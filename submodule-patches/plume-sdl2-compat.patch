@@ -1,0 +1,116 @@
+diff --git a/plume_metal.cpp b/plume_metal.cpp
+index a5f30a3..4bfc6fb 100644
+--- a/plume_metal.cpp
++++ b/plume_metal.cpp
+@@ -1196,8 +1196,6 @@ namespace plume {
+         // Create texture with configured descriptor and alignment
+         MTL::TextureDescriptor *descriptor = MTL::TextureDescriptor::textureBufferDescriptor(pixelFormat, width, options, usage);
+         this->texture = buffer->mtl->newTexture(descriptor, 0, bytesPerRow);
+-
+-        descriptor->release();
+     }
+ 
+     MetalBufferFormattedView::~MetalBufferFormattedView() {
+@@ -1319,7 +1317,7 @@ namespace plume {
+         assert(format == RenderShaderFormat::METAL);
+ 
+         this->format = format;
+-        this->functionName = (entryPointName != nullptr) ? NS::String::string(entryPointName, NS::UTF8StringEncoding) : MTLSTR("");
++        this->functionName = ((entryPointName != nullptr) ? NS::String::string(entryPointName, NS::UTF8StringEncoding) : MTLSTR(""))->retain();
+ 
+         NS::Error *error = nullptr;
+         const dispatch_data_t dispatchData = dispatch_data_create(data, size, dispatch_get_main_queue(), ^{});
+@@ -1343,7 +1341,7 @@ namespace plume {
+         if (debugName) {
+             debugName->release();
+         }
+-        debugName = NS::String::string(name.c_str(), NS::UTF8StringEncoding);
++        debugName = NS::String::string(name.c_str(), NS::UTF8StringEncoding)->retain();
+         library->setLabel(debugName);
+     }
+ 
+@@ -2053,6 +2051,7 @@ namespace plume {
+         CA::MetalDrawable *nextDrawable = layer->nextDrawable();
+         if (nextDrawable == nullptr) {
+             fprintf(stderr, "No more drawables available for rendering.\n");
++            releasePool->release();
+             return false;
+         }
+ 
+@@ -2252,8 +2251,14 @@ namespace plume {
+     void MetalCommandList::begin() {
+         assert(mtl == nullptr);
+         startedEncoding = false;
++
++        NS::AutoreleasePool *releasePool = NS::AutoreleasePool::alloc()->init();
+         mtl = queue->mtl->commandBufferWithUnretainedReferences();
++        // commandBufferWithUnretainedReferences() returns an autoreleased
++        // command buffer. Keep an owned reference until commit() balances it.
++        mtl->retain();
+         mtl->setLabel(MTLSTR("RT64 Command List"));
++        releasePool->release();
+ 
+         // Reset fence waits and updates for new command list.
+         fenceSlots.updateDirtyBits = ~0;
+@@ -3549,8 +3554,12 @@ namespace plume {
+         activeType = EncoderType::Blit;
+ 
+         if (activeBlitEncoder == nullptr) {
++            NS::AutoreleasePool *releasePool = NS::AutoreleasePool::alloc()->init();
++
+             activeBlitEncoder = mtl->blitCommandEncoder(device->sharedBlitDescriptor);
+             activeBlitEncoder->setLabel(MTLSTR("Copy Blit Encoder"));
++            activeBlitEncoder->retain();
++            releasePool->release();
+ 
+             startedEncoding = true;
+ 
+@@ -3575,9 +3584,13 @@ namespace plume {
+         activeType = EncoderType::Resolve;
+ 
+         if (activeResolveComputeEncoder == nullptr) {
++            NS::AutoreleasePool *releasePool = NS::AutoreleasePool::alloc()->init();
++
+             activeResolveComputeEncoder = mtl->computeCommandEncoder(MTL::DispatchTypeConcurrent);
+             activeResolveComputeEncoder->setLabel(MTLSTR("Resolve Texture Encoder"));
+             activeResolveComputeEncoder->setComputePipelineState(device->resolveTexturePipelineState);
++            activeResolveComputeEncoder->retain();
++            releasePool->release();
+ 
+             startedEncoding = true;
+ 
+@@ -3685,6 +3698,8 @@ namespace plume {
+         assert(commandLists != nullptr);
+         assert(commandListCount > 0);
+ 
++        NS::AutoreleasePool *releasePool = NS::AutoreleasePool::alloc()->init();
++
+         // Create a new command buffer to encode the wait semaphores into
+         MTL::CommandBuffer* cmdBuffer = mtl->commandBufferWithUnretainedReferences();
+         cmdBuffer->setLabel(MTLSTR("Wait Command Buffer"));
+@@ -3725,6 +3740,8 @@ namespace plume {
+ 
+         MetalCommandList *mutableCommandList = const_cast<MetalCommandList*>(interfaceCommandList);
+         mutableCommandList->commit();
++
++        releasePool->release();
+     }
+ 
+     void MetalCommandQueue::waitForCommandFence(RenderCommandFence *fence) {
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+index 2800022..ba47992 100644
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -2458,7 +2458,11 @@ namespace plume {
+         dstWidth = rect.right - rect.left;
+         dstHeight = rect.bottom - rect.top;
+ #   elif defined(PLUME_SDL_VULKAN_ENABLED)
+-        SDL_GetWindowSizeInPixels(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
++        // SDL_GetWindowSizeInPixels was added in SDL 2.26, while Steam's
++        // Linux runtime and older long-term-support distributions may expose
++        // an earlier SDL2. SDL_Vulkan_GetDrawableSize has provided the same
++        // pixel-sized Vulkan drawable dimensions since SDL 2.0.6.
++        SDL_Vulkan_GetDrawableSize(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
+ #   elif defined(__ANDROID__)
+         dstWidth = ANativeWindow_getWidth(desc.renderWindow);
+         dstHeight = ANativeWindow_getHeight(desc.renderWindow);

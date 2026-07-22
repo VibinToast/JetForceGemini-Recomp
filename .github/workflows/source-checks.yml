@@ -1,0 +1,50 @@
+name: source checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-source-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source and pinned submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check public source boundary
+        run: ./scripts/check-public-tree.sh
+
+      - name: Reject generated recompilation output in history
+        run: |
+          if git rev-list --objects --all | grep -E ' (RecompiledFuncs/|rsp/.*\.cpp$|[^/]+\.(z64|v64|n64|elf)$)'; then
+            echo "Private or generated recompilation content exists in Git history." >&2
+            exit 1
+          fi
+
+      - name: Validate shell entrypoints
+        run: |
+          bash -n scripts/*.sh
+          sh -n deploy/appimage/AppRun
+
+      - name: Validate TOML and AppStream XML
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import tomllib
+          import xml.etree.ElementTree as ET
+
+          for path in pathlib.Path('.').glob('*.toml'):
+              with path.open('rb') as stream:
+                  tomllib.load(stream)
+
+          ET.parse('deploy/io.github.cyscott.dkrrecomp.metainfo.xml')
+          PY
+
+      - name: Verify dependency patches
+        run: ./scripts/apply-submodule-patches.sh

@@ -1,0 +1,182 @@
+diff --git a/librecomp/src/ai.cpp b/librecomp/src/ai.cpp
+index 0195f2b..ea77182 100644
+--- a/librecomp/src/ai.cpp
++++ b/librecomp/src/ai.cpp
+@@ -16,7 +16,38 @@ extern "C" void osAiSetFrequency_recomp(uint8_t* rdram, recomp_context* ctx) {
+ }
+ 
+ extern "C" void osAiSetNextBuffer_recomp(uint8_t* rdram, recomp_context* ctx) {
+-    ultramodern::queue_audio_buffer(rdram, ctx->r4, ctx->r5);
++    // libaudio may hand the AI driver an uncached KSEG1 address. The generic
++    // host-pointer conversion expects the equivalent cached KSEG0 address;
++    // without canonicalizing it, KSEG1 adds 512 MiB and lands in the guard
++    // region above the recompiler's committed RDRAM mapping.
++    uint32_t audio_buffer = ctx->r4;
++    if ((audio_buffer & 0xE0000000U) == 0xA0000000U) {
++        audio_buffer = (audio_buffer & 0x1FFFFFFFU) | 0x80000000U;
++    }
++
++    constexpr uint32_t rdram_size = 8U * 1024U * 1024U;
++    const uint32_t physical_address = audio_buffer & 0x1FFFFFFFU;
++    const uint32_t byte_count = static_cast<uint32_t>(ctx->r5);
++
++    // Treat AI DMA arguments as untrusted. A wrapped negative byte count can
++    // otherwise turn into billions of samples, stalling the audio thread until
++    // it walks through the RDRAM guard region and crashes. Validate both the
++    // sample alignment and the complete source range before pointer conversion.
++    const bool invalid_range = (byte_count != 0) &&
++        ((physical_address >= rdram_size) || (byte_count > (rdram_size - physical_address)));
++    if ((byte_count & 1U) != 0 || invalid_range) {
++        static uint32_t invalid_audio_dma_warnings = 0;
++        if (invalid_audio_dma_warnings < 8) {
++            std::fprintf(stderr,
++                "[Audio] Ignoring invalid AI DMA: address=0x%08X, bytes=%u\n",
++                audio_buffer, byte_count);
++            invalid_audio_dma_warnings++;
++        }
++        ctx->r2 = 0;
++        return;
++    }
++
++    ultramodern::queue_audio_buffer(rdram, static_cast<int32_t>(audio_buffer), byte_count);
+     ctx->r2 = 0;
+ }
+ 
+diff --git a/librecomp/src/rsp.cpp b/librecomp/src/rsp.cpp
+index 1cb3f6a..b117649 100644
+--- a/librecomp/src/rsp.cpp
++++ b/librecomp/src/rsp.cpp
+@@ -35,6 +35,15 @@ void recomp::rsp::constants_init() {
+ // Runs a recompiled RSP microcode
+ bool recomp::rsp::run_task(uint8_t* rdram, const OSTask* task) {
+     assert(rsp_callbacks.get_rsp_microcode != nullptr);
++
++    // DKR can submit an empty startup audio frame as a wrapped negative Acmd
++    // length (0xFFFFFFF8). The original scheduler effectively has no work to
++    // run for that frame; entering the audio microcode would instead dispatch
++    // through an uninitialized command-table entry at address zero.
++    if ((task->t.type == M_AUDTASK) && (static_cast<int32_t>(task->t.data_size) <= 0)) {
++        return true;
++    }
++
+     RspUcodeFunc* ucode_func = rsp_callbacks.get_rsp_microcode(task);
+ 
+     if (ucode_func == nullptr) {
+diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
+index 1333133..39799c2 100644
+--- a/ultramodern/src/events.cpp
++++ b/ultramodern/src/events.cpp
+@@ -1,5 +1,6 @@
+ #include <thread>
+ #include <atomic>
++#include <algorithm>
+ #include <chrono>
+ #include <cinttypes>
+ #include <variant>
+@@ -8,6 +9,7 @@
+ #include <mutex>
+ #include <queue>
+ #include <cstring>
++#include <cstdlib>
+ 
+ #include "blockingconcurrentqueue.h"
+ 
+@@ -26,6 +28,7 @@ void ultramodern::events::set_callbacks(const ultramodern::events::callbacks_t&
+ 
+ struct SpTaskAction {
+     OSTask task;
++    moodycamel::LightweightSemaphore* parsed;
+ };
+ 
+ struct ScreenUpdateAction {
+@@ -349,6 +352,13 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+     // Notify the caller thread that this thread is ready.
+     thread_ready->signal();
+ 
++    const bool gfx_profile_enabled = std::getenv("DKR_GFX_PROFILE") != nullptr;
++    uint64_t profile_task_count = 0;
++    uint64_t profile_parse_total_us = 0;
++    int64_t profile_parse_max_us = 0;
++    size_t profile_queue_max = 0;
++    auto profile_last_log = std::chrono::steady_clock::now();
++
+     while (!exited) {
+         // Try to pull an action from the queue
+         Action action;
+@@ -360,11 +370,6 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+                     renderer_context->enable_instant_present();
+                     enabled_instant_present = true;
+                 }
+-                // Tell the game that the RSP completed instantly. This will allow it to queue other task types, but it won't
+-                // start another graphics task until the RDP is also complete. Games usually preserve the RSP inputs until the RDP
+-                // is finished as well, so sending this early shouldn't be an issue in most cases.
+-                // If this causes issues then the logic can be replaced with responding to yield requests.
+-                sp_complete();
+                 ultramodern::measure_input_latency();
+ 
+                 PTR(u64) displaylist = task_action->task.t.data_ptr;
+@@ -374,7 +379,53 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+                 renderer_context->send_dl(&task_action->task);
+                 [[maybe_unused]] auto renderer_end = std::chrono::high_resolution_clock::now();
+ 
++                const auto renderer_time = std::chrono::duration_cast<std::chrono::microseconds>(
++                    renderer_end - renderer_start);
++                if (gfx_profile_enabled) {
++                    const int64_t parse_us = renderer_time.count();
++                    const size_t queue_size = events_context.action_queue.size_approx();
++                    profile_task_count++;
++                    profile_parse_total_us += static_cast<uint64_t>(parse_us);
++                    profile_parse_max_us = std::max(profile_parse_max_us, parse_us);
++                    profile_queue_max = std::max(profile_queue_max, queue_size);
++
++                    const auto profile_now = std::chrono::steady_clock::now();
++                    if ((profile_now - profile_last_log) >= 1s) {
++                        const double average_us = profile_task_count > 0
++                            ? static_cast<double>(profile_parse_total_us) / static_cast<double>(profile_task_count)
++                            : 0.0;
++                        fprintf(stderr,
++                            "[DKR PERF] display-list tasks=%llu parse_avg=%.1f us parse_max=%lld us queue_max=%zu\n",
++                            static_cast<unsigned long long>(profile_task_count), average_us,
++                            static_cast<long long>(profile_parse_max_us), profile_queue_max);
++                        profile_task_count = 0;
++                        profile_parse_total_us = 0;
++                        profile_parse_max_us = 0;
++                        profile_queue_max = 0;
++                        profile_last_log = profile_now;
++                    }
++                }
++                static auto last_slow_renderer_log = std::chrono::high_resolution_clock::time_point{};
++                if ((renderer_time > 25ms) && ((renderer_end - last_slow_renderer_log) > 1s)) {
++                    fprintf(stderr, "[DKR] Slow display-list parse: %lld us (queue: %zu)\n",
++                        static_cast<long long>(renderer_time.count()),
++                        events_context.action_queue.size_approx());
++                    last_slow_renderer_log = renderer_end;
++                }
++
++                // RT64's HLE path reads the task's display list and its referenced
++                // vertex/texture data synchronously in send_dl(). DKR reuses that
++                // memory as soon as it receives SP completion, so acknowledging the
++                // task before parsing finishes races the game against the graphics
++                // thread on slower hosts and produces malformed commands.
++                sp_complete();
+                 dp_complete();
++                // The HLE renderer reads display-list, matrix, vertex, and
++                // texture data directly from RDRAM during send_dl(). Release
++                // the submitting game thread only after those reads finish;
++                // DKR starts rebuilding its double-buffered arena immediately
++                // after submission, before it necessarily receives SP/DP.
++                task_action->parsed->signal();
+                 // TODO hook the parsed event up to the actual parsing point when a callback is added to RT64.
+                 ultramodern::extensions::on_displaylist_parsed(displaylist);
+                 ultramodern::extensions::on_displaylist_completed(displaylist);
+@@ -559,7 +610,9 @@ void ultramodern::submit_rsp_task(RDRAM_ARG PTR(OSTask) task_) {
+ 
+     // Send gfx tasks to the graphics action queue
+     if (task->t.type == M_GFXTASK) {
+-        events_context.action_queue.enqueue(SpTaskAction{ *task });
++        moodycamel::LightweightSemaphore parsed{ 0 };
++        events_context.action_queue.enqueue(SpTaskAction{ *task, &parsed });
++        parsed.wait();
+     }
+     // Set all other tasks as the RSP task
+     else {

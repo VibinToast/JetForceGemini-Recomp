@@ -1,0 +1,76 @@
+diff --git a/RSPRecomp/src/rsp_recomp.cpp b/RSPRecomp/src/rsp_recomp.cpp
+index 518477d..1c9af6f 100644
+--- a/RSPRecomp/src/rsp_recomp.cpp
++++ b/RSPRecomp/src/rsp_recomp.cpp
+@@ -132,7 +132,13 @@ uint32_t expected_c0_reg_value(int cop0_reg) {
+     case Cop0Reg::RSP_COP0_SP_SEMAPHORE:
+         return 0; // Always acquire the semaphore
+     case Cop0Reg::RSP_COP0_DPC_STATUS:
+-        return 0; // Good enough for the microcodes that would be recompiled (i.e. non-graphics ones)
++        return 0; // No status flags are exposed to recompiled microcode.
++    case Cop0Reg::RSP_COP0_DPC_START:
++    case Cop0Reg::RSP_COP0_DPC_END:
++    case Cop0Reg::RSP_COP0_DPC_CURRENT:
++        // Graphics tasks are intercepted by the host renderer, so their recompiled
++        // microcode is generated for completeness but is not executed by librecomp.
++        return 0;
+     default:
+         fmt::print(stderr, "Unhandled mfc0: {}\n", cop0_reg);
+         throw std::runtime_error("Unhandled mfc0");
+@@ -154,6 +160,12 @@ std::string_view c0_reg_write_action(int cop0_reg) {
+         return "DO_DMA_READ";
+     case Cop0Reg::RSP_COP0_SP_WR_LEN:
+         return "DO_DMA_WRITE";
++    case Cop0Reg::RSP_COP0_DPC_START:
++    case Cop0Reg::RSP_COP0_DPC_END:
++    case Cop0Reg::RSP_COP0_DPC_STATUS:
++        // Graphics tasks are intercepted by the host renderer. Keep this as a
++        // no-op until librecomp exposes the renderer's DPC register interface.
++        return "";
+     default:
+         fmt::print(stderr, "Unhandled mtc0: {}\n", cop0_reg);
+         throw std::runtime_error("Unhandled mtc0");
+@@ -188,7 +200,9 @@ BranchTargets get_branch_targets(const std::vector<rabbitizer::InstructionRsp>&
+     BranchTargets ret;
+     for (const auto& instr : instrs) {
+         if (instr.isJumpWithAddress() || instr.isBranch()) {
+-            ret.direct_targets.insert(instr.getBranchVramGeneric() & rsp_mem_mask);
++            // RSP branches use a 12-bit PC. A branch that crosses the end of
++            // IMEM wraps back to its 0x1000 mapping rather than into DMEM.
++            ret.direct_targets.insert((instr.getBranchVramGeneric() | 0x1000) & rsp_mem_mask);
+         }
+         if (instr.doesLink()) {
+             ret.indirect_targets.insert(instr.getVram() + 2 * instr_size);
+@@ -236,7 +250,7 @@ bool process_instruction(size_t instr_index, const std::vector<rabbitizer::Instr
+         }
+     }
+ 
+-    uint16_t branch_target = instr.getBranchVramGeneric() & rsp_mem_mask;
++    uint16_t branch_target = (instr.getBranchVramGeneric() | 0x1000) & rsp_mem_mask;
+ 
+     // Output a comment with the original instruction
+     if (instr.isBranch() || instr_id == InstrId::rsp_j) {
+@@ -395,6 +409,10 @@ bool process_instruction(size_t instr_index, const std::vector<rabbitizer::Instr
+             break;
+         case InstrId::rsp_addi:
+         case InstrId::rsp_addiu:
++            if (rt == 0) {
++                fmt::print(output_file, "\n");
++                break;
++            }
+             print_line("{}{} = RSP_ADD32({}{}, {})", ctx_gpr_prefix(rt), rt, ctx_gpr_prefix(rs), rs, signed_imm_string);
+             break;
+         case InstrId::rsp_and:
+@@ -531,6 +549,12 @@ bool process_instruction(size_t instr_index, const std::vector<rabbitizer::Instr
+         case InstrId::rsp_break:
+             print_line("return RspExitReason::Broke", instr_vram);
+             break;
++        case InstrId::rsp_cfc2:
++            print_line("rsp.CFC2({}{}, {})", ctx_gpr_prefix(rt), rt, rd);
++            break;
++        case InstrId::rsp_ctc2:
++            print_line("rsp.CTC2({}{}, {})", ctx_gpr_prefix(rt), rt, rd);
++            break;
+         case InstrId::rsp_mfc0:
+             print_line("{}{} = {}", ctx_gpr_prefix(rt), rt, expected_c0_reg_value(rd));
+             break;

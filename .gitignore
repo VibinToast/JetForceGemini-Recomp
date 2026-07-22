@@ -1,0 +1,71 @@
+# VSCode file settings
+.vscode/
+*.code-workspace
+
+# Private input and generated recompilation files
+*.elf
+*.z64
+*.n64
+*.v64
+baserom*
+
+# Output C files
+RecompiledFuncs/
+RecompiledPatches/
+
+# Local build and distribution output
+/build/
+/build-*/
+/dist-*/
+*.o
+
+# Windows build output
+*.exe
+*.dll
+*.lib
+*.pdb
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+out/
+
+# Visual Studio 2015/2017 cache/options directory
+.vs/
+vcpkg_installed/
+
+# Runtime files
+imgui.ini
+rt64.log
+
+node_modules/
+
+# Recompiler Linux binary
+N64Recomp
+RSPRecomp
+.DS_Store
+
+# Controller mappings file
+recompcontrollerdb.txt
+
+# clangd cache
+.cache/

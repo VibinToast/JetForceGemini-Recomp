@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.cyscott.dkrrecomp</id>
+  <name>Diddy Kong Racing: Recompiled</name>
+  <summary>Native recompilation of Diddy Kong Racing</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <supports>
+    <control>keyboard</control>
+    <control>gamepad</control>
+  </supports>
+  <description>
+    <p>A native port powered by N64: Recompiled and RT64.</p>
+    <p>An unmodified, legally obtained Diddy Kong Racing USA (En,Fr) Rev 1 ROM is required and is not included.</p>
+  </description>
+  <launchable type="desktop-id">io.github.cyscott.dkrrecomp.desktop</launchable>
+</component>

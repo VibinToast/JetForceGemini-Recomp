@@ -1,0 +1,137 @@
+# N64Recomp configuration for the North American Diddy Kong Racing 1.1 ROM.
+#
+# The checked-in symbol manifest was generated from the matching decompilation
+# ELF. Instructions are read from the user's private, verified ROM.
+
+[input]
+entrypoint = 0x80000400
+symbols_file_path = "dkr.us.v80.syms.toml"
+rom_file_path = "baserom.us.v80.z64"
+output_func_path = "RecompiledFuncs"
+
+[patches]
+# The retail binary retains an unused helper that programs the N64 CPU's
+# hardware breakpoint register. A native process neither needs nor exposes it.
+stubs = [
+    "set_breakpoint",
+    # The original anti-tamper check reads the CIC boot value from SP IMEM.
+    # Native recompilation has no PIF boot stage, so provide the successful
+    # hardware result from the runtime instead of touching an MMIO address.
+    "drm_validate_imem",
+    "drm_validate_dmem",
+    # This anti-tamper check sums the code bytes of obj_loop_goldenballoon in
+    # RDRAM and makes every racer's head group spin when it mismatches. The
+    # port's ROM patches legitimately alter code bytes, so the retail checksum
+    # can never match; the runtime provides a no-op instead.
+    "drm_checksum_balloon",
+    # RSP program images are linked into the CPU text section and intentionally
+    # carry function-shaped symbols. They are recompiled separately with RSPRecomp.
+    "aspMainTextStart",
+    "rspF3DDKRDramStart",
+    "rspF3DDKRFifoStart",
+    "rspF3DDKRXbusStart",
+    "rspUnknown2Start",
+]
+# Functions declared but not generated; the runtime provides native
+# implementations (the "stubs" list generates EMPTY bodies and does NOT
+# dispatch to any native override).
+ignored = [
+    # Character Select queries this once for every dancer. The native wrapper
+    # advances its shared clock once per game frame so every character receives
+    # one coherent pose; see src/recomp_api/music_animation.cpp.
+    "music_animation_fraction",
+]
+# DKR ships its own natural-log implementation under the C library name.
+# Rename it in generated native code to avoid colliding with macOS math.h.
+# obj_animate keeps a generated, private retail reference under the
+# obj_animate_recomp name. The public native wrapper can then run a diagnostic
+# A/B comparison without checking generated ROM-derived source into Git.
+renamed = ["log", "strcasecmp", "strncasecmp", "obj_animate"]
+
+# cam_init inlines two pieces of N64 hardware access instead of calling a
+# libultra routine. The native runtime has no PI status register, so report the
+# bus as idle. It also cannot directly map the cartridge at 0xB0000000; return
+# the verified retail value used by DKR's viewport anti-piracy check.
+[[patches.instruction]]
+vram = 0x800661E4
+func = "cam_init"
+value = 0x00001025 # lw v0, 0(v1) -> or v0, zero, zero
+
+[[patches.instruction]]
+vram = 0x8006620C
+func = "cam_init"
+value = 0x340F8965 # lw t7, 0x578(t6) -> ori t7, zero, 0x8965
+
+# render_scene performs a second cartridge/boot integrity read through the
+# uncached N64 address space. Preserve the retail-ROM success value without
+# dereferencing that address in the native process.
+[[patches.instruction]]
+vram = 0x80024FF8
+func = "render_scene"
+value = 0x3C0DAC29 # lw t5, 0x200(t7) -> lui t5, 0xAC29
+
+# Golden balloons perform another cartridge-code integrity check. Avoid the
+# unmapped 0xA0000284 read and take the same success branch as retail hardware.
+[[patches.instruction]]
+vram = 0x8003B548
+func = "obj_loop_goldenballoon"
+value = 0x0000C825 # lw t9, 0x284(t8) -> or t9, zero, zero
+
+[[patches.instruction]]
+vram = 0x8003B554
+func = "obj_loop_goldenballoon"
+value = 0x10000002 # beq t9, at, success -> beq zero, zero, success
+
+# Attached racer/object models compare the boot CIC ID that IPL3 normally
+# leaves in osCicId. Native startup has no IPL3, so provide CIC-6103's verified
+# value at the comparison site.
+[[patches.instruction]]
+vram = 0x80012798
+func = "render_3d_model"
+value = 0x340D17D7 # lw t5, 0x310(t5) -> ori t5, zero, 0x17D7
+
+# Race completion waits for the PI bus and reads another retail cartridge
+# word. The renderer/runtime has no PI register or directly mapped cartridge,
+# so return the idle/success values before the post-race flow runs.
+[[patches.instruction]]
+vram = 0x8001A560
+func = "race_check_finish"
+value = 0x00001025 # lw v0, 0(v1) -> or v0, zero, zero
+
+[[patches.instruction]]
+vram = 0x8001A588
+func = "race_check_finish"
+value = 0x340F6C07 # lw t7, 0x574(t8) -> ori t7, zero, 0x6C07
+
+# viewport_menu_set stores inclusive lower-right bounds for custom viewports.
+# The N64 hid that last-pixel convention in overscan, but RT64's scissor is
+# exclusive: clamping a full-screen request to 319x239 leaves one native pixel
+# of stale framebuffer visible along the right and bottom edges. Keep partial
+# viewports untouched and clamp only out-of-range full-screen requests to the
+# actual 320x240 boundary.
+[[patches.instruction]]
+vram = 0x80066CA0
+func = "viewport_menu_set"
+value = 0x00806025 # addiu t4, a0, -1 -> or t4, a0, zero
+
+[[patches.instruction]]
+vram = 0x80066CB8
+func = "viewport_menu_set"
+value = 0x00606825 # addiu t5, v1, -1 -> or t5, v1, zero
+
+# DKR's retail scheduler abandons RSP and RDP tasks after eleven video
+# retraces. On original hardware a reset also cancels the pending interrupt,
+# but the native renderer can legitimately take longer while a Vulkan driver
+# compiles a new pipeline and then delivers its completion asynchronously. A
+# late completion otherwise dereferences the scheduler's now-null task. Keep
+# the retail recovery paths, but extend both to roughly nine minutes so shader
+# compilation cannot trigger them during normal play.
+[[patches.instruction]]
+vram = 0x80079CDC
+func = "__scHandleRetrace"
+value = 0x29417FFF # slti at, t2, 0xB -> slti at, t2, 0x7FFF
+
+[[patches.instruction]]
+vram = 0x80079D24
+func = "__scHandleRetrace"
+value = 0x29817FFF # slti at, t4, 0xB -> slti at, t4, 0x7FFF

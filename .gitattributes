@@ -1,0 +1,13 @@
+# The inherited application shell uses CRLF in a number of source files.
+# Treat the carriage return as part of the line ending while still checking
+# for spaces/tabs before it and the other standard whitespace errors.
+* whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+
+*.png binary
+*.ico binary
+*.otf binary
+*.ttf binary
+
+# These files are exact snapshots of dependency diffs. Their added lines must
+# retain the dependency's original whitespace so `git apply` reproduces it.
+*.patch -whitespace

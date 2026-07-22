@@ -1,0 +1,1688 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 2fb01e5..f334b45 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -322,6 +322,7 @@ set (SOURCES
+ 
+     "${PROJECT_SOURCE_DIR}/src/gbi/rt64_gbi.cpp"
+     "${PROJECT_SOURCE_DIR}/src/gbi/rt64_gbi_f3d.cpp"
++    "${PROJECT_SOURCE_DIR}/src/gbi/rt64_gbi_f3ddkr.cpp"
+     "${PROJECT_SOURCE_DIR}/src/gbi/rt64_gbi_f3dex.cpp"
+     "${PROJECT_SOURCE_DIR}/src/gbi/rt64_gbi_f3dex2.cpp"
+     "${PROJECT_SOURCE_DIR}/src/gbi/rt64_gbi_f3dgolden.cpp"
+@@ -553,4 +554,3 @@ build_pixel_shader(  rt64 "src/shaders/Im3DPS.hlsl")
+ build_pixel_shader(  rt64 "src/shaders/PostProcessPS.hlsl")
+ 
+ target_include_directories(rt64 PRIVATE ${CMAKE_BINARY_DIR}/src)
+-
+diff --git a/src/common/rt64_thread.cpp b/src/common/rt64_thread.cpp
+index c4b080b..5a5f2db 100644
+--- a/src/common/rt64_thread.cpp
++++ b/src/common/rt64_thread.cpp
+@@ -12,6 +12,9 @@
+ #   include "utf8conv/utf8conv.h"
+ #elif defined(__linux__)
+ #   include <pthread.h>
++#   include <sys/resource.h>
++#   include <sys/syscall.h>
++#   include <unistd.h>
+ #endif
+ 
+ namespace RT64 {
+@@ -55,11 +58,18 @@ namespace RT64 {
+     void Thread::setCurrentThreadPriority(Priority priority) {
+ #   if defined(_WIN32)
+         SetThreadPriority(GetCurrentThread(), toWindowsPriority(priority));
+-#   elif defined(__linux__) || defined(__APPLE__)
+-        // On Linux, thread priorities can't be changed under the default scheduler policy (SCHED_OTHER) and the other policies
+-        // that are available without root privileges are lower priority. Instead you can set the thread's "nice" value, which ranges
+-        // from -20 to 19 (lower being higher priority). However, by strict POSIX spec "nice" is meant to be per-process instead of
+-        // per-thread. Therefore to avoid issues in case Linux is modified to match the spec in the future, this function does nothing.
++#   elif defined(__linux__)
++        // Linux implements nice values per thread for NPTL. RT64's shader
++        // workers request Idle priority specifically so they cannot starve the
++        // renderer, but treating that request as a no-op causes severe pipeline
++        // compilation stalls and memory pressure on Steam Deck. Lowering a
++        // thread's own priority is permitted without elevated privileges.
++        if (priority == Thread::Priority::Idle) {
++            const id_t threadId = static_cast<id_t>(syscall(SYS_gettid));
++            (void)setpriority(PRIO_PROCESS, threadId, 19);
++        }
++#   elif defined(__APPLE__)
++        // Keep the platform default on macOS.
+         (void)priority;
+ #   else
+         static_assert(false, "Unimplemented");
+diff --git a/src/gbi/rt64_gbi.cpp b/src/gbi/rt64_gbi.cpp
+index 7006549..669d5dd 100644
+--- a/src/gbi/rt64_gbi.cpp
++++ b/src/gbi/rt64_gbi.cpp
+@@ -9,6 +9,7 @@
+ 
+ #include "rt64_gbi_extended.h"
+ #include "rt64_gbi_f3d.h"
++#include "rt64_gbi_f3ddkr.h"
+ #include "rt64_gbi_f3dgolden.h"
+ #include "rt64_gbi_f3dpd.h"
+ #include "rt64_gbi_f3dex.h"
+@@ -61,6 +62,9 @@ namespace RT64 {
+     const GBIInstance   F3D_GOLDEN                = { "SW Version: 2.0G, 09-30-96 (GE007)",        GBIUCode::F3DGOLDEN,   { false,  false,  false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   F3D_PD                    = { "SW Version: Unknown (PD)",                  GBIUCode::F3DPD,       { false,  false,  false,  false,  false } };
+     const GBIInstance   F3D_WAVE                  = { "SW Version: 2.0D, 04-01-96 (Wave Race)",    GBIUCode::F3DWAVE,     { false,  false,  false,  false,  false } }; // Needs confirmation.
++    const GBIInstance   F3DDKR_XBUS               = { "F3DDKR.xbus (Diddy Kong Racing)",           GBIUCode::F3DDKR,       { false,  true,   false,  false,  false } };
++    const GBIInstance   F3DDKR_FIFO               = { "F3DDKR.fifo (Diddy Kong Racing)",           GBIUCode::F3DDKR,       { false,  true,   false,  false,  false } };
++    const GBIInstance   F3DDKR_DRAM               = { "F3DDKR.dram (Diddy Kong Racing)",           GBIUCode::F3DDKR,       { false,  true,   false,  false,  false } };
+     const GBIInstance   F3DEX_0_95                = { "F3DEX 0.95",                                GBIUCode::F3DEX,       { false,  false,  false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   F3DLX_0_95                = { "F3DLX 0.95",                                GBIUCode::F3DEX,       { true,   false,  false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   F3DEX_0_96                = { "F3DEX 0.96",                                GBIUCode::F3DEX,       { false,  false,  false,  false,  false } }; // Needs confirmation.
+@@ -160,7 +164,10 @@ namespace RT64 {
+     // 
+     //                  Length      Hash                    Known instances               
+     //     
+-    static std::array<GBISegment, 94> textSegments = {
++    static std::array<GBISegment, 97> textSegments = {
++            GBISegment{ 0x11F0,     0x2DDDC8AA73AF6BCBULL,  { &F3DDKR_XBUS } },
++            GBISegment{ 0x11F0,     0x58F2DAC4834E2CFDULL,  { &F3DDKR_FIFO } },
++            GBISegment{ 0x1200,     0x31366AF4CC38F062ULL,  { &F3DDKR_DRAM } },
+             GBISegment{ 0x1408,     0x9C0926F5E466BE70ULL,  { &F3D_SDK_E } }, // Needs confirmation.
+             GBISegment{ 0x1400,     0x34EAA6E921BCF1B2ULL,  { &F3D_SDK_F, &F3D_SDK_UNKNOWN_G, &F3D_SDK_UNKNOWN_H } }, // Needs confirmation.
+             GBISegment{ 0x1408,     0x3E05E9BBE814C700ULL,  { &F3D_FIFO_SDK_E } }, // Needs confirmation.
+@@ -257,7 +264,10 @@ namespace RT64 {
+             GBISegment{ 0x10B0,     0xE8028E4BC6529E6EULL,  { &ZSORTP_0_33 } }, // Needs confirmation.
+     };
+ 
+-    static std::array<GBISegment, 105> dataSegments = {
++    static std::array<GBISegment, 108> dataSegments = {
++            GBISegment{ 0x800,      0xC850B914F9B0EAAFULL,  { &F3DDKR_XBUS } },
++            GBISegment{ 0x800,      0x0D773FFCFF980C48ULL,  { &F3DDKR_FIFO } },
++            GBISegment{ 0x800,      0xED3F297CA4A42925ULL,  { &F3DDKR_DRAM } },
+             GBISegment{ 0x800,      0xEEB10D73400213B3ULL,  { &F3D_SDK_E } }, // Needs confirmation.
+             GBISegment{ 0x800,      0x49651E384B48F694ULL,  { &F3D_SDK_F } }, // Needs confirmation.
+             GBISegment{ 0x800,      0x1A736198F90E81C5ULL,  { &F3D_SDK_UNKNOWN_G } }, // Needs confirmation.
+@@ -499,6 +509,9 @@ namespace RT64 {
+             case GBIUCode::L3DEX2:
+                 GBI_L3DEX2::setup(&gbi);
+                 break;
++            case GBIUCode::F3DDKR:
++                GBI_F3DDKR::setup(&gbi);
++                break;
+             default:
+                 assert(false && "Unknown UCode.");
+                 break;
+@@ -558,4 +571,4 @@ namespace RT64 {
+     GBIFunction GBIManager::getExtendedFunction() const {
+         return &GBI_EXTENDED::extendedOp;
+     }
+-};
+\ No newline at end of file
++};
+diff --git a/src/gbi/rt64_gbi.h b/src/gbi/rt64_gbi.h
+index 69c35d2..c9e5467 100644
+--- a/src/gbi/rt64_gbi.h
++++ b/src/gbi/rt64_gbi.h
+@@ -28,6 +28,7 @@ namespace RT64 {
+         S2DEX,
+         S2DEX2,
+         L3DEX2,
++        F3DDKR,
+         Count
+     };
+ 
+@@ -74,4 +75,4 @@ namespace RT64 {
+         void deduceGBIInformation(uint8_t *RDRAM, uint32_t textAddress, uint32_t dataAddress);
+         GBIFunction getExtendedFunction() const;
+     };
+-};
+\ No newline at end of file
++};
+diff --git a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_manager.cpp
+index 7d385fa..97d9dbb 100644
+--- a/src/hle/rt64_framebuffer_manager.cpp
++++ b/src/hle/rt64_framebuffer_manager.cpp
+@@ -31,7 +31,19 @@ namespace RT64 {
+     FramebufferManager::~FramebufferManager() {}
+ 
+     Framebuffer &FramebufferManager::get(uint32_t address, uint8_t siz, uint32_t width, uint32_t height) {
++        const bool isNew = (framebuffers.find(address) == framebuffers.end());
+         auto &fb = framebuffers[address];
++        if (std::getenv("RT64_DKR_FB_OVERLAP_LOG") != nullptr) {
++            static uint32_t getLogCount = 0;
++            if (isNew && (getLogCount++ < 256)) {
++                std::fprintf(stderr, "[RT64] NEW fb entry %08X (this=%p, mapSize=%zu) w=%u siz=%u h=%u\n",
++                    address, static_cast<void *>(this), framebuffers.size(), width, unsigned(siz), height);
++            }
++            else if ((fb.width != 0) && ((fb.width != width) || (fb.siz != siz)) && (getLogCount++ < 256)) {
++                std::fprintf(stderr, "[RT64] fb %08X format flip: w %u->%u siz %u->%u h=%u\n",
++                    address, fb.width, width, unsigned(fb.siz), unsigned(siz), height);
++            }
++        }
+         fb.widthChanged = (fb.width != width);
+         fb.sizChanged = (fb.siz != siz);
+ 
+@@ -188,6 +200,12 @@ namespace RT64 {
+ 
+         auto fbIt = framebuffers.find(op.createTileCopy.address);
+         assert(fbIt != framebuffers.end());
++        if (fbIt == framebuffers.end()) {
++            // The framebuffer was discarded after the operation was queued;
++            // recording against it would dereference invalid state.
++            return;
++        }
++
+         RenderTargetKey colorTargetKey(fbIt->second.addressStart, fbIt->second.width, fbIt->second.siz, Framebuffer::Type::Color);
+         RenderTarget &colorTarget = targetManager.get(colorTargetKey);
+         if (tileCopy.readColorFromStorage) {
+@@ -876,6 +894,15 @@ namespace RT64 {
+         auto it = framebuffers.begin();
+         while (it != framebuffers.end()) {
+             if ((&it->second != changedFb) && (it->second.overlaps(addressStart, addressEnd))) {
++                if (std::getenv("RT64_DKR_FB_OVERLAP_LOG") != nullptr) {
++                    static uint32_t changeRAMLogCount = 0;
++                    if (changeRAMLogCount++ < 256) {
++                        std::fprintf(stderr,
++                            "[RT64] changeRAM: write [%06X,%06X) marks fb %06X (w=%u h=%u maxH=%u end=%06X) rdramChanged\n",
++                            addressStart, addressEnd, it->second.addressStart, it->second.width, it->second.height,
++                            it->second.maxHeight, it->second.addressEnd);
++                    }
++                }
+                 it->second.rdramChanged = true;
+             }
+ 
+@@ -952,12 +979,20 @@ namespace RT64 {
+             beforeDiscardBarriers.clear();
+ 
+             for (RenderTexture *texture : cmdListDiscards.cmdListDiscards) {
++                if (texture == nullptr) {
++                    continue;
++                }
++
+                 beforeDiscardBarriers.emplace_back(RenderTextureBarrier(texture, RenderTextureLayout::COLOR_WRITE));
+             }
+ 
+             renderWorker->commandList->barriers(RenderBarrierStage::GRAPHICS, beforeDiscardBarriers);
+ 
+             for (RenderTexture *texture : cmdListDiscards.cmdListDiscards) {
++                if (texture == nullptr) {
++                    continue;
++                }
++
+                 renderWorker->commandList->discardTexture(texture);
+             }
+         }
+diff --git a/src/hle/rt64_game_frame.cpp b/src/hle/rt64_game_frame.cpp
+index 87392d0..a1a1dc1 100644
+--- a/src/hle/rt64_game_frame.cpp
++++ b/src/hle/rt64_game_frame.cpp
+@@ -518,7 +518,7 @@ namespace RT64 {
+         lookAtCheckSet.clear();
+ 
+         // Traverse the map and fill the set with all the combinations of transforms to check.
+-        for (std::pair<uint64_t, GameCallMap> curIt : curCallHashMap) {
++        for (const std::pair<const uint64_t, GameCallMap> &curIt : curCallHashMap) {
+             auto prevRange = prevCallHashMap.equal_range(curIt.first);
+             for (auto prevIt = prevRange.first; prevIt != prevRange.second; prevIt++) {
+                 const GameIndices::Projection &curProjIndices = curScene.projections[curIt.second.sceneProjIndex];
+diff --git a/src/hle/rt64_interpreter.cpp b/src/hle/rt64_interpreter.cpp
+index dccaa87..a962cd9 100644
+--- a/src/hle/rt64_interpreter.cpp
++++ b/src/hle/rt64_interpreter.cpp
+@@ -5,12 +5,379 @@
+ #include "rt64_interpreter.h"
+ 
+ #include <cassert>
++#include <cstdio>
++#include <cstdlib>
+ 
+ //#define DUMP_DISPLAY_LISTS
+ 
+ namespace RT64 {
+     static FILE *displayListFp = nullptr;
+ 
++    namespace {
++        constexpr uint64_t DKRWarningCommandCount = 1ULL << 16;
++        constexpr uint64_t DKRMaxCommandCount = 1ULL << 20;
++        constexpr uint64_t DKRWarningVertexCount = 1ULL << 18;
++        constexpr uint64_t DKRMaxVertexCount = 1ULL << 22;
++        constexpr uint64_t DKRWarningTriangleCount = 1ULL << 18;
++        constexpr uint64_t DKRMaxTriangleCount = 1ULL << 22;
++        constexpr uint64_t DKRWarningTextureBytes = 32ULL << 20;
++        constexpr uint64_t DKRMaxTextureBytes = 256ULL << 20;
++        constexpr uint32_t DKRWarningDMADepth = 4;
++        constexpr uint32_t DKRMaxDMADepth = 64;
++        constexpr uint32_t DKRWarningReturnDepth = 16;
++        constexpr uint32_t DKRMaxReturnDepth = 64;
++
++        const char *dkrAbortReasonName(DKRDisplayListDiagnostics::AbortReason reason) {
++            switch (reason) {
++            case DKRDisplayListDiagnostics::AbortReason::CommandBudget:
++                return "command-budget";
++            case DKRDisplayListDiagnostics::AbortReason::ReturnDepth:
++                return "return-depth";
++            case DKRDisplayListDiagnostics::AbortReason::DMADepth:
++                return "dma-depth";
++            case DKRDisplayListDiagnostics::AbortReason::VertexBudget:
++                return "vertex-budget";
++            case DKRDisplayListDiagnostics::AbortReason::TriangleBudget:
++                return "triangle-budget";
++            case DKRDisplayListDiagnostics::AbortReason::TextureBudget:
++                return "texture-budget";
++            case DKRDisplayListDiagnostics::AbortReason::MalformedDMA:
++                return "malformed-dma";
++            case DKRDisplayListDiagnostics::AbortReason::InvalidCommand:
++                return "invalid-command";
++            default:
++                return "none";
++            }
++        }
++
++        bool dkrValidWorkloadCursor(const State *state, int cursor) {
++            return (state != nullptr) && (state->ext.workloadQueue != nullptr) &&
++                (cursor >= 0) && (cursor < int(state->ext.workloadQueue->workloads.size()));
++        }
++
++        uint32_t dkrCommandAddress(const State *state, const DisplayList *dl) {
++            if ((state == nullptr) || (state->RDRAM == nullptr) || (dl == nullptr)) {
++                return 0xFFFFFFFFU;
++            }
++
++            const uintptr_t rdramStart = reinterpret_cast<uintptr_t>(state->RDRAM);
++            const uintptr_t commandAddress = reinterpret_cast<uintptr_t>(dl);
++            const uintptr_t rdramEnd = rdramStart + 0x00800000U;
++            if ((commandAddress < rdramStart) || ((commandAddress + sizeof(DisplayList)) > rdramEnd)) {
++                return 0xFFFFFFFFU;
++            }
++
++            return uint32_t(commandAddress - rdramStart);
++        }
++    }
++
++    void DKRDisplayListDiagnostics::begin(State *state, uint32_t dlStartAddress, bool enabled) {
++        *this = DKRDisplayListDiagnostics{};
++        active = enabled;
++        if (!active) {
++            return;
++        }
++
++        rootAddress = dlStartAddress & 0x007FFFFFU;
++        nextVertexReport = DKRWarningVertexCount;
++        nextTriangleReport = DKRWarningTriangleCount;
++        nextTextureReport = DKRWarningTextureBytes;
++        const char *traceValue = std::getenv("RT64_DKR_DL_TRACE");
++        traceAll = (traceValue != nullptr) && (traceValue[0] != '\0') && (traceValue[0] != '0');
++
++        if (state->ext.workloadQueue != nullptr) {
++            workloadCursorStart = state->ext.workloadQueue->writeCursor;
++            if (dkrValidWorkloadCursor(state, workloadCursorStart)) {
++                const DrawData &drawData = state->ext.workloadQueue->workloads[workloadCursorStart].drawData;
++                workloadVerticesStart = drawData.vertexCount();
++                workloadTrianglesStart = drawData.faceIndices.size() / 3;
++                workloadLoadsStart = drawData.loadOperations.size();
++            }
++        }
++    }
++
++    bool DKRDisplayListDiagnostics::noteCommand(State *state, const DisplayList *dl, bool fromDMA) {
++        if (!active || abortRequested) {
++            return !abortRequested;
++        }
++
++        const uint32_t commandAddress = dkrCommandAddress(state, dl);
++        if (commandAddress == 0xFFFFFFFFU) {
++            if (fromDMA) {
++                dmaFaultAddress = commandAddress;
++                requestAbort(state, AbortReason::MalformedDMA);
++            }
++            else {
++                requestAbort(state, AbortReason::InvalidCommand);
++            }
++            return false;
++        }
++
++        commandCount++;
++        if (fromDMA) {
++            dmaExecutedCommandCount++;
++            dmaOpCodeCounts[uint8_t(dl->w0 >> 24)]++;
++        }
++        else {
++            topLevelCommandCount++;
++        }
++
++        lastOpCode = uint8_t(dl->w0 >> 24);
++        lastCommandAddress = commandAddress;
++
++        const uint32_t returnDepth = uint32_t(state->returnAddressStack.size());
++        if (returnDepth > maxReturnDepth) {
++            maxReturnDepth = returnDepth;
++        }
++
++        if (maxReturnDepth > DKRMaxReturnDepth) {
++            requestAbort(state, AbortReason::ReturnDepth);
++            return false;
++        }
++
++        if (commandCount >= DKRMaxCommandCount) {
++            requestAbort(state, AbortReason::CommandBudget);
++            return false;
++        }
++
++        if ((commandCount >= DKRWarningCommandCount) && ((commandCount & (commandCount - 1)) == 0)) {
++            report(state, "progress");
++        }
++
++        return true;
++    }
++
++    bool DKRDisplayListDiagnostics::enterDMA(State *state, uint32_t declaredCommandCount, uint32_t address) {
++        if (!active || abortRequested) {
++            return !abortRequested;
++        }
++
++        dmaCommandCount++;
++        dmaDeclaredCommandCount += declaredCommandCount;
++        dmaDepth++;
++        if (dmaDepth > maxDMADepth) {
++            maxDMADepth = dmaDepth;
++        }
++
++        if (dmaDepth > DKRMaxDMADepth) {
++            dmaFaultAddress = address;
++            dmaDepth--;
++            requestAbort(state, AbortReason::DMADepth);
++            return false;
++        }
++
++        if (dmaDepth == DKRWarningDMADepth) {
++            report(state, "dma-depth-warning");
++        }
++
++        return true;
++    }
++
++    void DKRDisplayListDiagnostics::leaveDMA() {
++        if (active && (dmaDepth > 0)) {
++            dmaDepth--;
++        }
++    }
++
++    void DKRDisplayListDiagnostics::noteUnknownDMACommand() {
++        if (active) {
++            unknownDMACommandCount++;
++        }
++    }
++
++    void DKRDisplayListDiagnostics::noteVertexBatch(State *state, uint32_t count) {
++        if (!active || abortRequested) {
++            return;
++        }
++
++        vertexCommandCount++;
++        vertexCount += count;
++        if (vertexCount >= DKRMaxVertexCount) {
++            requestAbort(state, AbortReason::VertexBudget);
++            return;
++        }
++
++        if (vertexCount >= nextVertexReport) {
++            report(state, "vertex-progress");
++            do {
++                nextVertexReport *= 2;
++            } while ((nextVertexReport != 0) && (vertexCount >= nextVertexReport));
++        }
++    }
++
++    void DKRDisplayListDiagnostics::noteTriangleBatch(State *state, uint32_t declaredCount, uint32_t drawnCount, uint32_t skippedCount) {
++        if (!active || abortRequested) {
++            return;
++        }
++
++        triangleCommandCount++;
++        declaredTriangleCount += declaredCount;
++        drawnTriangleCount += drawnCount;
++        skippedTriangleCount += skippedCount;
++        if (declaredTriangleCount >= DKRMaxTriangleCount) {
++            requestAbort(state, AbortReason::TriangleBudget);
++            return;
++        }
++
++        if (declaredTriangleCount >= nextTriangleReport) {
++            report(state, "triangle-progress");
++            do {
++                nextTriangleReport *= 2;
++            } while ((nextTriangleReport != 0) && (declaredTriangleCount >= nextTriangleReport));
++        }
++    }
++
++    void DKRDisplayListDiagnostics::noteTextureImage(uint32_t width) {
++        if (!active) {
++            return;
++        }
++
++        textureImageCommandCount++;
++        if (width > maxTextureWidth) {
++            maxTextureWidth = width;
++        }
++    }
++
++    void DKRDisplayListDiagnostics::noteLoadBlock(State *state, uint64_t bytes, bool rejected) {
++        if (!active || abortRequested) {
++            return;
++        }
++
++        loadBlockCommandCount++;
++        if (rejected) {
++            rejectedTextureLoadCount++;
++            return;
++        }
++
++        textureLoadBytes += bytes;
++        if (bytes > maxTextureLoadBytes) {
++            maxTextureLoadBytes = bytes;
++        }
++
++        if (textureLoadBytes >= DKRMaxTextureBytes) {
++            requestAbort(state, AbortReason::TextureBudget);
++            return;
++        }
++
++        if (textureLoadBytes >= nextTextureReport) {
++            report(state, "texture-progress");
++            do {
++                nextTextureReport *= 2;
++            } while ((nextTextureReport != 0) && (textureLoadBytes >= nextTextureReport));
++        }
++    }
++
++    void DKRDisplayListDiagnostics::abortMalformedDMA(State *state, uint32_t address) {
++        if (!active || abortRequested) {
++            return;
++        }
++
++        dmaFaultAddress = address;
++        requestAbort(state, AbortReason::MalformedDMA);
++    }
++
++    void DKRDisplayListDiagnostics::requestAbort(State *state, AbortReason reason) {
++        if (!active || abortRequested) {
++            return;
++        }
++
++        abortRequested = true;
++        abortReason = reason;
++        report(state, "abort");
++        abortReported = true;
++    }
++
++    bool DKRDisplayListDiagnostics::shouldAbort() const {
++        return active && abortRequested;
++    }
++
++    void DKRDisplayListDiagnostics::finish(State *state) {
++        if (!active) {
++            return;
++        }
++
++        const bool suspicious = abortRequested || (unknownDMACommandCount != 0) ||
++            (commandCount >= DKRWarningCommandCount) || (vertexCount >= DKRWarningVertexCount) ||
++            (declaredTriangleCount >= DKRWarningTriangleCount) || (textureLoadBytes >= DKRWarningTextureBytes) ||
++            (maxDMADepth >= DKRWarningDMADepth) || (maxReturnDepth >= DKRWarningReturnDepth);
++        if (!abortReported && (traceAll || suspicious)) {
++            report(state, abortRequested ? "aborted" : (suspicious ? "suspicious" : "complete"));
++        }
++
++        active = false;
++    }
++
++    void DKRDisplayListDiagnostics::report(State *state, const char *status) {
++        if (!active) {
++            return;
++        }
++
++        int workloadCursor = -1;
++        uint64_t workloadVertices = 0;
++        uint64_t workloadTriangles = 0;
++        uint64_t workloadLoads = 0;
++        bool workloadChanged = false;
++        if (state->ext.workloadQueue != nullptr) {
++            workloadCursor = state->ext.workloadQueue->writeCursor;
++            if (dkrValidWorkloadCursor(state, workloadCursor)) {
++                const DrawData &drawData = state->ext.workloadQueue->workloads[workloadCursor].drawData;
++                workloadVertices = drawData.vertexCount();
++                workloadTriangles = drawData.faceIndices.size() / 3;
++                workloadLoads = drawData.loadOperations.size();
++                workloadChanged = (workloadCursor != workloadCursorStart);
++                if (!workloadChanged) {
++                    workloadVertices -= (workloadVertices >= workloadVerticesStart) ? workloadVerticesStart : workloadVertices;
++                    workloadTriangles -= (workloadTriangles >= workloadTrianglesStart) ? workloadTrianglesStart : workloadTriangles;
++                    workloadLoads -= (workloadLoads >= workloadLoadsStart) ? workloadLoadsStart : workloadLoads;
++                }
++            }
++        }
++
++        std::fprintf(stderr,
++            "[DKR-DL] status=%s reason=%s root=0x%08X last=0x%08X op=0x%02X "
++            "commands=%llu top=%llu dma_exec=%llu dma_calls=%llu dma_declared=%llu dma_depth=%u "
++            "return_depth=%u unknown_dma=%llu vertices=%llu/%llu triangles=%llu/%llu/%llu/%llu "
++            "textures=%llu loads=%llu bytes=%llu max_load=%llu rejected=%llu max_width=%u "
++            "workload=%d->%d switched=%u work_vertices=%llu work_triangles=%llu work_loads=%llu dma_fault=0x%08X\n",
++            status, dkrAbortReasonName(abortReason), rootAddress, lastCommandAddress, lastOpCode,
++            static_cast<unsigned long long>(commandCount),
++            static_cast<unsigned long long>(topLevelCommandCount),
++            static_cast<unsigned long long>(dmaExecutedCommandCount),
++            static_cast<unsigned long long>(dmaCommandCount),
++            static_cast<unsigned long long>(dmaDeclaredCommandCount), maxDMADepth, maxReturnDepth,
++            static_cast<unsigned long long>(unknownDMACommandCount),
++            static_cast<unsigned long long>(vertexCommandCount),
++            static_cast<unsigned long long>(vertexCount),
++            static_cast<unsigned long long>(triangleCommandCount),
++            static_cast<unsigned long long>(declaredTriangleCount),
++            static_cast<unsigned long long>(drawnTriangleCount),
++            static_cast<unsigned long long>(skippedTriangleCount),
++            static_cast<unsigned long long>(textureImageCommandCount),
++            static_cast<unsigned long long>(loadBlockCommandCount),
++            static_cast<unsigned long long>(textureLoadBytes),
++            static_cast<unsigned long long>(maxTextureLoadBytes),
++            static_cast<unsigned long long>(rejectedTextureLoadCount), maxTextureWidth,
++            workloadCursorStart, workloadCursor, workloadChanged ? 1U : 0U,
++            static_cast<unsigned long long>(workloadVertices),
++            static_cast<unsigned long long>(workloadTriangles),
++            static_cast<unsigned long long>(workloadLoads), dmaFaultAddress);
++        std::fflush(stderr);
++
++        if (traceAll && (dmaExecutedCommandCount != 0)) {
++            std::fprintf(stderr, "[DKR-DMA] opcodes=");
++            bool first = true;
++            for (uint32_t opCode = 0; opCode < dmaOpCodeCounts.size(); opCode++) {
++                if (dmaOpCodeCounts[opCode] != 0) {
++                    std::fprintf(stderr, "%s%02X:%llu", first ? "" : ",", opCode,
++                        static_cast<unsigned long long>(dmaOpCodeCounts[opCode]));
++                    first = false;
++                }
++            }
++            std::fprintf(stderr, "\n");
++            std::fflush(stderr);
++        }
++    }
++
+     // Interpreter
+ 
+     Interpreter::Interpreter() {
+@@ -165,11 +532,25 @@ namespace RT64 {
+         // Check RDRAM if required.
+         state->checkRDRAM();
+ 
++        dkrDiagnostics.begin(state, dlStartAdddress, hleGBI->ucode == GBIUCode::F3DDKR);
++
++        // Every RSP task starts with an empty display-list stack on hardware.
++        // A malformed or torn display list that aborted mid-run can leave
++        // stale return addresses behind; carrying them over makes every
++        // subsequent task trip the return-depth guard and blacks out the
++        // screen permanently.
++        state->returnAddressStack.clear();
++
+         // Run the command interpreter.
+         DisplayList *dl = dlStart;
+         uint8_t opCode;
+         GBIFunction func;
+         while (dl != nullptr) {
++            if (!dkrDiagnostics.noteCommand(state, dl, false)) {
++                dl = nullptr;
++                break;
++            }
++
+             opCode = (dl->w0 >> 24);
+ 
+             if ((extendedOpCode != 0) && (opCode == extendedOpCode)) {
+@@ -190,11 +571,18 @@ namespace RT64 {
+                 }
+             }
+ 
++            if (dkrDiagnostics.shouldAbort()) {
++                dl = nullptr;
++                break;
++            }
++
+             if (dl != nullptr) {
+                 dl++;
+             }
+         }
+ 
++        dkrDiagnostics.finish(state);
++
+         state->dlCpuProfiler.end();
+     }
+ };
+diff --git a/src/hle/rt64_interpreter.h b/src/hle/rt64_interpreter.h
+index c29e4b2..7ab83ad 100644
+--- a/src/hle/rt64_interpreter.h
++++ b/src/hle/rt64_interpreter.h
+@@ -10,10 +10,79 @@
+ #include "gbi/rt64_gbi.h"
+ 
+ namespace RT64 {
++    struct DKRDisplayListDiagnostics {
++        enum class AbortReason {
++            None,
++            CommandBudget,
++            ReturnDepth,
++            DMADepth,
++            VertexBudget,
++            TriangleBudget,
++            TextureBudget,
++            MalformedDMA,
++            InvalidCommand
++        };
++
++        bool active = false;
++        bool traceAll = false;
++        bool abortRequested = false;
++        bool abortReported = false;
++        AbortReason abortReason = AbortReason::None;
++        uint32_t rootAddress = 0;
++        uint32_t lastCommandAddress = 0xFFFFFFFFU;
++        uint32_t dmaFaultAddress = 0xFFFFFFFFU;
++        uint8_t lastOpCode = 0;
++        uint64_t commandCount = 0;
++        uint64_t topLevelCommandCount = 0;
++        uint64_t dmaCommandCount = 0;
++        uint64_t dmaDeclaredCommandCount = 0;
++        uint64_t dmaExecutedCommandCount = 0;
++        uint64_t unknownDMACommandCount = 0;
++        uint64_t vertexCommandCount = 0;
++        uint64_t vertexCount = 0;
++        uint64_t triangleCommandCount = 0;
++        uint64_t declaredTriangleCount = 0;
++        uint64_t drawnTriangleCount = 0;
++        uint64_t skippedTriangleCount = 0;
++        uint64_t textureImageCommandCount = 0;
++        uint64_t loadBlockCommandCount = 0;
++        uint64_t textureLoadBytes = 0;
++        uint64_t maxTextureLoadBytes = 0;
++        uint64_t rejectedTextureLoadCount = 0;
++        uint32_t maxTextureWidth = 0;
++        uint32_t dmaDepth = 0;
++        uint32_t maxDMADepth = 0;
++        uint32_t maxReturnDepth = 0;
++        int workloadCursorStart = -1;
++        uint64_t workloadVerticesStart = 0;
++        uint64_t workloadTrianglesStart = 0;
++        uint64_t workloadLoadsStart = 0;
++        uint64_t nextVertexReport = 0;
++        uint64_t nextTriangleReport = 0;
++        uint64_t nextTextureReport = 0;
++        std::array<uint64_t, 256> dmaOpCodeCounts{};
++
++        void begin(State *state, uint32_t dlStartAddress, bool enabled);
++        bool noteCommand(State *state, const DisplayList *dl, bool fromDMA);
++        bool enterDMA(State *state, uint32_t declaredCommandCount, uint32_t address);
++        void leaveDMA();
++        void noteUnknownDMACommand();
++        void noteVertexBatch(State *state, uint32_t count);
++        void noteTriangleBatch(State *state, uint32_t declaredCount, uint32_t drawnCount, uint32_t skippedCount);
++        void noteTextureImage(uint32_t width);
++        void noteLoadBlock(State *state, uint64_t bytes, bool rejected);
++        void abortMalformedDMA(State *state, uint32_t address);
++        void requestAbort(State *state, AbortReason reason);
++        bool shouldAbort() const;
++        void finish(State *state);
++        void report(State *state, const char *status);
++    };
++
+     struct Interpreter {
+         State *state;
+         GBIManager gbiManager;
+         GBI *hleGBI;
++        DKRDisplayListDiagnostics dkrDiagnostics;
+         uint8_t extendedOpCode = 0;
+         GBIFunction extendedFunction = nullptr;
+ 
+@@ -28,4 +97,4 @@ namespace RT64 {
+         void processRDPLists(uint32_t dlStartAdddress, DisplayList* dlStart, DisplayList* dlEnd);
+         void processDisplayLists(uint32_t dlStartAdddress, DisplayList *dlStart);
+     };
+-};
+\ No newline at end of file
++};
+diff --git a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
+index 10c04fc..24dc889 100644
+--- a/src/hle/rt64_rdp.cpp
++++ b/src/hle/rt64_rdp.cpp
+@@ -4,7 +4,9 @@
+ 
+ #include "rt64_rdp.h"
+ 
++#include <atomic>
+ #include <cassert>
++#include <cstdio>
+ 
+ #include "../include/rt64_extended_gbi.h"
+ 
+@@ -26,6 +28,23 @@
+ #endif
+ 
+ namespace RT64 {
++    namespace {
++        constexpr uint32_t InvalidLoadBoundsLogLimit = 8;
++        std::atomic_uint32_t invalidLoadBoundsLogCount = 0;
++
++        void logInvalidLoadBounds(const char *operation, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrtOrDxt) {
++            const uint32_t logIndex = invalidLoadBoundsLogCount.fetch_add(1, std::memory_order_relaxed);
++            if (logIndex >= InvalidLoadBoundsLogLimit) {
++                return;
++            }
++
++            std::fprintf(stderr,
++                "[RT64] Ignoring %s with invalid bounds (uls=%u, ult=%u, lrs=%u, lrt/dxt=%u)%s\n",
++                operation, unsigned(uls), unsigned(ult), unsigned(lrs), unsigned(lrtOrDxt),
++                (logIndex + 1 == InvalidLoadBoundsLogLimit) ? "; further warnings suppressed" : "");
++        }
++    }
++
+     // RDP
+     static uint8_t getCommandLength(uint32_t commandId) {
+         if (commandId == (G_TEXRECT & 0x3F) || commandId == (G_TEXRECTFLIP & 0x3F)) {
+@@ -149,6 +168,13 @@ namespace RT64 {
+             // Always tags regions in TMEM, regardless of whether it's possible to make a copy or not.
+             uint32_t fbEnd = fb->addressStart + fb->imageRowBytes(fb->width) * fb->maxHeight;
+             bool syncRequired = (fb->addressStart < addressEnd) && (fbEnd > addressStart);
++            if (syncRequired && (std::getenv("RT64_DKR_FB_OVERLAP_LOG") != nullptr)) {
++                static std::atomic_uint32_t overlapLogCount = 0;
++                if (overlapLogCount.fetch_add(1, std::memory_order_relaxed) < 256) {
++                    std::fprintf(stderr, "[RT64] TMEM load overlaps tracked FB: fb=[%06X,%06X) w=%u h=%u(max %u) load=[%06X,%06X)\n",
++                        fb->addressStart, fbEnd, fb->width, fb->height, fb->maxHeight, addressStart, addressEnd);
++                }
++            }
+             fbManager.insertRegionsTMEM(fb->addressStart, tmemStart, std::min(tmemWords, uint32_t(RDP_TMEM_WORDS)), tmemMask, RGBA32, syncRequired, couldMakeTile ? &regionIterators : nullptr);
+             
+             if (couldMakeTile) {
+@@ -472,6 +498,11 @@ namespace RT64 {
+     }
+ 
+     void RDP::loadTileOperation(const LoadTile &loadTile, const LoadTexture &loadTexture, bool deferred) {
++        if ((loadTile.uls > loadTile.lrs) || (loadTile.ult > loadTile.lrt)) {
++            logInvalidLoadBounds("load tile", loadTile.uls, loadTile.ult, loadTile.lrs, loadTile.lrt);
++            return;
++        }
++
+         const uint32_t bytesOffset = (loadTile.uls >> 2) << loadTexture.siz >> 1;
+         const uint32_t bytesPerRow = loadTexture.width << loadTexture.siz >> 1;
+         const uint32_t textureStart = loadTexture.address + bytesOffset + bytesPerRow * (loadTile.ult >> 2);
+@@ -511,6 +542,11 @@ namespace RT64 {
+     }
+ 
+     void RDP::loadBlockOperation(const LoadTile &loadTile, const LoadTexture &loadTexture, bool deferred) {
++        if (loadTile.uls > loadTile.lrs) {
++            logInvalidLoadBounds("load block", loadTile.uls, loadTile.ult, loadTile.lrs, loadTile.lrt);
++            return;
++        }
++
+         // Deduce loading parameters for block and the texture address.
+         const uint32_t bytesOffset = loadTile.uls << loadTexture.siz >> 1;
+         const uint32_t bytesPerRow = loadTexture.width << loadTexture.siz >> 1;
+@@ -547,6 +583,11 @@ namespace RT64 {
+     }
+ 
+     void RDP::loadTLUTOperation(const LoadTile &loadTile, const LoadTexture &loadTexture, bool deferred) {
++        if ((loadTile.uls > loadTile.lrs) || (loadTile.ult > loadTile.lrt)) {
++            logInvalidLoadBounds("load TLUT", loadTile.uls, loadTile.ult, loadTile.lrs, loadTile.lrt);
++            return;
++        }
++
+         // Deduce loading parameters for TLUT and the texture address.
+         const uint32_t bytesOffset = (loadTile.uls >> 2) << loadTexture.siz >> 1;
+         const uint32_t bytesPerRow = loadTexture.width << loadTexture.siz >> 1;
+@@ -598,14 +639,15 @@ namespace RT64 {
+         t.lrt = lrt;
+ 
+         // Ignored by the hardware.
+-        if (t.uls > t.lrs) {
++        if ((t.uls > t.lrs) || (t.ult > t.lrt)) {
++            logInvalidLoadBounds("load tile", t.uls, t.ult, t.lrs, t.lrt);
+             return;
+         }
+ 
+ #   ifdef ASSERT_LOAD_METHODS
+         assert((t.uls != t.lrs) || ((t.uls & 0x3) == 0) && "Unknown and possibly undefined hardware behavior.");
+         assert((t.ult != t.lrt) || ((t.ult & 0x3) == 0) && "Unknown hardware behavior.");
+-        assert((t.lrt <= t.lrt) && "Unknown hardware behavior.");
++        assert((t.ult <= t.lrt) && "Unknown hardware behavior.");
+         assert((t.siz == texture.siz) && "Different tile and texture sizes are not currently supported.");
+         assert((texture.siz != G_IM_SIZ_4b) && "4-bit texture image is not currently supported.");
+         assert((t.fmt != G_IM_FMT_YUV) && "YUV is not currently supported.");
+@@ -650,7 +692,7 @@ namespace RT64 {
+         assert(tile < RDP_TILES);
+ 
+         // Ignored by the hardware.
+-        if (uls > lrs) {
++        if ((uls > lrs) || (ult > lrt)) {
+             return false;
+         }
+ 
+@@ -688,7 +730,7 @@ namespace RT64 {
+         assert(tile < RDP_TILES);
+ 
+         // Ignored by the hardware.
+-        if (uls > lrs) {
++        if ((uls > lrs) || (ult > lrt)) {
+             return false;
+         }
+ 
+@@ -727,7 +769,12 @@ namespace RT64 {
+         t.lrt = dxt;
+ 
+         // Ignored by the hardware.
+-        if ((t.uls > t.lrs) || (t.lrs >= 0x800)) {
++        if (t.uls > t.lrs) {
++            logInvalidLoadBounds("load block", t.uls, t.ult, t.lrs, t.lrt);
++            return;
++        }
++
++        if (t.lrs >= 0x800) {
+             return;
+         }
+         
+@@ -785,6 +832,11 @@ namespace RT64 {
+         t.lrs = lrs;
+         t.lrt = lrt;
+ 
++        if ((t.uls > t.lrs) || (t.ult > t.lrt)) {
++            logInvalidLoadBounds("load TLUT", t.uls, t.ult, t.lrs, t.lrt);
++            return;
++        }
++
+ #   ifdef ASSERT_LOAD_METHODS
+         assert((texture.siz == G_IM_SIZ_16b) && "Non-16 bit textures are not currently supported.");
+         assert((t.siz == G_IM_SIZ_4b) && "Non-4 bit tiles are not currently supported.");
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index d4d9883..2686b9f 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -4,6 +4,7 @@
+ 
+ #include "rt64_rsp.h"
+ 
++#include <algorithm>
+ #include <cassert>
+ 
+ #include "../include/rt64_extended_gbi.h"
+@@ -90,6 +91,19 @@ namespace RT64 {
+         geometryModeStack[0] = G_CLIPPING;
+         fogChanged = true;
+         lookAtChanged = true;
++        DKR.matrices.fill(hlslpp::float4x4::identity());
++        DKR.segmentedAddresses.fill(0);
++        DKR.physicalAddresses.fill(0);
++        DKR.matrixOffset = 0;
++        DKR.vertexOffset = 0;
++        DKR.textureOffset = 0;
++        DKR.textureShift = 0;
++        DKR.textureCount = 0;
++        DKR.loadedVertices.reset();
++        DKR.activeMatrix = 0;
++        DKR.vertexCursor = 0;
++        DKR.billboard = false;
++        DKR.force8MBAddressMask = false;
+ 
+         clearExtended();
+     }
+@@ -98,7 +112,10 @@ namespace RT64 {
+ 
+     // Masks addresses as the RSP DMA hardware would.
+     template<uint32_t mask> uint32_t RSP::maskPhysicalAddress(uint32_t address) {
+-        if (state->extended.extendRDRAM && ((address & ExtendedMask) == ExtendedMask)) {
++        if (DKR.force8MBAddressMask) {
++            return address & mask & 0x007FFFFFU;
++        }
++        else if (state->extended.extendRDRAM && ((address & ExtendedMask) == ExtendedMask)) {
+             return address - ExtendedMask;
+         }
+         else {
+@@ -108,7 +125,7 @@ namespace RT64 {
+ 
+     // Performs a lookup in the segment table to convert the given address.
+     uint32_t RSP::fromSegmented(uint32_t segAddress) {
+-        if (state->extended.extendRDRAM && ((segAddress & ExtendedMask) == ExtendedMask)) {
++        if (!DKR.force8MBAddressMask && state->extended.extendRDRAM && ((segAddress & ExtendedMask) == ExtendedMask)) {
+             return segAddress;
+         }
+         else {
+@@ -207,6 +224,130 @@ namespace RT64 {
+         matrixCommon(floatMatrix, address, params);
+     }
+ 
++    void RSP::matrixDKR(uint32_t address, uint8_t index) {
++        if (index >= DKR.matrices.size()) {
++            assert(false && "F3DDKR matrix index is invalid.");
++            return;
++        }
++
++        const uint32_t rdramAddress = maskPhysicalAddress<0x00FFFFF8>(DKR.matrixOffset + fromSegmented(address));
++        const FixedMatrix *fixedMatrix = reinterpret_cast<FixedMatrix *>(state->fromRDRAM(rdramAddress));
++        DKR.matrices[index] = fixedMatrix->toMatrix4x4();
++        DKR.segmentedAddresses[index] = address;
++        DKR.physicalAddresses[index] = rdramAddress;
++        selectMatrixDKR(index);
++    }
++
++    void RSP::selectMatrixDKR(uint8_t index) {
++        if (index >= DKR.matrices.size()) {
++            assert(false && "F3DDKR matrix index is invalid.");
++            return;
++        }
++
++        DKR.activeMatrix = index;
++        modelMatrixStackSize = 1;
++        modelMatrixStack[0] = DKR.matrices[index];
++        modelMatrixSegmentedAddressStack[0] = DKR.segmentedAddresses[index];
++        modelMatrixPhysicalAddressStack[0] = DKR.physicalAddresses[index];
++
++        // F3DDKR supplies complete model-view-projection matrices from a heap
++        // whose slots are reused for different racer parts between frames.
++        // Cross-frame transform matching therefore stretches body geometry
++        // between unrelated matrices. Keep these transforms current-frame-only;
++        // the game still advances them at its native update rate.
++        TransformGroup &group = extended.modelMatrixIdStack[0];
++        group.matrixId = G_EX_ID_IGNORE;
++        group.decompose = false;
++        group.positionInterpolation = G_EX_COMPONENT_SKIP;
++        group.rotationInterpolation = G_EX_COMPONENT_SKIP;
++        group.scaleInterpolation = G_EX_COMPONENT_SKIP;
++        group.skewInterpolation = G_EX_COMPONENT_SKIP;
++        group.perspectiveInterpolation = G_EX_COMPONENT_SKIP;
++        // Also skip tile interpolation: with the default AUTO, every pair of
++        // hash-identical draw calls (hundreds per frame in DKR's wave
++        // renderer) enters the frame-matcher's quadratic tile-matching loop,
++        // which stalls the workload thread for the entire frame.
++        group.tileInterpolation = G_EX_COMPONENT_SKIP;
++        group.ordering = G_EX_ORDER_LINEAR;
++        extended.modelMatrixIdStackChanged = true;
++
++        // F3DDKR matrices are complete MVP matrices. Treat them as the model
++        // transform and keep RT64's view/projection side at identity. Do not
++        // invalidate an already-identity projection on every matrix switch:
++        // racer meshes intentionally draw triangles across a base load under
++        // matrix 1 and an append load under matrix 2. Creating a new projection
++        // for the append makes those vertices use a different view-projection
++        // index, and only the draw-bearing later projection is aspect-adjusted.
++        // That stretches the mixed seam triangles in widescreen mode.
++        const uint32_t projectionStackIndex = projectionMatrixStackSize - 1;
++        const bool resetProjectionToIdentity =
++            !isMatrixIdentity(viewMatrixStack[projectionStackIndex]) ||
++            !isMatrixIdentity(projMatrixStack[projectionStackIndex]) ||
++            !isMatrixIdentity(viewProjMatrixStack[projectionStackIndex]);
++        if (resetProjectionToIdentity) {
++            viewMatrixStack[projectionStackIndex] = hlslpp::float4x4::identity();
++            projMatrixStack[projectionStackIndex] = hlslpp::float4x4::identity();
++            viewProjMatrixStack[projectionStackIndex] = hlslpp::float4x4::identity();
++            projectionMatrixChanged = true;
++            projectionMatrixInversed = false;
++        }
++
++        modelViewProjChanged = true;
++    }
++
++    void RSP::setBillboardDKR(bool enabled) {
++        DKR.billboard = enabled;
++    }
++
++    void RSP::setDMAOffsetsDKR(uint32_t matrixOffset, uint32_t vertexOffset) {
++        // The microcode's offset moveword only updates the segment table in
++        // DMEM; the vertex cursor (0x14C) and the transformed vertex slots
++        // are untouched.
++        DKR.matrixOffset = matrixOffset;
++        DKR.vertexOffset = vertexOffset;
++    }
++
++    void RSP::setDMATextureOffsetDKR(uint32_t address) {
++        DKR.textureOffset = maskPhysicalAddress<0x00FFFFF8>(fromSegmented(address));
++        DKR.textureShift = 0;
++        DKR.textureCount = 0;
++    }
++
++    uint32_t RSP::textureImageAddressDKR(uint8_t fmt, uint32_t address) {
++        uint32_t physicalAddress = maskPhysicalAddress<0x00FFFFFF>(fromSegmented(address));
++        if (DKR.textureOffset != 0) {
++            if (fmt == G_IM_FMT_RGBA) {
++                const uint32_t shiftAddress = DKR.textureOffset + DKR.textureCount * sizeof(uint16_t);
++                DKR.textureShift = *reinterpret_cast<const uint16_t *>(state->fromRDRAM(shiftAddress ^ 0x2));
++                physicalAddress += DKR.textureShift;
++            }
++            else {
++                DKR.textureOffset = 0;
++                DKR.textureShift = 0;
++                DKR.textureCount = 0;
++            }
++        }
++
++        return physicalAddress;
++    }
++
++    void RSP::loadBlockDKR(uint16_t lrs) {
++        if (DKR.textureOffset == 0) {
++            return;
++        }
++
++        const uint32_t blockBytes = (((lrs >> 2) + 1) << 3);
++        if ((blockBytes != 0) && ((DKR.textureShift % blockBytes) != 0)) {
++            state->rdp->texture.address -= DKR.textureShift;
++            DKR.textureOffset = 0;
++            DKR.textureShift = 0;
++            DKR.textureCount = 0;
++        }
++        else {
++            DKR.textureCount++;
++        }
++    }
++
+     void RSP::popMatrix(uint32_t count) {
+         while (count--) {
+             if (modelMatrixStackSize > 1) {
+@@ -372,6 +513,93 @@ namespace RT64 {
+         memcpy(&vertices[dstIndex], dlVerts, sizeof(Vertex) * vtxCount);
+         setVertexCommon<true, sizeof(Vertex)>(rdramAddress, dstIndex, dstIndex + vtxCount);
+     }
++
++    void RSP::setVertexDKR(uint32_t address, uint32_t vtxCount, uint32_t sourceOffset, bool append) {
++        // Microcode-verified placement rule (DMEM 0x14C cursor): a non-append
++        // load always writes to slot 0 and sets the cursor to its count; an
++        // append load writes to the cursor and leaves it unchanged. This is
++        // how racer models stitch body (matrix 1) and head/tail (matrix 2)
++        // vertices contiguously, and how sprites reuse slots 1..n across
++        // triangle batches while slot 0 keeps the anchor vertex.
++        uint32_t dstIndex;
++        if (!append) {
++            dstIndex = 0;
++            DKR.vertexCursor = uint8_t(vtxCount);
++        }
++        else {
++            dstIndex = DKR.vertexCursor;
++        }
++
++        // DMEM vertex slots persist across batches on hardware, and DKR's
++        // larger models rely on it: triangle batches reference seam vertices
++        // loaded by a previous batch that were never re-uploaded. The
++        // validity bits therefore only accumulate; they guard against slots
++        // that were never written since the task started.
++
++        if ((dstIndex >= RSP_MAX_VERTICES) || ((dstIndex + vtxCount) > RSP_MAX_VERTICES)) {
++            assert(false && "F3DDKR vertex indices are not valid.");
++            return;
++        }
++
++        const uint32_t rdramAddress = maskPhysicalAddress<0x00FFFFF8>(DKR.vertexOffset + fromSegmented(address)) + sourceOffset;
++        for (uint32_t i = 0; i < vtxCount; i++) {
++            const uint32_t src = rdramAddress + i * 10;
++            Vertex &dst = vertices[dstIndex + i];
++            dst.x = *reinterpret_cast<const int16_t *>(state->fromRDRAM(src ^ 0x2));
++            dst.y = *reinterpret_cast<const int16_t *>(state->fromRDRAM((src + 2) ^ 0x2));
++            dst.z = *reinterpret_cast<const int16_t *>(state->fromRDRAM((src + 4) ^ 0x2));
++            dst.flag = 0;
++            dst.s = 0;
++            dst.t = 0;
++            dst.color.r = *state->fromRDRAM((src + 6) ^ 0x3);
++            dst.color.g = *state->fromRDRAM((src + 7) ^ 0x3);
++            dst.color.b = *state->fromRDRAM((src + 8) ^ 0x3);
++            dst.color.a = *state->fromRDRAM((src + 9) ^ 0x3);
++        }
++
++        // F3DDKR billboards transform vertex zero with the regular MVP, then
++        // add its clip-space position to every appended billboard vertex. Add
++        // that anchor to the translation row so both RT64's CPU bookkeeping
++        // and the GPU world transform reproduce the microcode operation.
++        const hlslpp::float4x4 unanchoredMatrix = modelMatrixStack[0];
++        bool anchoredBillboard = false;
++
++        // F3DDKR intentionally permits a triangle to span vertices loaded
++        // under matrix 1 and vertices appended under matrix 2. RT64 already
++        // records a world-transform index per vertex, so keeping each load in
++        // its original coordinate space reproduces the microcode directly.
++        // Transforming the appended vertices on the CPU and quantizing them
++        // back to int16 corrupts exactly the mixed head/tail seam triangles
++        // used by close-range racer models.
++
++        if (append && DKR.billboard) {
++            const int workloadCursor = state->ext.workloadQueue->writeCursor;
++            Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
++            const uint32_t anchorIndex = indices[0];
++            if (anchorIndex < workload.drawData.posTransformed.size()) {
++                modelMatrixStack[0][3] += workload.drawData.posTransformed[anchorIndex];
++                // Keep the anchor's clip-space W for RT64's matrix-based
++                // billboard emulation. Adding the local W term here creates
++                // huge screen-space primitives and pathological overdraw.
++                modelMatrixStack[0][3].w = workload.drawData.posTransformed[anchorIndex].w;
++                modelViewProjChanged = true;
++                anchoredBillboard = true;
++            }
++        }
++
++        setVertexCommon<true, 10>(rdramAddress, dstIndex, dstIndex + vtxCount);
++
++        for (uint32_t i = dstIndex; i < (dstIndex + vtxCount); i++) {
++            DKR.loadedVertices.set(i);
++        }
++
++        if (anchoredBillboard) {
++            modelMatrixStack[0] = unanchoredMatrix;
++            modelMatrixSegmentedAddressStack[0] = DKR.segmentedAddresses[DKR.activeMatrix];
++            modelMatrixPhysicalAddressStack[0] = DKR.physicalAddresses[DKR.activeMatrix];
++            modelViewProjChanged = true;
++        }
++    }
+     
+     void RSP::setVertexPD(uint32_t address, uint32_t vtxCount, uint32_t dstIndex) {
+         if ((dstIndex >= RSP_MAX_VERTICES) || ((dstIndex + vtxCount) > RSP_MAX_VERTICES)) {
+@@ -753,28 +981,58 @@ namespace RT64 {
+             auto &worldIndices = workload.drawData.worldIndices;
+             auto &posTransformed = workload.drawData.posTransformed;
+             const uint32_t newIndex = workload.drawData.vertexCount();
+-            posFloats.emplace_back(posFloats[globalIndex * 3 + 0]);
+-            posFloats.emplace_back(posFloats[globalIndex * 3 + 1]);
+-            posFloats.emplace_back(posFloats[globalIndex * 3 + 2]);
+-            velFloats.emplace_back(velFloats[globalIndex * 3 + 0]);
+-            velFloats.emplace_back(velFloats[globalIndex * 3 + 1]);
+-            velFloats.emplace_back(velFloats[globalIndex * 3 + 2]);
+-            normColBytes.emplace_back(normColBytes[globalIndex * 4 + 0]);
+-            normColBytes.emplace_back(normColBytes[globalIndex * 4 + 1]);
+-            normColBytes.emplace_back(normColBytes[globalIndex * 4 + 2]);
+-            normColBytes.emplace_back(normColBytes[globalIndex * 4 + 3]);
+-            tcFloats.emplace_back(tcFloats[globalIndex * 2 + 0]);
+-            tcFloats.emplace_back(tcFloats[globalIndex * 2 + 1]);
+-            tcVelFloats.emplace_back(tcVelFloats[globalIndex * 2 + 0]);
+-            tcVelFloats.emplace_back(tcVelFloats[globalIndex * 2 + 1]);
+-            viewProjIndices.emplace_back(viewProjIndices[globalIndex]);
+-            worldIndices.emplace_back(worldIndices[globalIndex]);
+-            fogIndices.emplace_back(fogIndices[globalIndex]);
+-            lightIndices.emplace_back(lightIndices[globalIndex]);
+-            lightCounts.emplace_back(lightCounts[globalIndex]);
+-            lookAtIndices.emplace_back(lookAtIndices[globalIndex]);
+-            posTransformed.emplace_back(posTransformed[globalIndex]);
+-            posScreen.emplace_back(posScreen[globalIndex]);
++
++            // Copy every attribute into locals before appending: passing a
++            // reference to a vector's own element to emplace_back is undefined
++            // behavior when the append reallocates, and this path runs
++            // thousands of times per frame for F3DDKR's per-triangle ST
++            // rewrites. The dangling reads produced deterministic garbage
++            // positions on models with many shared vertices.
++            const float px = posFloats[globalIndex * 3 + 0];
++            const float py = posFloats[globalIndex * 3 + 1];
++            const float pz = posFloats[globalIndex * 3 + 2];
++            const float vx = velFloats[globalIndex * 3 + 0];
++            const float vy = velFloats[globalIndex * 3 + 1];
++            const float vz = velFloats[globalIndex * 3 + 2];
++            const uint8_t nc0 = normColBytes[globalIndex * 4 + 0];
++            const uint8_t nc1 = normColBytes[globalIndex * 4 + 1];
++            const uint8_t nc2 = normColBytes[globalIndex * 4 + 2];
++            const uint8_t nc3 = normColBytes[globalIndex * 4 + 3];
++            const float tcS = tcFloats[globalIndex * 2 + 0];
++            const float tcT = tcFloats[globalIndex * 2 + 1];
++            const float tcVelS = tcVelFloats[globalIndex * 2 + 0];
++            const float tcVelT = tcVelFloats[globalIndex * 2 + 1];
++            const auto viewProjIndex = viewProjIndices[globalIndex];
++            const auto worldIndex = worldIndices[globalIndex];
++            const auto fogIndex = fogIndices[globalIndex];
++            const auto lightIndex = lightIndices[globalIndex];
++            const auto lightCount = lightCounts[globalIndex];
++            const auto lookAtIndex = lookAtIndices[globalIndex];
++            const auto transformedPos = posTransformed[globalIndex];
++            const auto screenPos = posScreen[globalIndex];
++
++            posFloats.emplace_back(px);
++            posFloats.emplace_back(py);
++            posFloats.emplace_back(pz);
++            velFloats.emplace_back(vx);
++            velFloats.emplace_back(vy);
++            velFloats.emplace_back(vz);
++            normColBytes.emplace_back(nc0);
++            normColBytes.emplace_back(nc1);
++            normColBytes.emplace_back(nc2);
++            normColBytes.emplace_back(nc3);
++            tcFloats.emplace_back(tcS);
++            tcFloats.emplace_back(tcT);
++            tcVelFloats.emplace_back(tcVelS);
++            tcVelFloats.emplace_back(tcVelT);
++            viewProjIndices.emplace_back(viewProjIndex);
++            worldIndices.emplace_back(worldIndex);
++            fogIndices.emplace_back(fogIndex);
++            lightIndices.emplace_back(lightIndex);
++            lightCounts.emplace_back(lightCount);
++            lookAtIndices.emplace_back(lookAtIndex);
++            posTransformed.emplace_back(transformedPos);
++            posScreen.emplace_back(screenPos);
+             indices[dstIndex] = newIndex;
+             used[dstIndex] = false;
+             globalIndex = indices[dstIndex];
+@@ -878,9 +1136,11 @@ namespace RT64 {
+ 
+     void RSP::modifyGeometryMode(uint32_t offMask, uint32_t onMask) {
+         uint32_t &geometryMode = geometryModeStack[geometryModeStackSize - 1];
+-        geometryMode &= offMask;
+-        geometryMode |= onMask;
+-        state->updateDrawStatusAttribute(DrawAttribute::GeometryMode);
++        const uint32_t updatedGeometryMode = (geometryMode & offMask) | onMask;
++        if (updatedGeometryMode != geometryMode) {
++            geometryMode = updatedGeometryMode;
++            state->updateDrawStatusAttribute(DrawAttribute::GeometryMode);
++        }
+     }
+ 
+     void RSP::setObjRenderMode(uint32_t value) {
+diff --git a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
+index e3d289c..1203944 100644
+--- a/src/hle/rt64_rsp.h
++++ b/src/hle/rt64_rsp.h
+@@ -187,6 +187,22 @@ namespace RT64 {
+         uint32_t shadingSmoothMask;
+         std::array<uint32_t, RSP_MAX_SEGMENTS> segments;
+ 
++        struct {
++            std::array<hlslpp::float4x4, 3> matrices;
++            std::array<uint32_t, 3> segmentedAddresses;
++            std::array<uint32_t, 3> physicalAddresses;
++            uint32_t matrixOffset;
++            uint32_t vertexOffset;
++            uint32_t textureOffset;
++            uint32_t textureShift;
++            uint32_t textureCount;
++            std::bitset<RSP_MAX_VERTICES> loadedVertices;
++            uint8_t activeMatrix;
++            uint8_t vertexCursor;
++            bool billboard;
++            bool force8MBAddressMask;
++        } DKR;
++
+         struct {
+             // Storage for struct data loaded by S2D commands.
+             std::array<uint8_t, 256> struct_buffer;
+@@ -240,6 +256,13 @@ namespace RT64 {
+         void matrixCommon(const hlslpp::float4x4 &floatMatrix, uint32_t address, uint8_t params);
+         void matrix(uint32_t address, uint8_t params);
+         void matrixFloat(uint32_t address, uint8_t params);
++        void matrixDKR(uint32_t address, uint8_t index);
++        void selectMatrixDKR(uint8_t index);
++        void setBillboardDKR(bool enabled);
++        void setDMAOffsetsDKR(uint32_t matrixOffset, uint32_t vertexOffset);
++        void setDMATextureOffsetDKR(uint32_t address);
++        uint32_t textureImageAddressDKR(uint8_t fmt, uint32_t address);
++        void loadBlockDKR(uint16_t lrs);
+         void popMatrix(uint32_t count);
+         void pushProjectionMatrix();
+         void popProjectionMatrix();
+@@ -251,6 +274,7 @@ namespace RT64 {
+         void specialComputeModelViewProj();
+         void setModelViewProjChanged(bool changed);
+         void setVertex(uint32_t address, uint32_t vtxCount, uint32_t dstIndex);
++        void setVertexDKR(uint32_t address, uint32_t vtxCount, uint32_t sourceOffset, bool append);
+         void setVertexPD(uint32_t address, uint32_t vtxCount, uint32_t dstIndex);
+         void setVertexEXV1(uint32_t address, uint32_t vtxCount, uint32_t dstIndex);
+         void setVertexColorPD(uint32_t address);
+@@ -303,4 +327,4 @@ namespace RT64 {
+         void setGBI(GBI *gbi);
+         void setNoN(bool NoN);
+     };
+-};
+\ No newline at end of file
++};
+diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
+index f9f0ad8..5972127 100644
+--- a/src/hle/rt64_state.cpp
++++ b/src/hle/rt64_state.cpp
+@@ -523,10 +523,24 @@ namespace RT64 {
+             auto &colorImg = fbPair.colorImage;
+             auto &depthImg = fbPair.depthImage;
+             uint32_t colorHeight = fbPair.drawColorRect.bottom(true);
++            if (rsp->DKR.force8MBAddressMask && (colorImg.width == 320)) {
++                // NTSC DKR framebuffers are 320x240. A torn dynamic display
++                // list can briefly supply garbage rectangle bounds; never let
++                // that turn into a framebuffer write over the adjacent game
++                // heap while the parser's malformed-list guard recovers.
++                colorHeight = std::min(colorHeight, 240U);
++            }
+             uint32_t colorWriteWidth = (colorHeight > 1) ? colorImg.width : std::min(fbPair.drawColorRect.right(true), int32_t(colorImg.width));
+             uint32_t depthWriteWidth = 0;
+             RT64::Framebuffer *colorFb = &framebufferManager.get(colorImg.address, colorImg.siz, colorImg.width, colorHeight);
+             colorImg.formatChanged = colorFb->widthChanged || colorFb->sizChanged || colorFb->rdramChanged;
++            if (colorImg.formatChanged && (std::getenv("RT64_DKR_FB_OVERLAP_LOG") != nullptr)) {
++                static uint32_t flagLogCount = 0;
++                if (flagLogCount++ < 256) {
++                    std::fprintf(stderr, "[RT64] color fb %08X flags: width=%d siz=%d rdram=%d\n",
++                        colorImg.address, int(colorFb->widthChanged), int(colorFb->sizChanged), int(colorFb->rdramChanged));
++                }
++            }
+             colorFb->clearChanged();
+             colorFb->addDitherPatterns(fbPair.ditherPatterns);
+ 
+@@ -557,6 +571,16 @@ namespace RT64 {
+                 fbPair.syncRequired = true;
+             }
+ 
++            if (fbPair.syncRequired && (std::getenv("RT64_DKR_FB_OVERLAP_LOG") != nullptr)) {
++                static uint32_t syncLogCount = 0;
++                if (syncLogCount++ < 512) {
++                    std::fprintf(stderr,
++                        "[RT64] fbPair %d sync: colorFmtChg=%d addr=%06X w=%u siz=%u | depthFmtChg=%d addr=%06X | reason=%d\n",
++                        fbPairIndex, int(colorImg.formatChanged), colorImg.address, colorImg.width, unsigned(colorImg.siz),
++                        int(depthImg.formatChanged), depthImg.address, int(flushReason));
++                }
++            }
++
+             uint32_t colorFbBytes = colorFb->imageRowBytes(colorWriteWidth) * colorFb->height;
+             uint64_t writeTimestamp = framebufferManager.nextWriteTimestamp();
+             colorFb->RAMBytes = std::max(colorFb->RAMBytes, colorFbBytes);
+@@ -1075,7 +1099,8 @@ namespace RT64 {
+ 
+                     // Submit the shader to the cache so compilation can start right away.
+                     // Ignore any calls that use fill type, as they're emulated without using a shader.
+-                    if (callDesc.otherMode.cycleType() != G_CYC_FILL) {
++                    if (!ext.workloadQueue->ubershadersOnly.load(std::memory_order_relaxed) &&
++                        (callDesc.otherMode.cycleType() != G_CYC_FILL)) {
+                         ext.rasterShaderCache->submit(shaderDesc);
+                     }
+ 
+@@ -1150,6 +1175,9 @@ namespace RT64 {
+                     const auto &colorImg = fbPair.colorImage;
+                     const auto &depthImg = fbPair.depthImage;
+                     colorHeight = fbPair.drawColorRect.bottom(true);
++                    if (rsp->DKR.force8MBAddressMask && (colorImg.width == 320)) {
++                        colorHeight = std::min(colorHeight, 240U);
++                    }
+                     colorWriteWidth = (colorHeight > 1) ? colorImg.width : std::min(fbPair.drawColorRect.right(true), int32_t(colorImg.width));
+                     depthWriteWidth = 0;
+                     colorFb = &framebufferManager.get(colorImg.address, colorImg.siz, colorImg.width, colorHeight);
+@@ -1172,6 +1200,13 @@ namespace RT64 {
+                         depthRowEnd = fbPair.drawDepthRect.bottom(true);
+                     }
+ 
++                    if (rsp->DKR.force8MBAddressMask && (colorImg.width == 320)) {
++                        colorRowStart = std::min(colorRowStart, 240U);
++                        colorRowEnd = std::min(colorRowEnd, 240U);
++                        depthRowStart = std::min(depthRowStart, 240U);
++                        depthRowEnd = std::min(depthRowEnd, 240U);
++                    }
++
+                     return true;
+                 }
+                 else {
+@@ -2731,6 +2766,9 @@ namespace RT64 {
+     }
+ 
+     uint8_t *State::fromRDRAM(uint32_t rdramAddress) const {
++        if ((rsp != nullptr) && rsp->DKR.force8MBAddressMask) {
++            rdramAddress &= 0x007FFFFFU;
++        }
+         return &RDRAM[rdramAddress];
+     }
+ 
+@@ -2773,4 +2811,4 @@ namespace RT64 {
+             break;
+         }
+     }
+-};
+\ No newline at end of file
++};
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+index 5a331aa..11ab816 100644
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -2,6 +2,11 @@
+ // RT64
+ //
+ 
++#include <algorithm>
++#include <chrono>
++#include <cstdio>
++#include <cstdlib>
++
+ #include "rt64_workload_queue.h"
+ 
+ #include "common/rt64_thread.h"
+@@ -51,15 +56,15 @@ namespace RT64 {
+         int nextWriteCursor = (writeCursor + 1) % workloads.size();
+ 
+         // Stall the thread until the barrier is lifted if we're trying to write on a workload being used by the GPU.
+-        bool waitForBarrier;
+-        do {
+-            const std::scoped_lock lock(cursorMutex);
+-            waitForBarrier = (nextWriteCursor == barrierCursor);
+-        } while (waitForBarrier);
+-
+-        // Modify the cursor and notify anything waiting on the queue.
++        // A condition wait instead of a busy spin: when the queue is full the
++        // spin starves the render thread of cursorMutex and burns a core.
+         {
+-            const std::scoped_lock lock(cursorMutex);
++            std::unique_lock<std::mutex> lock(cursorMutex);
++            cursorCondition.wait(lock, [&]() {
++                return (nextWriteCursor != barrierCursor) || !threadsRunning;
++            });
++
++            // Modify the cursor and notify anything waiting on the queue.
+             writeCursor = nextWriteCursor;
+         }
+ 
+@@ -847,7 +852,54 @@ namespace RT64 {
+             // Update the GPU profiler with the results from the timestamps of the frame.
+             queryPool->queryResults();
+             const uint64_t *frameTimestamps = queryPool->getResults();
+-            rendererGPUProfiler.log(double(frameTimestamps[1] - frameTimestamps[0]) / 1000000.0);
++            const double gpuFrameMs = double(frameTimestamps[1] - frameTimestamps[0]) / 1000000.0;
++            rendererGPUProfiler.log(gpuFrameMs);
++            if (std::getenv("RT64_DKR_PERF_LOG") != nullptr) {
++                static uint64_t perfFrameCount = 0;
++                static double perfGpuTotalMs = 0.0;
++                static double perfGpuMaxMs = 0.0;
++                static uint64_t perfFbPairTotal = 0;
++                static uint64_t perfDrawTotal = 0;
++                static auto perfLastLog = std::chrono::steady_clock::now();
++
++                uint32_t totalDraws = 0;
++                for (uint32_t f = 0; f < workload.fbPairCount; f++) {
++                    totalDraws += workload.fbPairs[f].projectionCount > 0 ? workload.fbPairs[f].gameCallCount : 0;
++                }
++
++                perfFrameCount++;
++                perfGpuTotalMs += gpuFrameMs;
++                perfGpuMaxMs = std::max(perfGpuMaxMs, gpuFrameMs);
++                perfFbPairTotal += workload.fbPairCount;
++                perfDrawTotal += totalDraws;
++
++                const auto perfNow = std::chrono::steady_clock::now();
++                if ((perfNow - perfLastLog) >= std::chrono::seconds(1)) {
++                    const double frameCount = static_cast<double>(perfFrameCount);
++                    std::fprintf(stderr,
++                        "[RT64 PERF] frames=%llu gpu_avg=%.2f ms gpu_max=%.2f ms fbPairs_avg=%.1f calls_avg=%.1f\n",
++                        static_cast<unsigned long long>(perfFrameCount), perfGpuTotalMs / frameCount,
++                        perfGpuMaxMs, static_cast<double>(perfFbPairTotal) / frameCount,
++                        static_cast<double>(perfDrawTotal) / frameCount);
++                    perfFrameCount = 0;
++                    perfGpuTotalMs = 0.0;
++                    perfGpuMaxMs = 0.0;
++                    perfFbPairTotal = 0;
++                    perfDrawTotal = 0;
++                    perfLastLog = perfNow;
++                }
++            }
++            if ((gpuFrameMs > 20.0) && (std::getenv("RT64_DKR_FB_OVERLAP_LOG") != nullptr)) {
++                static uint32_t gpuLogCount = 0;
++                if (gpuLogCount++ < 512) {
++                    uint32_t totalDraws = 0;
++                    for (uint32_t f = 0; f < workload.fbPairCount; f++) {
++                        totalDraws += workload.fbPairs[f].projectionCount > 0 ? workload.fbPairs[f].gameCallCount : 0;
++                    }
++                    std::fprintf(stderr, "[RT64] GPU frame %.1f ms, fbPairs=%u, calls=%u\n",
++                        gpuFrameMs, workload.fbPairCount, totalDraws);
++                }
++            }
+ 
+             // Indicate to the texture cache it's safe to delete the textures if no locks are active.
+             ext.textureCache->decrementLock();
+@@ -865,8 +917,13 @@ namespace RT64 {
+     }
+ 
+     void WorkloadQueue::threadAdvanceBarrier() {
+-        std::scoped_lock<std::mutex> cursorLock(cursorMutex);
+-        barrierCursor = (barrierCursor + 1) % workloads.size();
++        {
++            std::scoped_lock<std::mutex> cursorLock(cursorMutex);
++            barrierCursor = (barrierCursor + 1) % workloads.size();
++        }
++
++        // Wake up advanceToNextWorkload if it's waiting on the barrier.
++        cursorCondition.notify_all();
+     }
+ 
+     void WorkloadQueue::threadAdvanceWorkloadId(uint64_t newWorkloadId) {
+@@ -1221,4 +1278,4 @@ namespace RT64 {
+             }
+         }
+     }
+-};
+\ No newline at end of file
++};
+diff --git a/src/render/rt64_raster_shader_cache.cpp b/src/render/rt64_raster_shader_cache.cpp
+index bf7b669..890debb 100644
+--- a/src/render/rt64_raster_shader_cache.cpp
++++ b/src/render/rt64_raster_shader_cache.cpp
+@@ -4,6 +4,8 @@
+ 
+ #include "rt64_raster_shader_cache.h"
+ 
++#include <cstdlib>
++
+ #include "common/rt64_thread.h"
+ 
+ #define ENABLE_OPTIMIZED_SHADER_GENERATION
+@@ -43,6 +45,7 @@ namespace RT64 {
+             {
+                 std::unique_lock<std::mutex> queueLock(shaderCache->descQueueMutex);
+                 shaderCache->descQueueActiveCount--;
++                shaderCache->descQueueChanged.notify_all();
+                 shaderCache->descQueueChanged.wait(queueLock, [this]() {
+                     return !threadRunning || !shaderCache->descQueue.empty();
+                 });
+@@ -109,9 +112,30 @@ namespace RT64 {
+         if (shaderFormat == RenderShaderFormat::SPIRV) {
+             optimizerCacheSPIRV.initialize();
+         }
++
++        // Diagnostic capture is opt-in and contains only renderer state, never
++        // textures, display lists, or ROM data. It is used to produce a small
++        // deterministic preload table for scenes that are expensive on Deck.
++        const char *capturePath = std::getenv("RT64_DKR_SHADER_CAPTURE");
++        if ((capturePath != nullptr) && (capturePath[0] != '\0')) {
++            shaderCapture.open(capturePath, std::ios::out | std::ios::trunc);
++        }
++    }
++
++    void RasterShaderCache::setCompilationEnabled(bool enabled) {
++        compilationEnabled.store(enabled, std::memory_order_release);
++
++        if (!enabled) {
++            std::unique_lock<std::mutex> queueLock(descQueueMutex);
++            descQueue = std::queue<ShaderDescription>();
++        }
+     }
+ 
+     void RasterShaderCache::submit(const ShaderDescription &desc) {
++        if (!compilationEnabled.load(std::memory_order_acquire)) {
++            return;
++        }
++
+         {
+             std::unique_lock<std::mutex> queueLock(submissionMutex);
+ 
+@@ -123,6 +147,15 @@ namespace RT64 {
+             }
+ 
+             found = true;
++
++            if (shaderCapture.is_open()) {
++                shaderCapture << desc.colorCombiner.L << ' '
++                              << desc.colorCombiner.H << ' '
++                              << desc.otherMode.L << ' '
++                              << desc.otherMode.H << ' '
++                              << desc.flags.value << '\n';
++                shaderCapture.flush();
++            }
+         }
+ 
+         // Push a new shader compilation to the queue.
+@@ -135,16 +168,10 @@ namespace RT64 {
+     }
+     
+     void RasterShaderCache::waitForAll() {
+-        {
+-            std::unique_lock<std::mutex> queueLock(descQueueMutex);
+-            descQueue = std::queue<ShaderDescription>();
+-        }
+-
+-        bool keepWaiting = false;
+-        do {
+-            std::unique_lock<std::mutex> queueLock(descQueueMutex);
+-            keepWaiting = (descQueueActiveCount > 0);
+-        } while (keepWaiting);
++        std::unique_lock<std::mutex> queueLock(descQueueMutex);
++        descQueueChanged.wait(queueLock, [this]() {
++            return descQueue.empty() && (descQueueActiveCount == 0);
++        });
+     }
+ 
+     void RasterShaderCache::destroyAll() {
+@@ -179,4 +206,4 @@ namespace RT64 {
+         std::unique_lock<std::mutex> lock(GPUShadersMutex);
+         return GPUShaders.size();
+     }
+-};
+\ No newline at end of file
++};
+diff --git a/src/render/rt64_raster_shader_cache.h b/src/render/rt64_raster_shader_cache.h
+index 5c40c18..f5ae764 100644
+--- a/src/render/rt64_raster_shader_cache.h
++++ b/src/render/rt64_raster_shader_cache.h
+@@ -39,6 +39,8 @@ namespace RT64 {
+         std::unordered_map<uint64_t, std::unique_ptr<RasterShader>> GPUShaders;
+         std::mutex GPUShadersMutex;
+         std::list<std::unique_ptr<CompilationThread>> compilationThreads;
++        std::atomic<bool> compilationEnabled = true;
++        std::ofstream shaderCapture;
+         uint32_t threadCount;
+         uint32_t ubershaderThreadCount;
+         RenderShaderFormat shaderFormat;
+@@ -49,6 +51,7 @@ namespace RT64 {
+         RasterShaderCache(uint32_t threadCount, uint32_t ubershaderThreadCount);
+         ~RasterShaderCache();
+         void setup(RenderDevice *device, RenderShaderFormat shaderFormat, const ShaderLibrary *shaderLibrary, const RenderMultisampling &multisampling);
++        void setCompilationEnabled(bool enabled);
+         void submit(const ShaderDescription &desc);
+         void waitForAll();
+         void destroyAll();
+@@ -56,4 +59,4 @@ namespace RT64 {
+         RasterShaderUber *getGPUShaderUber() const;
+         uint32_t shaderCount();
+     };
+-};
+\ No newline at end of file
++};
+diff --git a/src/render/rt64_transform_processor.cpp b/src/render/rt64_transform_processor.cpp
+index cd8004d..3b91e75 100644
+--- a/src/render/rt64_transform_processor.cpp
++++ b/src/render/rt64_transform_processor.cpp
+@@ -74,7 +74,11 @@ namespace RT64 {
+         uploads.clear();
+ 
+         for (uint32_t w : p.curFrame->workloads) {
+-            const bool prevFrameValid = (p.prevFrame != nullptr);
++            // The interpolation arrays are only populated when this workload
++            // was matched to one in the previous frame. A previous game frame
++            // can still exist across scene/workload transitions; selecting an
++            // empty interpolation array in that case uploads garbage matrices.
++            const bool prevFrameValid = (p.prevFrame != nullptr) && p.curFrame->frameMap.workloads[w].mapped;
+             Workload &workload = p.workloadQueue->workloads[w];
+             const DrawData &drawData = workload.drawData;
+             DrawBuffers &drawBuffers = workload.drawBuffers;
+@@ -89,4 +93,4 @@ namespace RT64 {
+ 
+         bufferUploader->submit(p.worker, uploads);
+     }
+-};
+\ No newline at end of file
++};
