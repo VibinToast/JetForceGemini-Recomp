@@ -12,10 +12,18 @@ jobs:
   public-source-integrity:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out source and pinned submodules
+      - name: Check out source
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Initialize patched dependencies
+        run: |
+          git submodule update --init \
+            lib/N64ModernRuntime \
+            lib/N64Recomp \
+            lib/rt64
+          git -C lib/rt64 submodule update --init src/contrib/plume
 
       - name: Check public source boundary
         run: ./scripts/check-public-tree.sh
