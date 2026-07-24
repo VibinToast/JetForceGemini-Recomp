@@ -73,7 +73,7 @@ Repeat renderer changes with at least Banjo and Krunch because their attached mo
 
 ## Current tested baseline
 
-As of the 0.1.17 development series:
+As of the 0.1.18 binary alpha:
 
 | Check | macOS arm64 | Steam Deck x86-64 |
 | --- | --- | --- |

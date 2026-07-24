@@ -20,6 +20,7 @@ This list describes the current alpha, not the behavior of the original game.
 - Steam Deck defaults to the game's original refresh rate. RT64-generated frame interpolation can reuse dynamic racer display-list state incorrectly, producing duplicated or displaced racers.
 - Steam Deck preloads the boot-through-Ancient-Lake specialized shader set and avoids splitting a draw batch when DKR repeats an unchanged geometry mode. Materials outside the preload table use the universal fallback.
 - Authored 4:3 menu and post-race pages intentionally pillarbox even when gameplay uses widescreen.
+- Expand widescreen can expose a localized sky/water projection seam while flying over the open ocean in the Adventure overworld. The rest of the overworld and the 4:3 mode are unaffected.
 - Player Select uses one music-clock snapshot for all dancers in a game frame. This removes the Deck-only pose hiccup without changing clouds or other scene animation.
 - New RT64 or driver versions can invalidate assumptions around shader compilation, framebuffer overlap, or task completion. Re-test scene transitions and water-heavy attract scenes after dependency updates.
 

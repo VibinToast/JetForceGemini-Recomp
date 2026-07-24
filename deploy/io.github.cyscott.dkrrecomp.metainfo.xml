@@ -13,5 +13,12 @@
     <p>A native port powered by N64: Recompiled and RT64.</p>
     <p>An unmodified, legally obtained Diddy Kong Racing USA (En,Fr) Rev 1 ROM is required and is not included.</p>
   </description>
+  <releases>
+    <release version="0.1.18" date="2026-07-24" type="development">
+      <description>
+        <p>First ROM-free binary alpha for macOS Apple silicon and Linux x86-64 / Steam Deck.</p>
+      </description>
+    </release>
+  </releases>
   <launchable type="desktop-id">io.github.cyscott.dkrrecomp.desktop</launchable>
 </component>

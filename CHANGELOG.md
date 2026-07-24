@@ -2,6 +2,21 @@
 
 All notable changes to the public alpha are documented here. Versions before `0.1.17` were private development builds and are summarized rather than presented as supported releases.
 
+## 0.1.18 - 2026-07-24
+
+First downloadable binary alpha.
+
+### Distribution
+
+- Adds ROM-free macOS Apple-silicon and Linux x86-64 / Steam Deck packages built from the public release tag.
+- Publishes a permission-preserving Steam Deck tarball containing the AppImage.
+- Publishes SHA-256 checksums alongside the release packages.
+
+### Documentation
+
+- Records the localized Adventure-overworld open-ocean seam that can appear with Expand widescreen.
+- Keeps Windows explicitly unvalidated rather than implying support from inherited build code.
+
 ## 0.1.17 - 2026-07-22
 
 First publication-candidate source layout.
