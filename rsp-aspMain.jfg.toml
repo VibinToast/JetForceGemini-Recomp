@@ -1,0 +1,24 @@
+# RSPRecomp config for Jet Force Gemini's audio microcode (US ROM 0x9E610).
+# It is Rare's n_audio microcode with an MP3 overlay, the same layout Dinosaur Planet uses: 0xF80 bytes of base text
+# at IMEM 0x04001080, and a second code image (ROM +0xF80, 0x8C0 bytes) that the microcode swaps into IMEM 0x1238.
+text_offset = 0x9E610
+text_size = 0xF80
+text_address = 0x04001080
+rom_file_path = "baserom.us.z64"
+output_file_path = "rsp/aspMain.cpp"
+output_function_name = "aspMain"
+# Command handlers, taken from the 17-entry jump table at the start of the microcode data (ROM 0xB081E, DMEM 0x10).
+# The first entry (0x1238) is the start of the overlay slot below.
+extra_indirect_branch_targets = [
+    0x1AE8, 0x143C, 0x1240, 0x1D84, 0x126C,
+    0x1B20, 0x12A8, 0x1214, 0x141C, 0x1310,
+    0x13CC, 0x12E4, 0x1FB0, 0x1358, 0x16EC,
+    0x1408,
+]
+
+[[overlay_slots]]
+text_address = 0x4001238
+overlays = [
+    { offset = 0x1B8, size = 0xDC8 },
+    { offset = 0xF80, size = 0x8C0 },
+]

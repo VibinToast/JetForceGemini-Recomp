@@ -1,0 +1,41 @@
+# N64Recomp config for Jet Force Gemini (US) — MAIN SEGMENT ONLY (overlays are not recompiled yet).
+#
+# Input: the user's own ROM plus jfg.us.syms.toml (function symbols exported from the matching decomp ELF).
+# After running N64Recomp, run tools/merge_gen_anim_data.py on the output directory.
+[input]
+symbols_file_path = "jfg.us.syms.toml"
+rom_file_path = "baserom.us.recomp.z64"
+output_func_path = "RecompiledFuncs"
+
+[patches]
+# Entry points inside the gen_anim_data blob (0x80073E80-0x80074E50, recompiled as one function, see
+# jfg.us.syms.toml): not generated separately; tools/merge_gen_anim_data.py writes a wrapper for each entry point.
+# Only the two that have sized symbols need listing here; the other 13 are size-0 labels N64Recomp never sees.
+ignored = [
+    # Anti-tamper: read words that the CIC-6105 IPL3 boot code leaves in RDRAM, through KSEG1 (0xA02FB1F4 and
+    # 0xA02FE1C0), and expect 0xAD090010 / 0xAD170014. A native process has no IPL3 stage; the port provides native
+    # versions that report the genuine-hardware result (src/jfg/jfg_glue.cpp).
+    "osBootRamTest1_6105",
+    "osBootRamTest2_6105",
+    "func_80074A68",
+    "func_80074B50",
+]
+# Game functions whose names collide with the host C runtime (MSVC declares `_itoa`); emitted with a `_recomp` suffix.
+renamed = ["_itoa"]
+# RSP microcode images linked into the CPU text section (splat `textbin`); they carry function-typed symbols but are
+# not R4300 code. Audio and graphics microcode are handled separately (RSPRecomp / RT64).
+stubs = [
+    "D_8009DA10_9E610", # ucode_audio        (ROM 0x9E610, 6208 bytes)
+    "D_8009F250_9FE50", # ucode_boot (rspboot) (ROM 0x9FE50, 384 bytes)
+    "D_8009F3D0_9FFD0", # ucode_f3ddkr_dram  (ROM 0x9FFD0, 4752 bytes)
+]
+
+
+# gen_anim_data.s: `jr $s1` through a 2-entry table at 0x800A7478 whose entry 0 is NULL and entry 1 is the
+# instruction right after the delay slot (0x80074E34). N64Recomp cannot size a table starting with NULL.
+# Replacing the jr with a nop falls through to the only valid target; behaviour differs only for index 0,
+# which would jump to address 0 on hardware.
+[[patches.instruction]]
+vram = 0x80074E2C
+func = "gen_anim_data"
+value = 0x00000000
