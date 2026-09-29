@@ -1,0 +1,12 @@
+# Never commit the game: the ROM, or anything generated from it.
+*.z64
+*.n64
+*.v64
+generated/
+RecompiledFuncs/
+# Build output and logs
+build/
+bin/
+bin_*/
+*.log
+build_drive.tmp

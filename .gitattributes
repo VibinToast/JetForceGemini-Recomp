@@ -1,0 +1,3 @@
+# Store every file byte-for-byte. The patches contain CRLF lines that must not be converted,
+# and the shell scripts must keep LF endings.
+* -text
