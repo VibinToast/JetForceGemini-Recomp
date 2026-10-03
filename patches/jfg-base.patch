@@ -1,0 +1,1970 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5b41993..b9d280f 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,5 +1,5 @@
+ cmake_minimum_required(VERSION 3.20)
+-project(DKRRecomp VERSION 0.1.18 LANGUAGES C CXX)
++project(JFGRecomp VERSION 1.0.0 LANGUAGES C CXX)
+ set(CMAKE_C_STANDARD 17)
+ set(CMAKE_CXX_STANDARD 20)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+@@ -101,50 +101,50 @@ add_custom_target(MakeRecompControllerDB
+     DEPENDS ${RECOMP_CONTROLLER_DB_TXT})
+ 
+ # Main executable
+-add_executable(DiddyKongRacingRecompiled)
+-add_dependencies(DiddyKongRacingRecompiled MakeRecompControllerDB)
++add_executable(JetForceGeminiRecompiled)
++add_dependencies(JetForceGeminiRecompiled MakeRecompControllerDB)
+ 
+ if (APPLE)
+-    set_target_properties(DiddyKongRacingRecompiled PROPERTIES
++    set_target_properties(JetForceGeminiRecompiled PROPERTIES
+         MACOSX_BUNDLE TRUE
+-        OUTPUT_NAME "Diddy Kong Racing Recompiled"
+-        MACOSX_BUNDLE_BUNDLE_NAME "Diddy Kong Racing Recompiled"
+-        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.cyscott.dkrrecomp"
++        OUTPUT_NAME "Jet Force Gemini Recompiled"
++        MACOSX_BUNDLE_BUNDLE_NAME "Jet Force Gemini Recompiled"
++        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.jfgrecomp"
+         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+-        MACOSX_BUNDLE_COPYRIGHT "Diddy Kong Racing game data is supplied by the user."
++        MACOSX_BUNDLE_COPYRIGHT "Jet Force Gemini game data is supplied by the user."
+     )
+ 
+-    add_custom_command(TARGET DiddyKongRacingRecompiled POST_BUILD
++    add_custom_command(TARGET JetForceGeminiRecompiled POST_BUILD
+         COMMAND ${CMAKE_COMMAND} -E make_directory
+-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources"
++            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources"
+         COMMAND ${CMAKE_COMMAND} -E copy_directory
+             "${CMAKE_SOURCE_DIR}/assets"
+-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources/assets"
++            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources/assets"
+         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+             "${RECOMP_CONTROLLER_DB_TXT}"
+-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources/recompcontrollerdb.txt"
++            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources/recompcontrollerdb.txt"
+         COMMAND "${CMAKE_SOURCE_DIR}/scripts/package-macos-dependencies.sh"
+-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>"
+-        COMMENT "Packaging the DKR macOS app resources"
++            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>"
++        COMMENT "Packaging the macOS app resources"
+     )
+ 
+     # Keep edited launcher/settings assets in sync even when no C++ file needs
+     # relinking. POST_BUILD alone only runs after the executable is rebuilt.
+-    file(GLOB_RECURSE DKR_MACOS_ASSETS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/assets/*")
+-    add_custom_target(DKRMacResources ALL
++    file(GLOB_RECURSE JFG_MACOS_ASSETS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/assets/*")
++    add_custom_target(JFGMacResources ALL
+         COMMAND ${CMAKE_COMMAND} -E make_directory
+-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources"
++            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources"
+         COMMAND ${CMAKE_COMMAND} -E copy_directory
+             "${CMAKE_SOURCE_DIR}/assets"
+-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources/assets"
++            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources/assets"
+         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+             "${RECOMP_CONTROLLER_DB_TXT}"
+-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources/recompcontrollerdb.txt"
+-        DEPENDS ${DKR_MACOS_ASSETS} ${RECOMP_CONTROLLER_DB_TXT}
+-        COMMENT "Synchronizing the DKR macOS app resources"
++            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources/recompcontrollerdb.txt"
++        DEPENDS ${JFG_MACOS_ASSETS} ${RECOMP_CONTROLLER_DB_TXT}
++        COMMENT "Synchronizing the macOS app resources"
+     )
+-    add_dependencies(DiddyKongRacingRecompiled DKRMacResources)
++    add_dependencies(JetForceGeminiRecompiled JFGMacResources)
+ endif()
+ 
+ file(GLOB SOURCES ${CMAKE_SOURCE_DIR}/src/*.cpp)
+@@ -157,7 +157,7 @@ set (SOURCES_EXTRA
+     ${CMAKE_SOURCE_DIR}/lib/RmlUi/Backends/RmlUi_Platform_SDL.cpp
+ )
+ 
+-target_include_directories(DiddyKongRacingRecompiled PRIVATE
++target_include_directories(JetForceGeminiRecompiled PRIVATE
+     ${CMAKE_SOURCE_DIR}/src
+     #${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime/N64Recomp/include
+     ${CMAKE_SOURCE_DIR}/lib/N64Recomp/include
+@@ -184,13 +184,13 @@ target_include_directories(DiddyKongRacingRecompiled PRIVATE
+ )
+ 
+ if(CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
+-    target_compile_options(DiddyKongRacingRecompiled PRIVATE
++    target_compile_options(JetForceGeminiRecompiled PRIVATE
+         -march=nehalem
+         -fno-strict-aliasing
+         -fms-extensions
+     )
+ else()
+-    target_compile_options(DiddyKongRacingRecompiled PRIVATE
++    target_compile_options(JetForceGeminiRecompiled PRIVATE
+         -fno-strict-aliasing
+         -fms-extensions
+     )
+@@ -211,7 +211,7 @@ endif()
+ 
+ if (MSVC)
+     # Disable identical code folding, since this breaks mod function patching as multiple functions can get merged into one.
+-    target_link_options(DiddyKongRacingRecompiled PRIVATE /OPT:NOICF)
++    target_link_options(JetForceGeminiRecompiled PRIVATE /OPT:NOICF)
+ endif()
+ 
+ if (WIN32)
+@@ -229,23 +229,23 @@ if (WIN32)
+         URL https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-devel-${SDL2_VERSION}-VC.zip
+     )
+     FetchContent_MakeAvailable(sdl2)
+-    target_include_directories(DiddyKongRacingRecompiled PRIVATE
++    target_include_directories(JetForceGeminiRecompiled PRIVATE
+         ${sdl2_SOURCE_DIR}/include
+     )
+-    target_link_directories(DiddyKongRacingRecompiled PRIVATE
++    target_link_directories(JetForceGeminiRecompiled PRIVATE
+         ${sdl2_SOURCE_DIR}/lib/x64
+     )
+ 
+     # Copy SDL2 and dxc DLLs to output folder as post build step
+-    add_custom_command(TARGET DiddyKongRacingRecompiled POST_BUILD
++    add_custom_command(TARGET JetForceGeminiRecompiled POST_BUILD
+         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+             "${sdl2_SOURCE_DIR}/lib/x64/SDL2.dll"
+             "${CMAKE_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxil.dll"
+             "${CMAKE_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxcompiler.dll"
+-            $<TARGET_FILE_DIR:DiddyKongRacingRecompiled>)
++            $<TARGET_FILE_DIR:JetForceGeminiRecompiled>)
+ 
+     set_target_properties(
+-        DiddyKongRacingRecompiled
++        JetForceGeminiRecompiled
+         PROPERTIES
+             LINK_FLAGS_DEBUG "/SUBSYSTEM:CONSOLE"
+             LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
+@@ -253,8 +253,8 @@ if (WIN32)
+             LINK_FLAGS_MINSIZEREL "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
+     )
+ 
+-    target_sources(DiddyKongRacingRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/icons/app.rc)
+-    target_link_libraries(DiddyKongRacingRecompiled PRIVATE SDL2 Winmm.lib)
++    target_sources(JetForceGeminiRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/icons/app.rc)
++    target_link_libraries(JetForceGeminiRecompiled PRIVATE SDL2 Winmm.lib)
+ endif()
+ 
+ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+@@ -267,12 +267,12 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+        COMMAND file_to_c ${CMAKE_SOURCE_DIR}/icons/512.png icon_bytes ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.c ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.h
+        DEPENDS ${CMAKE_SOURCE_DIR}/icons/512.png
+     )
+-    target_sources(DiddyKongRacingRecompiled PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.c)
++    target_sources(JetForceGeminiRecompiled PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.c)
+ 
+     message(STATUS "SDL2_FOUND = ${SDL2_FOUND}")
+     message(STATUS "SDL2_INCLUDE_DIRS = ${SDL2_INCLUDE_DIRS}")
+ 
+-    target_include_directories(DiddyKongRacingRecompiled PRIVATE ${SDL2_INCLUDE_DIRS})
++    target_include_directories(JetForceGeminiRecompiled PRIVATE ${SDL2_INCLUDE_DIRS})
+ 
+     find_package(Freetype REQUIRED)
+ 
+@@ -281,19 +281,19 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+     message(STATUS "FREETYPE_LIBRARIES = ${FREETYPE_LIBRARIES}")
+ 
+     include_directories(${FREETYPE_LIBRARIES})
+-    target_link_libraries(DiddyKongRacingRecompiled PRIVATE ${FREETYPE_LIBRARIES} SDL2::SDL2)
++    target_link_libraries(JetForceGeminiRecompiled PRIVATE ${FREETYPE_LIBRARIES} SDL2::SDL2)
+ 
+     set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+     set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+     find_package(Threads REQUIRED)
+ 
+-    target_link_libraries(DiddyKongRacingRecompiled PRIVATE "-latomic -static-libstdc++" ${CMAKE_DL_LIBS} Threads::Threads)
++    target_link_libraries(JetForceGeminiRecompiled PRIVATE "-latomic -static-libstdc++" ${CMAKE_DL_LIBS} Threads::Threads)
+ 
+     # Export symbols to the dynamic symbol table so backtraces work (when symbols aren't stripped)
+-    target_link_options(DiddyKongRacingRecompiled PRIVATE -Wl,-export-dynamic)
++    target_link_options(JetForceGeminiRecompiled PRIVATE -Wl,-export-dynamic)
+ endif()
+ 
+-target_link_libraries(DiddyKongRacingRecompiled PRIVATE
++target_link_libraries(JetForceGeminiRecompiled PRIVATE
+     RecompiledFuncs
+     librecomp
+     ultramodern
+@@ -339,9 +339,9 @@ else()
+     endif()
+ endif()
+ 
+-build_vertex_shader(DiddyKongRacingRecompiled "shaders/InterfaceVS.hlsl" "shaders/InterfaceVS.hlsl")
+-build_pixel_shader(DiddyKongRacingRecompiled "shaders/InterfacePS.hlsl" "shaders/InterfacePS.hlsl")
++build_vertex_shader(JetForceGeminiRecompiled "shaders/InterfaceVS.hlsl" "shaders/InterfaceVS.hlsl")
++build_pixel_shader(JetForceGeminiRecompiled "shaders/InterfacePS.hlsl" "shaders/InterfacePS.hlsl")
+ 
+-target_sources(DiddyKongRacingRecompiled PRIVATE ${SOURCES} ${SOURCES_RECURSIVE} ${SOURCES_EXTRA})
++target_sources(JetForceGeminiRecompiled PRIVATE ${SOURCES} ${SOURCES_RECURSIVE} ${SOURCES_EXTRA})
+ 
+-set_property(TARGET DiddyKongRacingRecompiled PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
++set_property(TARGET JetForceGeminiRecompiled PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+diff --git a/src/config/config.cpp b/src/config/config.cpp
+index fec4eaa..9076b75 100644
+--- a/src/config/config.cpp
++++ b/src/config/config.cpp
+@@ -1,6 +1,8 @@
+ #include "config.hpp"
+ 
+ #include <filesystem>
++#include <vector>
++#include <system_error>
+ #include <fstream>
+ #include <iomanip>
+ 
+@@ -167,46 +169,95 @@ void input_field_from_json(const nlohmann::json& j, dino::input::InputField& fie
+     j.at("input_id").get_to(field.input_id);
+ }
+ 
+-std::filesystem::path get_app_folder_path() {
+-   // directly check for portable.txt (windows and native linux binary)
+-   if (std::filesystem::exists("portable.txt")) {
+-       return std::filesystem::current_path();
+-   }
+-
+-   std::filesystem::path recomp_dir{};
+-
++// JFG port: the folder the executable is in. Everything the program reads or writes at run time lives there.
++std::filesystem::path get_executable_folder_path() {
++    static std::filesystem::path cached;
++    if (!cached.empty()) {
++        return cached;
++    }
++    std::error_code ec;
+ #if defined(_WIN32)
+-   // Deduce local app data path.
+-   PWSTR known_path = NULL;
+-   HRESULT result = SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &known_path);
+-   if (result == S_OK) {
+-       recomp_dir = std::filesystem::path{known_path} / program_id;
+-   }
++    std::wstring buffer(32768, L'\0');
++    const DWORD length = GetModuleFileNameW(NULL, buffer.data(), (DWORD)buffer.size());
++    if (length > 0 && length < buffer.size()) {
++        buffer.resize(length);
++        cached = std::filesystem::path{buffer}.parent_path();
++    }
++#elif defined(__linux__)
++    const std::filesystem::path exe = std::filesystem::read_symlink("/proc/self/exe", ec);
++    if (!ec) {
++        cached = exe.parent_path();
++    }
++#endif
++    if (cached.empty()) {
++        cached = std::filesystem::current_path(ec);
++    }
++    return cached;
++}
+ 
+-   CoTaskMemFree(known_path);
++// Where earlier builds kept saves and settings: a per-user folder, first under the name of the project this port is
++// based on, then under this port's own name.
++static std::vector<std::filesystem::path> legacy_app_folder_paths() {
++    std::vector<std::filesystem::path> ret{};
++    std::filesystem::path base{};
++#if defined(_WIN32)
++    PWSTR known_path = NULL;
++    if (SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &known_path) == S_OK) {
++        base = std::filesystem::path{known_path};
++    }
++    CoTaskMemFree(known_path);
+ #elif defined(__linux__)
++    const char *homedir = getenv("HOME");
++    if (homedir == nullptr) {
++        homedir = getpwuid(getuid())->pw_dir;
++    }
++    if (homedir != nullptr) {
++        base = std::filesystem::path{homedir} / ".config";
++    }
++#endif
++    if (!base.empty()) {
++        ret.push_back(base / std::u8string{program_id});
++        ret.push_back(base / "DiddyKongRacingRecompiled");
++    }
++    return ret;
++}
++
++std::filesystem::path get_app_folder_path() {
++#if defined(__APPLE__)
++   const char *homedir = getenv("HOME");
++   if (homedir != nullptr) {
++       return std::filesystem::path{homedir} / "Library/Application Support" / std::u8string{program_id};
++   }
++   return {};
++#else
++#if defined(__linux__)
+    // check for APP_FOLDER_PATH env var used by AppImage
+    if (getenv("APP_FOLDER_PATH") != nullptr) {
+        return std::filesystem::path{getenv("APP_FOLDER_PATH")};
+    }
++#endif
+ 
+-   const char *homedir;
+-
+-   if ((homedir = getenv("HOME")) == nullptr) {
+-       homedir = getpwuid(getuid())->pw_dir;
+-   }
++    // JFG port: saves and settings are kept next to the executable, not in a per-user folder.
++    const std::filesystem::path app_dir = get_executable_folder_path();
++
++    // Carry saves and settings over from the per-user folder of an earlier build, once.
++    static bool migration_checked = false;
++    if (!migration_checked) {
++        migration_checked = true;
++        std::error_code ec;
++        if (!std::filesystem::exists(app_dir / "saves", ec)) {
++            for (const std::filesystem::path& legacy_dir : legacy_app_folder_paths()) {
++                if (std::filesystem::is_directory(legacy_dir / "saves", ec)) {
++                    std::filesystem::copy(legacy_dir, app_dir,
++                        std::filesystem::copy_options::recursive | std::filesystem::copy_options::skip_existing, ec);
++                    break;
++                }
++            }
++        }
++    }
+ 
+-   if (homedir != nullptr) {
+-       recomp_dir = std::filesystem::path{homedir} / (std::u8string{u8".config/"} + std::u8string{program_id});
+-   }
+-#elif defined(__APPLE__)
+-   const char *homedir = getenv("HOME");
+-   if (homedir != nullptr) {
+-       recomp_dir = std::filesystem::path{homedir} / "Library/Application Support" / std::u8string{program_id};
+-   }
++    return app_dir;
+ #endif
+-
+-    return recomp_dir;
+ }
+ 
+ bool read_json(std::ifstream input_file, nlohmann::json& json_out) {
+diff --git a/src/config/config.hpp b/src/config/config.hpp
+index 52113db..686e335 100644
+--- a/src/config/config.hpp
++++ b/src/config/config.hpp
+@@ -8,8 +8,8 @@
+ #include "input/input.hpp"
+ 
+ namespace dino::config {
+-    constexpr std::u8string_view program_id = u8"DiddyKongRacingRecompiled";
+-    constexpr std::string_view program_name = "Diddy Kong Racing: Recompiled";
++    constexpr std::u8string_view program_id = u8"JetForceGeminiRecompiled";
++    constexpr std::string_view program_name = "Jet Force Gemini: Recompiled";
+ 
+     void load_config();
+     void save_config();
+@@ -21,6 +21,7 @@ namespace dino::config {
+     void reset_single_input_binding(dino::input::InputDevice device, dino::input::GameInput input);
+ 
+     std::filesystem::path get_app_folder_path();
++    std::filesystem::path get_executable_folder_path();
+ 
+     enum class AutosaveMode {
+         On,
+diff --git a/src/debug_ui/backend.cpp b/src/debug_ui/backend.cpp
+index a12f9f1..40c0625 100644
+--- a/src/debug_ui/backend.cpp
++++ b/src/debug_ui/backend.cpp
+@@ -1,5 +1,7 @@
+ #include "backend.hpp"
+ 
++#include <atomic>
++
+ #ifdef _WIN32
+ #include <SDL_video.h>
+ #else
+@@ -53,6 +55,14 @@ struct VulkanContext {
+ ImGuiContext *dino_imgui_ctx;
+ bool b_is_open = false;
+ bool b_in_ui_frame = false;
++// JFG PORT: lets the game-side code draw a passive overlay (the "press F9" hint) while the debug UI is closed.
++static bool b_overlay = false;
++// JFG PORT: F5 asks the game to go back to the title screen (taken by take_reset_request() on the game thread).
++static std::atomic<bool> b_reset_requested{ false };
++// JFG PORT: F6 switches to the next texture pack (taken by take_next_pack_request()).
++static std::atomic<bool> b_next_pack_requested{ false };
++// JFG PORT: F7 switches the fly camera on / off (taken by take_fly_request()).
++static std::atomic<bool> b_fly_requested{ false };
+ 
+ static ImGuiContext *prev_ctx;
+ static std::unique_ptr<plume::RenderDescriptorSet> descriptor_set;
+@@ -88,6 +98,55 @@ static RT64::UserConfiguration::GraphicsAPI get_graphics_api() {
+ 
+ bool is_open() { return b_is_open; }
+ bool in_ui_frame() { return b_in_ui_frame; }
++void set_overlay(bool enabled) { b_overlay = enabled; }
++bool take_reset_request() { return b_reset_requested.exchange(false); }
++bool take_next_pack_request() { return b_next_pack_requested.exchange(false); }
++bool take_fly_request() { return b_fly_requested.exchange(false); }
++
++// JFG PORT: F9 (or `) opens / closes the original debug window, F10 the toolbar; each switches over from the other.
++static bool b_toolbar_mode = false;
++bool toolbar_mode() { return b_toolbar_mode; }
++// JFG PORT: with the toolbar open, either the toolbar or the game has the mouse and keyboard. Alt (pressed and released
++// on its own, like a Windows menu bar) switches between them, and a click outside the toolbar and its windows hands
++// them to the game. The toolbar starts with them when F10 opens it.
++static std::atomic<bool> b_toolbar_game_input{ false };
++static bool b_release_ui = false;      // the game just took over: close the toolbar's menus and drop its focus
++static bool b_alt_alone = false;       // Alt is down and no other key was pressed since
++static bool b_click_outside = false;   // a mouse button went down outside the toolbar's menus and windows
++bool toolbar_game_input() { return b_is_open && b_toolbar_mode && b_toolbar_game_input.load(); }
++static void set_toolbar_game_input(bool game) {
++    if (game && !b_toolbar_game_input.load()) b_release_ui = true;
++    b_toolbar_game_input = game;
++}
++static void handle_toggle_key(const SDL_Event& event) {
++    if (event.type == SDL_KEYDOWN && !event.key.repeat) {
++        const SDL_Scancode code = event.key.keysym.scancode;
++        b_alt_alone = code == SDL_SCANCODE_LALT || code == SDL_SCANCODE_RALT;
++    }
++    else if (event.type == SDL_KEYUP && (event.key.keysym.scancode == SDL_SCANCODE_LALT || event.key.keysym.scancode == SDL_SCANCODE_RALT)) {
++        if (b_alt_alone && b_is_open && b_toolbar_mode) set_toolbar_game_input(!b_toolbar_game_input.load());
++        b_alt_alone = false;
++    }
++    if (event.type != SDL_KEYDOWN || event.key.repeat) return;
++    const SDL_Scancode code = event.key.keysym.scancode;
++    if (code == SDL_Scancode::SDL_SCANCODE_GRAVE || code == SDL_Scancode::SDL_SCANCODE_F9 || code == SDL_Scancode::SDL_SCANCODE_F10) {
++        const bool toolbar = code == SDL_Scancode::SDL_SCANCODE_F10;
++        if (b_is_open && b_toolbar_mode == toolbar) b_is_open = false;
++        else { b_is_open = true; b_toolbar_mode = toolbar; }
++        b_toolbar_game_input = false;
++        b_click_outside = false;
++    }
++}
++// JFG PORT: input events ImGui must not see while the game has the mouse and keyboard.
++static bool is_input_event(const SDL_Event& event) {
++    switch (event.type) {
++    case SDL_KEYDOWN: case SDL_KEYUP: case SDL_TEXTINPUT: case SDL_TEXTEDITING:
++    case SDL_MOUSEMOTION: case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: case SDL_MOUSEWHEEL:
++        return true;
++    default:
++        return false;
++    }
++}
+ 
+ void begin() {
+     if (!dino_imgui_ctx->Initialized) return;
+@@ -96,16 +155,11 @@ void begin() {
+         // Still process the event queue but don't send any to ImGui
+         SDL_Event event{};
+         while (event_queue.try_dequeue(event)) {
+-            if (event.type == SDL_KEYDOWN &&
+-                    (event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_GRAVE ||
+-                        event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F9) &&
+-                    !event.key.repeat) {
+-                b_is_open = !b_is_open;
+-            }
++            handle_toggle_key(event);
+         }
+     }
+ 
+-    if (!b_is_open) {
++    if (!b_is_open && !b_overlay) {
+         // Still not open even after handling key events
+         return;
+     }
+@@ -120,17 +174,32 @@ void begin() {
+ 
+     SDL_Event event{};
+     while (event_queue.try_dequeue(event)) {
+-        if (event.type == SDL_KEYDOWN &&
+-                (event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_GRAVE ||
+-                    event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F9) &&
+-                !event.key.repeat) {
+-            b_is_open = !b_is_open;
++        handle_toggle_key(event);
++
++        // JFG PORT: toolbar open - the game or the toolbar has the mouse and keyboard (see toolbar_game_input()).
++        if (b_is_open && b_toolbar_mode) {
++            if (b_toolbar_game_input.load() && is_input_event(event)) continue;
++            if (event.type == SDL_MOUSEBUTTONDOWN) b_click_outside = !dino_imgui_ctx->IO.WantCaptureMouse;
++            else if (event.type == SDL_MOUSEBUTTONUP && b_click_outside) {
++                // Taken over on release, so the click itself does not fire.
++                b_click_outside = false;
++                set_toolbar_game_input(true);
++                continue;
++            }
+         }
+ 
+         ImGui_ImplSDL2_ProcessEvent(&event);
+     }
++    if (b_release_ui) {
++        ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
++        ImGui::GetIO().ClearInputKeys();
++    }
+ 
+-    if (!b_is_open) {
++    // JFG PORT: an overlay-only frame, or the game having the mouse, must not take over the mouse cursor.
++    if (b_is_open && !toolbar_game_input()) ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
++    else ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
++
++    if (!b_is_open && !b_overlay) {
+         // Closed after handling key events
+         b_in_ui_frame = false;
+         ImGui::SetCurrentContext(prev_ctx);
+@@ -160,6 +229,13 @@ void begin() {
+     }
+ 
+     ImGui::NewFrame();
++
++    // JFG PORT: the game took the mouse and keyboard from the toolbar: close its menus and drop its keyboard focus.
++    if (b_release_ui) {
++        b_release_ui = false;
++        ImGui::ClosePopupsExceptModals();
++        ImGui::FocusWindow(nullptr);
++    }
+ }
+ 
+ void end() {
+@@ -176,6 +252,15 @@ void end() {
+ }
+ 
+ static int sdl_event_filter(void *userdata, SDL_Event *event) {
++    if (event->type == SDL_KEYDOWN && event->key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F5 && !event->key.repeat) {
++        b_reset_requested = true;
++    }
++    if (event->type == SDL_KEYDOWN && event->key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F6 && !event->key.repeat) {
++        b_next_pack_requested = true;
++    }
++    if (event->type == SDL_KEYDOWN && event->key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F7 && !event->key.repeat) {
++        b_fly_requested = true;
++    }
+     event_queue.enqueue(*event);
+ 
+     return 1;
+@@ -283,7 +368,7 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
+ }
+ 
+ static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
+-    if (!b_is_open) return;
++    if (!b_is_open && !b_overlay) return;
+ 
+     const std::lock_guard<std::mutex> frame_lock(frame_mutex);
+ 
+diff --git a/src/debug_ui/backend.hpp b/src/debug_ui/backend.hpp
+index 6c13bfc..8879255 100644
+--- a/src/debug_ui/backend.hpp
++++ b/src/debug_ui/backend.hpp
+@@ -6,7 +6,13 @@ namespace dino::debug_ui::backend {
+ 
+ extern ImGuiContext *dino_imgui_ctx;
+ bool is_open();
++bool toolbar_mode(); // JFG PORT: true while F10's toolbar (not F9's window) is the open debug UI
++bool toolbar_game_input(); // JFG PORT: the toolbar is open but the game has the mouse and keyboard (Alt switches)
+ bool in_ui_frame();
++void set_overlay(bool enabled);
++bool take_reset_request(); // JFG PORT: F5 was pressed since the last call
++bool take_next_pack_request(); // JFG PORT: F6 was pressed since the last call
++bool take_fly_request(); // JFG PORT: F7 was pressed since the last call
+ 
+ void begin();
+ void end();
+diff --git a/src/debug_ui/debug_ui.cpp b/src/debug_ui/debug_ui.cpp
+index a49e8be..e1dd767 100644
+--- a/src/debug_ui/debug_ui.cpp
++++ b/src/debug_ui/debug_ui.cpp
+@@ -11,13 +11,17 @@ bool is_open() {
+     return backend::is_open() && backend::dino_imgui_ctx->Initialized;
+ }
+ 
++bool game_has_input() {
++    return !is_open() || backend::toolbar_game_input();
++}
++
+ bool want_capture_keyboard() {
+     // Go directly through our context pointer so we don't have to worry about it being current
+     if (backend::dino_imgui_ctx == nullptr) {
+         return false;
+     }
+ 
+-    return backend::is_open() && backend::dino_imgui_ctx->IO.WantCaptureKeyboard;
++    return backend::is_open() && !backend::toolbar_game_input() && backend::dino_imgui_ctx->IO.WantCaptureKeyboard;
+ }
+ 
+ void ui_frame_begin() {
+diff --git a/src/debug_ui/debug_ui.hpp b/src/debug_ui/debug_ui.hpp
+index 6fb7cfd..d4ff74a 100644
+--- a/src/debug_ui/debug_ui.hpp
++++ b/src/debug_ui/debug_ui.hpp
+@@ -5,6 +5,8 @@
+ namespace dino::debug_ui {
+ 
+ bool is_open();
++// JFG PORT: the game gets the mouse and keyboard: the debug UI is closed, or F10's toolbar is open but handed them to the game.
++bool game_has_input();
+ 
+ bool want_capture_keyboard();
+ 
+diff --git a/src/input/controls.cpp b/src/input/controls.cpp
+index 7b53d07..556f276 100644
+--- a/src/input/controls.cpp
++++ b/src/input/controls.cpp
+@@ -1,6 +1,17 @@
+ #include "controls.hpp"
+ 
++#include <algorithm>
+ #include <array>
++#include <cstdlib>
++
++#include "SDL.h"
++
++// Dual-stick controls for Jet Force Gemini (src/jfg/jfg_debug_menu.cpp).
++extern "C" int jfg_dual_stick_active(void);
++extern "C" int jfg_invert_aim_normal(uint16_t buttons);
++extern "C" int jfg_dual_stick_layout(void);
++extern "C" void jfg_dual_stick(uint16_t* buttons, float* x, float* y, float right_x, float right_y);
++extern "C" int jfg_mouse_keyboard_active(void);
+ 
+ namespace dino::input {
+ 
+@@ -85,10 +96,66 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
+     }
+ 
+     if (!game_input_disabled()) {
++        const bool dual_stick = jfg_dual_stick_active() != 0;
++        const bool dual_layout = dual_stick && jfg_dual_stick_layout() != 0;
++        // Mouse and keyboard (JFG option): during gameplay the keyboard has its own layout below instead of the
++        // keyboard bindings, the mouse buttons aim and fire, and src/jfg turns mouse movement into camera and aim and
++        // the wheel into weapon changes.
++        const bool mouse_keyboard = dual_stick && jfg_mouse_keyboard_active() != 0;
+         for (size_t i = 0; i < n64_button_values.size(); i++) {
+             size_t input_index = (size_t)GameInput::N64_BUTTON_START + i;
+-            cur_buttons |= get_input_digital(keyboard_input_mappings[input_index]) ? n64_button_values[i] : 0;
+-            cur_buttons |= get_input_digital(controller_input_mappings[input_index]) ? n64_button_values[i] : 0;
++            if (!mouse_keyboard) {
++                cur_buttons |= get_input_digital(keyboard_input_mappings[input_index]) ? n64_button_values[i] : 0;
++            }
++            if (!dual_stick) {
++                cur_buttons |= get_input_digital(controller_input_mappings[input_index]) ? n64_button_values[i] : 0;
++            }
++            else if (dual_layout) {
++                // The built-in layout below replaces the controller bindings.
++            }
++            else {
++                // The right stick is an analog stick in this mode: bindings of N64 buttons to it (by default the
++                // C buttons) are ignored.
++                for (const InputField& field : controller_input_mappings[input_index]) {
++                    if (field.input_type == 4) { // InputType::ControllerAnalog (input.cpp)
++                        const int axis = abs(field.input_id) - 1;
++                        if (axis == SDL_CONTROLLER_AXIS_RIGHTX || axis == SDL_CONTROLLER_AXIS_RIGHTY) continue;
++                    }
++                    cur_buttons |= get_input_digital(field) ? n64_button_values[i] : 0;
++                }
++            }
++        }
++
++        if (dual_layout) {
++            // Dual-stick mode's own layout for a modern (Xbox-style) controller, used during gameplay only. The game's
++            // actions sit on N64 buttons: C-up jumps (and zooms in / walks forward while aiming), C-down crouches (zooms
++            // out / walks back), A and B change weapon, R aims, Z fires. jfg_dual_stick() finishes the job (D-pad up/down
++            // as zoom while aiming, the optional trigger swap).
++            constexpr uint32_t digital = 3, analog = 4; // InputType::ControllerDigital / ControllerAnalog (input.cpp)
++            struct LayoutEntry { uint32_t type; int32_t id; uint16_t n64; };
++            static const LayoutEntry layout[] = {
++                { analog,  SDL_CONTROLLER_AXIS_TRIGGERLEFT + 1,  0x0010 }, // LT: aim (R)
++                { analog,  SDL_CONTROLLER_AXIS_TRIGGERRIGHT + 1, 0x2000 }, // RT: fire (Z)
++                { digital, SDL_CONTROLLER_BUTTON_A,              0x0008 }, // A: jump (C-up)
++                { digital, SDL_CONTROLLER_BUTTON_B,              0x0004 }, // B: crouch (C-down)
++                { digital, SDL_CONTROLLER_BUTTON_LEFTSTICK,      0x0004 }, // left stick click: crouch (C-down)
++                { digital, SDL_CONTROLLER_BUTTON_Y,              0x8000 }, // Y: N64 A (next weapon)
++                { digital, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER,  0x8000 }, // RB: N64 A (next weapon)
++                { digital, SDL_CONTROLLER_BUTTON_X,              0x4000 }, // X: N64 B (previous weapon)
++                { digital, SDL_CONTROLLER_BUTTON_LEFTSHOULDER,   0x4000 }, // LB: N64 B (previous weapon)
++                { digital, SDL_CONTROLLER_BUTTON_RIGHTSTICK,     0x0020 }, // right stick click: N64 L
++                { digital, SDL_CONTROLLER_BUTTON_BACK,           0x0020 }, // View/Back: N64 L
++                { digital, SDL_CONTROLLER_BUTTON_START,          0x1000 }, // Menu/Start: START
++                { digital, SDL_CONTROLLER_BUTTON_DPAD_UP,        0x0800 }, // D-pad: the N64 D-pad (weapon select);
++                { digital, SDL_CONTROLLER_BUTTON_DPAD_DOWN,      0x0400 }, //   up/down zoom while aiming
++                { digital, SDL_CONTROLLER_BUTTON_DPAD_LEFT,      0x0200 },
++                { digital, SDL_CONTROLLER_BUTTON_DPAD_RIGHT,     0x0100 },
++            };
++            for (const LayoutEntry& entry : layout) {
++                if (get_input_digital(InputField{ entry.type, entry.id })) {
++                    cur_buttons |= entry.n64;
++                }
++            }
+         }
+ 
+         float joystick_x = get_input_analog(controller_input_mappings[(size_t)GameInput::X_AXIS_POS])
+@@ -99,11 +166,56 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
+ 
+         apply_joystick_deadzone(joystick_x, joystick_y, &joystick_x, &joystick_y);
+ 
+-        cur_x = get_input_analog(keyboard_input_mappings[(size_t)GameInput::X_AXIS_POS])
+-                - get_input_analog(keyboard_input_mappings[(size_t)GameInput::X_AXIS_NEG]) + joystick_x;
++        if (mouse_keyboard) {
++            constexpr uint32_t keyboard = 1; // InputType::Keyboard (input.cpp)
++            auto key = [](SDL_Scancode code) { return get_input_digital(InputField{ keyboard, (int32_t)code }); };
++            struct KeyEntry { SDL_Scancode key; uint16_t n64; };
++            static const KeyEntry keys[] = {
++                { SDL_SCANCODE_SPACE,  0x0008 }, // jump (C-up)
++                { SDL_SCANCODE_LCTRL,  0x0004 }, // crouch (C-down)
++                { SDL_SCANCODE_C,      0x0004 },
++                { SDL_SCANCODE_E,      0x8000 }, // next weapon (N64 A)
++                { SDL_SCANCODE_Q,      0x4000 }, // previous weapon (N64 B)
++                { SDL_SCANCODE_RETURN, 0x1000 }, // START
++                { SDL_SCANCODE_TAB,    0x0020 }, // N64 L
++                { SDL_SCANCODE_1,      0x0800 }, // D-pad up (zoom in while aiming)
++                { SDL_SCANCODE_2,      0x0100 }, // D-pad right
++                { SDL_SCANCODE_3,      0x0400 }, // D-pad down (zoom out while aiming)
++                { SDL_SCANCODE_4,      0x0200 }, // D-pad left
++            };
++            for (const KeyEntry& entry : keys) {
++                if (key(entry.key)) cur_buttons |= entry.n64;
++            }
++            const uint32_t mouse_buttons = SDL_GetMouseState(nullptr, nullptr);
++            if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) cur_buttons |= 0x0010; // aim (R)
++            if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) cur_buttons |= 0x2000;  // fire (Z)
++
++            // WASD as the left stick.
++            float kx = (key(SDL_SCANCODE_D) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_A) ? 1.0f : 0.0f);
++            float ky = (key(SDL_SCANCODE_W) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_S) ? 1.0f : 0.0f);
++            if (kx != 0.0f && ky != 0.0f) { kx *= 0.7071f; ky *= 0.7071f; }
++            joystick_x = std::clamp(joystick_x + kx, -1.0f, 1.0f);
++            joystick_y = std::clamp(joystick_y + ky, -1.0f, 1.0f);
++        }
++
++        if (dual_stick) {
++            float right_x = 0.0f, right_y = 0.0f;
++            get_right_analog(&right_x, &right_y);
++            jfg_dual_stick(&cur_buttons, &joystick_x, &joystick_y, right_x, -right_y); // SDL: down is positive
++        }
+ 
+-        cur_y = get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_POS])
+-                - get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_NEG]) + joystick_y;
++        cur_x = joystick_x;
++        cur_y = joystick_y;
++        if (!mouse_keyboard) {
++            cur_x += get_input_analog(keyboard_input_mappings[(size_t)GameInput::X_AXIS_POS])
++                   - get_input_analog(keyboard_input_mappings[(size_t)GameInput::X_AXIS_NEG]);
++            cur_y += get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_POS])
++                   - get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_NEG]);
++        }
++
++        if (!dual_stick && jfg_invert_aim_normal(cur_buttons) != 0) {
++            cur_y = -cur_y; // option: flip up/down while aiming with the normal controls
++        }
+ 
+         float joystick_range = get_joystick_range() / 100.0f;
+         
+diff --git a/src/input/input.cpp b/src/input/input.cpp
+index 2d0e062..523604c 100644
+--- a/src/input/input.cpp
++++ b/src/input/input.cpp
+@@ -14,6 +14,11 @@
+ 
+ #include "controls.hpp"
+ 
++// Mouse and keyboard controls for Jet Force Gemini (src/jfg/jfg_debug_menu.cpp).
++extern "C" int jfg_mouse_keyboard_active(void);
++extern "C" void jfg_mouse_motion(int dx, int dy);
++extern "C" void jfg_mouse_wheel(int notches);
++
+ constexpr float axis_threshold = 0.5f;
+ 
+ struct ControllerState {
+@@ -225,6 +230,7 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
+         {
+             SDL_MouseWheelEvent* wheel_event = &event->wheel;
+             InputState.mouse_wheel_pos.fetch_add(wheel_event->y * (wheel_event->direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1));
++            jfg_mouse_wheel(wheel_event->y * (wheel_event->direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1));
+         }
+         queue_if_enabled(event);
+         break;
+@@ -342,6 +348,9 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
+             InputState.pending_mouse_delta[0] += motion_event->xrel;
+             InputState.pending_mouse_delta[1] += motion_event->yrel;
+         }
++        if (jfg_mouse_keyboard_active()) {
++            jfg_mouse_motion(event->motion.xrel, event->motion.yrel);
++        }
+         queue_if_enabled(event);
+         break;
+     case SDL_EventType::SDL_DROPBEGIN:
+@@ -374,6 +383,8 @@ void dino::input::handle_events() {
+ 
+         // Lock the cursor if all three conditions are true: mouse aiming is enabled, game input is not disabled, and the game has been started.
+         bool cursor_locked = (dino::input::get_mouse_sensitivity() != 0) && !dino::input::game_input_disabled() && ultramodern::is_game_started();
++        // JFG: mouse and keyboard controls capture the mouse during gameplay.
++        cursor_locked = cursor_locked || (jfg_mouse_keyboard_active() != 0 && !dino::input::game_input_disabled());
+ 
+         // Hide the cursor based on its enable state, but override visibility to false if the cursor is locked.
+         bool cursor_visible = cursor_enabled;
+@@ -401,7 +412,7 @@ void dino::input::handle_events() {
+         }
+ 
+         // If the debug UI is open, let ImGui have control over the cursor.
+-        if (!dino::debug_ui::is_open()) {
++        if (dino::debug_ui::game_has_input()) { // JFG PORT: also while F10's toolbar has handed the mouse to the game
+             SDL_ShowCursor(cursor_visible ? SDL_ENABLE : SDL_DISABLE);
+         }
+         SDL_SetRelativeMouseMode(cursor_locked ? SDL_TRUE : SDL_FALSE);
+@@ -597,6 +608,11 @@ void dino::input::poll_inputs() {
+ 
+ void dino::input::set_rumble(int controller_num, bool on) {
+     if (controller_num == 0) {
++        // JFG PORT: JFG_DEBUG_RUMBLE=1 logs every change of the motor state (for testing without a controller).
++        static const bool log = std::getenv("JFG_DEBUG_RUMBLE") != nullptr;
++        if (log && InputState.rumble_active != on) {
++            fprintf(stderr, "[JFG] rumble %s\n", on ? "on" : "off");
++        }
+         InputState.rumble_active = on;
+     }
+ }
+diff --git a/src/main.cpp b/src/main.cpp
+index f93f6d3..952fce3 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -3,6 +3,9 @@
+ #include <cstdlib>
+ #include <thread>
+ #include <vector>
++#include <filesystem>
++#include <string>
++#include <system_error>
+ 
+ #include "nfd.h"
+ #include "ultramodern/ultramodern.hpp"
+@@ -34,7 +37,7 @@
+ #include "runtime/rsp.hpp"
+ #include "runtime/threads.hpp"
+ 
+-const std::string version_string = "0.1.18";
++const std::string version_string = "1.0.0";
+ 
+ extern "C" void recomp_entrypoint(uint8_t *rdram, recomp_context *ctx);
+ gpr get_entrypoint_address();
+@@ -48,24 +51,42 @@ static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
+     recomp_entrypoint(rdram, ctx);
+ }
+ 
++// JFG port: boot-time globals the runtime's IPL3 emulation leaves unset (src/jfg/jfg_glue.cpp).
++extern "C" void jfg_on_init(uint8_t* rdram, recomp_context* ctx);
++
++// JFG PORT: Jet Force Gemini's modified osCreateThread (libultra/src/os/createthread.c, JFGDIFFS) starts every
++// thread with SR_FR set, i.e. 64-bit FPU registers where odd-numbered registers are independent, and clears it
++// only for threads created with a negative id (the audio thread, whose libultra code needs FR = 0).
++// The runtime replaces osCreateThread, so reproduce that rule here; game code that uses odd FPU registers
++// (camera, collision and matrix maths) computes garbage otherwise.
+ static void custom_thread_create_callback(uint8_t* rdram, recomp_context* ctx) {
+     dino::runtime::crash_register_thread_context(ctx);
++
++    PTR(OSThread) self = ultramodern::this_thread();
++    const bool fr = (self == NULLPTR) || (TO_PTR(OSThread, self)->id >= 0);
++    if (fr) {
++        ctx->f_odd = &ctx->f1.u32l;
++        ctx->mips3_float_mode = true;
++        ctx->status_reg |= 0x04000000u; // SR_FR
++    }
+ }
+ 
+ // array of supported GameEntry objects
+ std::vector<recomp::GameEntry> supported_games = {
+     {
+-        .rom_hash = 0xB55D4348B9AB07F5,
+-        .internal_name = "Diddy Kong Racing   ",
+-        .game_id = u8"dkr-us-v80",
+-        .mod_game_id = "diddy-kong-racing",
+-        .save_type = recomp::SaveType::Eep16k,
++        // XXH3-64 of the US ROM (sha1 493ced9008dbe932d6e91179b68e8630cf23a023)
++        .rom_hash = 0x44830C263C2DE108,
++        .internal_name = "JET FORCE GEMINI    ",
++        .game_id = u8"jfg-us",
++        .mod_game_id = "jet-force-gemini",
++        .save_type = recomp::SaveType::Flashram,
+         .is_enabled = true,
+         .decompression_routine = nullptr,
+         .has_compressed_code = false,
+         .entrypoint_address = get_entrypoint_address(),
+         .entrypoint = custom_recomp_entrypoint,
+         .thread_create_callback = custom_thread_create_callback,
++        .on_init_callback = jfg_on_init,
+     },
+ };
+ 
+@@ -73,6 +94,7 @@ struct CliArgs {
+     bool skip_launcher = false;
+     bool force_launcher = false;
+     bool show_console = false;
++    const char* rom_path = nullptr; // JFG port: --rom <path> selects/validates the ROM without the launcher UI
+     int window_width = 1600;
+     int window_height = 960;
+ };
+@@ -91,6 +113,16 @@ int main(int argc, char** argv) {
+         char *arg = argv[i];
+         if (strcmp(arg, "--skip-launcher") == 0) {
+             cli_args.skip_launcher = true;
++        } else if (strcmp(arg, "--rom") == 0) {
++            i++;
++            if (i < argc) {
++                // Made absolute here: the working directory changes below.
++                static std::string rom_path_absolute;
++                std::error_code ec;
++                const std::filesystem::path absolute = std::filesystem::absolute(argv[i], ec);
++                rom_path_absolute = ec ? std::string{argv[i]} : absolute.string();
++                cli_args.rom_path = rom_path_absolute.c_str();
++            }
+         } else if (strcmp(arg, "--launcher") == 0) {
+             cli_args.force_launcher = true;
+         } else if (strcmp(argv[i], "--show-console") == 0) {
+@@ -117,6 +149,15 @@ int main(int argc, char** argv) {
+         }
+     }
+ 
++#if !defined(__APPLE__)
++    // JFG port: run from the folder the executable is in, whatever folder it was started from. Assets, the controller
++    // database, saves, settings and the options file are all found relative to it.
++    {
++        std::error_code ec;
++        std::filesystem::current_path(dino::config::get_executable_folder_path(), ec);
++    }
++#endif
++
+     // Load project version
+     recomp::Version project_version{};
+     if (!recomp::Version::from_string(version_string, project_version)) {
+@@ -196,6 +237,11 @@ int main(int argc, char** argv) {
+     // The runtime performs this check again during startup; doing it here lets
+     // an already configured Mac app launch straight into DKR.
+     recomp::check_all_stored_roms();
++    if (cli_args.rom_path != nullptr) {
++        recomp::RomValidationError rom_error = recomp::select_rom(cli_args.rom_path, supported_games[0].game_id);
++        fprintf(stderr, "[jfg] --rom %s: %s\n", cli_args.rom_path,
++            rom_error == recomp::RomValidationError::Good ? "accepted" : "REJECTED (wrong or modified ROM)");
++    }
+ 
+     recompui::register_ui_exports();
+     dino::runtime::register_overlays();
+diff --git a/src/recomp_api/animation.cpp b/src/recomp_api/animation.cpp
+deleted file mode 100644
+index 053e0f6..0000000
+--- a/src/recomp_api/animation.cpp
++++ /dev/null
+@@ -1,455 +0,0 @@
+-#include <cstdint>
+-#include <chrono>
+-#include <cstdio>
+-#include <cstdlib>
+-#include <unordered_map>
+-#include <vector>
+-#include <algorithm>
+-
+-#include "recomp.h"
+-
+-// Native reimplementation of DKR's obj_animate (vram 0x80061F70, US Rev 1).
+-//
+-// The retail function is hand-written assembly (see the decomp's
+-// src/hasm/obj_animate.s) implementing delta-compressed vertex animation:
+-//   anim data = [frame0: 12-byte root block + 6*V s16 absolute positions]
+-//               [frameN: 12-byte root block + 3*V s8 per-component deltas]...
+-// A positions-only working buffer (6 bytes/vertex) accumulates deltas
+-// forward/backward to the current whole frame; the fractional 1/16ths of the
+-// frame counter scale the *next* frame's deltas into a global scratch buffer;
+-// the final pass composes working+scratch into the double-buffered 10-byte
+-// Vertex array selected by ModelInstance::animationTaskNum (flipped here).
+-//
+-// This native version exists to bisect a persistent vertex-corruption bug on
+-// heavily-animated characters: if it behaves identically to the statically
+-// recompiled original, the animation *data* is at fault; if it fixes the
+-// corruption, the recompilation of the assembly is.
+-
+-namespace {
+-
+-using gpr = uint64_t;
+-
+-inline int32_t mem_w(uint8_t* rdram, gpr addr) {
+-    return *reinterpret_cast<int32_t*>(rdram + ((addr & 0xFFFFFFFFULL) - 0x80000000ULL));
+-}
+-
+-inline int16_t mem_h(uint8_t* rdram, gpr addr) {
+-    return *reinterpret_cast<int16_t*>(rdram + (((addr & 0xFFFFFFFFULL) ^ 2) - 0x80000000ULL));
+-}
+-
+-inline void store_h(uint8_t* rdram, gpr addr, int16_t value) {
+-    *reinterpret_cast<int16_t*>(rdram + (((addr & 0xFFFFFFFFULL) ^ 2) - 0x80000000ULL)) = value;
+-}
+-
+-inline int8_t mem_b(uint8_t* rdram, gpr addr) {
+-    return *reinterpret_cast<int8_t*>(rdram + (((addr & 0xFFFFFFFFULL) ^ 3) - 0x80000000ULL));
+-}
+-
+-inline uint8_t mem_bu(uint8_t* rdram, gpr addr) {
+-    return *reinterpret_cast<uint8_t*>(rdram + (((addr & 0xFFFFFFFFULL) ^ 3) - 0x80000000ULL));
+-}
+-
+-inline void store_b(uint8_t* rdram, gpr addr, int8_t value) {
+-    *reinterpret_cast<int8_t*>(rdram + (((addr & 0xFFFFFFFFULL) ^ 3) - 0x80000000ULL)) = value;
+-}
+-
+-// Frame root values are 16-bit big-endian at arbitrary alignment inside the
+-// 3-byte-stride frame blocks; the original assembles them from byte pairs.
+-inline int32_t root_s16(uint8_t* rdram, gpr addr) {
+-    return (int32_t(mem_b(rdram, addr)) << 8) | mem_bu(rdram, addr + 1);
+-}
+-
+-// v80 address (lui 0x8012 + lo -0x243C in the retail code); the v77
+-// decomp symbol D_8011D644 sits 0x580 lower and is WRONG for this ROM.
+-constexpr gpr ScratchPointerAddr = 0x8011DBC4ULL;
+-
+-} // namespace
+-
+-extern "C" void obj_animate_recomp(uint8_t* rdram, recomp_context* ctx);
+-
+-static void obj_animate_native(uint8_t* rdram, recomp_context* ctx) {
+-    static const bool trace = (std::getenv("DKR_ANIM_TRACE") != nullptr);
+-
+-    const gpr obj = ctx->r4;
+-
+-    // Model instance selection: clamp obj->modelIndex (0x3A) to the header's
+-    // instance count (0x55 of *0x40), index the instance array at 0x68.
+-    int32_t modelIndex = mem_b(rdram, obj + 0x3A);
+-    if (modelIndex < 0) {
+-        modelIndex = 0;
+-    }
+-    const int32_t maxIndex = mem_b(rdram, gpr(uint32_t(mem_w(rdram, obj + 0x40))) + 0x55);
+-    if (modelIndex >= maxIndex) {
+-        modelIndex = maxIndex;
+-    }
+-    const gpr instance = gpr(uint32_t(mem_w(rdram, gpr(uint32_t(mem_w(rdram, obj + 0x68))) + gpr(modelIndex) * 4)));
+-    const gpr model = gpr(uint32_t(mem_w(rdram, instance)));
+-
+-    const uint32_t animsPtr = uint32_t(mem_w(rdram, model + 0x44));
+-    if (animsPtr == 0) {
+-        ctx->r2 = 0;
+-        return;
+-    }
+-
+-    const int32_t frameRaw = mem_h(rdram, obj + 0x18);
+-    int32_t animID = mem_b(rdram, obj + 0x3B);
+-    if ((frameRaw == mem_h(rdram, instance + 0x14)) && (animID == mem_h(rdram, instance + 0x10))) {
+-        ctx->r2 = 0;
+-        return;
+-    }
+-
+-    if (animID < 0) {
+-        animID = 0;
+-    }
+-    const int32_t numAnims = mem_h(rdram, model + 0x48);
+-    if (animID >= numAnims) {
+-        animID = numAnims - 1;
+-    }
+-
+-    int32_t maxFrame = 0;
+-    if (numAnims > 0) {
+-        maxFrame = mem_w(rdram, gpr(animsPtr) + gpr(animID) * 8 + 0x4) - 2;
+-    }
+-
+-    // frameRaw is a 12.4 fixed-point frame counter.
+-    int32_t frame = int32_t(uint32_t(frameRaw) >> 4);
+-    int32_t effRaw = frameRaw;
+-    int32_t lastAnimID;
+-    if (frame > maxFrame) {
+-        // Ran past the end: restart the animation and force a rebuild.
+-        lastAnimID = -1;
+-        effRaw = 0;
+-        frame = 0;
+-        store_h(rdram, instance + 0x10, int16_t(-1));
+-    }
+-    else {
+-        lastAnimID = mem_h(rdram, instance + 0x10);
+-    }
+-
+-    const gpr work = gpr(uint32_t(mem_w(rdram, instance + 0xC)));
+-    // Stateless mode: never trust the incremental working-buffer state; always
+-    // rebuild from frame 0 and apply every delta up to the target frame. The
+-    // incremental path is exact in theory but the accumulated state has been
+-    // observed to drift (bounded, deterministic pose distortion on
+-    // heavily-animated models); recomputation makes the pose exact by
+-    // construction at negligible native cost.
+-    static const bool stateless = (std::getenv("DKR_ANIM_INCREMENTAL") == nullptr);
+-    int32_t lastFrame = (!stateless && (animID == lastAnimID)) ? mem_h(rdram, instance + 0x12) : -1;
+-
+-    store_h(rdram, instance + 0x10, int16_t(animID));
+-    store_h(rdram, instance + 0x14, int16_t(effRaw));
+-    store_h(rdram, instance + 0x12, int16_t(frame));
+-
+-    const int32_t subframe = effRaw & 0xF;
+-    if (trace) {
+-        static uint32_t entryLog = 0;
+-        if (entryLog++ < 40) {
+-            std::fprintf(stderr,
+-                "[ANIM] enter obj=%08X inst=%08X model=%08X work=%08X anims=%08X scratch=%08X frame=%d last=%d\n",
+-                uint32_t(obj), uint32_t(instance), uint32_t(model), uint32_t(work),
+-                animsPtr, uint32_t(mem_w(rdram, ScratchPointerAddr)), frame, lastFrame);
+-        }
+-    }
+-    const gpr animEntry = gpr(animsPtr) + gpr(animID) * 8;
+-    const gpr animData = gpr(uint32_t(mem_w(rdram, animEntry)));
+-    const int32_t listCount = mem_h(rdram, model + 0x24);
+-    const int32_t vertsPerFrame = mem_h(rdram, model + 0x4A);
+-    const gpr indexList = gpr(uint32_t(mem_w(rdram, model + 0x4C)));
+-    const int32_t frameSize = vertsPerFrame * 3 + 12;
+-
+-    // Rebuild the working buffer from frame 0's absolute positions when the
+-    // animation changed, looped, or we're at frame 0.
+-    if ((frame == 0) || (lastFrame == -1)) {
+-        const gpr absolutes = animData + 0xC;
+-        gpr base = gpr(uint32_t(mem_w(rdram, model + 0x4)));
+-        for (int32_t i = 0; i < listCount; i++, base += 0xA) {
+-            const int32_t idx = mem_h(rdram, indexList + gpr(i) * 2);
+-            if (idx == -1) {
+-                continue;
+-            }
+-
+-            const gpr src = absolutes + gpr(idx) * 6;
+-            const gpr dst = work + gpr(idx) * 6;
+-            store_h(rdram, dst + 0, int16_t(mem_h(rdram, base + 0) + mem_h(rdram, src + 0)));
+-            store_h(rdram, dst + 2, int16_t(mem_h(rdram, base + 2) + mem_h(rdram, src + 2)));
+-            store_h(rdram, dst + 4, int16_t(mem_h(rdram, base + 4) + mem_h(rdram, src + 4)));
+-        }
+-        lastFrame = 0;
+-    }
+-
+-    // Deltas for whole frame f live at animData + frameSize * (f + 1).
+-    if (lastFrame < frame) {
+-        gpr deltas = animData + gpr(uint32_t(frameSize) * uint32_t(lastFrame + 2));
+-        for (int32_t f = lastFrame; f < frame; f++, deltas += frameSize) {
+-            gpr d = deltas;
+-            gpr w = work;
+-            for (int32_t k = 0; k < vertsPerFrame; k++, d += 3, w += 6) {
+-                store_h(rdram, w + 0, int16_t(mem_h(rdram, w + 0) + mem_b(rdram, d + 0)));
+-                store_h(rdram, w + 2, int16_t(mem_h(rdram, w + 2) + mem_b(rdram, d + 1)));
+-                store_h(rdram, w + 4, int16_t(mem_h(rdram, w + 4) + mem_b(rdram, d + 2)));
+-            }
+-        }
+-    }
+-    else if (frame < lastFrame) {
+-        gpr deltas = animData + gpr(uint32_t(frameSize) * uint32_t(lastFrame + 2));
+-        for (int32_t f = lastFrame; f > frame; f--) {
+-            deltas -= frameSize;
+-            gpr d = deltas;
+-            gpr w = work;
+-            for (int32_t k = 0; k < vertsPerFrame; k++, d += 3, w += 6) {
+-                store_h(rdram, w + 0, int16_t(mem_h(rdram, w + 0) - mem_b(rdram, d + 0)));
+-                store_h(rdram, w + 2, int16_t(mem_h(rdram, w + 2) - mem_b(rdram, d + 1)));
+-                store_h(rdram, w + 4, int16_t(mem_h(rdram, w + 4) - mem_b(rdram, d + 2)));
+-            }
+-        }
+-    }
+-
+-    // Fractional interpolation: scale the NEXT frame's deltas by subframe/16
+-    // into the global scratch buffer.
+-    const gpr scratch = gpr(uint32_t(mem_w(rdram, ScratchPointerAddr)));
+-    {
+-        gpr d = animData + gpr(uint32_t(frameSize) * uint32_t(frame + 2));
+-        gpr s = scratch;
+-        for (int32_t k = 0; k < vertsPerFrame; k++, d += 3, s += 6) {
+-            store_h(rdram, s + 0, int16_t((int32_t(mem_b(rdram, d + 0)) * subframe) >> 4));
+-            store_h(rdram, s + 2, int16_t((int32_t(mem_b(rdram, d + 1)) * subframe) >> 4));
+-            store_h(rdram, s + 4, int16_t((int32_t(mem_b(rdram, d + 2)) * subframe) >> 4));
+-        }
+-    }
+-
+-    // Interpolate the 12-byte root block (three s16 at +0/+2/+4, one at +0xA).
+-    {
+-        gpr curRoot = (frame == 0) ? animData
+-                                   : (animData + gpr(uint32_t(frameSize) * uint32_t(frame + 1)) - 0xC);
+-        const gpr nextRoot = (frame == 0) ? (animData + gpr(uint32_t(frameSize)) * 2 - 0xC)
+-                                          : (curRoot + frameSize);
+-        const int32_t offsets[4] = { 0x0, 0x2, 0x4, 0xA };
+-        const int32_t outs[4] = { 0x16, 0x18, 0x1A, 0x1C };
+-        for (int i = 0; i < 4; i++) {
+-            const int32_t cur = root_s16(rdram, curRoot + offsets[i]);
+-            const int32_t next = root_s16(rdram, nextRoot + offsets[i]);
+-            store_h(rdram, instance + outs[i], int16_t(cur + (((next - cur) * subframe) >> 4)));
+-        }
+-    }
+-
+-    // Flip the double buffer and compose working + scratch into the 10-byte
+-    // Vertex array the renderer consumes.
+-    const int8_t taskNum = mem_b(rdram, instance + 0x1F) ^ 1;
+-    store_b(rdram, instance + 0x1F, taskNum);
+-    gpr dest = gpr(uint32_t(mem_w(rdram, instance + 0x4 + gpr(taskNum) * 4)));
+-
+-    int32_t outOfRange = 0;
+-    for (int32_t i = 0; i < listCount; i++, dest += 0xA) {
+-        const int32_t idx = mem_h(rdram, indexList + gpr(i) * 2);
+-        if (idx == -1) {
+-            continue;
+-        }
+-
+-        const gpr w = work + gpr(idx) * 6;
+-        const gpr s = scratch + gpr(idx) * 6;
+-        for (int32_t c = 0; c < 3; c++) {
+-            const int16_t value = int16_t(mem_h(rdram, w + gpr(c) * 2) + mem_h(rdram, s + gpr(c) * 2));
+-            store_h(rdram, dest + gpr(c) * 2, value);
+-            if (value > 2000 || value < -2000) {
+-                outOfRange++;
+-            }
+-        }
+-    }
+-
+-    if (trace && (outOfRange > 0)) {
+-        static uint32_t reportCount = 0;
+-        if (reportCount++ < 64) {
+-            std::fprintf(stderr,
+-                "[ANIM] native obj_animate out-of-range verts=%d anim=%d frame=%d last=%d verts/frame=%d data=%08X\n",
+-                outOfRange, animID, frame, lastFrame, vertsPerFrame, uint32_t(animData));
+-        }
+-    }
+-
+-    if (trace) {
+-        // Integrity tracking: remember a checksum of the positions we just
+-        // wrote per destination buffer, and report if a buffer we previously
+-        // wrote was modified by third-party code before our next visit.
+-        static std::unordered_map<uint32_t, uint32_t> writtenSums;
+-        const uint32_t destBase = uint32_t(mem_w(rdram, instance + 0x4 + gpr(taskNum) * 4));
+-        auto sumBuffer = [&](uint32_t base) {
+-            uint32_t sum = 0;
+-            gpr p = gpr(base);
+-            for (int32_t i = 0; i < listCount; i++, p += 0xA) {
+-                sum = sum * 31 + uint16_t(mem_h(rdram, p + 0));
+-                sum = sum * 31 + uint16_t(mem_h(rdram, p + 2));
+-                sum = sum * 31 + uint16_t(mem_h(rdram, p + 4));
+-            }
+-            return sum;
+-        };
+-        auto it = writtenSums.find(destBase);
+-        if (it != writtenSums.end()) {
+-            // We are about to have overwritten this buffer; the pre-write
+-            // check happened implicitly above via outOfRange of *our* data.
+-        }
+-        writtenSums[destBase] = sumBuffer(destBase);
+-
+-        // Check the OTHER buffer (written two calls ago, untouched by us now).
+-        const uint32_t otherBase = uint32_t(mem_w(rdram, instance + 0x4 + gpr(taskNum ^ 1) * 4));
+-        auto other = writtenSums.find(otherBase);
+-        if (other != writtenSums.end()) {
+-            const uint32_t now = sumBuffer(otherBase);
+-            if (now != other->second) {
+-                static uint32_t stompCount = 0;
+-                if (stompCount++ < 64) {
+-                    std::fprintf(stderr, "[ANIM] buffer %08X MODIFIED externally since we wrote it\n", otherBase);
+-                }
+-                other->second = now;
+-            }
+-        }
+-
+-        static uint32_t writeLog = 0;
+-        if (writeLog++ < 100000) {
+-            std::fprintf(stderr, "[ANIM] wrote dest=%08X n=%d anim=%d frame=%d v0=(%d,%d,%d) v1=(%d,%d,%d)\n",
+-                destBase, listCount, animID, frame,
+-                mem_h(rdram, gpr(destBase) + 0), mem_h(rdram, gpr(destBase) + 2), mem_h(rdram, gpr(destBase) + 4),
+-                mem_h(rdram, gpr(destBase) + 10), mem_h(rdram, gpr(destBase) + 12), mem_h(rdram, gpr(destBase) + 14));
+-        }
+-    }
+-
+-    ctx->r2 = 1;
+-}
+-
+-
+-// A/B harness: run the native reimplementation in shadow mode against the
+-// recompiled original. The original's results stay live (retail behavior);
+-// any divergence between the two is logged byte-precisely.
+-extern "C" void obj_animate(uint8_t* rdram, recomp_context* ctx) {
+-    static const bool compare = (std::getenv("DKR_ANIM_COMPARE") != nullptr);
+-    if (!compare) {
+-        // Default to the recompiled original (retail behavior). The native
+-        // reimplementation is byte-identical (verified via DKR_ANIM_COMPARE)
+-        // and available with DKR_ANIM_NATIVE=1 (stateless pose recompute
+-        // unless DKR_ANIM_INCREMENTAL is also set).
+-        static const bool useNative = (std::getenv("DKR_ANIM_NATIVE") != nullptr);
+-        static const bool profile = (std::getenv("DKR_ANIM_PERF") != nullptr);
+-        const auto profileStart = profile ? std::chrono::steady_clock::now()
+-                                          : std::chrono::steady_clock::time_point{};
+-        if (useNative) {
+-            obj_animate_native(rdram, ctx);
+-        }
+-        else {
+-            obj_animate_recomp(rdram, ctx);
+-        }
+-        if (profile) {
+-            static uint64_t callCount = 0;
+-            static uint64_t totalUs = 0;
+-            static uint64_t maxUs = 0;
+-            static auto lastReport = std::chrono::steady_clock::now();
+-            const auto now = std::chrono::steady_clock::now();
+-            const uint64_t elapsedUs = static_cast<uint64_t>(
+-                std::chrono::duration_cast<std::chrono::microseconds>(now - profileStart).count());
+-            callCount++;
+-            totalUs += elapsedUs;
+-            maxUs = std::max(maxUs, elapsedUs);
+-            if ((now - lastReport) >= std::chrono::seconds(1)) {
+-                std::fprintf(stderr,
+-                    "[ANIM PERF] mode=%s calls=%llu avg=%.1f us max=%llu us\n",
+-                    useNative ? "native-incremental" : "recompiled-retail",
+-                    static_cast<unsigned long long>(callCount),
+-                    callCount ? static_cast<double>(totalUs) / static_cast<double>(callCount) : 0.0,
+-                    static_cast<unsigned long long>(maxUs));
+-                callCount = 0;
+-                totalUs = 0;
+-                maxUs = 0;
+-                lastReport = now;
+-            }
+-        }
+-        return;
+-    }
+-
+-    const gpr obj = ctx->r4;
+-    int32_t modelIndex = mem_b(rdram, obj + 0x3A);
+-    if (modelIndex < 0) modelIndex = 0;
+-    const int32_t maxIndex = mem_b(rdram, gpr(uint32_t(mem_w(rdram, obj + 0x40))) + 0x55);
+-    if (modelIndex >= maxIndex) modelIndex = maxIndex;
+-    const gpr instance = gpr(uint32_t(mem_w(rdram, gpr(uint32_t(mem_w(rdram, obj + 0x68))) + gpr(modelIndex) * 4)));
+-    const gpr model = gpr(uint32_t(mem_w(rdram, instance)));
+-    const uint32_t animsPtr = uint32_t(mem_w(rdram, model + 0x44));
+-    if (animsPtr == 0) {
+-        obj_animate_recomp(rdram, ctx);
+-        return;
+-    }
+-
+-    const int32_t listCount = mem_h(rdram, model + 0x24);
+-    const int32_t vertsPerFrame = mem_h(rdram, model + 0x4A);
+-    const gpr indexList = gpr(uint32_t(mem_w(rdram, model + 0x4C)));
+-    const gpr work = gpr(uint32_t(mem_w(rdram, instance + 0xC)));
+-    const uint32_t scratchPtr = uint32_t(mem_w(rdram, ScratchPointerAddr));
+-    int32_t maxIdx = -1;
+-    for (int32_t i = 0; i < listCount; i++) {
+-        const int32_t idx = mem_h(rdram, indexList + gpr(i) * 2);
+-        if (idx > maxIdx) maxIdx = idx;
+-    }
+-
+-    auto hostRange = [&](uint32_t vram, size_t len, std::vector<uint8_t>& out) {
+-        const uint32_t start = (vram & ~3u);
+-        const size_t total = ((len + (vram - start)) + 3) & ~size_t(3);
+-        out.assign(rdram + (start - 0x80000000u), rdram + (start - 0x80000000u) + total);
+-        return start;
+-    };
+-    auto restoreRange = [&](uint32_t start, const std::vector<uint8_t>& data) {
+-        std::copy(data.begin(), data.end(), rdram + (start - 0x80000000u));
+-    };
+-
+-    const uint32_t dest0 = uint32_t(mem_w(rdram, instance + 0x4));
+-    const uint32_t dest1 = uint32_t(mem_w(rdram, instance + 0x8));
+-    const size_t workLen = size_t(maxIdx + 1) * 6;
+-    const size_t scratchLen = size_t(vertsPerFrame) * 6;
+-    const size_t destLen = size_t(listCount) * 10;
+-
+-    std::vector<uint8_t> sInst, sWork, sScratch, sDest0, sDest1;
+-    const uint32_t instStart = hostRange(uint32_t(instance) + 0x10, 0x10, sInst);
+-    const uint32_t workStart = hostRange(uint32_t(work), workLen, sWork);
+-    const uint32_t scratchStart = scratchPtr ? hostRange(scratchPtr, scratchLen, sScratch) : 0;
+-    const uint32_t d0Start = hostRange(dest0, destLen, sDest0);
+-    const uint32_t d1Start = hostRange(dest1, destLen, sDest1);
+-
+-    // Run the native implementation on live state, snapshot its results.
+-    recomp_context nativeCtx = *ctx;
+-    obj_animate_native(rdram, &nativeCtx);
+-    std::vector<uint8_t> nInst, nWork, nScratch, nDest0, nDest1;
+-    hostRange(uint32_t(instance) + 0x10, 0x10, nInst);
+-    hostRange(uint32_t(work), workLen, nWork);
+-    if (scratchPtr) hostRange(scratchPtr, scratchLen, nScratch);
+-    hostRange(dest0, destLen, nDest0);
+-    hostRange(dest1, destLen, nDest1);
+-
+-    // Restore and run the original; its results stay live.
+-    restoreRange(instStart, sInst);
+-    restoreRange(workStart, sWork);
+-    if (scratchPtr) restoreRange(scratchStart, sScratch);
+-    restoreRange(d0Start, sDest0);
+-    restoreRange(d1Start, sDest1);
+-    obj_animate_recomp(rdram, ctx);
+-
+-    // Compare.
+-    static uint32_t diffReports = 0;
+-    auto diff = [&](const char* what, uint32_t start, const std::vector<uint8_t>& mine) {
+-        if (diffReports >= 40) return;
+-        std::vector<uint8_t> orig;
+-        hostRange(start, mine.size(), orig);
+-        for (size_t i = 0; i < mine.size() && i < orig.size(); i++) {
+-            if (mine[i] != orig[i]) {
+-                std::fprintf(stderr,
+-                    "[ANIM-DIFF] %s +0x%zx: native=%02X orig=%02X (obj=%08X frameRaw=%d)\n",
+-                    what, i, mine[i], orig[i], uint32_t(obj), int(mem_h(rdram, obj + 0x18)));
+-                diffReports++;
+-                if (diffReports >= 40) return;
+-            }
+-        }
+-    };
+-    diff("inst", instStart, nInst);
+-    diff("work", workStart, nWork);
+-    if (scratchPtr) diff("scratch", scratchStart, nScratch);
+-    diff("dest0", d0Start, nDest0);
+-    diff("dest1", d1Start, nDest1);
+-    if (nativeCtx.r2 != ctx->r2 && diffReports < 40) {
+-        std::fprintf(stderr, "[ANIM-DIFF] return native=%d orig=%d\n", int(nativeCtx.r2), int(ctx->r2));
+-        diffReports++;
+-    }
+-}
+diff --git a/src/recomp_api/func_8001B4F0_hack.cpp b/src/recomp_api/func_8001B4F0_hack.cpp
+deleted file mode 100644
+index 79016f4..0000000
+--- a/src/recomp_api/func_8001B4F0_hack.cpp
++++ /dev/null
+@@ -1,25 +0,0 @@
+-#include <cassert>
+-#include <cstdint>
+-
+-#include "recomp.h"
+-
+-static const uint32_t SR_FR = 0x04000000;
+-
+-// With the way func_8001B4F0 is recompiled, we need to track whether the function
+-// already ran it's return routine and prevent it from being ran more than once.
+-thread_local bool func_8001B4F0_returned = false;
+-
+-extern "C" void recomp_on_func_8001B4F0_entry(uint8_t* rdram, recomp_context* ctx) {
+-    func_8001B4F0_returned = false;
+-    cop0_status_write(ctx, cop0_status_read(ctx) | SR_FR);
+-}
+-
+-extern "C" int recomp_did_func_8001B4F0_return() {
+-    return func_8001B4F0_returned ? 1 : 0;
+-}
+-
+-extern "C" void recomp_on_func_8001B4F0_ret(uint8_t* rdram, recomp_context* ctx) {
+-    assert(func_8001B4F0_returned == false);
+-    func_8001B4F0_returned = true;
+-    cop0_status_write(ctx, cop0_status_read(ctx) & ~SR_FR);
+-}
+diff --git a/src/recomp_api/hardware.cpp b/src/recomp_api/hardware.cpp
+deleted file mode 100644
+index 74f2aa7..0000000
+--- a/src/recomp_api/hardware.cpp
++++ /dev/null
+@@ -1,19 +0,0 @@
+-#include <cstdint>
+-
+-#include "recomp.h"
+-
+-extern "C" void drm_validate_imem_recomp(uint8_t* rdram, recomp_context* ctx) {
+-    ctx->r2 = 1;
+-}
+-
+-extern "C" void drm_validate_dmem_recomp(uint8_t* rdram, recomp_context* ctx) {
+-    ctx->r2 = 1;
+-}
+-
+-extern "C" void drm_checksum_balloon_recomp(uint8_t* rdram, recomp_context* ctx) {
+-    // The retail function checksums obj_loop_goldenballoon's code bytes and
+-    // sets gAntiPiracyHeadroll = 0x800 on mismatch, which visibly corrupts
+-    // every racer's head/tail vertex group while on a vehicle. The port
+-    // patches game code in RDRAM by design, so the retail sum cannot match.
+-    // The check is anti-tamper, not game logic; skip it entirely.
+-}
+diff --git a/src/recomp_api/music_animation.cpp b/src/recomp_api/music_animation.cpp
+deleted file mode 100644
+index c07bf6b..0000000
+--- a/src/recomp_api/music_animation.cpp
++++ /dev/null
+@@ -1,154 +0,0 @@
+-#include <bit>
+-#include <chrono>
+-#include <cstdint>
+-#include <cstdio>
+-#include <cstdlib>
+-
+-#include "recomp.h"
+-#include "ultramodern/ultra64.h"
+-
+-namespace {
+-
+-// US 1.1 RDRAM offsets. Words are directly addressable in N64Recomp's
+-// word-swapped RDRAM; halfwords and bytes retain the usual XOR adjustment.
+-constexpr uint32_t AudioPrevCount = 0x000DCBBC;
+-constexpr uint32_t MusicTempo = 0x001162B0;
+-constexpr uint32_t MusicAnimationTick = 0x001162B4;
+-constexpr uint32_t MusicPlaying = 0x001162C0;
+-constexpr uint32_t CurrentMenuId = 0x000DF9F0;
+-constexpr uint32_t SpTaskNum = 0x00123A68;
+-constexpr uint32_t GameMode = 0x00123A6C;
+-
+-constexpr int32_t GameModeMenu = 1;
+-constexpr int32_t MenuCharacterSelect = 3;
+-constexpr float CounterTicksPerMillisecond = 46875.0f;
+-
+-uint32_t load_u32(const uint8_t* rdram, uint32_t offset) {
+-    return *reinterpret_cast<const uint32_t*>(rdram + offset);
+-}
+-
+-void store_u32(uint8_t* rdram, uint32_t offset, uint32_t value) {
+-    *reinterpret_cast<uint32_t*>(rdram + offset) = value;
+-}
+-
+-int16_t load_s16(const uint8_t* rdram, uint32_t offset) {
+-    return *reinterpret_cast<const int16_t*>(rdram + (offset ^ 2U));
+-}
+-
+-void store_s16(uint8_t* rdram, uint32_t offset, int16_t value) {
+-    *reinterpret_cast<int16_t*>(rdram + (offset ^ 2U)) = value;
+-}
+-
+-uint8_t load_u8(const uint8_t* rdram, uint32_t offset) {
+-    return rdram[offset ^ 3U];
+-}
+-
+-float load_float(const uint8_t* rdram, uint32_t offset) {
+-    return std::bit_cast<float>(load_u32(rdram, offset));
+-}
+-
+-void store_float(uint8_t* rdram, uint32_t offset, float value) {
+-    store_u32(rdram, offset, std::bit_cast<uint32_t>(value));
+-}
+-
+-struct CharacterSelectPhaseCache {
+-    uint8_t* rdram = nullptr;
+-    uint32_t spTaskNum = UINT32_MAX;
+-    float fraction = 0.0f;
+-    bool valid = false;
+-    uint64_t cacheHits = 0;
+-    std::chrono::steady_clock::time_point computedAt{};
+-    std::chrono::steady_clock::time_point lastReport{};
+-};
+-
+-CharacterSelectPhaseCache phaseCache;
+-
+-} // namespace
+-
+-// DKR's retail helper mutates audioPrevCount and gMusicAnimationTick on every
+-// query. Character Select calls it once for each dancer during one object
+-// update pass. That is harmless on the N64, where the calls are effectively
+-// simultaneous, but an optimized native renderer can spread them across a
+-// meaningful part of the frame and give each model a different pose.
+-//
+-// Advance the retail clock once on the first query of a Character Select game
+-// frame, then return the identical phase to the remaining dancers. gSPTaskNum
+-// flips at the start of each normal game frame and is stable throughout the
+-// object pass. The age guard prevents a stale hit if a skipped frame leaves the
+-// two-state token unchanged. All non-Character-Select callers retain one clock
+-// advance per call.
+-extern "C" void music_animation_fraction(uint8_t* rdram, recomp_context* ctx) {
+-    using Clock = std::chrono::steady_clock;
+-    const auto now = Clock::now();
+-
+-    const bool characterSelect =
+-        static_cast<int32_t>(load_u32(rdram, GameMode)) == GameModeMenu &&
+-        static_cast<int32_t>(load_u32(rdram, CurrentMenuId)) == MenuCharacterSelect;
+-    const uint32_t spTaskNum = load_u32(rdram, SpTaskNum);
+-    const bool sameCharacterSelectFrame =
+-        characterSelect && phaseCache.valid && phaseCache.rdram == rdram &&
+-        phaseCache.spTaskNum == spTaskNum &&
+-        (now - phaseCache.computedAt) < std::chrono::milliseconds(50);
+-
+-    if (sameCharacterSelectFrame) {
+-        phaseCache.cacheHits++;
+-        ctx->f0.fl = phaseCache.fraction;
+-        return;
+-    }
+-
+-    const uint32_t count = osGetCount();
+-    const uint32_t previousCount = load_u32(rdram, AudioPrevCount);
+-    // Unsigned subtraction is the exact modulo-2^32 counter delta. It handles
+-    // equality as zero and a genuine COUNT rollover without a special branch.
+-    const uint32_t delta = count - previousCount;
+-
+-    float tick = load_float(rdram, MusicAnimationTick);
+-    tick += static_cast<float>(delta) / CounterTicksPerMillisecond;
+-
+-    int16_t tempo = load_s16(rdram, MusicTempo);
+-    if (load_u8(rdram, MusicPlaying) == 0) {
+-        tempo = 182;
+-        store_s16(rdram, MusicTempo, tempo);
+-    }
+-    // A sequence normally resolves its tempo before this helper is used. Keep
+-    // malformed or transitional state finite instead of dividing by zero.
+-    if (tempo <= 0) {
+-        tempo = 182;
+-    }
+-
+-    const float period = 120000.0f / static_cast<float>(tempo);
+-    while (period < tick) {
+-        tick -= period;
+-    }
+-
+-    const float fraction = tick / period;
+-    store_float(rdram, MusicAnimationTick, tick);
+-    store_u32(rdram, AudioPrevCount, count);
+-
+-    if (characterSelect) {
+-        if (phaseCache.rdram != rdram) {
+-            phaseCache.lastReport = now;
+-            phaseCache.cacheHits = 0;
+-        }
+-        phaseCache.rdram = rdram;
+-        phaseCache.spTaskNum = spTaskNum;
+-        phaseCache.fraction = fraction;
+-        phaseCache.valid = true;
+-        phaseCache.computedAt = now;
+-
+-        static const bool trace = std::getenv("DKR_MUSIC_ANIM_TRACE") != nullptr;
+-        if (trace && (now - phaseCache.lastReport) >= std::chrono::seconds(1)) {
+-            std::fprintf(stderr,
+-                "[MUSIC ANIM] task=%u delta=%u tempo=%d tick=%.3f phase=%.6f cached=%llu\n",
+-                spTaskNum, delta, static_cast<int>(tempo), tick, fraction,
+-                static_cast<unsigned long long>(phaseCache.cacheHits));
+-            phaseCache.cacheHits = 0;
+-            phaseCache.lastReport = now;
+-        }
+-    }
+-    else {
+-        phaseCache.valid = false;
+-    }
+-
+-    ctx->f0.fl = fraction;
+-}
+diff --git a/src/recomp_api/pak.cpp b/src/recomp_api/pak.cpp
+index e6d7716..0960cf4 100644
+--- a/src/recomp_api/pak.cpp
++++ b/src/recomp_api/pak.cpp
+@@ -2,14 +2,24 @@
+ 
+ #include "recomp.h"
+ #include "librecomp/helpers.hpp"
++#include "input/input.hpp"
+ 
+ namespace {
+ constexpr int32_t PfsErrNoPack = 1;
+ }
+ 
+ extern "C" void osPfsIsPlug_recomp(uint8_t* rdram, recomp_context* ctx) {
+-    auto* pattern = _arg<1, uint8_t*>(rdram, ctx);
+-    *pattern = 0;
++    const gpr pattern = _arg<1, PTR(u8)>(rdram, ctx);
++    // JFG PORT: report a pak in every port that has a controller. Jet Force Gemini only tries osMotorInit (the
++    // Rumble Pak) for ports this reports as occupied; osPfsInit below still says there is no Controller Pak.
++    uint8_t bits = 0;
++    for (int i = 0; i < 4; i++) {
++        const auto info = dino::input::get_connected_device_info(i);
++        if (info.connected_device == ultramodern::input::Device::Controller && info.connected_pak != ultramodern::input::Pak::None) {
++            bits |= uint8_t(1u << i);
++        }
++    }
++    MEM_B(0, pattern) = int8_t(bits); // a single byte in big-endian RDRAM
+     _return<int32_t>(ctx, 0);
+ }
+ 
+diff --git a/src/renderer/renderer.cpp b/src/renderer/renderer.cpp
+index 4572744..fc9755b 100644
+--- a/src/renderer/renderer.cpp
++++ b/src/renderer/renderer.cpp
+@@ -1,8 +1,17 @@
++extern "C" int jfg_skip_render_active(void); // src/jfg/jfg_debug_menu.cpp
++extern "C" int jfg_widescreen_active(void);  // src/jfg/jfg_debug_menu.cpp: the "Widescreen" option of the F9 menu
++extern "C" int jfg_texture_dump_active(void);
++extern "C" void jfg_texture_dump_folder(char* buf, int size); // src/jfg/jfg_debug_menu.cpp: "One folder per level"  // src/jfg/jfg_debug_menu.cpp: "Dump textures" (F9 -> Textures)
++extern "C" int jfg_texture_pack_current(char* buf, int size); // the chosen pack folder (relative, "" = none); returns a change counter
++extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_debug_menu.cpp: "Frame rate" option; -1 = use the Graphics setting, 0 = Original, 1 = Display
+ #define HLSL_CPU
+ #include "hle/rt64_application.h"
+ #include "renderer.hpp"
+ 
+ #include <array>
++#include <cctype>
++#include <filesystem>
++#include <fstream>
+ #include <chrono>
+ #include <cstdint>
+ #include <memory>
+@@ -168,7 +177,11 @@ RT64::UserConfiguration::AspectRatio to_rt64(ultramodern::renderer::AspectRatio
+         case ultramodern::renderer::AspectRatio::Original:
+             return RT64::UserConfiguration::AspectRatio::Original;
+         case ultramodern::renderer::AspectRatio::Expand:
+-            return RT64::UserConfiguration::AspectRatio::Expand;
++            // JFG PORT: "Expand" widens the render target and relies on widescreen patches in the game (the base
++            // project has them for Diddy Kong Racing; Jet Force Gemini has none). Without them only full-width
++            // rectangles (screen clears, fades, flashes) spill into the side borders, which shows up as the
++            // borders flickering. Treat it as Original until JFG gets real widescreen support.
++            return RT64::UserConfiguration::AspectRatio::Original;
+         case ultramodern::renderer::AspectRatio::Manual:
+             return RT64::UserConfiguration::AspectRatio::Manual;
+         case ultramodern::renderer::AspectRatio::OptionCount:
+@@ -250,10 +263,16 @@ void set_application_user_config(RT64::Application* application, const ultramode
+             break;
+     }
+ 
+-    application->userConfig.aspectRatio = to_rt64(config.ar_option);
++    application->userConfig.aspectRatio = jfg_widescreen_active() ? RT64::UserConfiguration::AspectRatio::Expand : to_rt64(config.ar_option);
+     application->userConfig.antialiasing = to_rt64(config.msaa_option);
+     application->userConfig.refreshRate = to_rt64(config.rr_option);
+     application->userConfig.refreshRateTarget = config.rr_manual_value;
++    // JFG PORT: the F9 menu's "Frame rate" option can override the Graphics menu's Framerate setting.
++    switch (jfg_refresh_override()) {
++        case 0: application->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Original; break;
++        case 1: application->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Display; break;
++        default: break;
++    }
+     application->userConfig.internalColorFormat = to_rt64(config.hpfb_option);
+     application->userConfig.displayBuffering = RT64::UserConfiguration::DisplayBuffering::Triple;
+     application->userConfig.filtering = RT64::UserConfiguration::Filtering::AntiAliasedPixelScaling;
+@@ -296,7 +315,7 @@ ultramodern::renderer::GraphicsApi map_graphics_api(RT64::UserConfiguration::Gra
+ }
+ 
+ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool debug) {
+-    fprintf(stderr, "[DKR] Initializing RT64 renderer\n");
++    fprintf(stderr, "[JFG] Initializing RT64 renderer\n");
+     static unsigned char dummy_rom_header[0x40];
+     recompui::set_render_hooks();
+ #if !defined(__APPLE__)
+@@ -392,7 +411,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
+     thread_id = window_handle.thread_id;
+ #endif
+     const auto rt64_setup_result = app->setup(thread_id);
+-    fprintf(stderr, "[DKR] RT64 setup result: %d, graphics API: %d\n",
++    fprintf(stderr, "[JFG] RT64 setup result: %d, graphics API: %d\n",
+         static_cast<int>(rt64_setup_result), static_cast<int>(app->chosenGraphicsAPI));
+     setup_result = map_setup_result(rt64_setup_result);
+     // Get the API that RT64 chose.
+@@ -412,7 +431,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
+     if (dino::config::running_on_steam_deck()) {
+         app->rasterShaderCache->setCompilationEnabled(false);
+         app->workloadQueue->ubershadersOnly.store(true, std::memory_order_relaxed);
+-        fprintf(stderr, "[DKR] Steam Deck runtime shader compilation disabled pending launcher preflight\n");
++        fprintf(stderr, "[JFG] Steam Deck runtime shader compilation disabled pending launcher preflight\n");
+     }
+ 
+     // Set the application's fullscreen state.
+@@ -447,6 +466,9 @@ RT64Context::~RT64Context() {
+ }
+ 
+ void RT64Context::send_dl(const OSTask* task) {
++    // While a cutscene is being skipped the display lists of the skipped frames are dropped, so the skip runs at the
++    // speed of the game logic alone; the last picture stays up meanwhile.
++    if (jfg_skip_render_active()) return;
+     check_texture_pack_actions();
+     app->state->rsp->reset();
+     constexpr uint32_t DkrRdramMask = 0x007FFFFFU;
+@@ -458,12 +480,12 @@ void RT64Context::preload_common_shaders() {
+     if ((app != nullptr) && (app->rasterShaderCache != nullptr) &&
+         (app->rasterShaderCache->shaderUber != nullptr)) {
+         const auto start = std::chrono::steady_clock::now();
+-        fprintf(stderr, "[DKR] Finalizing RT64 common shader pipelines\n");
++        fprintf(stderr, "[JFG] Finalizing RT64 common shader pipelines\n");
+         app->rasterShaderCache->shaderUber->waitForPipelineCreation();
+ 
+         if (dino::config::running_on_steam_deck()) {
+             const uint32_t shader_count_before = app->rasterShaderCache->shaderCount();
+-            fprintf(stderr, "[DKR] Preloading %zu Steam Deck attract-scene shader pipelines\n",
++            fprintf(stderr, "[JFG] Preloading %zu Steam Deck attract-scene shader pipelines\n",
+                 deck_attract_shader_preload.size());
+ 
+             app->rasterShaderCache->setCompilationEnabled(true);
+@@ -476,18 +498,57 @@ void RT64Context::preload_common_shaders() {
+             const uint32_t shader_count_after = app->rasterShaderCache->shaderCount();
+             app->workloadQueue->ubershadersOnly.store(false, std::memory_order_relaxed);
+             fprintf(stderr,
+-                "[DKR] Steam Deck specialized shader preflight ready (%u new); universal fallback retained\n",
++                "[JFG] Steam Deck specialized shader preflight ready (%u new); universal fallback retained\n",
+                 shader_count_after - shader_count_before);
+         }
+ 
+         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now() - start);
+-        fprintf(stderr, "[DKR] RT64 common shader pipelines ready in %lld ms\n",
++        fprintf(stderr, "[JFG] RT64 common shader pipelines ready in %lld ms\n",
+             static_cast<long long>(elapsed.count()));
+     }
+ }
+ 
+ void RT64Context::update_game_aspect_override() {
++    // JFG PORT: everything below reads Diddy Kong Racing variables at fixed RDRAM addresses to switch the aspect
++    // ratio for some DKR menus. Those addresses hold unrelated data in Jet Force Gemini. Instead, follow the
++    // "Widescreen" option of the F9 menu (it can change while the game runs).
++    {
++        static int applied = -1;
++        const int want = jfg_widescreen_active();
++        if (want != applied) {
++            applied = want;
++            app->userConfig.aspectRatio = want ? RT64::UserConfiguration::AspectRatio::Expand : RT64::UserConfiguration::AspectRatio::Original;
++            app->updateUserConfig(false);
++        }
++        // RT64 only interpolates when the frame on screen is the one the last workload drew. In Console mode it
++        // shows what the VI points at, which with this game's buffering is the frame before, so interpolation
++        // stays off. Skip Buffering looks the drawn frame up instead. Console stays the default because it is the
++        // mode that was tested with the CPU-drawn reticles (they also show in Skip Buffering). Checked every
++        // update because enable_instant_present() sets the mode once at start-up.
++        if (std::getenv("JFG_PRESENT_MODE") == nullptr) {
++            const int r = jfg_refresh_override();
++            const bool interpolate = (r == 1) || ((r == -1) && (ultramodern::renderer::get_graphics_config().rr_option != ultramodern::renderer::RefreshRate::Original));
++            const auto wanted = interpolate ? RT64::EnhancementConfiguration::Presentation::Mode::SkipBuffering
++                                            : RT64::EnhancementConfiguration::Presentation::Mode::Console;
++            if (app->enhancementConfig.presentation.mode != wanted) {
++                app->enhancementConfig.presentation.mode = wanted;
++                app->updateEnhancementConfig();
++            }
++        }
++        // And the "Frame rate" option (Display = interpolate up to the monitor's refresh rate).
++        static int applied_rate = -2;
++        const int rate = jfg_refresh_override();
++        if (rate != applied_rate) {
++            applied_rate = rate;
++            const auto &config = ultramodern::renderer::get_graphics_config();
++            app->userConfig.refreshRate = (rate == 1) ? RT64::UserConfiguration::RefreshRate::Display
++                : (rate == 0) ? RT64::UserConfiguration::RefreshRate::Original : to_rt64(config.rr_option);
++            app->updateUserConfig(false);
++        }
++    }
++    return;
++
+     // The track-select backdrop is an authored 320-pixel-wide scrolling page.
+     // The post-race and results layouts likewise draw only a 4:3 page while the
+     // race scene remains visible behind it. Expanding any of those projections
+@@ -507,7 +568,7 @@ void RT64Context::update_game_aspect_override() {
+     const bool postrace_active = rdram[DkrPostRaceViewportOffset ^ 3U] != 0;
+     const int32_t game_mode = *reinterpret_cast<const int32_t *>(rdram + DkrGameModeOffset);
+     const int32_t current_menu_id = *reinterpret_cast<const int32_t *>(rdram + DkrCurrentMenuIdOffset);
+-    if (std::getenv("DKR_SCENE_TRACE") != nullptr) {
++    if (std::getenv("JFG_SCENE_TRACE") != nullptr) {
+         static int32_t previous_game_mode = INT32_MIN;
+         static int32_t previous_menu_id = INT32_MIN;
+         if ((game_mode != previous_game_mode) || (current_menu_id != previous_menu_id)) {
+@@ -534,7 +595,7 @@ void RT64Context::update_game_aspect_override() {
+     }
+ 
+     app->updateUserConfig(false);
+-    fprintf(stderr, "[DKR] Authored 4:3 aspect override %s\n",
++    fprintf(stderr, "[JFG] Authored 4:3 aspect override %s\n",
+         game_aspect_override ? "enabled" : "disabled");
+ }
+ 
+@@ -574,7 +635,14 @@ bool RT64Context::update_config(const ultramodern::renderer::GraphicsConfig& old
+ 
+ void RT64Context::enable_instant_present() {
+     // Enable the present early presentation mode for minimal latency.
+-    app->enhancementConfig.presentation.mode = RT64::EnhancementConfiguration::Presentation::Mode::PresentEarly;
++    // JFG PORT: Jet Force Gemini draws some things with the CPU straight into the framebuffer after the RDP is
++    // done (mainCPUeffects -> fxOutputLines: the reticles of most weapons, digital read-outs, lines). RT64 only
++    // picks such changes up when it processes the VI update, which the PresentEarly mode skips entirely.
++    const char *mode_env = std::getenv("JFG_PRESENT_MODE"); // debug: early, skip, console
++    auto mode = RT64::EnhancementConfiguration::Presentation::Mode::Console;
++    if (mode_env != nullptr && mode_env[0] == 'e') mode = RT64::EnhancementConfiguration::Presentation::Mode::PresentEarly;
++    if (mode_env != nullptr && mode_env[0] == 's') mode = RT64::EnhancementConfiguration::Presentation::Mode::SkipBuffering;
++    app->enhancementConfig.presentation.mode = mode;
+ 
+     app->updateEnhancementConfig();
+ }
+@@ -601,8 +669,76 @@ float RT64Context::get_resolution_scale() const {
+     }
+ }
+ 
++extern "C" void jfg_texture_pack_set_count(int count); // src/jfg/jfg_debug_menu.cpp: shown in Options -> Textures
++// JFG PORT: writes texture_pack/rt64.json listing every image whose name starts with a 16-digit RT64 texture hash
++// (as written by "Dump textures"), so a folder of upscaled dumps is a texture pack without any other tool.
++// Returns the number of textures listed.
++static std::string jfg_pack_folder; // the folder pack in use, relative to the app folder ("" = none)
++static size_t jfg_write_pack_database(const std::filesystem::path& dir) {
++    std::string entries;
++    size_t count = 0;
++    std::error_code ec;
++    for (std::filesystem::recursive_directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
++        if (!it->is_regular_file()) continue;
++        std::string ext = it->path().extension().string();
++        for (char& c : ext) c = (char)std::tolower((unsigned char)c);
++        if (ext != ".png" && ext != ".dds") continue;
++        const std::string name = it->path().filename().string();
++        if (name.size() < 17) continue;
++        bool hex = true;
++        for (int i = 0; i < 16; i++) hex = hex && std::isxdigit((unsigned char)name[i]);
++        // <hash>.png, or with a suffix added by an upscaler (Upscayl writes <name>_upscayl_4x_<model>.png).
++        if (!hex || (name[16] != '.' && name[16] != '_' && name[16] != '-' && name[16] != ' ')) continue;
++        const auto rel_u8 = std::filesystem::relative(it->path(), dir, ec).generic_u8string();
++        const std::string rel(rel_u8.begin(), rel_u8.end());
++        std::string hash = name.substr(0, 16);
++        for (char& c : hash) c = (char)std::tolower((unsigned char)c);
++        entries += std::string(count ? ",\n" : "") + "    { \"path\": \"" + rel + "\", \"hashes\": { \"rt64\": \"" + hash + "\" } }";
++        count++;
++    }
++    std::ofstream out(dir / "rt64.json", std::ios::binary);
++    out << "{\n  \"configuration\": { \"autoPath\": \"rt64\", \"configurationVersion\": 3, \"hashVersion\": 5 },\n"
++        << "  \"textures\": [\n" << entries << "\n  ]\n}\n";
++    return count;
++}
++
+ void RT64Context::check_texture_pack_actions() {
+     bool packs_changed = false;
++
++    // JFG PORT: texture dumping and the folder pack (F9 -> Textures). Done here, on the thread that draws, because
++    // RT64 dumps while it processes display lists.
++    {
++        const bool dump = jfg_texture_dump_active() != 0;
++        // With "One folder per level" the folder follows the level: a sub-folder named after it, with its own record of
++        // what has been dumped (so a texture is saved again in every level that uses it).
++        char sub[256];
++        jfg_texture_dump_folder(sub, sizeof(sub));
++        static std::string dump_sub;
++        if (dump != app->state->dumpingTexturesPng || (dump && dump_sub != sub)) {
++            if (dump) {
++                dump_sub = sub;
++                std::filesystem::path dir = dino::config::get_app_folder_path() / "texture_dump";
++                if (!dump_sub.empty()) dir /= std::filesystem::u8path(dump_sub);
++                std::error_code ec;
++                std::filesystem::create_directories(dir, ec);
++                app->state->dumpingTexturesDirectory = dir;
++                app->state->textureManager.dumpedSet.clear();
++                fprintf(stderr, "[JFG] dumping textures to %s\n", dir.string().c_str());
++            }
++            else {
++                app->state->dumpingTexturesDirectory.clear();
++            }
++            app->state->dumpingTexturesPng = dump;
++        }
++        static int pack_generation = -1;
++        char rel[512];
++        const int generation = jfg_texture_pack_current(rel, sizeof(rel));
++        if (generation != pack_generation) {
++            pack_generation = generation;
++            jfg_pack_folder = rel;
++            packs_changed = true;
++        }
++    }
+     TexturePackAction cur_action;
+     while (texture_pack_action_queue.try_dequeue(cur_action)) {
+         std::visit(overloaded{
+@@ -647,11 +783,25 @@ void RT64Context::check_texture_pack_actions() {
+ 
+         // Build the path list from the sorted mod list.
+         std::vector<RT64::ReplacementDirectory> replacement_directories;
+-        replacement_directories.reserve(enabled_texture_packs.size());
++        replacement_directories.reserve(enabled_texture_packs.size() + 1);
+         for (const std::string &mod_id : sorted_texture_packs) {
+             replacement_directories.emplace_back(RT64::ReplacementDirectory(recomp::mods::get_mod_filename(mod_id)));
+         }
+ 
++        // JFG PORT: the folder pack chosen in Options -> Textures (or with F6), after the installed packs (earlier
++        // entries win).
++        const std::filesystem::path pack_dir = dino::config::get_app_folder_path() / std::filesystem::u8path(jfg_pack_folder);
++        std::error_code pack_ec;
++        jfg_texture_pack_set_count(-1);
++        if (!jfg_pack_folder.empty() && std::filesystem::is_directory(pack_dir, pack_ec)) {
++            const size_t count = jfg_write_pack_database(pack_dir);
++            fprintf(stderr, "[JFG] texture pack %s: %zu textures\n", jfg_pack_folder.c_str(), count);
++            jfg_texture_pack_set_count((int)count);
++            if (count > 0) {
++                replacement_directories.emplace_back(RT64::ReplacementDirectory(pack_dir));
++            }
++        }
++
+         if (!replacement_directories.empty()) {
+             app->textureCache->loadReplacementDirectories(replacement_directories);
+         }
+diff --git a/src/runtime/gfx.cpp b/src/runtime/gfx.cpp
+index 3da3d55..ffe6015 100644
+--- a/src/runtime/gfx.cpp
++++ b/src/runtime/gfx.cpp
+@@ -99,7 +99,7 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
+     flags |= SDL_WINDOW_METAL;
+ #endif
+ 
+-    window = SDL_CreateWindow("Diddy Kong Racing: Recompiled", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, flags);
++    window = SDL_CreateWindow("Jet Force Gemini: Recompiled", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, flags);
+ 
+     if (window == nullptr) {
+         exit_error("Failed to create window: %s\n", SDL_GetError());
