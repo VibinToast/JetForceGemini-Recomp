@@ -39,3 +39,73 @@ stubs = [
 vram = 0x80074E2C
 func = "gen_anim_data"
 value = 0x00000000
+
+# --- Direct hardware access in game code ----------------------------------------------------------------------------
+# __amHandleFrameMsg (audio manager) has osAiGetLength inlined: `lw $t7, AI_LEN_REG` through KSEG1 (0xA4500004).
+# Drop the load and supply the value from the runtime's audio backend instead.
+[[patches.instruction]]
+vram = 0x80001F2C
+func = "__amHandleFrameMsg"
+value = 0x00000000 # lw t7, 4(t6) -> nop
+
+[[patches.hook]]
+func = "__amHandleFrameMsg"
+before_vram = 0x80001F30
+text = "{ uint32_t recomp_osAiGetLength(void); ctx->r15 = (gpr)(int32_t)recomp_osAiGetLength(); }"
+
+# --- Anti-tamper checks that touch hardware directly (overlays 111, 133, 156) -----------------------------------------
+# osCartTest3_6105 / osCartTest4_6105: wait for PI idle by polling PI_STATUS_REG (0xA4600010), then read a word of
+# the cartridge through its KSEG1 mapping (0xB0000454 / 0xB0000A5C, part of the boot code) and compare it with the
+# value from a genuine cartridge. Natively: report the PI bus idle, and fetch the word from the user's ROM image,
+# so the comparison itself still runs against real data.
+[[patches.instruction]]
+vram = 0x826E0018
+func = "osCartTest3_6105"
+value = 0x00001025 # lw v0, 0(v1) [PI_STATUS] -> or v0, zero, zero
+
+[[patches.instruction]]
+vram = 0x826E002C
+func = "osCartTest3_6105"
+value = 0x00001025 # lw v0, 0(v1) [PI_STATUS] -> or v0, zero, zero
+
+[[patches.instruction]]
+vram = 0x826E0050
+func = "osCartTest3_6105"
+value = 0x00000000 # lw v0, 0(t0) [cartridge] -> nop (value supplied by the hook below)
+
+[[patches.hook]]
+func = "osCartTest3_6105"
+before_vram = 0x826E0054
+text = "{ uint32_t jfg_cart_read32(uint32_t); ctx->r2 = (gpr)(int32_t)jfg_cart_read32((uint32_t)ctx->r8); }"
+
+[[patches.instruction]]
+vram = 0x82840018
+func = "osCartTest4_6105"
+value = 0x00001025
+
+[[patches.instruction]]
+vram = 0x8284002C
+func = "osCartTest4_6105"
+value = 0x00001025
+
+[[patches.instruction]]
+vram = 0x82840050
+func = "osCartTest4_6105"
+value = 0x00000000
+
+[[patches.hook]]
+func = "osCartTest4_6105"
+before_vram = 0x82840054
+text = "{ uint32_t jfg_cart_read32(uint32_t); ctx->r2 = (gpr)(int32_t)jfg_cart_read32((uint32_t)ctx->r8); }"
+
+# osRamTest4_6105: reads physical RDRAM 0x2E8 through KSEG1 and expects 0xC86E2000, a leftover of the console's boot
+# stage. There is no boot stage here: skip the load and take the branch genuine hardware takes.
+[[patches.instruction]]
+vram = 0x829B0004
+func = "osRamTest4_6105"
+value = 0x00000000 # lw t7, 0x2E8(t6) -> nop
+
+[[patches.instruction]]
+vram = 0x829B0010
+func = "osRamTest4_6105"
+value = 0x10000003 # beq t7, at, pass -> b pass
