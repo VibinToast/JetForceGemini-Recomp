@@ -149,6 +149,31 @@ func = "func_80044FAC_45BAC"
 before_vram = 0x800457BC
 text = "{ uint32_t jfg_frame_sync(uint8_t*, uint32_t); ctx->r2 = (int32_t)jfg_frame_sync(rdram, (uint32_t)ctx->r2); }"
 
+# Cutscene skip (src/jfg/jfg_debug_menu.cpp): after joyRead() in the main loop tick, and at the entry of viFrameSync.
+[[patches.hook]]
+func = "func_80044FAC_45BAC"
+before_vram = 0x80045250
+text = "{ void jfg_after_joy(uint8_t*, recomp_context*); jfg_after_joy(rdram, ctx); }"
+
+[[patches.hook]]
+func = "viFrameSync"
+before_vram = 0x80054FBC
+text = "{ int jfg_vi_skip(uint8_t*, recomp_context*); if (jfg_vi_skip(rdram, ctx)) { recomp_exit_function(); return; } }"
+
+# While a cutscene is skipped no graphics task is sent at all (rcpFast3d returns at once, so rcpWaitDP has nothing to
+# wait for): the skipped part then runs at the speed of the game logic alone instead of one tick per video frame.
+[[patches.hook]]
+func = "rcpFast3d"
+before_vram = 0x8004DA10
+text = "{ int jfg_rcp_skip(uint8_t*, uint32_t); if (jfg_rcp_skip(rdram, (uint32_t)ctx->r6)) { ctx->r2 = 0; recomp_exit_function(); return; } }"
+
+# Sounds started by a skipped cutscene are dropped (they would all be heard at once when the skip ends, and the sound
+# player runs out of sound states). ad_sndp_play(bank, sound, volume, pan, pitch, ?, handlePtr): the handle (7th argument, on the stack) is set to NULL.
+[[patches.hook]]
+func = "ad_sndp_play"
+before_vram = 0x80085EEC
+text = "{ int jfg_snd_skip(uint8_t*, uint32_t); if (jfg_snd_skip(rdram, (uint32_t)ctx->r29)) { ctx->r2 = 0; recomp_exit_function(); return; } }"
+
 # osSyncPrintf: the game's debug output. Its output routine (0x8009A710) is reached through a function pointer the
 # recompiler has no entry for, which stopped the program the first time the game printed a warning (for example
 # "out of sound states"). The port prints the format string to stderr instead and returns.
@@ -156,6 +181,15 @@ text = "{ uint32_t jfg_frame_sync(uint8_t*, uint32_t); ctx->r2 = (int32_t)jfg_fr
 func = "osSyncPrintf"
 before_vram = 0x8009A724
 text = "{ void jfg_sync_printf(uint8_t*, recomp_context*); jfg_sync_printf(rdram, ctx); recomp_exit_function(); return; }"
+
+# The other sound-player events the game thread posts during a skipped cutscene (volume, pan and pitch updates of
+# sounds that are already playing) are dropped as well; only "stop" events are let through. A skip runs hundreds of
+# ticks before the audio thread gets a turn, and the sound player's event queue is small: once it is full the player
+# loses its own periodic event and never recovers ("Nonsense sndp event" forever, no more sound effects).
+[[patches.hook]]
+func = "n_alEvtqPostEvent"
+before_vram = 0x8008B610
+text = "{ int jfg_evt_skip(uint8_t*, uint32_t, uint32_t); if (jfg_evt_skip(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5)) { recomp_exit_function(); return; } }"
 
 # mainChangeLevel(level, character, entrance?, frontMode, ?, ?) entry: logged with JFG_DEBUG_STATS (src/jfg/jfg_debug_menu.cpp).
 [[patches.hook]]
@@ -176,3 +210,13 @@ text = "{ void jfg_mm_alloc_check(uint8_t*, recomp_context*); jfg_mm_alloc_check
 func = "mathBreakPoint"
 before_vram = 0x800496AC
 text = "{ void jfg_game_break(uint8_t*, recomp_context*); jfg_game_break(rdram, ctx); }"
+
+# 60 fps, second part: the scheduler only starts a frame's graphics task once the previous frame's buffer swap has
+# taken effect (__scTaskReady: VI current framebuffer != next framebuffer -> wait for the next retrace). With the
+# runtime's VI that check still sees the swap as pending at the retrace that applies it, which put every frame one more
+# retrace behind. (The third part, the main loop's own wait, is jfg_vi_skip in src/jfg.) The renderer draws a whole frame at once and shows the buffer the VI points at, so with 60 fps on the
+# task is let through.
+[[patches.hook]]
+func = "__scTaskReady"
+before_vram = 0x800509B0
+text = "{ int jfg_sched_extra_frame(void); if (jfg_sched_extra_frame()) { ctx->r2 = ctx->r4; recomp_exit_function(); return; } }"
