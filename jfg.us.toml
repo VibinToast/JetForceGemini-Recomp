@@ -136,3 +136,43 @@ value = 0x00000000 # lw t7, 0x2E8(t6) -> nop
 vram = 0x829B0010
 func = "osRamTest4_6105"
 value = 0x10000003 # beq t7, at, pass -> b pass
+
+# Native debug menu (src/jfg/jfg_debug_menu.cpp): called once per game tick at the entry of the main loop tick.
+[[patches.hook]]
+func = "func_80044FAC_45BAC"
+before_vram = 0x80044FAC
+text = "{ void jfg_debug_frame(uint8_t*, recomp_context*); jfg_debug_frame(rdram, ctx); }"
+
+# Right after viFrameSync() returns in the main loop tick ($v0 = frames to simulate); 6 while a cutscene is skipped.
+[[patches.hook]]
+func = "func_80044FAC_45BAC"
+before_vram = 0x800457BC
+text = "{ uint32_t jfg_frame_sync(uint8_t*, uint32_t); ctx->r2 = (int32_t)jfg_frame_sync(rdram, (uint32_t)ctx->r2); }"
+
+# osSyncPrintf: the game's debug output. Its output routine (0x8009A710) is reached through a function pointer the
+# recompiler has no entry for, which stopped the program the first time the game printed a warning (for example
+# "out of sound states"). The port prints the format string to stderr instead and returns.
+[[patches.hook]]
+func = "osSyncPrintf"
+before_vram = 0x8009A724
+text = "{ void jfg_sync_printf(uint8_t*, recomp_context*); jfg_sync_printf(rdram, ctx); recomp_exit_function(); return; }"
+
+# mainChangeLevel(level, character, entrance?, frontMode, ?, ?) entry: logged with JFG_DEBUG_STATS (src/jfg/jfg_debug_menu.cpp).
+[[patches.hook]]
+func = "mainChangeLevel"
+before_vram = 0x8004665C
+text = "{ void jfg_change_level_log(uint8_t*, recomp_context*); jfg_change_level_log(rdram, ctx); }"
+
+# mmAlloc, right after mempool_slot_find returned ($v0 = the block, 0 when the heap has no room): the port retries once
+# after mmFlushFreeStack (frees queued with a delay are released at once) and logs both cases (jfg_mm_alloc_check).
+[[patches.hook]]
+func = "mmAlloc"
+before_vram = 0x8004A5FC
+text = "{ void jfg_mm_alloc_check(uint8_t*, recomp_context*); jfg_mm_alloc_check(rdram, ctx); }"
+
+# mathBreakPoint, the game's assertion ("break"): logged to bin/jfg_error.log and reported in a message box before the
+# process ends (jfg_game_break). Without this the runtime's exit() could crash in its shutdown and leave nothing behind.
+[[patches.hook]]
+func = "mathBreakPoint"
+before_vram = 0x800496AC
+text = "{ void jfg_game_break(uint8_t*, recomp_context*); jfg_game_break(rdram, ctx); }"
