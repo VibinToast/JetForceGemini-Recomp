@@ -211,6 +211,15 @@ func = "mathBreakPoint"
 before_vram = 0x800496AC
 text = "{ void jfg_game_break(uint8_t*, recomp_context*); jfg_game_break(rdram, ctx); }"
 
+# 60 fps (F9 -> Options -> Display -> Frame rate). The scheduler holds back the "frame done" message of each frame
+# until 2 video retraces have passed since the last one (sc->frameCount at OSSched + 0x300, counted up here in
+# __scHandleRetrace; the decomp notes "if you want to make the game 60FPS, change this to 2"), which caps the game at
+# 30 fps whatever viFrameSync does. With 60 fps on, every retrace counts twice (jfg_sched_extra_frame returns 1).
+[[patches.hook]]
+func = "__scHandleRetrace"
+before_vram = 0x800506D8
+text = "{ int jfg_sched_extra_frame(void); ctx->r8 = (gpr)(int32_t)((int32_t)ctx->r8 + jfg_sched_extra_frame()); }"
+
 # 60 fps, second part: the scheduler only starts a frame's graphics task once the previous frame's buffer swap has
 # taken effect (__scTaskReady: VI current framebuffer != next framebuffer -> wait for the next retrace). With the
 # runtime's VI that check still sees the swap as pending at the retrace that applies it, which put every frame one more
