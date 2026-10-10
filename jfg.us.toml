@@ -191,6 +191,20 @@ func = "n_alEvtqPostEvent"
 before_vram = 0x8008B610
 text = "{ int jfg_evt_skip(uint8_t*, uint32_t, uint32_t); if (jfg_evt_skip(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5)) { recomp_exit_function(); return; } }"
 
+# Dual-stick camera (src/jfg/jfg_debug_menu.cpp): right before the scene is drawn (the "jal trackDraw" in the game
+# tick), the active camera is moved to the angle the right stick has chosen.
+[[patches.hook]]
+func = "func_80045F00_46B00"
+before_vram = 0x800462A0
+text = "{ void jfg_camera_override(uint8_t*, recomp_context*); jfg_camera_override(rdram, ctx); }"
+
+# Movement speed options (src/jfg/jfg_debug_menu.cpp): objMoveXYZ(object, dx, dy, dz) moves an object with collision;
+# for the player's object the horizontal step is scaled.
+[[patches.hook]]
+func = "objMoveXYZ"
+before_vram = 0x80009A04
+text = "{ void jfg_move_scale(uint8_t*, recomp_context*); jfg_move_scale(rdram, ctx); }"
+
 # mainChangeLevel(level, character, entrance?, frontMode, ?, ?) entry: logged with JFG_DEBUG_STATS (src/jfg/jfg_debug_menu.cpp).
 [[patches.hook]]
 func = "mainChangeLevel"
@@ -229,3 +243,15 @@ text = "{ int jfg_sched_extra_frame(void); ctx->r8 = (gpr)(int32_t)((int32_t)ctx
 func = "__scTaskReady"
 before_vram = 0x800509B0
 text = "{ int jfg_sched_extra_frame(void); if (jfg_sched_extra_frame()) { ctx->r2 = ctx->r4; recomp_exit_function(); return; } }"
+
+# Moving platforms: controlPlatform carries the player along with objMoveXYZ; that step must not be enlarged by the
+# "Movement speed" option (jfg_move_scale). Flag set around the call.
+[[patches.hook]]
+func = "controlPlatform"
+before_vram = 0x80035A98
+text = "{ void jfg_platform_move(int); jfg_platform_move(1); }"
+
+[[patches.hook]]
+func = "controlPlatform"
+before_vram = 0x80035AA0
+text = "{ void jfg_platform_move(int); jfg_platform_move(0); }"
