@@ -244,6 +244,19 @@ func = "__scTaskReady"
 before_vram = 0x800509B0
 text = "{ int jfg_sched_extra_frame(void); if (jfg_sched_extra_frame()) { ctx->r2 = ctx->r4; recomp_exit_function(); return; } }"
 
+# Weapons tab (src/jfg/jfg_debug_menu.cpp): bolt size for the player's laser bolts, at the end of laserboltInit
+# (overlay 109; a0 = the new bolt).
+[[patches.hook]]
+func = "laserboltInit"
+before_vram = 0x826C0288
+text = "{ void jfg_bolt_init(uint8_t*, recomp_context*); jfg_bolt_init(rdram, ctx); }"
+
+# Weapons tab: the player's mines, for the "mines on the field" limit; end of mineInit (overlay 112; s1 = mine, s0 = data).
+[[patches.hook]]
+func = "mineInit"
+before_vram = 0x826F020C
+text = "{ void jfg_mine_init(uint8_t*, recomp_context*); jfg_mine_init(rdram, ctx); }"
+
 # Moving platforms: controlPlatform carries the player along with objMoveXYZ; that step must not be enlarged by the
 # "Movement speed" option (jfg_move_scale). Flag set around the call.
 [[patches.hook]]
@@ -255,3 +268,34 @@ text = "{ void jfg_platform_move(int); jfg_platform_move(1); }"
 func = "controlPlatform"
 before_vram = 0x80035AA0
 text = "{ void jfg_platform_move(int); jfg_platform_move(0); }"
+
+# Sniper zoom: controlGetManualAim stores the zoom (data+0x1EC, 1..5) and its rate (+0x1F0); a fixed zoom replaces both.
+[[patches.hook]]
+func = "controlGetManualAim"
+before_vram = 0x8003AC74
+text = "{ float jfg_sniper_zoom(float); float z = jfg_sniper_zoom(ctx->f2.fl); if (z != ctx->f2.fl) { ctx->f2.fl = z; ctx->f14.fl = 0.0f; } }"
+
+# Sniper rifle walking: while aiming, each character's aim control walks with the zoom keys (C-up / C-down) but
+# skips walking with the sniper rifle (t3 / t4 = the current weapon, 7 = sniper), as those keys zoom the scope. With
+# "Sniper rifle: fixed zoom" the zoom keys are free, so the sniper walks like any other weapon.
+[[patches.hook]]
+func = "func_overlay_15_00004658_1F17FD8"
+before_vram = 0x820F46F4
+text = "{ int jfg_sniper_walk(int); ctx->r11 = (gpr)(int32_t)jfg_sniper_walk((int32_t)ctx->r11); }"
+
+[[patches.hook]]
+func = "func_overlay_16_00004440_1F22458"
+before_vram = 0x821044DC
+text = "{ int jfg_sniper_walk(int); ctx->r11 = (gpr)(int32_t)jfg_sniper_walk((int32_t)ctx->r11); }"
+
+[[patches.hook]]
+func = "func_overlay_17_00004614_1F2C15C"
+before_vram = 0x821146C4
+text = "{ int jfg_sniper_walk(int); ctx->r12 = (gpr)(int32_t)jfg_sniper_walk((int32_t)ctx->r12); }"
+
+# Animation steps (objAnimDframe(object, speed, frames); the floats arrive in a1 / a2): the player's throw animation
+# runs faster with a shorter throw delay (Weapons tab).
+[[patches.hook]]
+func = "objAnimDframe"
+before_vram = 0x8001138C
+text = "{ uint32_t jfg_anim_speed(uint8_t*, uint32_t, uint32_t); ctx->r5 = (gpr)(int32_t)jfg_anim_speed(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5); }"
