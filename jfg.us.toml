@@ -257,6 +257,30 @@ func = "mineInit"
 before_vram = 0x826F020C
 text = "{ void jfg_mine_init(uint8_t*, recomp_context*); jfg_mine_init(rdram, ctx); }"
 
+# Boss fights (src/jfg/jfg_debug_menu.cpp, jfg_boss_tick): the player's boss-fight control (overlays 50-52, one per
+# character) ran this tick - the dual-stick / mouse and keyboard controls switch to the boss layout.
+[[patches.hook]]
+func = "boyBossControl"
+before_vram = 0x82310000
+text = "{ void jfg_boss_tick(void); jfg_boss_tick(); }"
+
+[[patches.hook]]
+func = "dogBossControl"
+before_vram = 0x82320000
+text = "{ void jfg_boss_tick(void); jfg_boss_tick(); }"
+
+[[patches.hook]]
+func = "girlBossControl"
+before_vram = 0x82330000
+text = "{ void jfg_boss_tick(void); jfg_boss_tick(); }"
+
+# Jetpack fuel pads (overlay 100, refuelControl): the fuel added this tick (t3) scaled by the "Refuel speed" option,
+# just before it is stored in the player's data (+0x58C); the game clamps it to the maximum right after.
+[[patches.hook]]
+func = "refuelControl"
+before_vram = 0x82630294
+text = "{ int jfg_refuel_amount(int); ctx->r25 = (gpr)(int32_t)((int32_t)ctx->r4 + jfg_refuel_amount((int32_t)ctx->r11)); }"
+
 # Moving platforms: controlPlatform carries the player along with objMoveXYZ; that step must not be enlarged by the
 # "Movement speed" option (jfg_move_scale). Flag set around the call.
 [[patches.hook]]
