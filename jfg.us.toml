@@ -149,6 +149,17 @@ func = "func_80044FAC_45BAC"
 before_vram = 0x800457BC
 text = "{ uint32_t jfg_frame_sync(uint8_t*, uint32_t); ctx->r2 = (int32_t)jfg_frame_sync(rdram, (uint32_t)ctx->r2); }"
 
+# "No blood" option: overlay 8's bloodSpurtAdd and bloodHitSpriteAdd (both return nothing) do nothing when it is on.
+[[patches.hook]]
+func = "bloodSpurtAdd"
+before_vram = 0x820801CC
+text = "{ int jfg_no_blood(void); if (jfg_no_blood()) { recomp_exit_function(); return; } }"
+
+[[patches.hook]]
+func = "bloodHitSpriteAdd"
+before_vram = 0x82080334
+text = "{ int jfg_no_blood(void); if (jfg_no_blood()) { recomp_exit_function(); return; } }"
+
 # Cutscene skip (src/jfg/jfg_debug_menu.cpp): after joyRead() in the main loop tick, and at the entry of viFrameSync.
 [[patches.hook]]
 func = "func_80044FAC_45BAC"
@@ -323,3 +334,16 @@ text = "{ int jfg_sniper_walk(int); ctx->r12 = (gpr)(int32_t)jfg_sniper_walk((in
 func = "objAnimDframe"
 before_vram = 0x8001138C
 text = "{ uint32_t jfg_anim_speed(uint8_t*, uint32_t, uint32_t); ctx->r5 = (gpr)(int32_t)jfg_anim_speed(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5); }"
+
+# "Skip the Tribal check" cheat: game flag 88 (all Tribals rescued) reads as set, without changing the save.
+[[patches.hook]]
+func = "mainGetGameFlag"
+before_vram = 0x80047ED0
+text = "{ int jfg_flag_override(int); if (jfg_flag_override((int)ctx->r4)) { ctx->r2 = 1; recomp_exit_function(); return; } }"
+
+# Fly camera "freeze": at the branch where func_80045F00 chooses between the world's tick and its pause tick (v1 =
+# the pause mode), a non-zero v1 runs the pause tick (objects drawn, not moved) without the pause menu.
+[[patches.hook]]
+func = "func_80045F00_46B00"
+before_vram = 0x80046058
+text = "{ int jfg_freeze_world(void); if (jfg_freeze_world()) ctx->r3 = 1; }"
