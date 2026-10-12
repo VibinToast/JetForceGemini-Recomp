@@ -1,0 +1,110 @@
+# Every push to main makes a release: the version goes up, the tag (v1.2.3) is created, CHANGELOG.md and
+# version.txt are updated, and a GitHub release is published with the commit messages as its notes.
+#
+# - The patch number goes up by default (1.0.0 -> 1.0.1). Put #minor (-> 1.1.0) or #major (-> 2.0.0) in a commit
+#   message to bump those instead.
+# - Put [skip release] in the last commit message of a push to push without a release.
+# - The first run releases the version already in version.txt (1.0.0).
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the new version
+        id: version
+        run: |
+          last=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+          if [ -z "$last" ]; then
+            new=$(tr -d ' \r\n' < version.txt)
+            range=HEAD
+          else
+            if [ "$(git rev-list --count "$last..HEAD")" = 0 ]; then
+              echo "Nothing new since $last."; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+            IFS=. read -r major minor patch <<< "${last#v}"
+            messages=$(git log --format=%B "$last..HEAD")
+            if grep -qiE '#major|BREAKING CHANGE' <<< "$messages"; then major=$((major + 1)); minor=0; patch=0
+            elif grep -qiE '#minor' <<< "$messages"; then minor=$((minor + 1)); patch=0
+            else patch=$((patch + 1)); fi
+            new="$major.$minor.$patch"
+            range="$last..HEAD"
+          fi
+          if git rev-parse -q --verify "refs/tags/v$new" >/dev/null; then
+            echo "Tag v$new already exists." >&2; exit 1
+          fi
+          echo "version=$new" >> "$GITHUB_OUTPUT"
+          echo "last=$last" >> "$GITHUB_OUTPUT"
+          echo "range=$range" >> "$GITHUB_OUTPUT"
+
+      - name: Write the release notes
+        if: steps.version.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          LAST: ${{ steps.version.outputs.last }}
+          RANGE: ${{ steps.version.outputs.range }}
+        run: |
+          # One line per commit, without the version bumps and with the #minor / #major / [skip ...] markers removed.
+          git log --no-merges --format='%s' "$RANGE" \
+            | grep -vE '^chore: release v' \
+            | sed -E 's/ *(#minor|#major|\[skip [a-z]+\]) *//gI' \
+            | sed -E '/^$/d; s/^/- /' > changes.md
+          [ -s changes.md ] || echo "- Maintenance" > changes.md
+          {
+            echo "## What's changed"
+            echo
+            cat changes.md
+            if [ -n "$LAST" ]; then
+              echo
+              echo "**Full changelog**: https://github.com/${{ github.repository }}/compare/$LAST...v$VERSION"
+            fi
+          } > notes.md
+          {
+            echo "# Changelog"
+            echo
+            echo "## v$VERSION ($(date -u +%Y-%m-%d))"
+            echo
+            cat changes.md
+            if [ -f CHANGELOG.md ]; then
+              echo
+              tail -n +3 CHANGELOG.md
+            fi
+          } > CHANGELOG.new
+          mv CHANGELOG.new CHANGELOG.md
+          echo "$VERSION" > version.txt
+
+      - name: Commit, tag and push
+        if: steps.version.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md version.txt
+          git commit -m "chore: release v$VERSION [skip ci]"
+          git tag -a "v$VERSION" -m "v$VERSION"
+          git push origin HEAD:main
+          git push origin "v$VERSION"
+
+      - name: Publish the GitHub release
+        if: steps.version.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: gh release create "v$VERSION" --title "v$VERSION" --notes-file notes.md --verify-tag
