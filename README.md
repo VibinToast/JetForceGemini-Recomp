@@ -10,6 +10,53 @@ the game's code is translated from your ROM and compiled for your PC.
 Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630cf23a023`. Save it as
 `baserom.us.z64` in this folder.
 
+## Features
+
+**Launcher**
+- Launcher in Jet Force Gemini colours with Play, Profiles, Gameplay, Visuals, Graphics, Sound, Controls,
+  Stick & Rumble, Texture Packs and About pages. Works with a controller.
+
+**Profiles**
+- Built-in profiles: Default (the original game), Modern, Modern and Balanced (Modern with rebalanced weapons)
+  and Extreme.
+- Your own profiles: save, switch and delete them.
+
+**Controls**
+- Dual-stick controls with a camera-relative left stick, a free camera and a modern button layout.
+- Mouse and keyboard controls.
+- Over-the-shoulder aim with a centred reticle, and adjustable aim speed.
+- Jump while aiming.
+- Sniper rifle with a fixed zoom, so you can walk while scoped.
+- Dual-stick and mouse-and-keyboard controls in boss fights.
+- Adjustable movement speed and diagonal boost, plus camera, mouse and invert options.
+- Rumble Pak support, and rebindable controls.
+- Races and Floyd missions keep the original controls automatically.
+
+**Gameplay**
+- START skips cutscenes, the logo screens and the story intro.
+- Adjustable damage taken, jetpack refuel speed and Vela's dive speed.
+- A Weapons editor for each weapon: damage, fire rate, speed, range, spread, throw delay, bolt size, charge speed
+  and mine limit. Faster throws also speed up the throw animation.
+- No blood option.
+
+**Visuals**
+- Widescreen.
+- Ambient occlusion (SSAO) and bloom, each with sliders.
+- Disable LOD and draw distant objects.
+- Fly camera for screenshots (F7), which can freeze the world and hide the HUD.
+- On-screen FPS, level and texture pack.
+
+**Texture packs**
+- Texture dumping, all in one folder or one folder per level.
+- Helper scripts in `tools/textures` for collecting newly dumped textures.
+
+**Tools (F10 toolbar)**
+- Cheats: invulnerable, unlimited ammo, all weapons, all levels, skip the Tribal check.
+- Level warp to any level, with a choice of character and entrance.
+- Items editor: weapons, ammo, health, keys, objects, Tribals, ship and Floyd parts, progress flags and
+  multiplayer unlocks.
+- Quick profile and texture-pack switching.
+
 ## Build and run
 
 **Windows** (10/11, Direct3D 12 GPU): install Visual Studio 2022 (Desktop development with C++, plus C++ Clang
@@ -25,6 +72,17 @@ sudo apt install git cmake ninja-build clang lld python3 libsdl2-dev libvulkan-d
 
 The game ends up in `bin`, together with its saves and settings. The `build` folder is only needed for building.
 Keep `bin` private, because it holds a copy of the ROM.
+
+## Keys
+
+| Key | Action |
+|---|---|
+| Select / Esc | Settings menu |
+| F10 | Tools toolbar (Alt switches between the toolbar and the game) |
+| F9 | Debug window |
+| F5 / F6 | Back to the title screen / next texture pack |
+| F7 | Fly camera |
+| F11 / Alt+Enter | Fullscreen |
 
 ## How it works
 
