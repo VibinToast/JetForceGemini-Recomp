@@ -3043,13 +3043,13 @@ index d117b72..76acb9c 100644
          config_context = recompui::create_context(dino::runtime::get_asset_path("config_menu.rml"));
          recompui::update_mod_list(false);
          recompui::get_config_tabset()->AddEventListener(Rml::EventId::Tabchange, &config_tabset_listener);
-+        // JFG PORT: the Mods and Debug tabs have nothing that works with this game. They stay in the document
-+        // (code elsewhere looks them up by id and by index) but are not shown. The tabset gives every tab an
++        // JFG PORT: the Debug tab has nothing that works with this game. It stays in the document (code
++        // elsewhere looks it up by id and by index) but is not shown; the Mods tab is shown. The tabset gives every tab an
 +        // inline display property when it adopts it, so this has to be set afterwards, here.
 +        {
 +            recompui::ContextId old_context = recompui::try_close_current_context();
 +            if (Rml::ElementDocument* doc = config_context.get_document()) {
-+                for (const char* id : { "tab_mods", "tab_debug" }) {
++                for (const char* id : { "tab_debug" }) {
 +                    if (Rml::Element* tab = doc->GetElementById(id)) {
 +                        tab->SetProperty(Rml::PropertyId::Display, Rml::Style::Display::None);
 +                    }
