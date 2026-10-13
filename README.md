@@ -47,6 +47,8 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 - On-screen FPS, level and texture pack.
 
 **Texture packs**
+- The JFG 4K texture pack is a separate download. See
+  [vibintoast.com/content/textures/jfg-4k](https://vibintoast.com/content/textures/jfg-4k) for more info.
 - Texture dumping, all in one folder or one folder per level.
 - HD texture packs, picked from a list and switched in-game with F6.
 - Helper scripts in `tools/textures` for collecting newly dumped textures.
