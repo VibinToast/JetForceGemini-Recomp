@@ -2881,7 +2881,7 @@ index 4572744..fc9755b 100644
      TexturePackAction cur_action;
      while (texture_pack_action_queue.try_dequeue(cur_action)) {
          std::visit(overloaded{
-@@ -647,11 +783,25 @@ void RT64Context::check_texture_pack_actions() {
+@@ -647,11 +783,46 @@ void RT64Context::check_texture_pack_actions() {
  
          // Build the path list from the sorted mod list.
          std::vector<RT64::ReplacementDirectory> replacement_directories;
@@ -2896,8 +2896,29 @@ index 4572744..fc9755b 100644
 +        const std::filesystem::path pack_dir = dino::config::get_app_folder_path() / std::filesystem::u8path(jfg_pack_folder);
 +        std::error_code pack_ec;
 +        jfg_texture_pack_set_count(-1);
-+        if (!jfg_pack_folder.empty() && std::filesystem::is_directory(pack_dir, pack_ec)) {
-+            const size_t count = jfg_write_pack_database(pack_dir);
++        const bool pack_is_rtz = !jfg_pack_folder.empty() && pack_dir.extension() == ".rtz" && std::filesystem::is_regular_file(pack_dir, pack_ec);
++        if (!jfg_pack_folder.empty() && (pack_is_rtz || std::filesystem::is_directory(pack_dir, pack_ec))) {
++            size_t count = 0;
++            if (pack_is_rtz) {
++                // A packed pack (.rtz: a zip with rt64.json at its root) is used as it is; only its textures are counted.
++#ifdef _WIN32
++                std::FILE* zip_file = _wfopen(pack_dir.c_str(), L"rb");
++#else
++                std::FILE* zip_file = std::fopen(pack_dir.c_str(), "rb");
++#endif
++                if (zip_file != nullptr) {
++                    mz_zip_archive zip = {};
++                    if (mz_zip_reader_init_cfile(&zip, zip_file, 0, 0)) {
++                        count = mz_zip_reader_get_num_files(&zip);
++                        if (count > 0) count--; // rt64.json
++                        mz_zip_reader_end(&zip);
++                    }
++                    std::fclose(zip_file);
++                }
++            }
++            else {
++                count = jfg_write_pack_database(pack_dir);
++            }
 +            fprintf(stderr, "[JFG] texture pack %s: %zu textures\n", jfg_pack_folder.c_str(), count);
 +            jfg_texture_pack_set_count((int)count);
 +            if (count > 0) {

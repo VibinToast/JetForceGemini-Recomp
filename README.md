@@ -50,7 +50,10 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 - The JFG 4K texture pack is a separate download. See
   [vibintoast.com/content/textures/jfg-4k](https://vibintoast.com/content/textures/jfg-4k) for more info.
 - Texture dumping, all in one folder or one folder per level.
-- HD texture packs, picked from a list and switched in-game with F6.
+- HD texture packs, picked from a list and switched in-game with F6. A pack is a folder in `bin/texture_packs/<name>`
+  or a packed `.rtz` file (a zip with `rt64.json` at its root) in `bin/texture_packs/`.
+- A `.rtz` pack can also go in `bin/mods/`. It is then loaded as a mod, turned on by default, and can be switched
+  on and off and reordered in the Mods tab of the settings menu (Select / Esc).
 - Helper scripts in `tools/textures` for collecting newly dumped textures.
 
 **Tools (F10 toolbar)**

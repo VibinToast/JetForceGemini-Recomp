@@ -504,14 +504,21 @@ void save_options() {
     profile_autosave();
 }
 
-// The available packs: "texture_pack" if that folder exists, then every folder in texture_packs, sorted.
+// The available packs: "texture_pack" if that folder exists, then every folder and .rtz file in texture_packs, sorted.
 std::vector<std::string> list_texture_packs() {
     std::vector<std::string> packs;
     std::error_code ec;
     if (std::filesystem::is_directory("texture_pack", ec)) packs.emplace_back("texture_pack");
     std::vector<std::string> named;
     for (std::filesystem::directory_iterator it("texture_packs", ec), end; !ec && it != end; it.increment(ec)) {
-        if (it->is_directory()) { const auto n8 = it->path().filename().u8string(); named.emplace_back("texture_packs/" + std::string(n8.begin(), n8.end())); }
+        // A pack is a folder, or a packed pack: a .rtz file (a zip with rt64.json at its root).
+        bool is_pack = it->is_directory();
+        if (!is_pack && it->is_regular_file()) {
+            std::string ext = it->path().extension().string();
+            for (char& c : ext) c = (char)std::tolower((unsigned char)c);
+            is_pack = ext == ".rtz";
+        }
+        if (is_pack) { const auto n8 = it->path().filename().u8string(); named.emplace_back("texture_packs/" + std::string(n8.begin(), n8.end())); }
     }
     std::sort(named.begin(), named.end());
     packs.insert(packs.end(), named.begin(), named.end());
@@ -520,8 +527,9 @@ std::vector<std::string> list_texture_packs() {
 
 std::string pack_display_name(const std::string& folder) {
     if (folder.empty()) return "Off (original textures)";
-    if (folder.rfind("texture_packs/", 0) == 0) return folder.substr(14);
-    return folder;
+    std::string name = folder.rfind("texture_packs/", 0) == 0 ? folder.substr(14) : folder;
+    if (name.size() > 4 && name.compare(name.size() - 4, 4, ".rtz") == 0) name.resize(name.size() - 4);
+    return name;
 }
 
 // Chooses a pack (or "" for none), saves the choice and makes the renderer (re)load it.
@@ -772,7 +780,7 @@ void draw_options() {
                 const int n = g_texture_pack_count.load();
                 if (!current.empty() && n >= 0) ImGui::TextDisabled("%s: %d replacement textures loaded", current.c_str(), n);
             }
-            options_help("Put each pack in its own folder: bin\\texture_packs\\<name>. Images named like the dumps replace "
+            options_help("Put each pack in its own folder (bin\\texture_packs\\<name>) or as a packed .rtz file (bin\\texture_packs\\<name>.rtz). Images named like the dumps replace "
                          "those textures, at any size; a suffix after the name (as Upscayl adds) is fine. F6 switches to the "
                          "next pack (and to Off) while playing, to compare. Reload after adding or changing files.");
             ImGui::EndTabItem();
