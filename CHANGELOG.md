@@ -45,10 +45,13 @@ built and tested, unless marked otherwise.
   build. Existing folders and their contents are left alone.
 
 ### Releases
-- `.github/workflows/release.yml`: releases are made by hand. In GitHub, Actions > Release > Run workflow, then choose
-  `minor` (1.0 -> 1.1) or `major` (1.x -> 2.0). The first release is 1.0. The workflow turns this "Unreleased" section into
-  the release notes, renames it to the new version, writes `version.txt`, tags `vX.Y` and publishes the release. It
-  publishes the source only: the game cannot be built on GitHub because it needs your ROM.
+- `.github/workflows/release.yml`: releases are made by hand. In GitHub, Actions > Release > Run workflow, then type the
+  version (three numbers, for example `1.0.0`). The workflow turns this "Unreleased" section into the release notes,
+  renames it to the new version, writes `version.txt`, tags `vX.Y.Z` and publishes the release.
+- `tools/package_release.bat`: makes `dist/JFG-X.Y.Z-windows-x64-portable.zip` from `bin` (the exe, DLLs, assets and
+  empty `mods` and `texture_packs` folders; no saves, settings or ROM) and uploads it to the release with `gh` if it is
+  installed. The game cannot be built on GitHub because it needs your ROM, so this step runs on your PC after the
+  workflow.
 
 ### Notes
 - Changes were made in three places that must stay in step: `patches/jfg-base.patch` (what the build applies),

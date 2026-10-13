@@ -1,26 +1,26 @@
-# Manual releases: you decide when. Nothing happens on a normal push.
+# Manual releases: you decide when, and you type the version. Nothing happens on a normal push.
 #
-# To release: GitHub -> Actions -> "Release" -> "Run workflow" (pick the branch, pick minor or major).
+# To release: GitHub -> Actions -> "Release" -> "Run workflow", pick the branch and type the version (for example 1.0.0).
 #
-# - The first release is v1.0.
-# - After that, "minor" gives 1.0 -> 1.1 -> 1.2 ..., and "major" gives 1.x -> 2.0.
+# - The version must be three numbers, X.Y.Z, and must not have been released before. The tag is vX.Y.Z.
 # - The release notes are the "Unreleased" part of CHANGELOG.md. If that part is empty, the commit messages since the
 #   last release are used instead.
 # - It then renames "Unreleased" to the new version in CHANGELOG.md, writes the version into version.txt (which goes
-#   into the game's launcher), commits both, tags vX.Y and publishes the GitHub release.
+#   into the game's launcher), commits both, tags vX.Y.Z and publishes the GitHub release.
 #
-# This does not build the game. The game's code is translated from the owner's own ROM, so it cannot be built or
-# published from GitHub. The release has the source code (GitHub attaches the zip and tar.gz itself).
+# This does not build the game. The game's code is translated from the owner's own ROM, so it cannot be built on
+# GitHub. The portable zip is made on the owner's PC with tools/package_release.bat, which uploads it to this release
+# as JFG-X.Y.Z-windows-x64-portable.zip. GitHub attaches the source zip and tar.gz itself.
 name: Release
 
 on:
   workflow_dispatch:
     inputs:
-      bump:
-        description: Which number to raise (ignored for the first release, which is always 1.0)
-        type: choice
-        options: [minor, major]
-        default: minor
+      version:
+        description: Version to release, three numbers (for example 1.0.0)
+        type: string
+        required: true
+        default: 1.0.0
 
 permissions:
   contents: write
@@ -37,32 +37,29 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Work out the new version
+      - name: Check the version
         id: version
         env:
-          BUMP: ${{ inputs.bump }}
+          VERSION: ${{ inputs.version }}
         run: |
+          new="${VERSION#v}"
+          if ! [[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The version must be three numbers like 1.0.0, not '$VERSION'." >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v$new" > /dev/null; then
+            echo "Tag v$new already exists." >&2
+            exit 1
+          fi
           last=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)
           if [ -z "$last" ]; then
-            major=1; minor=0
             range=HEAD
           else
             if [ "$(git rev-list --count "$last..HEAD")" = 0 ]; then
               echo "Nothing new since $last, so there is nothing to release." >&2
               exit 1
             fi
-            IFS=. read -r major minor _ <<< "${last#v}"
-            if [ "$BUMP" = major ]; then
-              major=$((major + 1)); minor=0
-            else
-              minor=$((minor + 1))
-            fi
             range="$last..HEAD"
-          fi
-          new="$major.$minor"
-          if git rev-parse -q --verify "refs/tags/v$new" > /dev/null; then
-            echo "Tag v$new already exists." >&2
-            exit 1
           fi
           echo "version=$new" >> "$GITHUB_OUTPUT"
           echo "last=$last" >> "$GITHUB_OUTPUT"
@@ -98,7 +95,7 @@ jobs:
               notes += "\n\n**Full changelog**: https://github.com/%s/compare/%s...v%s" % (os.environ["REPO"], last, version)
           open("notes.md", "w", encoding="utf-8").write(notes + "\n")
           PY
-          echo "${VERSION}.0" > version.txt
+          echo "${VERSION}" > version.txt
 
       - name: Commit, tag and push
         env:
