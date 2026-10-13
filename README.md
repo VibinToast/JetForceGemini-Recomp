@@ -54,7 +54,8 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
   or a packed `.rtz` file (a zip with `rt64.json` at its root) in `bin/texture_packs/`.
 - A `.rtz` pack can also go in `bin/mods/`. It is then loaded as a mod, turned on by default, and can be switched
   on and off and reordered in the Mods tab of the settings menu (Select / Esc).
-- Helper scripts in `tools/textures` for collecting newly dumped textures.
+- Helper scripts in `tools/textures` for collecting newly dumped textures, converting a pack to DDS and packing it
+  into a `.rtz` file.
 
 **Tools (F10 toolbar)**
 - Cheats: invulnerable, unlimited ammo, all weapons, all levels, skip the Tribal check.

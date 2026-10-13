@@ -23,6 +23,15 @@ built and tested, unless marked otherwise.
 - How to make a pack: zip the contents of the pack folder (`rt64.json` at the archive root, textures beside it, stored or
   deflate) and name the file `<name>.rtz`.
 
+### Tools
+- `tools/textures/png_to_dds.bat`: drag a texture pack folder onto it to get a `<folder>_dds` folder with every PNG
+  converted to BC7 DDS (full mipmaps) by `texconv.exe`, and an `rt64.json` pointing at the `.dds` files. Needs
+  `texconv.exe` (Microsoft DirectXTex) next to the script or on PATH. Settings (format, raw-value handling) are at the top
+  of `png_to_dds.ps1`.
+- `tools/textures/make_rtz.bat`: drag a pack folder onto it to get `<folder>.rtz` next to it (a zip with `rt64.json` at
+  its root, stored by default). Put the result in `bin/texture_packs/` or `bin/mods/`.
+- Both are .bat wrappers around a .ps1 of the same name. Not run yet on Windows.
+
 ### Notes
 - Changes were made in three places that must stay in step: `patches/jfg-base.patch` (what the build applies),
   `build/src/...` (the current build tree) and `src/jfg/` (the port's own code).
