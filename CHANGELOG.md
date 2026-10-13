@@ -5,6 +5,8 @@ built and tested, unless marked otherwise.
 
 ## Unreleased
 
+## v1.0 (2026-10-13)
+
 ### Mods
 - The Mods tab in the settings menu (Select / Esc) is shown again. It was hidden by the port; only the Debug tab
   stays hidden. (`ui_config.cpp`, via `patches/jfg-base.patch`)
@@ -56,3 +58,4 @@ built and tested, unless marked otherwise.
 ### Notes
 - Changes were made in three places that must stay in step: `patches/jfg-base.patch` (what the build applies),
   `build/src/...` (the current build tree) and `src/jfg/` (the port's own code).
+
