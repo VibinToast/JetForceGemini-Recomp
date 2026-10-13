@@ -30,6 +30,8 @@ built and tested, unless marked otherwise.
   of `png_to_dds.ps1`.
 - `tools/textures/make_rtz.bat`: drag a pack folder onto it to get `<folder>.rtz` next to it (a zip with `rt64.json` at
   its root, stored by default). Put the result in `bin/texture_packs/` or `bin/mods/`.
+- `docs/TEXTURE_PACKS.md`: a guide to making a texture pack (dump, replace, test, convert to DDS, pack as `.rtz`),
+  linked from the README.
 - Both are .bat wrappers around a .ps1 of the same name. Not run yet on Windows.
 
 ### Notes
