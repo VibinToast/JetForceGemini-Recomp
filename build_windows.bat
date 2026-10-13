@@ -238,6 +238,9 @@ copy /y "%WORK%\build-windows\JetForceGeminiRecompiled.exe" "%BIN%\" >nul || ( e
 copy /y "%WORK%\build-windows\*.dll" "%BIN%\" >nul || ( echo [jfg] ERROR: copying the DLLs failed & exit /b 1 )
 copy /y "%WORK%\recompcontrollerdb.txt" "%BIN%\" >nul || ( echo [jfg] ERROR: copying recompcontrollerdb.txt failed & exit /b 1 )
 xcopy "%WORK%\assets" "%BIN%\assets\" /e /i /y /q >nul || ( echo [jfg] ERROR: copying assets failed & exit /b 1 )
+rem Empty folders for mods and texture packs (.rtz files or folders); existing ones, and what is in them, are left alone.
+if not exist "%BIN%\mods" mkdir "%BIN%\mods"
+if not exist "%BIN%\texture_packs" mkdir "%BIN%\texture_packs"
 echo [jfg] BUILD OK: %BIN%\JetForceGeminiRecompiled.exe
 echo [jfg] next: double-click run_windows.bat
 echo [jfg] build finished %DATE% %TIME%

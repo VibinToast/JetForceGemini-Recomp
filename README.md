@@ -78,7 +78,8 @@ sudo apt install git cmake ninja-build clang lld python3 libsdl2-dev libvulkan-d
 ./build_linux.sh && ./run_linux.sh
 ```
 
-The game ends up in `bin`, together with its saves and settings. The `build` folder is only needed for building.
+The game ends up in `bin`, together with its saves and settings. The build also creates empty `bin/mods` and `bin/texture_packs` folders for mods and texture packs (see
+[docs/TEXTURE_PACKS.md](docs/TEXTURE_PACKS.md)); anything already in them is kept. The `build` folder is only needed for building.
 Keep `bin` private, because it holds a copy of the ROM.
 
 ## Keys

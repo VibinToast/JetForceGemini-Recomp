@@ -96,5 +96,7 @@ cp -f build-linux/JetForceGeminiRecompiled "$BIN/"
 cp -f recompcontrollerdb.txt "$BIN/"
 cp -f icons/512.png "$BIN/icons/"
 rm -rf "$BIN/assets" && cp -r assets "$BIN/"
+# Empty folders for mods and texture packs (.rtz files or folders); existing ones, and what is in them, are left alone.
+mkdir -p "$BIN/mods" "$BIN/texture_packs"
 say "BUILD OK: $BIN/JetForceGeminiRecompiled"
 say "next: ./run_linux.sh"

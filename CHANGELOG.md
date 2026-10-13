@@ -34,6 +34,10 @@ built and tested, unless marked otherwise.
   linked from the README.
 - Both are .bat wrappers around a .ps1 of the same name. Not run yet on Windows.
 
+### Build
+- `build_windows.bat` and `build_linux.sh` now create empty `bin/mods` and `bin/texture_packs` folders after the
+  build. Existing folders and their contents are left alone.
+
 ### Releases
 - `.github/workflows/release.yml`: releases are made by hand. In GitHub, Actions > Release > Run workflow, then choose
   `minor` (1.0 -> 1.1) or `major` (1.x -> 2.0). The first release is 1.0. The workflow turns this "Unreleased" section into
