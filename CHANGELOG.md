@@ -34,6 +34,12 @@ built and tested, unless marked otherwise.
   linked from the README.
 - Both are .bat wrappers around a .ps1 of the same name. Not run yet on Windows.
 
+### Saves and settings
+- The game no longer looks in `%LOCALAPPDATA%` (or `~/.config` on Linux) for saves and settings. Saves and settings are
+  only read from, and written to, the `bin` folder next to the executable. The one-time copy from an earlier build's
+  per-user folder is removed. (`src/config/config.cpp`, via `patches/jfg-base.patch`.) Anyone who still has a save in
+  `%LOCALAPPDATA%\JetForceGeminiRecompiled` must copy it into `bin\saves` by hand.
+
 ### Build
 - `build_windows.bat` and `build_linux.sh` now create empty `bin/mods` and `bin/texture_packs` folders after the
   build. Existing folders and their contents are left alone.

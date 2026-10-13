@@ -1174,18 +1174,10 @@ index fec4eaa..9076b75 100644
  #include <fstream>
  #include <iomanip>
  
-@@ -167,46 +169,95 @@ void input_field_from_json(const nlohmann::json& j, dino::input::InputField& fie
+@@ -167,46 +169,52 @@ void input_field_from_json(const nlohmann::json& j, dino::input::InputField& fie
      j.at("input_id").get_to(field.input_id);
  }
  
--std::filesystem::path get_app_folder_path() {
--   // directly check for portable.txt (windows and native linux binary)
--   if (std::filesystem::exists("portable.txt")) {
--       return std::filesystem::current_path();
--   }
--
--   std::filesystem::path recomp_dir{};
--
 +// JFG port: the folder the executable is in. Everything the program reads or writes at run time lives there.
 +std::filesystem::path get_executable_folder_path() {
 +    static std::filesystem::path cached;
@@ -1193,13 +1185,7 @@ index fec4eaa..9076b75 100644
 +        return cached;
 +    }
 +    std::error_code ec;
- #if defined(_WIN32)
--   // Deduce local app data path.
--   PWSTR known_path = NULL;
--   HRESULT result = SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &known_path);
--   if (result == S_OK) {
--       recomp_dir = std::filesystem::path{known_path} / program_id;
--   }
++#if defined(_WIN32)
 +    std::wstring buffer(32768, L'\0');
 +    const DWORD length = GetModuleFileNameW(NULL, buffer.data(), (DWORD)buffer.size());
 +    if (length > 0 && length < buffer.size()) {
@@ -1217,41 +1203,29 @@ index fec4eaa..9076b75 100644
 +    }
 +    return cached;
 +}
- 
--   CoTaskMemFree(known_path);
-+// Where earlier builds kept saves and settings: a per-user folder, first under the name of the project this port is
-+// based on, then under this port's own name.
-+static std::vector<std::filesystem::path> legacy_app_folder_paths() {
-+    std::vector<std::filesystem::path> ret{};
-+    std::filesystem::path base{};
-+#if defined(_WIN32)
-+    PWSTR known_path = NULL;
-+    if (SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &known_path) == S_OK) {
-+        base = std::filesystem::path{known_path};
-+    }
-+    CoTaskMemFree(known_path);
- #elif defined(__linux__)
-+    const char *homedir = getenv("HOME");
-+    if (homedir == nullptr) {
-+        homedir = getpwuid(getuid())->pw_dir;
-+    }
-+    if (homedir != nullptr) {
-+        base = std::filesystem::path{homedir} / ".config";
-+    }
-+#endif
-+    if (!base.empty()) {
-+        ret.push_back(base / std::u8string{program_id});
-+        ret.push_back(base / "DiddyKongRacingRecompiled");
-+    }
-+    return ret;
-+}
 +
-+std::filesystem::path get_app_folder_path() {
+ std::filesystem::path get_app_folder_path() {
+-   // directly check for portable.txt (windows and native linux binary)
+-   if (std::filesystem::exists("portable.txt")) {
+-       return std::filesystem::current_path();
 +#if defined(__APPLE__)
 +   const char *homedir = getenv("HOME");
 +   if (homedir != nullptr) {
 +       return std::filesystem::path{homedir} / "Library/Application Support" / std::u8string{program_id};
-+   }
+    }
+-
+-   std::filesystem::path recomp_dir{};
+-
+-#if defined(_WIN32)
+-   // Deduce local app data path.
+-   PWSTR known_path = NULL;
+-   HRESULT result = SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &known_path);
+-   if (result == S_OK) {
+-       recomp_dir = std::filesystem::path{known_path} / program_id;
+-   }
+-
+-   CoTaskMemFree(known_path);
+-#elif defined(__linux__)
 +   return {};
 +#else
 +#if defined(__linux__)
@@ -1259,32 +1233,13 @@ index fec4eaa..9076b75 100644
     if (getenv("APP_FOLDER_PATH") != nullptr) {
         return std::filesystem::path{getenv("APP_FOLDER_PATH")};
     }
-+#endif
- 
+-
 -   const char *homedir;
 -
 -   if ((homedir = getenv("HOME")) == nullptr) {
 -       homedir = getpwuid(getuid())->pw_dir;
 -   }
-+    // JFG port: saves and settings are kept next to the executable, not in a per-user folder.
-+    const std::filesystem::path app_dir = get_executable_folder_path();
-+
-+    // Carry saves and settings over from the per-user folder of an earlier build, once.
-+    static bool migration_checked = false;
-+    if (!migration_checked) {
-+        migration_checked = true;
-+        std::error_code ec;
-+        if (!std::filesystem::exists(app_dir / "saves", ec)) {
-+            for (const std::filesystem::path& legacy_dir : legacy_app_folder_paths()) {
-+                if (std::filesystem::is_directory(legacy_dir / "saves", ec)) {
-+                    std::filesystem::copy(legacy_dir, app_dir,
-+                        std::filesystem::copy_options::recursive | std::filesystem::copy_options::skip_existing, ec);
-+                    break;
-+                }
-+            }
-+        }
-+    }
- 
+-
 -   if (homedir != nullptr) {
 -       recomp_dir = std::filesystem::path{homedir} / (std::u8string{u8".config/"} + std::u8string{program_id});
 -   }
@@ -1293,10 +1248,14 @@ index fec4eaa..9076b75 100644
 -   if (homedir != nullptr) {
 -       recomp_dir = std::filesystem::path{homedir} / "Library/Application Support" / std::u8string{program_id};
 -   }
-+    return app_dir;
  #endif
--
+ 
 -    return recomp_dir;
++    // JFG port: saves and settings are kept next to the executable, not in a per-user folder.
++    const std::filesystem::path app_dir = get_executable_folder_path();
++
++    return app_dir;
++#endif
  }
  
  bool read_json(std::ifstream input_file, nlohmann::json& json_out) {
