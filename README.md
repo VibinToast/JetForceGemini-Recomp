@@ -48,6 +48,7 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 
 **Texture packs**
 - Texture dumping, all in one folder or one folder per level.
+- HD texture packs, picked from a list and switched in-game with F6.
 - Helper scripts in `tools/textures` for collecting newly dumped textures.
 
 **Tools (F10 toolbar)**
