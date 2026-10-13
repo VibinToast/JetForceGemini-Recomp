@@ -34,6 +34,12 @@ built and tested, unless marked otherwise.
   linked from the README.
 - Both are .bat wrappers around a .ps1 of the same name. Not run yet on Windows.
 
+### Releases
+- `.github/workflows/release.yml`: releases are made by hand. In GitHub, Actions > Release > Run workflow, then choose
+  `minor` (1.0 -> 1.1) or `major` (1.x -> 2.0). The first release is 1.0. The workflow turns this "Unreleased" section into
+  the release notes, renames it to the new version, writes `version.txt`, tags `vX.Y` and publishes the release. It
+  publishes the source only: the game cannot be built on GitHub because it needs your ROM.
+
 ### Notes
 - Changes were made in three places that must stay in step: `patches/jfg-base.patch` (what the build applies),
   `build/src/...` (the current build tree) and `src/jfg/` (the port's own code).
