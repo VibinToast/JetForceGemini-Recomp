@@ -5,6 +5,42 @@ built and tested, unless marked otherwise.
 
 ## Unreleased
 
+## v1.0.0 (2026-10-13)
+
+- Choose the release version by hand and add the portable zip packager
+- Stop reading saves and settings from %LOCALAPPDATA%
+- Ignore every bin* folder
+- Create bin/mods and bin/texture_packs after the build
+- Make releases manual
+- Add a guide to making texture packs
+- Add drag-and-drop tools to convert a pack to DDS and to pack it as .rtz
+- Load .rtz texture packs from texture_packs
+- Show the Mods tab again
+- Update JFG 4K texture pack link in README
+- Document HD texture packs in the README
+- Add a launcher in Jet Force Gemini colours
+- Document the features and keys in the README
+- Add automatic releases
+- Add the Gameplay, Visuals, Profiles and Textures tabs to the settings menu
+- Add the no-blood option, the Tribal check cheat and the fly camera freeze
+- Add boss fight controls and the jetpack refuel option
+- Add the weapons editor hooks
+- Add the dual-stick camera and movement speed options
+- Add the RT64 changes for texture dumping and packs, and the texture helper scripts
+- Add the 60 fps option
+- Let START skip cutscenes and the intro
+- Add the native debug menu and settings
+- Put the version number into the build
+- Follow the game's overlay loader in the runtime
+- Report genuine hardware to the anti-tamper checks
+- Add the patch for the base project (config, input, renderer, runtime)
+- Add the Linux build and run scripts
+- Add the Windows build and run scripts
+- Prepare the overlays for recompilation
+- Add the merge step for the gen_anim_data entry points
+- Add the N64Recomp config and the symbols exported from the decomp
+- Add license, git settings and a first README
+
 ## v1.0 (2026-10-13)
 
 ### Mods
