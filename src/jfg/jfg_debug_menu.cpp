@@ -1976,7 +1976,7 @@ extern "C" void jfg_platform_move(int on) {
 // stick alone never moved it. The free camera and the camera-relative stick are off here; instead
 //   left stick / A, D: step left and right (C-left / C-right), forward/back keep their buttons (jump, crouch);
 //   right stick: the game's stick (turn and aim), up looks up unless "Invert Aim Up/Down" is set;
-//   mouse: turns the body and the aim directly (aim_controls), not through the stick.
+//   mouse: moves the aim directly, not through the stick; the body never turns (a rail).
 void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     (void)aiming;
     constexpr uint16_t C_LEFT = 0x0002, C_RIGHT = 0x0001;
@@ -1991,33 +1991,35 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     last = buttons;
     wr16(pad, buttons);
     // Aim: the right stick is the game's stick (turn and aim).
-    const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
     const float sx = std::clamp(rx, -1.0f, 1.0f), sy = std::clamp(ry, -1.0f, 1.0f);
     wr8(pad + 2, (uint8_t)(int8_t)std::lround(sx * 78.0f));
     wr8(pad + 3, (uint8_t)(int8_t)std::lround((g.invert_aim_y ? sy : -sy) * 78.0f));
     // The mouse does not go through the stick: its movement comes in lumps (none on one tick, a lot on the next), and
     // as a stick deflection that made the reticle jump about and drift back towards the middle of the screen, so the
-    // aim could not be held. As in normal aiming (aim_controls) it turns the body and the view pitch directly, by
-    // exactly how far the mouse moved.
+    // aim could not be held. It moves the aim directly, by exactly how far the mouse moved.
     //
-    // In a boss fight the character only faces the boss and steps left and right (C-left / C-right move it sideways
-    // relative to where it faces), and the game's own turning is limited. Turning directly has no such limit, so the
-    // character could turn right round and walk anywhere in the arena. The facing is therefore kept within BOSS_TURN_LIMIT
-    // of the direction it had when the fight began (taken again whenever the boss control starts running anew).
-    constexpr int BOSS_TURN_LIMIT = 0x1C71; // 40 degrees either side, as 16-bit angle units
+    // In a boss fight the character is on a rail: it faces the boss, never turns, and only steps left and right
+    // (C-left / C-right move it sideways relative to where it faces). So the mouse never turns the body - that is held
+    // at the direction it had when the fight began (taken again whenever the boss control starts running anew). Left
+    // and right move the reticle's offset from that direction instead, up and down tilt the view.
+    constexpr int RETICLE_LIMIT = 0x2000; // 45 degrees either side, as 16-bit angle units
+    constexpr int PITCH_LIMIT = 0x2AAA;
     static uint32_t last_obj = 0, last_tick = 0;
     static uint16_t centre = 0;
+    static int reticle = 0;
     const uint32_t data = rd32(obj + 0x68);
     if (jfg_mouse_keyboard_active() != 0 && valid_ptr(data)) {
-        if (obj != last_obj || g_tick_count - last_tick > 3) { last_obj = obj; centre = rd16(obj); }
-        aim_controls(obj, pad, frames);
-        const int offset = (int)(int16_t)(uint16_t)(rd16(obj) - centre);
-        if (offset > BOSS_TURN_LIMIT || offset < -BOSS_TURN_LIMIT) {
-            const uint16_t body = (uint16_t)(centre + std::clamp(offset, -BOSS_TURN_LIMIT, BOSS_TURN_LIMIT));
-            wr16(obj, body);
-            wr16(data + PD_BODY_YAW_COPY, body);
-            wr16(data + PD_BODY_YAW, body);
-        }
+        if (obj != last_obj || g_tick_count - last_tick > 3) { last_obj = obj; centre = rd16(obj); reticle = 0; }
+        reticle = std::clamp(reticle - g_mouse_aim_x, -RETICLE_LIMIT, RETICLE_LIMIT);
+        wr16(obj, centre);
+        wr16(data + PD_BODY_YAW_COPY, centre);
+        wr16(data + PD_BODY_YAW, centre);
+        for (uint32_t k : { PD_RETICLE_YAW, 0x1DCu, 0x246u }) wr16(data + k, (uint16_t)(int16_t)reticle);
+        const int view = std::clamp((int)(int16_t)rd16(data + PD_VIEW_PITCH) + (int)(int16_t)rd16(data + PD_RETICLE_PITCH) - g_mouse_aim_y, -PITCH_LIMIT, PITCH_LIMIT);
+        wr16(data + PD_VIEW_PITCH, (uint16_t)(int16_t)view);
+        wr16(data + PD_RETICLE_PITCH, 0);
+        wr8(pad + 2, 0);
+        wr8(pad + 3, 0);
     }
     last_tick = g_tick_count;
 }
