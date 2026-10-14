@@ -810,8 +810,8 @@ diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
      }
  
 diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:13:49.745516232 +0000
-+++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:13:59.927515239 +0000
+--- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:20:13.954478784 +0000
++++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:20:13.933478786 +0000
 @@ -4,7 +4,11 @@
  
  #include "rt64_framebuffer_renderer.h"
@@ -851,7 +851,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          renderIndicesVector.clear();
          rspSmoothNormalVector.clear();
          frameParams.viewUbershaders = ubershadersVisible;
-@@ -511,8 +528,324 @@
+@@ -511,8 +528,332 @@
          if (fbStorage->colorTarget != nullptr) {
              switchToGraphicsPipeline();
          }
@@ -883,6 +883,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +        // screen. The sides are cleared to black at the start of each 3D scene (below).
 +        const bool sidesWide = (fbStorage->colorTarget != nullptr) && (uint64_t(fbStorage->colorTarget->width) * 3ULL > uint64_t(fbStorage->colorTarget->height) * 4ULL + 6ULL);
 +        bool worldScene = false;
++        int32_t sceneTop = INT32_MAX, sceneBottom = INT32_MIN; // vertical extent of the scene's depth-writing draws
 +        if (ssaoOn || bloomOn || sidesWide) {
 +            uint32_t depthWrites = 0;
 +            uint32_t lastWritePosition = 0;
@@ -898,6 +899,8 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +                const interop::OtherMode otherMode = drawCall.triangles.shaderDesc.otherMode;
 +                if (otherMode.zUpd()) {
 +                    depthWrites++;
++                    sceneTop = std::min(sceneTop, drawCall.triangles.scissor.top);
++                    sceneBottom = std::max(sceneBottom, drawCall.triangles.scissor.bottom);
 +                    lastWritePosition = pos;
 +                }
 +                else if (!otherMode.zCmp() && (depthWrites >= SsaoMinDepthWrites)) {
@@ -907,6 +910,11 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +            }
 +
 +            worldScene = depthWrites >= SsaoMinDepthWrites;
++            // Only a scene that fills the screen's height is the game's picture; the pause screen's character panel is a smaller
++            // 3D scene whose edges must not be blacked out.
++            if (worldScene && sidesWide && (uint64_t(std::max(sceneBottom - sceneTop, 0)) * 10ULL < uint64_t(fbStorage->colorTarget->height) * 9ULL)) {
++                worldScene = false;
++            }
 +            if (depthWrites >= SsaoMinDepthWrites) {
 +                ssaoPosition = ssaoOn ? (lastWritePosition + 1) : UINT32_MAX;
 +                bloomPosition = bloomOn ? hudPosition : UINT32_MAX;
@@ -1177,7 +1185,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
              const InstanceDrawCall &drawCall = instanceDrawCallVector[i];
              switch (drawCall.type) {
              case InstanceDrawCall::Type::IndexedTriangles: 
-@@ -638,6 +971,7 @@
+@@ -638,6 +979,7 @@
              }
          }
  
@@ -1185,7 +1193,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          // Mark targets for resolve.
          if (fbStorage->colorTarget != nullptr) {
              fbStorage->colorTarget->markForResolve();
-@@ -648,6 +982,51 @@
+@@ -648,6 +990,51 @@
          }
      }
  
@@ -1237,7 +1245,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
      void FramebufferRenderer::updateMultisampling() {
          dummyColorTargetView.reset();
          dummyDepthTargetView.reset();
-@@ -1354,6 +1733,11 @@
+@@ -1354,6 +1741,11 @@
          postBlendDitherNoiseAddPipeline = rasterShaderUber->postBlendDitherNoiseAddPipeline.get();
          postBlendDitherNoiseSubPipeline = rasterShaderUber->postBlendDitherNoiseSubPipeline.get();
          postBlendDitherNoiseSubNegativePipeline = rasterShaderUber->postBlendDitherNoiseSubNegativePipeline.get();
@@ -1249,7 +1257,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
  
          // Make a new render target draw call.
          RenderTargetDrawCall &targetDrawCall = framebuffer.renderTargetDrawCall;
-@@ -1488,7 +1872,7 @@
+@@ -1488,7 +1880,7 @@
                  // The call's scissor spans the whole width of the framebuffer pair scissor. Custom origin must not be in use to be able to use the stretched viewport.
                  const auto &viewport = drawData.rspViewports[proj.transformsIndex];
                  FixedRect intersectionRect = proj.scissorRect.intersection(viewport.rect(viewportClipRatios));
