@@ -34,7 +34,7 @@ if /i not "%~1"=="__run" (
     )
     echo.
     echo Log saved to "%~dp0build_windows.log"
-    pause
+    if not defined JFG_NO_PAUSE pause
     exit /b
 )
 

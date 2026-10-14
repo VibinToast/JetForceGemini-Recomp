@@ -1,15 +1,37 @@
-# Makes dist\JFG-<version>-windows-x64-portable.zip from the bin folder, and uploads it to the GitHub release v<version>
+# Makes the release build and dist\JFG-<version>-windows-x64-portable.zip, and uploads the zip to the GitHub release v<version>
 # if the GitHub CLI (gh) is installed and signed in, together with a .sha256 file the launcher's updater checks the download
-# against. Run it through package_release.bat.
-#   package_release.bat            uses the number in version.txt
-#   package_release.bat 1.0.0      uses the number you give
-param([string]$Version = "")
+# against. Run it through package_release.bat. It:
+#   1. asks which version this is (Enter keeps the one in version.txt) and writes it to version.txt,
+#   2. builds the game with build_windows.bat, so the launcher shows that version,
+#   3. packs the zip from the bin folder and uploads it.
+#   package_release.bat              asks for the version
+#   package_release.bat 1.0.1        uses that version without asking
+#   package_release.bat 1.0.1 -SkipBuild   packs what is already in bin (no new build)
+param([string]$Version = "", [switch]$SkipBuild)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-if (-not $Version) { $Version = (Get-Content (Join-Path $root "version.txt") -Raw).Trim() }
+$versionFile = Join-Path $root "version.txt"
+$current = if (Test-Path $versionFile) { (Get-Content $versionFile -Raw).Trim() } else { "" }
+if (-not $Version) {
+    $answer = Read-Host "Version to release (three numbers, Enter = $current)"
+    $Version = if ($answer.Trim()) { $answer.Trim() } else { $current }
+}
 $Version = $Version.TrimStart("v")
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "The version must be three numbers like 1.0.0, not '$Version'." }
+if ($Version -ne $current) {
+    [System.IO.File]::WriteAllText($versionFile, "$Version`n")
+    Write-Host "version.txt: $current -> $Version"
+}
 $bin = Join-Path $root "bin"
+if (-not $SkipBuild) {
+    Write-Host "Building $Version with build_windows.bat (this takes a while)..."
+    $started = Get-Date
+    $env:JFG_NO_PAUSE = "1"
+    & cmd.exe /c ('"' + (Join-Path $root "build_windows.bat") + '"')
+    Remove-Item Env:JFG_NO_PAUSE -ErrorAction SilentlyContinue
+    $exe = Join-Path $bin "JetForceGeminiRecompiled.exe"
+    if (-not (Test-Path $exe) -or (Get-Item $exe).LastWriteTime -lt $started) { throw "The build did not produce a new bin\JetForceGeminiRecompiled.exe. See build_windows.log." }
+}
 if (-not (Test-Path (Join-Path $bin "JetForceGeminiRecompiled.exe"))) { throw "bin\JetForceGeminiRecompiled.exe not found. Run build_windows.bat first." }
 
 $name = "JFG-$Version-windows-x64-portable"
