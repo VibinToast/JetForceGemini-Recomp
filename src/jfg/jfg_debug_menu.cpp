@@ -1975,9 +1975,10 @@ extern "C" void jfg_platform_move(int on) {
 // Lurg fight (level 195): stick right turned the character and its reticle, C-left moved it 350 units sideways, the
 // stick alone never moved it. The free camera and the camera-relative stick are off here; instead
 //   left stick / A, D: step left and right (C-left / C-right), forward/back keep their buttons (jump, crouch);
-//   right stick / mouse: the game's stick (turn and aim), up looks up unless "Invert Aim Up/Down" is set.
+//   right stick: the game's stick (turn and aim), up looks up unless "Invert Aim Up/Down" is set;
+//   mouse: turns the body and the aim directly (aim_controls), not through the stick.
 void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
-    (void)obj; (void)aiming;
+    (void)aiming;
     constexpr uint16_t C_LEFT = 0x0002, C_RIGHT = 0x0001;
     const float lx = g_stick_lx, rx = g_stick_rx, ry = g_stick_ry;
     uint16_t buttons = rd16(pad);
@@ -1989,15 +1990,16 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     wr16(pressed, (uint16_t)((rd16(pressed) & ~(C_LEFT | C_RIGHT)) | (buttons & ~last & (C_LEFT | C_RIGHT))));
     last = buttons;
     wr16(pad, buttons);
-    // Aim: right stick, plus the mouse as a stick deflection (0.05 radians a frame = full stick, about 170 degrees a
-    // second; the mouse speed options scale it).
+    // Aim: the right stick is the game's stick (turn and aim).
     const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
-    float sx = rx + g_sign_cam * -g_mouse_cam_x / frames / 0.05f;
-    float sy = ry + g_mouse_cam_y / frames / 0.05f;
-    sx = std::clamp(sx, -1.0f, 1.0f);
-    sy = std::clamp(sy, -1.0f, 1.0f);
+    const float sx = std::clamp(rx, -1.0f, 1.0f), sy = std::clamp(ry, -1.0f, 1.0f);
     wr8(pad + 2, (uint8_t)(int8_t)std::lround(sx * 78.0f));
     wr8(pad + 3, (uint8_t)(int8_t)std::lround((g.invert_aim_y ? sy : -sy) * 78.0f));
+    // The mouse does not go through the stick: its movement comes in lumps (none on one tick, a lot on the next), and
+    // as a stick deflection that made the reticle jump about and drift back towards the middle of the screen, so the
+    // aim could not be held. As in normal aiming (aim_controls) it turns the body and the view pitch directly, by
+    // exactly how far the mouse moved.
+    if (jfg_mouse_keyboard_active() != 0 && valid_ptr(rd32(obj + 0x68))) aim_controls(obj, pad, frames);
 }
 
 // Tests: JFG_DEBUG_PLAYER=<ticks> logs the player's state every that many ticks.

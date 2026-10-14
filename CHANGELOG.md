@@ -5,6 +5,10 @@ built and tested, unless marked otherwise.
 
 ## Unreleased
 
+### Fixes
+- Mouse and keyboard in boss fights: the mouse no longer goes through the game's stick, which made the reticle shake and
+  drift. It turns the body and the aim directly, as in normal aiming. (`src/jfg/jfg_debug_menu.cpp`, `boss_controls`.)
+
 ## v1.0.0 (2026-10-13)
 
 - Choose the release version by hand and add the portable zip packager
