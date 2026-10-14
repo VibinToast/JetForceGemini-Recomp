@@ -749,10 +749,10 @@ index c5eb334..dc34871 100644
              </div>
          </form>
 diff --git a/assets/launcher.rml b/assets/launcher.rml
-index 058aa77..2a33bce 100644
+index 058aa77..e7a8d53 100644
 --- a/assets/launcher.rml
 +++ b/assets/launcher.rml
-@@ -3,104 +3,388 @@
+@@ -3,104 +3,391 @@
  		<title>Launcher</title>
  		<link type="text/rcss" href="rml.rcss"/>
  		<link type="text/rcss" href="recomp.rcss"/>
@@ -816,10 +816,13 @@ index 058aa77..2a33bce 100644
 +			.rl-btn--exit { border-color: #FF4A4A; color: #FF4A4A; }
 +			.rl-btn--exit:hover, #window:not([mouse-active]) .rl-btn--exit:focus { background-color: #FF4A4A; border-color: #FF4A4A; color: #050B1C; }
 +			.rl-separator { display: block; height: 2dp; margin: 6dp 0dp 18dp; background-color: #1F3D73; }
-+			.rl-repo { display: inline-block; margin: 0dp 12dp 0dp 0dp; padding: 0dp 4dp; font-size: 15dp; font-family: "JetBrains Mono"; color: #FFB21A; background-color: transparent; border-width: 0dp; border-bottom-width: 2dp; border-color: #1F3D73; cursor: pointer; }
++			.rl-repo { display: inline-block; margin: 0dp; padding: 0dp 4dp; font-size: 15dp; font-family: "JetBrains Mono"; color: #FFB21A; background-color: transparent; border-width: 0dp; border-bottom-width: 2dp; border-color: #1F3D73; cursor: pointer; }
 +			.rl-repo:hover { color: #E8F3FF; border-color: #3CC8FF; }
 +			#window:not([mouse-active]) .rl-repo:focus { color: #E8F3FF; border-color: #3CC8FF; }
-+			.rl-version { position: absolute; bottom: 14dp; left: 26dp; right: 26dp; font-size: 15dp; color: #8199BF; text-align: center; }
++			/* three columns: GitHub on the left, the version centred, an empty one on the right to balance */
++			.rl-version-side { display: block; flex: 1 1 0px; text-align: left; }
++			.rl-version-mid { display: block; flex: 0 0 auto; text-align: center; }
++			.rl-version { position: absolute; bottom: 14dp; left: 26dp; right: 26dp; font-size: 15dp; color: #8199BF; display: flex; flex-direction: row; align-items: center; }
 +			/* A newer release exists (src/jfg/jfg_update_check.cpp): a warning triangle next to the version number. Hovering it says which
 +			   version; a click opens the release page. */
 +			.rl-update { display: none; position: relative; width: 22dp; height: 20dp; margin-left: 10dp; cursor: pointer; }
@@ -1032,7 +1035,7 @@ index 058aa77..2a33bce 100644
 +							<div class="rl-separator"></div>
 +							<div class="rl-btn-shadow"><button id="nav_exit" class="rl-btn rl-btn--exit" onclick="exit_game"
 +								style="nav-up: #nav_about; nav-down: #nav_play;">Exit</button></div>
-+							<div class="rl-version"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp')">GitHub</button>v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click to see what is new and update.</div></div></div>
++							<div class="rl-version"><div class="rl-version-side"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp')">GitHub</button></div><div class="rl-version-mid">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click to see what is new and update.</div></div></div><div class="rl-version-side"></div></div>
  						</div>
  					</div>
 -					<div class="launcher__content-quadrant"></div>

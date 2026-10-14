@@ -224,9 +224,10 @@ void commits_thread() {
         if (subject.empty() || is_bot_commit(c) || subject.rfind("Merge ", 0) == 0) continue;
         text += "- " + subject + "\n";
     }
-    if (text.empty()) return;
     std::lock_guard<std::mutex> lock(g_mutex);
-    g_commits = "Since the last release (not in a version yet)\n" + text + "\n";
+    // Only what has been pushed to GitHub is listed there; commits that are only on a computer are not.
+    g_commits = text.empty() ? "Since the last release: no new commits on GitHub yet.\n\n"
+                             : "Since the last release (not in a version yet)\n" + text + "\n";
 }
 
 // ---- finding releases ---------------------------------------------------------------------------------------------------
