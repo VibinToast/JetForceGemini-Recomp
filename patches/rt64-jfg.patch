@@ -810,8 +810,8 @@ diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
      }
  
 diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 19:58:38.287605068 +0000
-+++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 19:59:01.687602787 +0000
+--- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:06:50.063557136 +0000
++++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:06:50.113557131 +0000
 @@ -4,7 +4,11 @@
  
  #include "rt64_framebuffer_renderer.h"
@@ -851,7 +851,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          renderIndicesVector.clear();
          rspSmoothNormalVector.clear();
          frameParams.viewUbershaders = ubershadersVisible;
-@@ -511,8 +528,285 @@
+@@ -511,8 +528,302 @@
          if (fbStorage->colorTarget != nullptr) {
              switchToGraphicsPipeline();
          }
@@ -1033,6 +1033,11 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +                    snapshot->target = colorTarget;
 +                }
 +
++                if (snapshot->targetTexture != colorTarget->texture.get()) {
++                    snapshot->targetTexture = colorTarget->texture.get();
++                    snapshot->valid = false;
++                }
++
 +                if ((snapshot->texture == nullptr) || (snapshot->width != width) || (snapshot->height != height) ||
 +                    (snapshot->format != snapshotFormat) || (snapshot->samples != snapshotSamples))
 +                {
@@ -1097,12 +1102,24 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +        };
          
 -        for (uint32_t i : rasterScene.instanceIndices) {
++        // JFG PORT: a scene without bloom that draws into a colour buffer changes what the saved picture of that buffer was
++        // made from (a fade to black, another screen), so the picture is dropped: restoring it later would bring back an old image.
++        if ((bloomPosition == UINT32_MAX) && (sceneDrawCount > 0) && (fbStorage->colorTarget != nullptr)) {
++            for (const std::unique_ptr<BloomSnapshot> &entry : bloomSnapshots) {
++                if ((entry->target == fbStorage->colorTarget) && (entry->frame != jfgFrame)) {
++                    entry->valid = false;
++                }
++            }
++        }
++
 +        // JFG PORT: a scene that gets bloom starts from the clean picture saved when the last one for this colour buffer was
 +        // made, so the parts the game does not draw again do not get the glow added to the old glow (see bloomSnapshots).
 +        if (bloomPosition != UINT32_MAX) {
 +            RenderTarget *colorTarget = fbStorage->colorTarget;
 +            for (const std::unique_ptr<BloomSnapshot> &entry : bloomSnapshots) {
-+                if ((entry->target != colorTarget) || !entry->valid || (entry->texture == nullptr) || (entry->frame == jfgFrame)) {
++                if ((entry->target != colorTarget) || !entry->valid || (entry->texture == nullptr) || (entry->frame == jfgFrame) ||
++                    (entry->targetTexture != colorTarget->texture.get()))
++                {
 +                    continue;
 +                }
 +
@@ -1138,7 +1155,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
              const InstanceDrawCall &drawCall = instanceDrawCallVector[i];
              switch (drawCall.type) {
              case InstanceDrawCall::Type::IndexedTriangles: 
-@@ -638,6 +932,7 @@
+@@ -638,6 +949,7 @@
              }
          }
  
@@ -1146,7 +1163,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          // Mark targets for resolve.
          if (fbStorage->colorTarget != nullptr) {
              fbStorage->colorTarget->markForResolve();
-@@ -648,6 +943,51 @@
+@@ -648,6 +960,51 @@
          }
      }
  
@@ -1198,7 +1215,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
      void FramebufferRenderer::updateMultisampling() {
          dummyColorTargetView.reset();
          dummyDepthTargetView.reset();
-@@ -1354,6 +1694,11 @@
+@@ -1354,6 +1711,11 @@
          postBlendDitherNoiseAddPipeline = rasterShaderUber->postBlendDitherNoiseAddPipeline.get();
          postBlendDitherNoiseSubPipeline = rasterShaderUber->postBlendDitherNoiseSubPipeline.get();
          postBlendDitherNoiseSubNegativePipeline = rasterShaderUber->postBlendDitherNoiseSubNegativePipeline.get();
@@ -1210,7 +1227,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
  
          // Make a new render target draw call.
          RenderTargetDrawCall &targetDrawCall = framebuffer.renderTargetDrawCall;
-@@ -1488,7 +1833,7 @@
+@@ -1488,7 +1850,7 @@
                  // The call's scissor spans the whole width of the framebuffer pair scissor. Custom origin must not be in use to be able to use the stretched viewport.
                  const auto &viewport = drawData.rspViewports[proj.transformsIndex];
                  FixedRect intersectionRect = proj.scissorRect.intersection(viewport.rect(viewportClipRatios));
@@ -1220,9 +1237,9 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                  bool useWideViewport = (viewportOrigin == G_EX_ORIGIN_NONE) && coversWholeWidth && horizontalRatio;
                  if (useWideViewport) {
 diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer_renderer.h
---- a/src/render/rt64_framebuffer_renderer.h	2026-10-14 19:58:38.287605068 +0000
-+++ b/src/render/rt64_framebuffer_renderer.h	2026-10-14 19:59:01.693602786 +0000
-@@ -87,6 +87,42 @@
+--- a/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:06:50.063557136 +0000
++++ b/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:06:50.123557130 +0000
+@@ -87,6 +87,43 @@
          RenderPipeline *postBlendDitherNoiseAddPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubNegativePipeline = nullptr;
@@ -1246,6 +1263,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer
 +        struct BloomSnapshot {
 +            std::unique_ptr<RenderTexture> texture;
 +            const RenderTarget *target = nullptr;
++            const RenderTexture *targetTexture = nullptr; // a target that was recreated is a different picture
 +            uint32_t width = 0;
 +            uint32_t height = 0;
 +            uint32_t samples = 0;
