@@ -2002,7 +2002,7 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     // (C-left / C-right move it sideways relative to where it faces). So the mouse never turns the body - that is held
     // at the direction it had when the fight began (taken again whenever the boss control starts running anew). Left
     // and right move the reticle's offset from that direction instead, up and down tilt the view.
-    constexpr int RETICLE_LIMIT = 0x2000; // 45 degrees either side, as 16-bit angle units
+    constexpr int RETICLE_LIMIT = 0x5555; // 120 degrees either side, as 16-bit angle units (some bosses move round the arena)
     constexpr int PITCH_LIMIT = 0x2AAA;
     static uint32_t last_obj = 0, last_tick = 0;
     static uint16_t centre = 0;
