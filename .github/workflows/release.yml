@@ -3,10 +3,11 @@
 # To release: GitHub -> Actions -> "Release" -> "Run workflow", pick the branch and type the version (for example 1.0.0).
 #
 # - The version must be three numbers, X.Y.Z, and must not have been released before. The tag is vX.Y.Z.
-# - The release notes are the "Unreleased" part of CHANGELOG.md. If that part is empty, the commit messages since the
-#   last release are used instead.
-# - It then renames "Unreleased" to the new version in CHANGELOG.md, writes the version into version.txt (which goes
-#   into the game's launcher), commits both, tags vX.Y.Z and publishes the GitHub release.
+# - The release notes are the commit messages (first line of each, newest first) between the last release tag and the
+#   branch being released: nothing to write by hand, so write commit messages that read well to players.
+# - It adds them to the top of CHANGELOG.md as the new version (the game shows that file under Changelogs), writes the
+#   version into version.txt (which goes into the game's launcher), commits both, tags vX.Y.Z and publishes the
+#   GitHub release.
 #
 # This does not build the game. The game's code is translated from the owner's own ROM, so it cannot be built on
 # GitHub. The portable zip is made on the owner's PC with tools/package_release.bat, which uploads it to this release
@@ -72,23 +73,22 @@ jobs:
           RANGE: ${{ steps.version.outputs.range }}
           REPO: ${{ github.repository }}
         run: |
-          git log --no-merges --format='%s' "$RANGE" | grep -vE '^chore: release v' | sed -E '/^$/d; s/^/- /' > commits.md || true
+          git log --no-merges --format='%s' "$RANGE" | grep -vE '^chore: release v' | sed -E '/^$/d; s/^/- /' | awk '!seen[$0]++' > commits.md || true
           python3 - <<'PY'
           import datetime, os, re
           version = os.environ["VERSION"]
           last = os.environ["LAST"]
           text = open("CHANGELOG.md", encoding="utf-8").read() if os.path.exists("CHANGELOG.md") else "# Changelog\n"
-          m = re.search(r"^## Unreleased[ \t]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
-          body = m.group(1).strip() if m else ""
-          if not body:
-              body = open("commits.md", encoding="utf-8").read().strip() or "- Maintenance"
+          # A leftover hand-written "Unreleased" section is dropped: the notes come from the commits only.
+          text = re.sub(r"^## Unreleased[ \t]*\n.*?(?=^## |\Z)", "", text, flags=re.S | re.M)
+          body = open("commits.md", encoding="utf-8").read().strip() or "- Maintenance"
           heading = "## v%s (%s)" % (version, datetime.date.today().isoformat())
           section = heading + "\n\n" + body + "\n\n"
+          m = re.search(r"^## ", text, re.M)
           if m:
-              text = text[:m.start()] + "## Unreleased\n\n" + section + text[m.end():]
+              text = text[:m.start()] + section + text[m.start():]
           else:
-              head, _, rest = text.partition("\n")
-              text = head + "\n\n## Unreleased\n\n" + section + rest.lstrip("\n")
+              text = text.rstrip("\n") + "\n\n" + section
           open("CHANGELOG.md", "w", encoding="utf-8").write(text)
           notes = body
           if last:
