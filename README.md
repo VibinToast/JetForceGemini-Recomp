@@ -1,7 +1,9 @@
 # Jet Force Gemini: Recompiled
 
-A native PC port of Jet Force Gemini (N64, US) for Windows and Linux, made by static recompilation. No emulator:
+A native 100% playable PC port of Jet Force Gemini (N64, US) for Windows and Linux, made by static recompilation. No emulator:
 the game's code is translated from your ROM and compiled for your PC.
+
+Current Progress is quality of life features.
 
 **No game code or assets are included.** You need your own ROM.
 
