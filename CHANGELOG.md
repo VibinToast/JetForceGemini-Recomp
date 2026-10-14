@@ -11,6 +11,8 @@ built and tested, unless marked otherwise.
   `ui_launcher.cpp` and `launcher.rml` via `patches/jfg-base.patch`.)
 
 ### Fixes
+- Mouse and keyboard: while the Select / Esc menu is open the mouse no longer turns the camera or aim, or changes weapon, in the
+  game behind it. (`src/jfg/jfg_debug_menu.cpp`.)
 - Boss fights with the dual-stick and mouse and keyboard controls: the aim moves directly (not through the game's stick, which
   made the mouse reticle shake and drift), and the character never turns: it stays on the rail, facing the boss, and
   only steps left and right. Once the aim is more than 40 degrees to a side the camera turns on the spot with it, so a

@@ -43,6 +43,7 @@
 #include "imgui/imgui.h"
 #include "debug_ui/debug_ui.hpp"
 #include "debug_ui/backend.hpp"
+#include "input/input.hpp"
 
 namespace recomp { std::span<const uint8_t> get_rom(); }
 extern std::atomic<uint32_t> rt64_jfg_present_count; // lib/rt64/src/hle/rt64_present_queue.cpp (JFG patch)
@@ -1688,10 +1689,12 @@ extern "C" int jfg_mouse_keyboard_active(void) {
 std::atomic<int> g_mouse_wheel{ 0 };
 // Wheel notches (up positive) while mouse and keyboard play; jfg_camera_controls turns them into weapon changes.
 extern "C" void jfg_mouse_wheel(int notches) {
-    if (jfg_mouse_keyboard_active()) g_mouse_wheel.fetch_add(notches, std::memory_order_relaxed);
+    // Not while the Select / Esc menu (or any other menu that takes the input) is open: the game behind it must not react.
+    if (jfg_mouse_keyboard_active() && !dino::input::game_input_disabled()) g_mouse_wheel.fetch_add(notches, std::memory_order_relaxed);
 }
 
 extern "C" void jfg_mouse_motion(int dx, int dy) {
+    if (dino::input::game_input_disabled()) return; // a menu is open: the mouse belongs to it, the camera and aim stay still
     g_mouse_dx.fetch_add(dx, std::memory_order_relaxed);
     g_mouse_dy.fetch_add(dy, std::memory_order_relaxed);
 }
@@ -2092,7 +2095,7 @@ void jfg_camera_controls(recomp_context* ctx) {
     {
         // Mouse movement for this tick (always taken, so nothing piles up in menus).
         const int mx = g_mouse_dx.exchange(0, std::memory_order_relaxed), my = g_mouse_dy.exchange(0, std::memory_order_relaxed);
-        const bool mouse = jfg_mouse_keyboard_active() != 0;
+        const bool mouse = jfg_mouse_keyboard_active() != 0 && !dino::input::game_input_disabled();
         const float cam = MOUSE_RADIANS_PER_COUNT * (float)g.mouse_camera_speed / 100.0f;
         const float aim = MOUSE_RADIANS_PER_COUNT * (32768.0f / PI_F) * (float)g.mouse_aim_speed / 100.0f;
         const float up = g.invert_mouse_y ? -1.0f : 1.0f; // mouse forward (SDL: negative y) looks up
