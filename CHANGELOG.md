@@ -6,6 +6,7 @@ built and tested, unless marked otherwise.
 ## Unreleased
 
 ### Launcher
+- The texture pack link points to vibintoast.com/projects/jfg-4k, and the About tab links to Bluesky.
 - Update from the launcher: a warning triangle next to the version number appears when GitHub has a newer release.
   Clicking it shows what changed since this build and asks to update (or to open the release page). The zip is
   downloaded from the release, checked against the SHA-256 GitHub lists for it, unpacked, swapped in (the running exe
@@ -15,6 +16,8 @@ built and tested, unless marked otherwise.
 - Launcher buttons no longer flicker when the cursor is on their edge.
 
 ### Fixes
+- Opening the Select / Esc menu while moving no longer leaves the character walking: the sticks and the jump button are
+  released as if the buttons had come up. (`src/jfg/jfg_debug_menu.cpp`, `controls.cpp` via `patches/jfg-base.patch`.)
 - Mouse and keyboard: while the Select / Esc menu is open the mouse no longer turns the camera or aim, or changes weapon, in the
   game behind it. (`src/jfg/jfg_debug_menu.cpp`.)
 - Boss fights with the dual-stick and mouse and keyboard controls: the aim moves directly (not through the game's stick, which

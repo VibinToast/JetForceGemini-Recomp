@@ -749,10 +749,10 @@ index c5eb334..dc34871 100644
              </div>
          </form>
 diff --git a/assets/launcher.rml b/assets/launcher.rml
-index 058aa77..347dc79 100644
+index 058aa77..6ed4e5f 100644
 --- a/assets/launcher.rml
 +++ b/assets/launcher.rml
-@@ -3,104 +3,368 @@
+@@ -3,104 +3,369 @@
  		<title>Launcher</title>
  		<link type="text/rcss" href="rml.rcss"/>
  		<link type="text/rcss" href="recomp.rcss"/>
@@ -1090,7 +1090,7 @@ index 058aa77..347dc79 100644
 +								<div class="rl-page" id="rl_page_textures" data-if="page == 'textures'">
 +									<div class="rl-pack-note">
 +										<span>The JFG 4K texture pack is a separate download.</span>
-+										<button class="rl-link rl-link--inline" data-event-click="open_url('https://vibintoast.com/content/textures/jfg-4k.html')" style="nav-left: #tab_jfg_textures; nav-up: none; nav-down: #jfg_pack_0;">More info: vibintoast.com/content/textures/jfg-4k.html</button>
++										<button class="rl-link rl-link--inline" data-event-click="open_url('https://vibintoast.com/projects/jfg-4k')" style="nav-left: #tab_jfg_textures; nav-up: none; nav-down: #jfg_pack_0;">More info: vibintoast.com/content/textures/jfg-4k.html</button>
 +									</div>
 +									<div class="rl-tpl" data-model="jfg_textures_model"><template src="config-menu__jfg_textures"/></div>
 +								</div>
@@ -1119,6 +1119,7 @@ index 058aa77..347dc79 100644
 +													<button class="rl-link" data-event-click="open_url('https://vibintoast.com/')">VibinToast.com</button>
 +													<button class="rl-link" data-event-click="open_url('https://github.com/VibinToast')">GitHub</button>
 +													<button class="rl-link" data-event-click="open_url('https://www.youtube.com/@VibinToast')">YouTube</button>
++													<button class="rl-link" data-event-click="open_url('https://bsky.app/profile/VibinToast.bsky.social')">Bluesky</button>
 +												</div>
 +											</div></div>
 +										</div>
@@ -1563,10 +1564,10 @@ index 6fb7cfd..d4ff74a 100644
  bool want_capture_keyboard();
  
 diff --git a/src/input/controls.cpp b/src/input/controls.cpp
-index 7b53d07..556f276 100644
+index 7b53d07..a6c8c4c 100644
 --- a/src/input/controls.cpp
 +++ b/src/input/controls.cpp
-@@ -1,6 +1,17 @@
+@@ -1,6 +1,18 @@
  #include "controls.hpp"
  
 +#include <algorithm>
@@ -1581,10 +1582,11 @@ index 7b53d07..556f276 100644
 +extern "C" int jfg_dual_stick_layout(void);
 +extern "C" void jfg_dual_stick(uint16_t* buttons, float* x, float* y, float right_x, float right_y);
 +extern "C" int jfg_mouse_keyboard_active(void);
++extern "C" void jfg_dual_stick_release(void);
  
  namespace dino::input {
  
-@@ -85,10 +96,66 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
+@@ -85,10 +97,66 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
      }
  
      if (!game_input_disabled()) {
@@ -1653,7 +1655,7 @@ index 7b53d07..556f276 100644
          }
  
          float joystick_x = get_input_analog(controller_input_mappings[(size_t)GameInput::X_AXIS_POS])
-@@ -99,11 +166,56 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
+@@ -99,11 +167,56 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
  
          apply_joystick_deadzone(joystick_x, joystick_y, &joystick_x, &joystick_y);
  
@@ -1690,15 +1692,15 @@ index 7b53d07..556f276 100644
 +            joystick_x = std::clamp(joystick_x + kx, -1.0f, 1.0f);
 +            joystick_y = std::clamp(joystick_y + ky, -1.0f, 1.0f);
 +        }
-+
+ 
+-        cur_y = get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_POS])
+-                - get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_NEG]) + joystick_y;
 +        if (dual_stick) {
 +            float right_x = 0.0f, right_y = 0.0f;
 +            get_right_analog(&right_x, &right_y);
 +            jfg_dual_stick(&cur_buttons, &joystick_x, &joystick_y, right_x, -right_y); // SDL: down is positive
 +        }
- 
--        cur_y = get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_POS])
--                - get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_NEG]) + joystick_y;
++
 +        cur_x = joystick_x;
 +        cur_y = joystick_y;
 +        if (!mouse_keyboard) {
@@ -1714,6 +1716,17 @@ index 7b53d07..556f276 100644
  
          float joystick_range = get_joystick_range() / 100.0f;
          
+@@ -111,6 +224,10 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
+         cur_y *= joystick_range;
+     }
+ 
++    else {
++        jfg_dual_stick_release(); // a menu has the input: let go of the sticks the game logic remembers
++    }
++
+     *buttons_out = cur_buttons;
+     *x_out = std::clamp(cur_x, -1.0f, 1.0f);
+     *y_out = std::clamp(cur_y, -1.0f, 1.0f);
 diff --git a/src/input/input.cpp b/src/input/input.cpp
 index 2d0e062..523604c 100644
 --- a/src/input/input.cpp

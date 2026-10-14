@@ -1745,6 +1745,13 @@ extern "C" void jfg_dual_stick(uint16_t* buttons, float* x, float* y, float righ
     *buttons = b;
 }
 
+// A menu has taken the input (Select / Esc): the sticks and the jump button count as let go, as if their button-up had been
+// received. Without this the values of the last poll stay in force and the character keeps walking.
+extern "C" void jfg_dual_stick_release(void) {
+    g_stick_lx = g_stick_ly = g_stick_rx = g_stick_ry = 0.0f;
+    g_jump_button.store(false, std::memory_order_relaxed);
+}
+
 // Aiming. The character control data (object + 0x68) holds, as 16-bit angles: the direction the body faces (+0x11C,
 // copy +0x106, and the object's yaw) and the view pitch (+0x1E2, limited to 60 degrees); the reticle's offset from
 // them (yaw +0x1CE, copies +0x1DC and +0x246; pitch +0x1E0); and their sums, the aim direction (yaw +0x1C6/+0x1CA;
