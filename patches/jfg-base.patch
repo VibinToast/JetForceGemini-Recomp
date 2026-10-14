@@ -749,10 +749,10 @@ index c5eb334..dc34871 100644
              </div>
          </form>
 diff --git a/assets/launcher.rml b/assets/launcher.rml
-index 058aa77..7adb702 100644
+index 058aa77..fefd549 100644
 --- a/assets/launcher.rml
 +++ b/assets/launcher.rml
-@@ -3,104 +3,322 @@
+@@ -3,104 +3,331 @@
  		<title>Launcher</title>
  		<link type="text/rcss" href="rml.rcss"/>
  		<link type="text/rcss" href="recomp.rcss"/>
@@ -814,6 +814,15 @@ index 058aa77..7adb702 100644
 +			.rl-btn--exit:hover, #window:not([mouse-active]) .rl-btn--exit:focus { background-color: #FF4A4A; border-color: #FF4A4A; color: #050B1C; }
 +			.rl-separator { display: block; height: 2dp; margin: 6dp 0dp 18dp; background-color: #1F3D73; }
 +			.rl-version { position: absolute; bottom: 14dp; left: 26dp; right: 26dp; font-size: 15dp; color: #8199BF; text-align: center; }
++			/* A newer release exists (src/jfg/jfg_update_check.cpp): a warning triangle next to the version number. Hovering it says which
++			   version; a click opens the release page. */
++			.rl-update { display: inline-block; position: relative; width: 22dp; height: 20dp; margin-left: 10dp; cursor: pointer; }
++			.rl-update-tri { position: absolute; top: 0dp; left: 0dp; width: 0dp; height: 0dp; border-left: 11dp #00000000; border-right: 11dp #00000000; border-bottom: 19dp #FFB21A; }
++			.rl-update:hover .rl-update-tri { border-bottom-color: #FFD36B; }
++			.rl-update-mark { position: absolute; top: 6dp; left: 0dp; width: 22dp; text-align: center; font-family: "Press Start 2P"; font-size: 11dp; line-height: 13dp; color: #050B1C; }
++			.rl-update-tip { display: none; position: absolute; bottom: 28dp; left: -120dp; width: 270dp; padding: 8dp 10dp; z-index: 20; text-align: left;
++				font-size: 13dp; line-height: 19dp; color: #E8F3FF; background-color: #0B1733; border-width: 2dp; border-color: #FFB21A; }
++			.rl-update:hover .rl-update-tip { display: block; }
 +
 +			/* Main panel */
 +			.rl-main { top: 34dp; right: 46dp; bottom: 46dp; left: 524dp; }
@@ -990,7 +999,7 @@ index 058aa77..7adb702 100644
 +							<div class="rl-separator"></div>
 +							<div class="rl-btn-shadow"><button id="nav_exit" class="rl-btn rl-btn--exit" onclick="exit_game"
 +								style="nav-up: #nav_about; nav-down: #nav_play;">Exit</button></div>
-+							<div class="rl-version">v{{version_number}}</div>
++							<div class="rl-version">v{{version_number}}<div class="rl-update" data-if="update_available" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp/releases/latest')"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click to open the download page.</div></div></div>
  						</div>
  					</div>
 -					<div class="launcher__content-quadrant"></div>
@@ -3148,10 +3157,10 @@ index d117b72..76acb9c 100644
  };
  
 diff --git a/src/ui/ui_launcher.cpp b/src/ui/ui_launcher.cpp
-index df580ce..833818a 100644
+index df580ce..af1df79 100644
 --- a/src/ui/ui_launcher.cpp
 +++ b/src/ui/ui_launcher.cpp
-@@ -7,13 +7,76 @@
+@@ -7,13 +7,89 @@
  #include "librecomp/mods.hpp"
  #include "ultramodern/ultramodern.hpp"
  #include "RmlUi/Core.h"
@@ -3162,6 +3171,10 @@ index df580ce..833818a 100644
 +#include <iterator>
  
  static std::string version_string;
++static bool update_available = false;  // a newer release exists (src/jfg/jfg_update_check.cpp): the launcher shows a warning triangle
++static std::string update_version;
++void jfg_update_check_start(const std::string& current);
++bool jfg_update_available(std::string& version);
  
  Rml::DataModelHandle model_handle;
  bool rom_valid = false;
@@ -3215,6 +3228,15 @@ index df580ce..833818a 100644
 +
 +// Called every UI frame (ui_state.cpp): steps the VibinToast icon while the About page is shown.
 +void jfg_launcher_ui_tick() {
++    if (model_handle && !update_available) {
++        std::string latest;
++        if (jfg_update_available(latest)) {
++            update_available = true;
++            update_version = latest;
++            model_handle.DirtyVariable("update_available");
++            model_handle.DirtyVariable("update_version");
++        }
++    }
 +    if (!model_handle || launcher_page != "about") return;
 +    using namespace std::chrono;
 +    const long long ms = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
@@ -3228,7 +3250,7 @@ index df580ce..833818a 100644
  extern std::vector<recomp::GameEntry> supported_games;
  
  void open_rom_select_dialog() {
-@@ -24,6 +87,7 @@ void open_rom_select_dialog() {
+@@ -24,6 +100,7 @@ void open_rom_select_dialog() {
                  case recomp::RomValidationError::Good:
                      rom_valid = true;
                      model_handle.DirtyVariable("rom_valid");
@@ -3236,7 +3258,7 @@ index df580ce..833818a 100644
                      break;
                  case recomp::RomValidationError::FailedToOpen:
                      recompui::message_box("Failed to open ROM file.");
-@@ -39,7 +103,7 @@ void open_rom_select_dialog() {
+@@ -39,7 +116,7 @@ void open_rom_select_dialog() {
                      break;
                  case recomp::RomValidationError::IncorrectVersion:
                      recompui::message_box(
@@ -3245,7 +3267,7 @@ index df580ce..833818a 100644
                      break;
                  case recomp::RomValidationError::OtherError:
                      recompui::message_box("An unknown error has occurred.");
-@@ -51,15 +115,16 @@ void open_rom_select_dialog() {
+@@ -51,15 +128,16 @@ void open_rom_select_dialog() {
  
  void select_rom() {
      recompui::open_info_prompt("Recomp Setup",
@@ -3265,7 +3287,7 @@ index df580ce..833818a 100644
      recomp::start_game(supported_games[0].game_id);
      recompui::hide_all_contexts();
  }
-@@ -81,6 +146,10 @@ public:
+@@ -81,6 +159,10 @@ public:
          rom_valid = recomp::is_rom_valid(supported_games[0].game_id);
      }
      void load_document() override {
@@ -3276,7 +3298,7 @@ index df580ce..833818a 100644
  		launcher_context = recompui::create_context(dino::runtime::get_asset_path("launcher.rml"));
      }
      void register_events(recompui::UiEventListenerInstancer& listener) override {
-@@ -123,9 +192,22 @@ public:
+@@ -123,9 +205,22 @@ public:
          );
          recompui::register_event(listener, "exit_game",
              [](const std::string& param, Rml::Event& event) {
@@ -3299,10 +3321,14 @@ index df580ce..833818a 100644
      }
      void make_bindings(Rml::Context* context) override {
          Rml::DataModelConstructor constructor = context->CreateDataModel("launcher_model");
-@@ -135,6 +217,27 @@ public:
+@@ -134,6 +229,30 @@ public:
+ 
          version_string = recomp::get_project_version().to_string();
          constructor.Bind("version_number", &version_string);
- 
++        constructor.Bind("update_available", &update_available);
++        constructor.Bind("update_version", &update_version);
++        jfg_update_check_start(version_string);
++
 +        // JFG PORT: the launcher's pages (see the top of this file).
 +        constructor.Bind("page", &launcher_page);
 +        constructor.Bind("toast_frame", &toast_frame);
@@ -3323,10 +3349,9 @@ index df580ce..833818a 100644
 +        constructor.BindEventCallback("open_url", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
 +            if (!args.empty()) SDL_OpenURL(args[0].Get<Rml::String>().c_str());
 +        });
-+
+ 
          model_handle = constructor.GetModelHandle();
      }
- };
 diff --git a/src/ui/ui_state.cpp b/src/ui/ui_state.cpp
 index 503692a..07acc5c 100644
 --- a/src/ui/ui_state.cpp

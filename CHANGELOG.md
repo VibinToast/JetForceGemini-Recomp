@@ -5,6 +5,11 @@ built and tested, unless marked otherwise.
 
 ## Unreleased
 
+### Launcher
+- The launcher checks GitHub for a newer release when it opens. If there is one, a warning triangle appears next to the
+  version number; hovering it shows the new version and clicking it opens the release page. (`src/jfg/jfg_update_check.cpp`,
+  `ui_launcher.cpp` and `launcher.rml` via `patches/jfg-base.patch`.)
+
 ### Fixes
 - Boss fights with the dual-stick and mouse and keyboard controls: the aim moves directly (not through the game's stick, which
   made the mouse reticle shake and drift), and the character never turns: it stays on the rail, facing the boss, and
