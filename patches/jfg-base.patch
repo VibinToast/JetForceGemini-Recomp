@@ -749,10 +749,10 @@ index c5eb334..dc34871 100644
              </div>
          </form>
 diff --git a/assets/launcher.rml b/assets/launcher.rml
-index 058aa77..6ed4e5f 100644
+index 058aa77..672ac99 100644
 --- a/assets/launcher.rml
 +++ b/assets/launcher.rml
-@@ -3,104 +3,369 @@
+@@ -3,104 +3,379 @@
  		<title>Launcher</title>
  		<link type="text/rcss" href="rml.rcss"/>
  		<link type="text/rcss" href="recomp.rcss"/>
@@ -837,6 +837,7 @@ index 058aa77..6ed4e5f 100644
 +			.rl-modal-sub { position: absolute; top: 62dp; left: 28dp; right: 28dp; font-size: 18dp; line-height: 26dp; color: #E8F3FF; }
 +			.rl-modal-notes { position: absolute; top: 100dp; left: 28dp; right: 28dp; bottom: 214dp; padding: 12dp 14dp; overflow-y: auto; white-space: pre-wrap;
 +				font-size: 15dp; line-height: 22dp; color: #C8D8F0; background-color: #050B1C; border-width: 2dp; border-color: #1F3D73; }
++			.rl-modal-notes.rl-modal-notes--tall { bottom: 100dp; }
 +			.rl-modal-status { position: absolute; bottom: 150dp; left: 28dp; right: 28dp; font-size: 16dp; line-height: 24dp; color: #3CC8FF; }
 +			.rl-modal-status.rl-error { color: #FF4A4A; }
 +			.rl-progress { position: absolute; bottom: 128dp; left: 28dp; right: 28dp; height: 14dp; background-color: #050B1C; border-width: 2dp; border-color: #1F3D73; }
@@ -1106,7 +1107,7 @@ index 058aa77..6ed4e5f 100644
 +								<div class="rl-page" id="rl_page_general" data-if="page == 'general'">
 +									<div class="rl-tpl" data-model="general_model"><template src="config-menu__general"/></div>
 +								</div>
- 
++
 +								<!-- About -->
 +								<div class="rl-page rl-page-scroll" id="rl_page_about" data-if="page == 'about'">
 +									<div class="rl-about">
@@ -1120,6 +1121,7 @@ index 058aa77..6ed4e5f 100644
 +													<button class="rl-link" data-event-click="open_url('https://github.com/VibinToast')">GitHub</button>
 +													<button class="rl-link" data-event-click="open_url('https://www.youtube.com/@VibinToast')">YouTube</button>
 +													<button class="rl-link" data-event-click="open_url('https://bsky.app/profile/VibinToast.bsky.social')">Bluesky</button>
++													<button class="rl-link" data-event-click="show_changelog()">Changelog</button>
 +												</div>
 +											</div></div>
 +										</div>
@@ -1148,7 +1150,7 @@ index 058aa77..6ed4e5f 100644
 +										</div>
 +									</div>
 +								</div>
-+
+ 
 +							</div>
  						</div>
  					</div>
@@ -1202,6 +1204,14 @@ index 058aa77..6ed4e5f 100644
 +						<div class="rl-action-shadow" data-if="update_stage == 0"><button id="rl_update_go" class="rl-action" data-event-click="update_install()">Update now</button></div>
 +						<div class="rl-action-shadow" data-if="update_stage == 0 || update_stage == 2"><button class="rl-action rl-action--outline" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp/releases/latest')">Release page</button></div>
 +						<div class="rl-action-shadow" data-if="update_stage != 1 &amp;&amp; update_stage != 3"><button id="rl_update_cancel" class="rl-action rl-action--outline" data-event-click="update_close()">{{update_stage == 2 ? 'Close' : 'Cancel'}}</button></div>
++					</div>
++				</div></div></div>
++				<div class="rl-modal" data-class-rl-on="changelog_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
++					<div class="rl-modal-title">Changelog</div>
++					<div class="rl-modal-sub">You have v{{version_number}}. Newest changes first.</div>
++					<div class="rl-modal-notes rl-modal-notes--tall">{{changelog_text}}</div>
++					<div class="rl-modal-buttons">
++						<div class="rl-action-shadow"><button id="rl_changelog_close" class="rl-action" data-event-click="changelog_close()">Close</button></div>
 +					</div>
 +				</div></div></div>
 +				<div class="rl-scanlines"></div>
@@ -3207,10 +3217,10 @@ index d117b72..76acb9c 100644
  };
  
 diff --git a/src/ui/ui_launcher.cpp b/src/ui/ui_launcher.cpp
-index df580ce..e4677d5 100644
+index df580ce..11ce13e 100644
 --- a/src/ui/ui_launcher.cpp
 +++ b/src/ui/ui_launcher.cpp
-@@ -7,13 +7,110 @@
+@@ -7,13 +7,111 @@
  #include "librecomp/mods.hpp"
  #include "ultramodern/ultramodern.hpp"
  #include "RmlUi/Core.h"
@@ -3225,7 +3235,8 @@ index df580ce..e4677d5 100644
 +// A newer release exists (src/jfg/jfg_update_check.cpp): the launcher shows a warning triangle next to the version; clicking it
 +// opens a dialog with what is new and a confirmation, and the update is then downloaded and installed.
 +static bool update_available = false, update_dialog = false, update_can_install = false, update_restarting = false;
-+static std::string update_version, update_changelog, update_status, update_unavailable;
++static std::string update_version, update_changelog, update_status, update_unavailable, changelog_text;
++static bool changelog_dialog = false;
 +static int update_stage = 0, update_percent = 0;
  
  Rml::DataModelHandle model_handle;
@@ -3321,7 +3332,7 @@ index df580ce..e4677d5 100644
  extern std::vector<recomp::GameEntry> supported_games;
  
  void open_rom_select_dialog() {
-@@ -24,6 +121,7 @@ void open_rom_select_dialog() {
+@@ -24,6 +122,7 @@ void open_rom_select_dialog() {
                  case recomp::RomValidationError::Good:
                      rom_valid = true;
                      model_handle.DirtyVariable("rom_valid");
@@ -3329,7 +3340,7 @@ index df580ce..e4677d5 100644
                      break;
                  case recomp::RomValidationError::FailedToOpen:
                      recompui::message_box("Failed to open ROM file.");
-@@ -39,7 +137,7 @@ void open_rom_select_dialog() {
+@@ -39,7 +138,7 @@ void open_rom_select_dialog() {
                      break;
                  case recomp::RomValidationError::IncorrectVersion:
                      recompui::message_box(
@@ -3338,7 +3349,7 @@ index df580ce..e4677d5 100644
                      break;
                  case recomp::RomValidationError::OtherError:
                      recompui::message_box("An unknown error has occurred.");
-@@ -51,15 +149,16 @@ void open_rom_select_dialog() {
+@@ -51,15 +150,16 @@ void open_rom_select_dialog() {
  
  void select_rom() {
      recompui::open_info_prompt("Recomp Setup",
@@ -3358,7 +3369,7 @@ index df580ce..e4677d5 100644
      recomp::start_game(supported_games[0].game_id);
      recompui::hide_all_contexts();
  }
-@@ -81,6 +180,10 @@ public:
+@@ -81,6 +181,10 @@ public:
          rom_valid = recomp::is_rom_valid(supported_games[0].game_id);
      }
      void load_document() override {
@@ -3369,7 +3380,7 @@ index df580ce..e4677d5 100644
  		launcher_context = recompui::create_context(dino::runtime::get_asset_path("launcher.rml"));
      }
      void register_events(recompui::UiEventListenerInstancer& listener) override {
-@@ -123,9 +226,30 @@ public:
+@@ -123,9 +227,35 @@ public:
          );
          recompui::register_event(listener, "exit_game",
              [](const std::string& param, Rml::Event& event) {
@@ -3383,6 +3394,11 @@ index df580ce..e4677d5 100644
 +                if (event.GetId() != Rml::EventId::Keydown || recompui::is_prompt_open()) return;
 +                const auto key = event.GetParameter<Rml::Input::KeyIdentifier>("key_identifier", Rml::Input::KeyIdentifier::KI_UNKNOWN);
 +                if (key != Rml::Input::KeyIdentifier::KI_ESCAPE) return;
++                if (changelog_dialog) {
++                    changelog_dialog = false;
++                    model_handle.DirtyVariable("changelog_dialog");
++                    return;
++                }
 +                if (update_dialog) { // Esc closes the update dialog (not while it is installing)
 +                    if (update_stage != 1 && update_stage != 3) {
 +                        update_dialog = false;
@@ -3400,7 +3416,7 @@ index df580ce..e4677d5 100644
      }
      void make_bindings(Rml::Context* context) override {
          Rml::DataModelConstructor constructor = context->CreateDataModel("launcher_model");
-@@ -134,6 +258,63 @@ public:
+@@ -134,6 +264,75 @@ public:
  
          version_string = recomp::get_project_version().to_string();
          constructor.Bind("version_number", &version_string);
@@ -3413,6 +3429,18 @@ index df580ce..e4677d5 100644
 +        constructor.Bind("update_stage", &update_stage);
 +        constructor.Bind("update_percent", &update_percent);
 +        constructor.Bind("update_status", &update_status);
++        constructor.Bind("changelog_dialog", &changelog_dialog);
++        constructor.Bind("changelog_text", &changelog_text);
++        constructor.BindEventCallback("show_changelog", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
++            if (changelog_text.empty()) changelog_text = jfg_changelog_text();
++            model_handle.DirtyVariable("changelog_text");
++            changelog_dialog = true;
++            model_handle.DirtyVariable("changelog_dialog");
++        });
++        constructor.BindEventCallback("changelog_close", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
++            changelog_dialog = false;
++            model_handle.DirtyVariable("changelog_dialog");
++        });
 +        constructor.BindEventCallback("show_update", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
 +            jfg_update_reset();
 +            update_stage = 0;

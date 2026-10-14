@@ -176,6 +176,8 @@ copy /y "%PORT_DIR%assets\config_menu\jfg_*.rml" "%WORK%\assets\config_menu\" >n
 rem The launcher's fonts and images (assets\launcher.rml; the VibinToast icon is made by tools\gen_jfg_launcher_sheet.py).
 if not exist "%WORK%\assets\jfg_launcher" mkdir "%WORK%\assets\jfg_launcher"
 copy /y "%PORT_DIR%assets\jfg_launcher\*.*" "%WORK%\assets\jfg_launcher\" >nul || ( echo [jfg] ERROR: copying assets\jfg_launcher failed & exit /b 1 )
+rem The changelog the launcher shows (About > Changelog) ships with the assets, so it also updates with the game.
+copy /y "%PORT_DIR%CHANGELOG.md" "%WORK%\assets\jfg_launcher\CHANGELOG.md" >nul || ( echo [jfg] ERROR: copying CHANGELOG.md failed & exit /b 1 )
 if not exist "%WORK%\include" mkdir "%WORK%\include"
 copy /y "%PORT_DIR%include\*.h" "%WORK%\include\" >nul || ( echo [jfg] ERROR: copying include failed & exit /b 1 )
 copy /y "%PORT_DIR%icons\*.*" "%WORK%\icons\" >nul || ( echo [jfg] ERROR: copying icons failed & exit /b 1 )

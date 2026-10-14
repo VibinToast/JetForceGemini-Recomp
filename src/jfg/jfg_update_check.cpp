@@ -516,6 +516,44 @@ void jfg_update_install() {
 #endif
 }
 
+static std::FILE* _wfopen_or_fopen(const fs::path& path) {
+#ifdef _WIN32
+    return _wfopen(path.c_str(), L"rb");
+#else
+    return std::fopen(path.c_str(), "rb");
+#endif
+}
+
+std::string jfg_changelog_text() {
+#ifdef _WIN32
+    const fs::path file = exe_folder() / "assets" / "jfg_launcher" / "CHANGELOG.md";
+#else
+    const fs::path file = fs::path("assets") / "jfg_launcher" / "CHANGELOG.md";
+#endif
+    std::string text;
+    if (std::FILE* f = _wfopen_or_fopen(file)) {
+        char buffer[4096];
+        size_t n;
+        while ((n = std::fread(buffer, 1, sizeof(buffer), f)) > 0) text.append(buffer, n);
+        std::fclose(f);
+    }
+    if (text.empty()) return "The changelog was not found next to the game. It is on the release page.";
+    text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+    text.erase(std::remove(text.begin(), text.end(), '`'), text.end());
+    // Start at the first version heading (the file opens with a few lines about itself); headings lose their # marks.
+    const size_t first = text.find("\n## ");
+    if (first != std::string::npos) text.erase(0, first + 1);
+    std::string out, line;
+    for (size_t i = 0; i <= text.size(); i++) {
+        if (i < text.size() && text[i] != '\n') { line += text[i]; continue; }
+        if (line.rfind("## ", 0) == 0) { if (!out.empty()) out += "\n"; out += line.substr(3) + "\n"; }
+        else if (line.rfind("### ", 0) == 0) out += line.substr(4) + ":\n";
+        else out += line + "\n";
+        line.clear();
+    }
+    return out;
+}
+
 JfgUpdateProgress jfg_update_progress() {
     JfgUpdateProgress progress;
     std::lock_guard<std::mutex> lock(g_mutex);

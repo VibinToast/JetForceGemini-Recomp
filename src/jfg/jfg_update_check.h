@@ -28,3 +28,6 @@ void jfg_update_reset();
 void jfg_update_fail(const std::string& message);
 // After stage 3: starts the new build. The caller then quits this one.
 void jfg_update_restart();
+
+// The text of CHANGELOG.md that ships in assets/jfg_launcher, tidied for showing as plain text (newest first).
+std::string jfg_changelog_text();
