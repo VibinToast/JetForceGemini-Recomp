@@ -3,6 +3,17 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. Entries under "Unreleased" are in the source but not yet
 built and tested, unless marked otherwise.
 
+## v1.1.2 (2026-10-14)
+
+- Keep the widescreen sides empty while paused instead of switching the aspect
+- Keep widescreen on while paused again (testing the pause screen backdrop)
+- Only restore the bloom snapshot at the first scene drawn into a colour buffer each frame
+- Only black out the widescreen sides for scenes that fill the screen height
+- No widescreen while paused; clear the widescreen sides at the start of each 3D scene
+- Drop a colour buffer's bloom snapshot when something else draws into it
+- Keep a bloom snapshot per colour buffer
+- Fix bloom piling up on parts of the screen that are not redrawn
+
 ## v1.1.1 (2026-10-14)
 
 - Updated release.yml
