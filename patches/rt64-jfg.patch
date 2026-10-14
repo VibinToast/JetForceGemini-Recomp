@@ -810,8 +810,8 @@ diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
      }
  
 diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:20:13.954478784 +0000
-+++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:20:13.933478786 +0000
+--- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:33:03.777403753 +0000
++++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:33:03.788403752 +0000
 @@ -4,7 +4,11 @@
  
  #include "rt64_framebuffer_renderer.h"
@@ -851,7 +851,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          renderIndicesVector.clear();
          rspSmoothNormalVector.clear();
          frameParams.viewUbershaders = ubershadersVisible;
-@@ -511,8 +528,332 @@
+@@ -511,8 +528,350 @@
          if (fbStorage->colorTarget != nullptr) {
              switchToGraphicsPipeline();
          }
@@ -1116,6 +1116,24 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +        };
          
 -        for (uint32_t i : rasterScene.instanceIndices) {
++        // JFG PORT: is this the first scene to draw into this colour buffer in this frame? Restoring the saved picture over the
++        // buffer is only right then; later it would wipe what the earlier scenes of the frame (a backdrop, say) have drawn.
++        bool firstSceneOnTarget = true;
++        if (fbStorage->colorTarget != nullptr) {
++            bool found = false;
++            for (std::pair<const RenderTarget *, uint32_t> &touched : jfgTargetsTouched) {
++                if (touched.first == fbStorage->colorTarget) {
++                    firstSceneOnTarget = (touched.second != jfgFrame);
++                    touched.second = jfgFrame;
++                    found = true;
++                    break;
++                }
++            }
++            if (!found) {
++                jfgTargetsTouched.emplace_back(fbStorage->colorTarget, jfgFrame);
++            }
++        }
++
 +        // JFG PORT: a scene without bloom that draws into a colour buffer changes what the saved picture of that buffer was
 +        // made from (a fade to black, another screen), so the picture is dropped: restoring it later would bring back an old image.
 +        if ((bloomPosition == UINT32_MAX) && (sceneDrawCount > 0) && (fbStorage->colorTarget != nullptr)) {
@@ -1128,7 +1146,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +
 +        // JFG PORT: a scene that gets bloom starts from the clean picture saved when the last one for this colour buffer was
 +        // made, so the parts the game does not draw again do not get the glow added to the old glow (see bloomSnapshots).
-+        if (bloomPosition != UINT32_MAX) {
++        if ((bloomPosition != UINT32_MAX) && firstSceneOnTarget) {
 +            RenderTarget *colorTarget = fbStorage->colorTarget;
 +            for (const std::unique_ptr<BloomSnapshot> &entry : bloomSnapshots) {
 +                if ((entry->target != colorTarget) || !entry->valid || (entry->texture == nullptr) || (entry->frame == jfgFrame) ||
@@ -1185,7 +1203,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
              const InstanceDrawCall &drawCall = instanceDrawCallVector[i];
              switch (drawCall.type) {
              case InstanceDrawCall::Type::IndexedTriangles: 
-@@ -638,6 +979,7 @@
+@@ -638,6 +997,7 @@
              }
          }
  
@@ -1193,7 +1211,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          // Mark targets for resolve.
          if (fbStorage->colorTarget != nullptr) {
              fbStorage->colorTarget->markForResolve();
-@@ -648,6 +990,51 @@
+@@ -648,6 +1008,51 @@
          }
      }
  
@@ -1245,7 +1263,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
      void FramebufferRenderer::updateMultisampling() {
          dummyColorTargetView.reset();
          dummyDepthTargetView.reset();
-@@ -1354,6 +1741,11 @@
+@@ -1354,6 +1759,11 @@
          postBlendDitherNoiseAddPipeline = rasterShaderUber->postBlendDitherNoiseAddPipeline.get();
          postBlendDitherNoiseSubPipeline = rasterShaderUber->postBlendDitherNoiseSubPipeline.get();
          postBlendDitherNoiseSubNegativePipeline = rasterShaderUber->postBlendDitherNoiseSubNegativePipeline.get();
@@ -1257,7 +1275,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
  
          // Make a new render target draw call.
          RenderTargetDrawCall &targetDrawCall = framebuffer.renderTargetDrawCall;
-@@ -1488,7 +1880,7 @@
+@@ -1488,7 +1898,7 @@
                  // The call's scissor spans the whole width of the framebuffer pair scissor. Custom origin must not be in use to be able to use the stretched viewport.
                  const auto &viewport = drawData.rspViewports[proj.transformsIndex];
                  FixedRect intersectionRect = proj.scissorRect.intersection(viewport.rect(viewportClipRatios));
@@ -1267,9 +1285,9 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                  bool useWideViewport = (viewportOrigin == G_EX_ORIGIN_NONE) && coversWholeWidth && horizontalRatio;
                  if (useWideViewport) {
 diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer_renderer.h
---- a/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:13:49.745516232 +0000
-+++ b/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:13:59.933515239 +0000
-@@ -87,6 +87,45 @@
+--- a/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:33:03.897403741 +0000
++++ b/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:33:03.903403741 +0000
+@@ -87,6 +87,46 @@
          RenderPipeline *postBlendDitherNoiseAddPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubNegativePipeline = nullptr;
@@ -1306,6 +1324,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer
 +        uint32_t jfgFrame = 0;
 +        const RenderTarget *jfgSidesClearedTarget = nullptr; // the colour buffer whose widescreen sides were cleared in jfgSidesClearedFrame
 +        uint32_t jfgSidesClearedFrame = 0;
++        std::vector<std::pair<const RenderTarget *, uint32_t>> jfgTargetsTouched; // colour buffer and the frame it was last drawn into
 +        RenderPipelineLayout *bloomPipelineLayout = nullptr;
 +        RenderPipeline *bloomExtractPipeline = nullptr;
 +        RenderPipeline *bloomBlurPipeline = nullptr;
