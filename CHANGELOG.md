@@ -3,33 +3,27 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. Entries under "Unreleased" are in the source but not yet
 built and tested, unless marked otherwise.
 
-## Unreleased
+## v1.1.0 (2026-10-14)
 
-### Launcher
-- A GitHub link left of the version number opens the repository. Changelogs also lists the commits since the last release, from GitHub (not those of GitHub's bots).
-- Changelogs (bottom of the Play page) shows the changes of this version and every earlier one, from the CHANGELOG.md that now ships in
-  `assets/jfg_launcher` (so it also updates with the game and works offline). (`build_windows.bat`, `jfg_update_check.cpp`,
-  launcher via `patches/jfg-base.patch`.)
-- The texture pack link points to vibintoast.com/projects/jfg-4k, and the About tab links to Bluesky.
-- Update from the launcher: a warning triangle next to the version number appears when GitHub has a newer release.
-  Clicking it shows what changed since this build and asks to update (or to open the release page). The zip is
-  downloaded from the release, checked against the SHA-256 GitHub lists for it, unpacked, swapped in (the running exe
-  and DLLs are renamed to `.old`, with a rollback if anything fails) and the game restarts. Saves, settings, texture
-  packs and mods are not touched. Releases need the portable zip attached (`tools/package_release.bat`).
-  (`src/jfg/jfg_update_check.cpp`, `.h`, launcher via `patches/jfg-base.patch`.)
-- Launcher buttons no longer flicker when the cursor is on their edge.
-
-### Fixes
-- Launcher, Graphics page: the info text is a box beside the options again instead of floating over them at the top right.
-- Opening the Select / Esc menu while moving no longer leaves the character walking: the sticks and the jump button are
-  released as if the buttons had come up. (`src/jfg/jfg_debug_menu.cpp`, `controls.cpp` via `patches/jfg-base.patch`.)
-- Mouse and keyboard: while the Select / Esc menu is open the mouse no longer turns the camera or aim, or changes weapon, in the
-  game behind it. (`src/jfg/jfg_debug_menu.cpp`.)
-- Boss fights with the dual-stick and mouse and keyboard controls: the aim moves directly (not through the game's stick, which
-  made the mouse reticle shake and drift), and the character never turns: it stays on the rail, facing the boss, and
-  only steps left and right. Once the aim is more than 40 degrees to a side the camera turns on the spot with it, so a
-  boss at the sides of the arena can be followed. With a controller and "Keep the reticle centered" the camera follows
-  the whole aim. (`src/jfg/jfg_debug_menu.cpp`, `boss_controls`, `jfg_camera_override`.)
+- Updated release.yml
+- Centre the version number with the GitHub link in a three-column row; say when there are no new commits
+- Updated readme
+- Show commits since the last release in Changelogs, add a GitHub link by the version
+- Move the changelog button to the bottom of the Play page and rename it Changelogs
+- Fix the Graphics page's info text floating over the options in the launcher
+- Add a changelog viewer to the launcher's About page
+- Release the sticks when a menu opens, update texture pack link, add Bluesky
+- Update the game from the launcher
+- Ignore the mouse in the game while the Select/Esc menu is open
+- Show a warning triangle in the launcher when a newer release exists
+- Aim the controller directly in boss fights, with the camera following
+- Turn the camera with the aim in boss fights so bosses at the sides stay in view
+- Let the mouse aim 120 degrees either side in boss fights
+- Keep the player on the rail in boss fights with the mouse
+- Keep the mouse turn in boss fights within a cone so the player only strafes
+- Fix the shaking reticle with mouse and keyboard in boss fights
+- Update .gitignore
+- Fix JFG 4K texture pack link in README
 
 ## v1.0.0 (2026-10-13)
 
