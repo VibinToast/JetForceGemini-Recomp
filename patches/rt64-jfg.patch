@@ -810,8 +810,8 @@ diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
      }
  
 diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:06:50.063557136 +0000
-+++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:06:50.113557131 +0000
+--- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:13:49.745516232 +0000
++++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:13:59.927515239 +0000
 @@ -4,7 +4,11 @@
  
  #include "rt64_framebuffer_renderer.h"
@@ -851,7 +851,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          renderIndicesVector.clear();
          rspSmoothNormalVector.clear();
          frameParams.viewUbershaders = ubershadersVisible;
-@@ -511,8 +528,302 @@
+@@ -511,8 +528,324 @@
          if (fbStorage->colorTarget != nullptr) {
              switchToGraphicsPipeline();
          }
@@ -878,7 +878,12 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +        thread_local std::vector<uint32_t> deferredDraws;
 +        drawOrder.clear();
 +        deferredDraws.clear();
-+        if (ssaoOn || bloomOn) {
++        // JFG PORT: in widescreen the colour buffer is wider than the game's 4:3 picture. The game only draws (and clears) its own
++        // 4:3 area; what lies beyond is whatever was left from earlier frames, which showed up as old pictures at the sides of the
++        // screen. The sides are cleared to black at the start of each 3D scene (below).
++        const bool sidesWide = (fbStorage->colorTarget != nullptr) && (uint64_t(fbStorage->colorTarget->width) * 3ULL > uint64_t(fbStorage->colorTarget->height) * 4ULL + 6ULL);
++        bool worldScene = false;
++        if (ssaoOn || bloomOn || sidesWide) {
 +            uint32_t depthWrites = 0;
 +            uint32_t lastWritePosition = 0;
 +            uint32_t hudPosition = sceneDrawCount;
@@ -901,6 +906,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +                }
 +            }
 +
++            worldScene = depthWrites >= SsaoMinDepthWrites;
 +            if (depthWrites >= SsaoMinDepthWrites) {
 +                ssaoPosition = ssaoOn ? (lastWritePosition + 1) : UINT32_MAX;
 +                bloomPosition = bloomOn ? hudPosition : UINT32_MAX;
@@ -1141,6 +1147,22 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +            }
 +        }
 +
++        if (sidesWide && worldScene && ((jfgSidesClearedTarget != fbStorage->colorTarget) || (jfgSidesClearedFrame != jfgFrame))) {
++            const RenderTarget *target = fbStorage->colorTarget;
++            const int32_t fullWidth = int32_t(target->width);
++            const int32_t sideWidth = (fullWidth - int32_t((uint64_t(target->height) * 4ULL) / 3ULL)) / 2;
++            if (sideWidth > 0) {
++                const RenderRect sides[2] = {
++                    RenderRect(0, 0, sideWidth, int32_t(target->height)),
++                    RenderRect(fullWidth - sideWidth, 0, fullWidth, int32_t(target->height))
++                };
++                worker->commandList->clearColor(0, RenderColor(0.0f, 0.0f, 0.0f, 1.0f), sides, 2);
++            }
++
++            jfgSidesClearedTarget = target;
++            jfgSidesClearedFrame = jfgFrame;
++        }
++
 +        for (uint32_t i : drawOrder) {
 +            if (i == SsaoMarker) {
 +                submitSsao();
@@ -1155,7 +1177,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
              const InstanceDrawCall &drawCall = instanceDrawCallVector[i];
              switch (drawCall.type) {
              case InstanceDrawCall::Type::IndexedTriangles: 
-@@ -638,6 +949,7 @@
+@@ -638,6 +971,7 @@
              }
          }
  
@@ -1163,7 +1185,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          // Mark targets for resolve.
          if (fbStorage->colorTarget != nullptr) {
              fbStorage->colorTarget->markForResolve();
-@@ -648,6 +960,51 @@
+@@ -648,6 +982,51 @@
          }
      }
  
@@ -1215,7 +1237,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
      void FramebufferRenderer::updateMultisampling() {
          dummyColorTargetView.reset();
          dummyDepthTargetView.reset();
-@@ -1354,6 +1711,11 @@
+@@ -1354,6 +1733,11 @@
          postBlendDitherNoiseAddPipeline = rasterShaderUber->postBlendDitherNoiseAddPipeline.get();
          postBlendDitherNoiseSubPipeline = rasterShaderUber->postBlendDitherNoiseSubPipeline.get();
          postBlendDitherNoiseSubNegativePipeline = rasterShaderUber->postBlendDitherNoiseSubNegativePipeline.get();
@@ -1227,7 +1249,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
  
          // Make a new render target draw call.
          RenderTargetDrawCall &targetDrawCall = framebuffer.renderTargetDrawCall;
-@@ -1488,7 +1850,7 @@
+@@ -1488,7 +1872,7 @@
                  // The call's scissor spans the whole width of the framebuffer pair scissor. Custom origin must not be in use to be able to use the stretched viewport.
                  const auto &viewport = drawData.rspViewports[proj.transformsIndex];
                  FixedRect intersectionRect = proj.scissorRect.intersection(viewport.rect(viewportClipRatios));
@@ -1237,9 +1259,9 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                  bool useWideViewport = (viewportOrigin == G_EX_ORIGIN_NONE) && coversWholeWidth && horizontalRatio;
                  if (useWideViewport) {
 diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer_renderer.h
---- a/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:06:50.063557136 +0000
-+++ b/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:06:50.123557130 +0000
-@@ -87,6 +87,43 @@
+--- a/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:13:49.745516232 +0000
++++ b/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:13:59.933515239 +0000
+@@ -87,6 +87,45 @@
          RenderPipeline *postBlendDitherNoiseAddPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubNegativePipeline = nullptr;
@@ -1274,6 +1296,8 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer
 +        std::vector<std::unique_ptr<BloomSnapshot>> bloomSnapshots;
 +        std::vector<std::unique_ptr<RenderTexture>> bloomSnapshotRetired;
 +        uint32_t jfgFrame = 0;
++        const RenderTarget *jfgSidesClearedTarget = nullptr; // the colour buffer whose widescreen sides were cleared in jfgSidesClearedFrame
++        uint32_t jfgSidesClearedFrame = 0;
 +        RenderPipelineLayout *bloomPipelineLayout = nullptr;
 +        RenderPipeline *bloomExtractPipeline = nullptr;
 +        RenderPipeline *bloomBlurPipeline = nullptr;
