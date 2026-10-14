@@ -810,8 +810,8 @@ diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
      }
  
 diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-08 23:27:53.983621526 -0500
-+++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-08 18:54:48.915935023 -0500
+--- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 19:54:12.259630996 +0000
++++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 19:54:12.275630995 +0000
 @@ -4,7 +4,11 @@
  
  #include "rt64_framebuffer_renderer.h"
@@ -840,16 +840,18 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
  namespace RT64 {
      // Helper functions.
      
-@@ -170,6 +183,8 @@
+@@ -170,6 +183,10 @@
      void FramebufferRenderer::resetFramebuffers(RenderWorker *worker, bool ubershadersVisible, float ditherNoiseStrength, const RenderMultisampling &multisampling) {
          instanceDrawCallVector.clear();
          hitGroupVector.clear();
 +        bloomDescriptorSets.clear(); // JFG PORT: the previous workload has finished on the GPU by now
 +        bloomBuffersRetired.clear();
++        bloomSnapshotRetired.clear();
++        jfgFrame++;
          renderIndicesVector.clear();
          rspSmoothNormalVector.clear();
          frameParams.viewUbershaders = ubershadersVisible;
-@@ -511,8 +526,202 @@
+@@ -511,8 +528,257 @@
          if (fbStorage->colorTarget != nullptr) {
              switchToGraphicsPipeline();
          }
@@ -1005,6 +1007,41 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +            cb.directionX = 0; cb.directionY = 1;
 +            bloomPass(bloomBlurPipeline, buffers->texture[1].get(), RenderTextureLayout::SHADER_READ, 0, bufferSet[1]);
 +
++            // Keep the scene as it is now, before the glow goes on (see bloomSnapshot).
++            {
++                const RenderFormat snapshotFormat = colorTarget->format;
++                const uint32_t snapshotSamples = colorTarget->multisampling.sampleCount;
++                if ((bloomSnapshot == nullptr) || (bloomSnapshotTarget != colorTarget) || (bloomSnapshotWidth != width) || (bloomSnapshotHeight != height) ||
++                    (bloomSnapshotFormat != snapshotFormat) || (bloomSnapshotSamples != snapshotSamples))
++                {
++                    if (bloomSnapshot != nullptr) {
++                        bloomSnapshotRetired.emplace_back(std::move(bloomSnapshot));
++                    }
++
++                    bloomSnapshotValid = false;
++                    RenderClearValue snapshotClear = RenderClearValue::Color(RenderColor(), snapshotFormat);
++                    bloomSnapshot = worker->device->createTexture(RenderTextureDesc::ColorTarget(width, height, snapshotFormat, colorTarget->multisampling, &snapshotClear));
++                    if (bloomSnapshot != nullptr) {
++                        bloomSnapshot->setName("JFG Bloom Snapshot");
++                        bloomSnapshotTarget = colorTarget;
++                        bloomSnapshotWidth = width;
++                        bloomSnapshotHeight = height;
++                        bloomSnapshotFormat = snapshotFormat;
++                        bloomSnapshotSamples = snapshotSamples;
++                    }
++                }
++
++                if (bloomSnapshot != nullptr) {
++                    worker->commandList->barriers(RenderBarrierStage::COPY, {
++                        RenderTextureBarrier(colorTarget->texture.get(), RenderTextureLayout::COPY_SOURCE),
++                        RenderTextureBarrier(bloomSnapshot.get(), RenderTextureLayout::COPY_DEST)
++                    });
++                    worker->commandList->copyTexture(bloomSnapshot.get(), colorTarget->texture.get());
++                    bloomSnapshotValid = true;
++                    bloomSnapshotFrame = jfgFrame;
++                }
++            }
++
 +            // Back to the scene target (depth stays read-only), add the bloom.
 +            worker->commandList->barriers(RenderBarrierStage::GRAPHICS, {
 +                RenderTextureBarrier(buffers->texture[0].get(), RenderTextureLayout::SHADER_READ),
@@ -1039,6 +1076,26 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +        };
          
 -        for (uint32_t i : rasterScene.instanceIndices) {
++        // JFG PORT: a scene that gets bloom starts from the clean picture saved when the last one was made, so the parts the game
++        // does not draw again do not get the glow added to last frame's glow (see bloomSnapshot).
++        if ((bloomPosition != UINT32_MAX) && bloomSnapshotValid && (bloomSnapshot != nullptr) && (bloomSnapshotFrame != jfgFrame)) {
++            RenderTarget *colorTarget = fbStorage->colorTarget;
++            if ((bloomSnapshotTarget == colorTarget) && (bloomSnapshotWidth == colorTarget->width) && (bloomSnapshotHeight == colorTarget->height) &&
++                (bloomSnapshotFormat == colorTarget->format) && (bloomSnapshotSamples == colorTarget->multisampling.sampleCount))
++            {
++                worker->commandList->barriers(RenderBarrierStage::COPY, {
++                    RenderTextureBarrier(bloomSnapshot.get(), RenderTextureLayout::COPY_SOURCE),
++                    RenderTextureBarrier(colorTarget->texture.get(), RenderTextureLayout::COPY_DEST)
++                });
++                worker->commandList->copyTexture(colorTarget->texture.get(), bloomSnapshot.get());
++                worker->commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(colorTarget->texture.get(), RenderTextureLayout::COLOR_WRITE));
++                worker->commandList->setFramebuffer(depthState ? fbStorage->colorWriteDepthRead.get() : fbStorage->colorDepthWrite.get());
++                switchToGraphicsPipeline();
++            }
++
++            bloomSnapshotValid = false;
++        }
++
 +        for (uint32_t i : drawOrder) {
 +            if (i == SsaoMarker) {
 +                submitSsao();
@@ -1053,7 +1110,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
              const InstanceDrawCall &drawCall = instanceDrawCallVector[i];
              switch (drawCall.type) {
              case InstanceDrawCall::Type::IndexedTriangles: 
-@@ -638,6 +847,7 @@
+@@ -638,6 +904,7 @@
              }
          }
  
@@ -1061,7 +1118,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          // Mark targets for resolve.
          if (fbStorage->colorTarget != nullptr) {
              fbStorage->colorTarget->markForResolve();
-@@ -648,6 +858,51 @@
+@@ -648,6 +915,51 @@
          }
      }
  
@@ -1113,7 +1170,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
      void FramebufferRenderer::updateMultisampling() {
          dummyColorTargetView.reset();
          dummyDepthTargetView.reset();
-@@ -1354,6 +1609,11 @@
+@@ -1354,6 +1666,11 @@
          postBlendDitherNoiseAddPipeline = rasterShaderUber->postBlendDitherNoiseAddPipeline.get();
          postBlendDitherNoiseSubPipeline = rasterShaderUber->postBlendDitherNoiseSubPipeline.get();
          postBlendDitherNoiseSubNegativePipeline = rasterShaderUber->postBlendDitherNoiseSubNegativePipeline.get();
@@ -1125,7 +1182,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
  
          // Make a new render target draw call.
          RenderTargetDrawCall &targetDrawCall = framebuffer.renderTargetDrawCall;
-@@ -1488,7 +1748,7 @@
+@@ -1488,7 +1805,7 @@
                  // The call's scissor spans the whole width of the framebuffer pair scissor. Custom origin must not be in use to be able to use the stretched viewport.
                  const auto &viewport = drawData.rspViewports[proj.transformsIndex];
                  FixedRect intersectionRect = proj.scissorRect.intersection(viewport.rect(viewportClipRatios));
@@ -1135,9 +1192,9 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                  bool useWideViewport = (viewportOrigin == G_EX_ORIGIN_NONE) && coversWholeWidth && horizontalRatio;
                  if (useWideViewport) {
 diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer_renderer.h
---- a/src/render/rt64_framebuffer_renderer.h	2026-10-08 23:27:53.983621526 -0500
-+++ b/src/render/rt64_framebuffer_renderer.h	2026-10-08 17:45:30.621556748 -0500
-@@ -87,6 +87,25 @@
+--- a/src/render/rt64_framebuffer_renderer.h	2026-10-14 19:54:12.259630996 +0000
++++ b/src/render/rt64_framebuffer_renderer.h	2026-10-14 19:54:12.281630994 +0000
+@@ -87,6 +87,38 @@
          RenderPipeline *postBlendDitherNoiseAddPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubNegativePipeline = nullptr;
@@ -1154,6 +1211,19 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer
 +        std::vector<std::unique_ptr<BloomBuffers>> bloomBuffers;
 +        std::vector<std::unique_ptr<BloomBuffers>> bloomBuffersRetired;
 +        std::vector<std::unique_ptr<RenderTargetCopyDescriptorSet>> bloomDescriptorSets;
++        // JFG PORT: the scene as it was just before the glow was added, kept so that the next frame can start from it. Without
++        // this, the parts of the screen the game does not draw again (the sides in widescreen, what the camera sees beyond the
++        // level) keep last frame's glow and get it added again, every frame, until they are white.
++        std::unique_ptr<RenderTexture> bloomSnapshot;
++        std::vector<std::unique_ptr<RenderTexture>> bloomSnapshotRetired;
++        const RenderTarget *bloomSnapshotTarget = nullptr;
++        uint32_t bloomSnapshotWidth = 0;
++        uint32_t bloomSnapshotHeight = 0;
++        uint32_t bloomSnapshotSamples = 0;
++        RenderFormat bloomSnapshotFormat = RenderFormat::UNKNOWN;
++        uint32_t bloomSnapshotFrame = 0;
++        bool bloomSnapshotValid = false;
++        uint32_t jfgFrame = 0;
 +        RenderPipelineLayout *bloomPipelineLayout = nullptr;
 +        RenderPipeline *bloomExtractPipeline = nullptr;
 +        RenderPipeline *bloomBlurPipeline = nullptr;
