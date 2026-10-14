@@ -70,6 +70,7 @@ void objGetPlayerlist(uint8_t* rdram, recomp_context* ctx);
 void objGetObjList(uint8_t* rdram, recomp_context* ctx);
 void controlSelectWeapon(uint8_t* rdram, recomp_context* ctx);
 void objMoveXYZ(uint8_t* rdram, recomp_context* ctx);
+void func_8002CC70_2D870(uint8_t* rdram, recomp_context* ctx); // the follow camera's wall check, see camera_collide()
 void fb_swap(uint8_t* rdram, recomp_context* ctx);
 void osViSwapBuffer_recomp(uint8_t* rdram, recomp_context* ctx);
 void osViBlack_recomp(uint8_t* rdram, recomp_context* ctx);
@@ -263,6 +264,7 @@ struct State {
     int  move_speed = 100;         // how fast the character moves over the ground, percent (any layout)
     bool diagonal_boost = false;   // dual stick: faster when the left stick is pushed diagonally, as running + sidestepping was
     int  strafe_speed = 100;       // dual stick: weight of the sideways part in that boost, percent
+    bool camera_collision = true;  // dual stick: the camera stays inside the level (the game's own wall check)
     bool aim_from_character = false; // dual stick: on aiming, the view turns to the character instead of the character to the view
     bool dual_layout = true;       // dual stick: built-in controller layout instead of the controller bindings
     bool swap_triggers = false;    // dual stick: swap the N64 Z (fire) and R (aim) inputs
@@ -440,6 +442,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "swap_triggers") == 0) g.swap_triggers = value != 0;
     else if (std::strcmp(key, "dual_layout") == 0) g.dual_layout = value != 0;
     else if (std::strcmp(key, "aim_from_character") == 0) g.aim_from_character = value != 0;
+    else if (std::strcmp(key, "camera_collision") == 0) g.camera_collision = value != 0;
     else if (std::strcmp(key, "move_speed") == 0) g.move_speed = std::clamp(value, 25, 400);
     else if (std::strcmp(key, "diagonal_boost") == 0) g.diagonal_boost = value != 0;
     else if (std::strcmp(key, "strafe_speed") == 0) g.strafe_speed = std::clamp(value, 0, 300);
@@ -487,6 +490,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "bloom=%d\nbloom_intensity=%d\nbloom_threshold=%d\nbloom_radius=%d\n", s.bloom ? 1 : 0, s.bloom_intensity, s.bloom_threshold, s.bloom_radius); out += buf;
     std::snprintf(buf, sizeof(buf), "dual_stick=%d\ninvert_aim_y=%d\nswap_triggers=%d\ndual_layout=%d\n", s.dual_stick ? 1 : 0, s.invert_aim_y ? 1 : 0, s.swap_triggers ? 1 : 0, s.dual_layout ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "invert_aim_normal=%d\ninvert_camera_y=%d\naim_from_character=%d\n", s.invert_aim_normal ? 1 : 0, s.invert_camera_y ? 1 : 0, s.aim_from_character ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "camera_collision=%d\n", s.camera_collision ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "move_speed=%d\ndiagonal_boost=%d\nstrafe_speed=%d\n", s.move_speed, s.diagonal_boost ? 1 : 0, s.strafe_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "camera_speed_h=%d\ncamera_speed_v=%d\naim_shoulder=%d\naim_centered=%d\naim_speed=%d\n", s.camera_speed_h, s.camera_speed_v, s.aim_shoulder ? 1 : 0, s.aim_centered ? 1 : 0, s.aim_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "aim_jump=%d\n", s.aim_jump ? 1 : 0); out += buf;
@@ -679,6 +683,9 @@ void draw_options() {
                 changed |= ImGui::Checkbox("Invert aim up/down (dual stick)", &g.invert_aim_y);
                 changed |= ImGui::Checkbox("Invert camera up/down", &g.invert_camera_y);
                 changed |= ImGui::Checkbox("Aim where the character faces (not where the camera looks)", &g.aim_from_character);
+                changed |= ImGui::Checkbox("Camera collision", &g.camera_collision);
+                options_help("Keeps the camera from going through walls and floors when it is swung round the character, using the "
+                             "game's own wall check. With it off the camera can end up outside the level.");
                 changed |= options_slider("Camera left/right %", &g.camera_speed_h, 25, 300);
                 changed |= options_slider("Camera up/down %", &g.camera_speed_v, 25, 300);
                 ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
@@ -1625,6 +1632,7 @@ struct CameraControl {
     bool overridden = false;    // the camera in RDRAM currently holds our values; saved[] holds the game's
     uint32_t camera_addr = 0;
     uint8_t saved[CAMERA_SIZE] = {};
+    float collide_scale = 1.0f; // how much of the way from the character to the wanted camera spot is free (eases back out)
     // Arriving somewhere new (another room through a door, a respawn, a teleport): the free camera starts again
     // behind the character, looking the way it faces, instead of keeping the heading from the place it came from.
     bool face_reset = true;
@@ -2296,6 +2304,30 @@ void jfg_camera_restore() {
     for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { uint32_t v; std::memcpy(&v, &g_cam.saved[i], 4); wr32(g_cam.camera_addr + i, v); }
 }
 
+// The game's follow camera keeps itself out of walls with func_8002CC70 (from the point it looks at, the wanted camera
+// position is pulled in to the first wall in the way, and kept above the floor and below the ceiling). The dual-stick
+// camera is placed by hand, so it asks the same function. (fx,fy,fz) is the point looked at, (tx,ty,tz) the wanted spot;
+// the spot is moved in place. It snaps in when something is in the way and eases back out when the way is free.
+void camera_collide(recomp_context* ctx, float fx, float fy, float fz, float& tx, float& ty, float& tz) {
+    if (!g.camera_collision) { g_cam.collide_scale = 1.0f; return; }
+    const uint32_t buf = ((uint32_t)ctx->r29 - 0x80u) & ~0x7u; // inside the gap call_game leaves below $sp
+    wrf(buf + 0, fx); wrf(buf + 4, fy); wrf(buf + 8, fz);
+    wrf(buf + 16, tx); wrf(buf + 20, ty); wrf(buf + 24, tz);
+    call_game(func_8002CC70_2D870, ctx, { buf, buf + 16, 0u });
+    const float rx = rdf(buf + 16), ry = rdf(buf + 20), rz = rdf(buf + 24);
+    const float want = std::sqrt((tx - fx) * (tx - fx) + (ty - fy) * (ty - fy) + (tz - fz) * (tz - fz));
+    const float got = std::sqrt((rx - fx) * (rx - fx) + (ry - fy) * (ry - fy) + (rz - fz) * (rz - fz));
+    if (!(want > 1.0f) || !std::isfinite(got)) { g_cam.collide_scale = 1.0f; return; }
+    // a little in front of the wall, so the near plane does not cut into it
+    float free_scale = std::clamp((got - 8.0f) / want, 0.05f, 1.0f);
+    if (got >= want - 0.5f) free_scale = 1.0f;
+    g_cam.collide_scale = free_scale < g_cam.collide_scale ? free_scale : std::min(free_scale, g_cam.collide_scale + 0.05f);
+    // the free part of the line to the spot; with the way clear, the height the game's check settled on (above the floor)
+    const float sx = fx + (tx - fx) * g_cam.collide_scale, sy = fy + (ty - fy) * g_cam.collide_scale, sz = fz + (tz - fz) * g_cam.collide_scale;
+    tx = sx; tz = sz;
+    ty = (g_cam.collide_scale >= 1.0f) ? ry : sy;
+}
+
 // Right before the scene is drawn: move the camera round the character to the chosen angles.
 extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
@@ -2346,13 +2378,15 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         const float tz = pz - fz * BACK + std::sin(heading) * SIDE;
         const float look = heading + std::atan2(SIDE, CONVERGE);
         const float b = g_cam.shoulder_blend;
+        float ctx_ = tx, cty_ = ty, ctz_ = tz;
+        camera_collide(ctx, px, py + HEAD, pz, ctx_, cty_, ctz_);
         for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
         g_cam.camera_addr = cam;
         g_cam.overridden = true;
         const float game_look = -angle_from_s16(rd16(cam)), game_pitch = angle_from_s16(rd16(cam + 2));
-        wrf(cam + 0x0C, cx + (tx - cx) * b);
-        wrf(cam + 0x10, cy + (ty - cy) * b);
-        wrf(cam + 0x14, cz + (tz - cz) * b);
+        wrf(cam + 0x0C, cx + (ctx_ - cx) * b);
+        wrf(cam + 0x10, cy + (cty_ - cy) * b);
+        wrf(cam + 0x14, cz + (ctz_ - cz) * b);
         wr16(cam + 0, angle_to_s16(-(game_look + wrap_angle(look - game_look) * b)));
         wr16(cam + 2, angle_to_s16(game_pitch + (pitch - game_pitch) * b));
         return;
@@ -2370,9 +2404,13 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
     g_cam.camera_addr = cam;
     g_cam.overridden = true;
-    wrf(cam + 0x0C, px - std::sin(g_cam.heading) * boom * std::cos(elevation));
-    wrf(cam + 0x10, py + pivot + boom * std::sin(elevation));
-    wrf(cam + 0x14, pz - std::cos(g_cam.heading) * boom * std::cos(elevation));
+    float wx = px - std::sin(g_cam.heading) * boom * std::cos(elevation);
+    float wy = py + pivot + boom * std::sin(elevation);
+    float wz = pz - std::cos(g_cam.heading) * boom * std::cos(elevation);
+    camera_collide(ctx, px, py + pivot, pz, wx, wy, wz);
+    wrf(cam + 0x0C, wx);
+    wrf(cam + 0x10, wy);
+    wrf(cam + 0x14, wz);
     wr16(cam + 0, angle_to_s16(-g_cam.heading));
     wr16(cam + 2, angle_to_s16(pitch));
 }
