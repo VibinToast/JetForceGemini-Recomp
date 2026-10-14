@@ -97,7 +97,7 @@ jobs:
           PY
           echo "${VERSION}" > version.txt
 
-      - name: Commit, tag and push
+      - name: Commit and push
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -105,12 +105,12 @@ jobs:
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md version.txt
           git commit -m "chore: release v$VERSION [skip ci]"
-          git tag -a "v$VERSION" -m "v$VERSION"
           git push origin "HEAD:${GITHUB_REF_NAME}"
-          git push origin "v$VERSION"
 
       - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
-        run: gh release create "v$VERSION" --title "v$VERSION" --notes-file notes.md --verify-tag
+        # The release creates the tag v$VERSION on the release commit through GitHub's API. (Pushing the tag with git was
+        # rejected for the workflow's token: "remote rejected ... (failed)".)
+        run: gh release create "v$VERSION" --title "v$VERSION" --notes-file notes.md --target "$(git rev-parse HEAD)"
