@@ -31,3 +31,7 @@ void jfg_update_restart();
 
 // The text of CHANGELOG.md that ships in assets/jfg_launcher, tidied for showing as plain text (newest first).
 std::string jfg_changelog_text();
+
+// The commits made since the last release, from GitHub (empty until they have arrived, or when offline), as a few lines of
+// text. Commits by GitHub's bots (the release commit of the Release workflow) are left out.
+std::string jfg_changelog_commits();

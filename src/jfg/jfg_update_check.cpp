@@ -48,6 +48,7 @@ namespace fs = std::filesystem;
 
 namespace {
 constexpr const char* RELEASES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/releases?per_page=30";
+constexpr const char* COMMITS_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/commits?per_page=100";
 constexpr const char* ZIP_SUFFIX = "-windows-x64-portable.zip";
 
 struct Release {
@@ -55,6 +56,7 @@ struct Release {
 };
 
 std::mutex g_mutex;
+std::string g_commits; // see jfg_changelog_commits()
 bool g_found = false;
 JfgUpdateInfo g_info;
 Release g_target;
@@ -190,6 +192,41 @@ bool http_get(const std::string& url, const Sink& sink, const ProgressFn&) {
 bool http_get_string(const std::string& url, std::string& out, size_t limit = 4u << 20) {
     out.clear();
     return http_get(url, [&](const char* data, size_t n) { if (out.size() + n > limit) return false; out.append(data, n); return true; }, nullptr);
+}
+
+// ---- commits since the last release -----------------------------------------------------------------------------------------
+bool is_bot_commit(const nlohmann::json& c) {
+    auto name_of = [](const nlohmann::json& j, const char* key) { return json_string(j, key); };
+    std::string who;
+    if (const auto it = c.find("author"); it != c.end() && it->is_object()) who += name_of(*it, "login") + "|" + name_of(*it, "type");
+    if (const auto it = c.find("commit"); it != c.end() && it->is_object()) {
+        if (const auto a = it->find("author"); a != it->end() && a->is_object()) who += "|" + name_of(*a, "name");
+    }
+    for (char& ch : who) ch = (char)std::tolower((unsigned char)ch);
+    return who.find("[bot]") != std::string::npos || who.find("|bot") != std::string::npos || who.find("github-actions") != std::string::npos;
+}
+
+void commits_thread() {
+    std::string body;
+    if (!http_get_string(COMMITS_URL, body)) return;
+    const nlohmann::json list = nlohmann::json::parse(body, nullptr, false);
+    if (list.is_discarded() || !list.is_array()) return;
+    std::string text;
+    for (const nlohmann::json& c : list) { // newest first
+        if (!c.is_object()) continue;
+        const auto it = c.find("commit");
+        if (it == c.end() || !it->is_object()) continue;
+        std::string subject = json_string(*it, "message");
+        subject = subject.substr(0, subject.find('\n'));
+        while (!subject.empty() && std::isspace((unsigned char)subject.back())) subject.pop_back();
+        const bool release_commit = subject.rfind("chore: release v", 0) == 0;
+        if (release_commit) break; // everything from here down is in a released version (and its notes)
+        if (subject.empty() || is_bot_commit(c) || subject.rfind("Merge ", 0) == 0) continue;
+        text += "- " + subject + "\n";
+    }
+    if (text.empty()) return;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_commits = "Since the last release (not in a version yet)\n" + text + "\n";
 }
 
 // ---- finding releases ---------------------------------------------------------------------------------------------------
@@ -488,6 +525,7 @@ void jfg_update_check_start(const std::string& current) {
     started = true;
     try {
         std::thread(check_thread, current).detach();
+        std::thread(commits_thread).detach();
 #ifdef _WIN32
         std::thread(cleanup_thread).detach();
 #endif
@@ -552,6 +590,11 @@ std::string jfg_changelog_text() {
         line.clear();
     }
     return out;
+}
+
+std::string jfg_changelog_commits() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_commits;
 }
 
 JfgUpdateProgress jfg_update_progress() {

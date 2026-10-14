@@ -749,10 +749,10 @@ index c5eb334..dc34871 100644
              </div>
          </form>
 diff --git a/assets/launcher.rml b/assets/launcher.rml
-index 058aa77..abcba7a 100644
+index 058aa77..2a33bce 100644
 --- a/assets/launcher.rml
 +++ b/assets/launcher.rml
-@@ -3,104 +3,385 @@
+@@ -3,104 +3,388 @@
  		<title>Launcher</title>
  		<link type="text/rcss" href="rml.rcss"/>
  		<link type="text/rcss" href="recomp.rcss"/>
@@ -816,6 +816,9 @@ index 058aa77..abcba7a 100644
 +			.rl-btn--exit { border-color: #FF4A4A; color: #FF4A4A; }
 +			.rl-btn--exit:hover, #window:not([mouse-active]) .rl-btn--exit:focus { background-color: #FF4A4A; border-color: #FF4A4A; color: #050B1C; }
 +			.rl-separator { display: block; height: 2dp; margin: 6dp 0dp 18dp; background-color: #1F3D73; }
++			.rl-repo { display: inline-block; margin: 0dp 12dp 0dp 0dp; padding: 0dp 4dp; font-size: 15dp; font-family: "JetBrains Mono"; color: #FFB21A; background-color: transparent; border-width: 0dp; border-bottom-width: 2dp; border-color: #1F3D73; cursor: pointer; }
++			.rl-repo:hover { color: #E8F3FF; border-color: #3CC8FF; }
++			#window:not([mouse-active]) .rl-repo:focus { color: #E8F3FF; border-color: #3CC8FF; }
 +			.rl-version { position: absolute; bottom: 14dp; left: 26dp; right: 26dp; font-size: 15dp; color: #8199BF; text-align: center; }
 +			/* A newer release exists (src/jfg/jfg_update_check.cpp): a warning triangle next to the version number. Hovering it says which
 +			   version; a click opens the release page. */
@@ -1029,7 +1032,7 @@ index 058aa77..abcba7a 100644
 +							<div class="rl-separator"></div>
 +							<div class="rl-btn-shadow"><button id="nav_exit" class="rl-btn rl-btn--exit" onclick="exit_game"
 +								style="nav-up: #nav_about; nav-down: #nav_play;">Exit</button></div>
-+							<div class="rl-version">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click to see what is new and update.</div></div></div>
++							<div class="rl-version"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp')">GitHub</button>v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click to see what is new and update.</div></div></div>
  						</div>
  					</div>
 -					<div class="launcher__content-quadrant"></div>
@@ -3223,7 +3226,7 @@ index d117b72..76acb9c 100644
  };
  
 diff --git a/src/ui/ui_launcher.cpp b/src/ui/ui_launcher.cpp
-index df580ce..11ce13e 100644
+index df580ce..39302c2 100644
 --- a/src/ui/ui_launcher.cpp
 +++ b/src/ui/ui_launcher.cpp
 @@ -7,13 +7,111 @@
@@ -3422,7 +3425,7 @@ index df580ce..11ce13e 100644
      }
      void make_bindings(Rml::Context* context) override {
          Rml::DataModelConstructor constructor = context->CreateDataModel("launcher_model");
-@@ -134,6 +264,75 @@ public:
+@@ -134,6 +264,76 @@ public:
  
          version_string = recomp::get_project_version().to_string();
          constructor.Bind("version_number", &version_string);
@@ -3438,7 +3441,8 @@ index df580ce..11ce13e 100644
 +        constructor.Bind("changelog_dialog", &changelog_dialog);
 +        constructor.Bind("changelog_text", &changelog_text);
 +        constructor.BindEventCallback("show_changelog", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
-+            if (changelog_text.empty()) changelog_text = jfg_changelog_text();
++            // The commits since the last release (from GitHub, when they have arrived) above the changelog shipped with the game.
++            changelog_text = jfg_changelog_commits() + jfg_changelog_text();
 +            model_handle.DirtyVariable("changelog_text");
 +            changelog_dialog = true;
 +            model_handle.DirtyVariable("changelog_dialog");
