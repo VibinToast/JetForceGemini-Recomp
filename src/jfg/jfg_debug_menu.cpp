@@ -1554,9 +1554,6 @@ extern "C" int jfg_refresh_override(void) {
 extern "C" int jfg_widescreen_active(void) {
     static const bool env = std::getenv("JFG_WIDESCREEN") != nullptr; // for tests
     if (!(g.widescreen || env) || g_rdram == nullptr) return 0;
-    // Not while the game is paused: its pause screens (and the planet map) are 4:3 pictures that draw 3D objects beyond their
-    // frame, which would show in the sides, and the sides would keep old pictures.
-    if (rd8(ADDR_pauseMode) != 0) return 0;
     return rd32(ADDR_mainGameMode) == 0 ? 1 : 0;
 }
 
