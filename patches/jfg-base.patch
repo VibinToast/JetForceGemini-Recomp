@@ -749,10 +749,10 @@ index c5eb334..dc34871 100644
              </div>
          </form>
 diff --git a/assets/launcher.rml b/assets/launcher.rml
-index 058aa77..73dfd3a 100644
+index 058aa77..abcba7a 100644
 --- a/assets/launcher.rml
 +++ b/assets/launcher.rml
-@@ -3,104 +3,384 @@
+@@ -3,104 +3,385 @@
  		<title>Launcher</title>
  		<link type="text/rcss" href="rml.rcss"/>
  		<link type="text/rcss" href="recomp.rcss"/>
@@ -837,6 +837,7 @@ index 058aa77..73dfd3a 100644
 +			.rl-modal-sub { position: absolute; top: 62dp; left: 28dp; right: 28dp; font-size: 18dp; line-height: 26dp; color: #E8F3FF; }
 +			.rl-modal-notes { position: absolute; top: 100dp; left: 28dp; right: 28dp; bottom: 214dp; padding: 12dp 14dp; overflow-y: auto; white-space: pre-wrap;
 +				font-size: 15dp; line-height: 22dp; color: #C8D8F0; background-color: #050B1C; border-width: 2dp; border-color: #1F3D73; }
++			.rl-changelogs { margin-top: 22dp; margin-bottom: 8dp; }
 +			.rl-modal-notes.rl-modal-notes--tall { bottom: 100dp; }
 +			.rl-modal-status { position: absolute; bottom: 150dp; left: 28dp; right: 28dp; font-size: 16dp; line-height: 24dp; color: #3CC8FF; }
 +			.rl-modal-status.rl-error { color: #FF4A4A; }
@@ -1081,6 +1082,7 @@ index 058aa77..73dfd3a 100644
 +										<div class="rl-key-row"><div class="rl-key">F7</div><div>Fly camera for screenshots (Visuals has its settings)</div></div>
 +										<div class="rl-key-row"><div class="rl-key">F11 / Alt+Enter</div><div>Fullscreen</div></div>
 +									</div>
++									<div class="rl-action-shadow rl-changelogs"><button id="rl_changelogs" class="rl-action rl-action--outline" data-event-click="show_changelog()" style="nav-left: #nav_play;">Changelogs</button></div>
 +								</div>
 +
 +								<!-- Settings pages: the Select / Esc menu's tabs -->
@@ -1126,7 +1128,6 @@ index 058aa77..73dfd3a 100644
 +													<button class="rl-link" data-event-click="open_url('https://github.com/VibinToast')">GitHub</button>
 +													<button class="rl-link" data-event-click="open_url('https://www.youtube.com/@VibinToast')">YouTube</button>
 +													<button class="rl-link" data-event-click="open_url('https://bsky.app/profile/VibinToast.bsky.social')">Bluesky</button>
-+													<button class="rl-link" data-event-click="show_changelog()">Changelog</button>
 +												</div>
 +											</div></div>
 +										</div>
@@ -1212,7 +1213,7 @@ index 058aa77..73dfd3a 100644
 +					</div>
 +				</div></div></div>
 +				<div class="rl-modal" data-class-rl-on="changelog_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
-+					<div class="rl-modal-title">Changelog</div>
++					<div class="rl-modal-title">Changelogs</div>
 +					<div class="rl-modal-sub">You have v{{version_number}}. Newest changes first.</div>
 +					<div class="rl-modal-notes rl-modal-notes--tall">{{changelog_text}}</div>
 +					<div class="rl-modal-buttons">

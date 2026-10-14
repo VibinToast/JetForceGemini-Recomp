@@ -6,7 +6,7 @@ built and tested, unless marked otherwise.
 ## Unreleased
 
 ### Launcher
-- About > Changelog shows the changes of this version and every earlier one, from the CHANGELOG.md that now ships in
+- Changelogs (bottom of the Play page) shows the changes of this version and every earlier one, from the CHANGELOG.md that now ships in
   `assets/jfg_launcher` (so it also updates with the game and works offline). (`build_windows.bat`, `jfg_update_check.cpp`,
   launcher via `patches/jfg-base.patch`.)
 - The texture pack link points to vibintoast.com/projects/jfg-4k, and the About tab links to Bluesky.
