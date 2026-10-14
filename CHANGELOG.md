@@ -3,6 +3,30 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. Entries under "Unreleased" are in the source but not yet
 built and tested, unless marked otherwise.
 
+## v1.1.1 (2026-10-14)
+
+- Updated release.yml
+- Updated version number
+- package_release asks for the version, writes version.txt and builds the game first
+- Centre the version number with the GitHub link in a three-column row; say when there are no new commits
+- Updated readme
+- Show commits since the last release in Changelogs, add a GitHub link by the version
+- Move the changelog button to the bottom of the Play page and rename it Changelogs
+- Fix the Graphics page's info text floating over the options in the launcher
+- Add a changelog viewer to the launcher's About page
+- Release the sticks when a menu opens, update texture pack link, add Bluesky
+- Update the game from the launcher
+- Ignore the mouse in the game while the Select/Esc menu is open
+- Show a warning triangle in the launcher when a newer release exists
+- Aim the controller directly in boss fights, with the camera following
+- Turn the camera with the aim in boss fights so bosses at the sides stay in view
+- Let the mouse aim 120 degrees either side in boss fights
+- Keep the player on the rail in boss fights with the mouse
+- Keep the mouse turn in boss fights within a cone so the player only strafes
+- Fix the shaking reticle with mouse and keyboard in boss fights
+- Update .gitignore
+- Fix JFG 4K texture pack link in README
+
 ## v1.1.0 (2026-10-14)
 
 - Updated release.yml
