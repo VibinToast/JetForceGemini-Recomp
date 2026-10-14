@@ -1993,13 +1993,12 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     wr16(pressed, (uint16_t)((rd16(pressed) & ~(C_LEFT | C_RIGHT)) | (buttons & ~last & (C_LEFT | C_RIGHT))));
     last = buttons;
     wr16(pad, buttons);
-    // Aim: the right stick is the game's stick (turn and aim).
-    const float sx = std::clamp(rx, -1.0f, 1.0f), sy = std::clamp(ry, -1.0f, 1.0f);
-    wr8(pad + 2, (uint8_t)(int8_t)std::lround(sx * 78.0f));
-    wr8(pad + 3, (uint8_t)(int8_t)std::lround((g.invert_aim_y ? sy : -sy) * 78.0f));
+    // Aim: the right stick and the mouse both move the aim directly (below); the game's own stick is left centred.
     // The mouse does not go through the stick: its movement comes in lumps (none on one tick, a lot on the next), and
     // as a stick deflection that made the reticle jump about and drift back towards the middle of the screen, so the
-    // aim could not be held. It moves the aim directly, by exactly how far the mouse moved.
+    // aim could not be held. It moves the aim directly, by exactly how far the mouse moved. The right stick is
+    // treated the same way (at the rates of the "Keep the reticle centered" aiming, scaled by the aim speed), so the
+    // controller works like the mouse here.
     //
     // In a boss fight the character is on a rail: it faces the boss, never turns, and only steps left and right
     // (C-left / C-right move it sideways relative to where it faces). So the mouse never turns the body - that is held
@@ -2012,21 +2011,35 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     static uint16_t centre = 0;
     static int reticle = 0;
     const uint32_t data = rd32(obj + 0x68);
-    if (jfg_mouse_keyboard_active() != 0 && valid_ptr(data)) {
+    if (valid_ptr(data)) {
         if (obj != last_obj || g_tick_count - last_tick > 3) { last_obj = obj; centre = rd16(obj); reticle = 0; }
-        reticle = std::clamp(reticle - g_mouse_aim_x, -RETICLE_LIMIT, RETICLE_LIMIT);
+        // Right stick as aim movement, with the game's own dead zone and range (joyClamp), as in aim_controls.
+        auto axis = [](float v) {
+            const float a = (std::abs(v) * 78.0f - 6.0f) / 64.0f;
+            return a <= 0.0f ? 0.0f : std::min(a, 1.0f) * (v < 0 ? -1.0f : 1.0f);
+        };
+        constexpr float YAW_RATE = 110.0f / 60.0f * (32768.0f / 180.0f), PITCH_RATE = 80.0f / 60.0f * (32768.0f / 180.0f);
+        const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6), speed = (float)g.aim_speed / 100.0f;
+        const float stick_x = std::clamp(rx, -1.0f, 1.0f), stick_y = std::clamp(ry, -1.0f, 1.0f);
+        const int yaw_step = (int)std::lround(axis(stick_x) * YAW_RATE * frames * speed) + g_mouse_aim_x;
+        // stick up = look up unless "Invert Aim Up/Down" is set; the view pitch value goes down to look up
+        const int pitch_step = (int)std::lround(axis(g.invert_aim_y ? stick_y : -stick_y) * PITCH_RATE * frames * speed) + g_mouse_aim_y;
+        reticle = std::clamp(reticle - yaw_step, -RETICLE_LIMIT, RETICLE_LIMIT);
         wr16(obj, centre);
         wr16(data + PD_BODY_YAW_COPY, centre);
         wr16(data + PD_BODY_YAW, centre);
         for (uint32_t k : { PD_RETICLE_YAW, 0x1DCu, 0x246u }) wr16(data + k, (uint16_t)(int16_t)reticle);
-        const int view = std::clamp((int)(int16_t)rd16(data + PD_VIEW_PITCH) + (int)(int16_t)rd16(data + PD_RETICLE_PITCH) - g_mouse_aim_y, -PITCH_LIMIT, PITCH_LIMIT);
+        const int view = std::clamp((int)(int16_t)rd16(data + PD_VIEW_PITCH) + (int)(int16_t)rd16(data + PD_RETICLE_PITCH) - pitch_step, -PITCH_LIMIT, PITCH_LIMIT);
         wr16(data + PD_VIEW_PITCH, (uint16_t)(int16_t)view);
         wr16(data + PD_RETICLE_PITCH, 0);
         wr8(pad + 2, 0);
         wr8(pad + 3, 0);
         // Past the box the camera turns on the spot, so the boss can be followed to the sides of the arena. It turns
         // about the player's position, never moving the player.
-        g_boss_cam_turn = reticle > RETICLE_BOX ? reticle - RETICLE_BOX : reticle < -RETICLE_BOX ? reticle + RETICLE_BOX : 0;
+        // With "Keep the reticle centered" and a controller the camera follows the whole aim, so the reticle stays in
+        // the middle of the screen.
+        const int box = (!g.aim_centered || jfg_mouse_keyboard_active() != 0) ? RETICLE_BOX : 0;
+        g_boss_cam_turn = reticle > box ? reticle - box : reticle < -box ? reticle + box : 0;
     }
     else {
         g_boss_cam_turn = 0;
