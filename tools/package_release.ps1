@@ -1,5 +1,6 @@
 # Makes dist\JFG-<version>-windows-x64-portable.zip from the bin folder, and uploads it to the GitHub release v<version>
-# if the GitHub CLI (gh) is installed and signed in. Run it through package_release.bat.
+# if the GitHub CLI (gh) is installed and signed in, together with a .sha256 file the launcher's updater checks the download
+# against. Run it through package_release.bat.
 #   package_release.bat            uses the number in version.txt
 #   package_release.bat 1.0.0      uses the number you give
 param([string]$Version = "")
@@ -39,12 +40,18 @@ try {
 } finally { $zip.Dispose() }
 Write-Host "Made $zipPath ($([math]::Round((Get-Item $zipPath).Length / 1MB, 1)) MB)"
 
+# The launcher's updater only installs a download whose SHA-256 matches this file, so it is uploaded with the zip.
+$hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLower()
+$sumPath = "$zipPath.sha256"
+[System.IO.File]::WriteAllText($sumPath, "$hash  $name.zip`n")
+Write-Host "SHA-256: $hash"
+
 if (Get-Command gh -ErrorAction SilentlyContinue) {
     Push-Location $root
     try {
         gh release view "v$Version" *> $null
         if ($LASTEXITCODE -eq 0) {
-            gh release upload "v$Version" $zipPath --clobber
+            gh release upload "v$Version" $zipPath $sumPath --clobber
             if ($LASTEXITCODE -eq 0) { Write-Host "Uploaded to the GitHub release v$Version." }
         } else {
             Write-Host "No GitHub release v$Version yet. Run the Release workflow on GitHub first, then run this again."

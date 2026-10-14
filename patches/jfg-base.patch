@@ -749,10 +749,10 @@ index c5eb334..dc34871 100644
              </div>
          </form>
 diff --git a/assets/launcher.rml b/assets/launcher.rml
-index 058aa77..fefd549 100644
+index 058aa77..347dc79 100644
 --- a/assets/launcher.rml
 +++ b/assets/launcher.rml
-@@ -3,104 +3,331 @@
+@@ -3,104 +3,368 @@
  		<title>Launcher</title>
  		<link type="text/rcss" href="rml.rcss"/>
  		<link type="text/rcss" href="recomp.rcss"/>
@@ -806,7 +806,10 @@ index 058aa77..fefd549 100644
 +				font-family: "Press Start 2P"; font-size: 15dp; line-height: 46dp; text-align: center; text-transform: uppercase;
 +				nav-up: auto; nav-down: auto; nav-left: none; nav-right: none; focus: auto; tab-index: auto; cursor: pointer;
 +				transition: top left background-color color border-color 0.08s linear-in-out; }
-+			.rl-btn:hover { top: -6dp; left: -6dp; border-color: #E8F3FF; }
++			/* The lift on hover is driven by the (stationary) shadow box, not the button itself: a button that moves out from under the
++			   cursor at its edge stops being hovered, moves back, and flickers. */
++			.rl-btn:hover { border-color: #E8F3FF; }
++			.rl-btn-shadow:hover .rl-btn { top: -6dp; left: -6dp; }
 +			.rl-btn.rl-active { background-color: #3CC8FF; color: #050B1C; }
 +			.rl-btn.rl-active:hover { background-color: #1E90E8; border-color: #1E90E8; }
 +			#window:not([mouse-active]) .rl-btn:focus { top: -6dp; left: -6dp; border-color: #E8F3FF; }
@@ -816,13 +819,31 @@ index 058aa77..fefd549 100644
 +			.rl-version { position: absolute; bottom: 14dp; left: 26dp; right: 26dp; font-size: 15dp; color: #8199BF; text-align: center; }
 +			/* A newer release exists (src/jfg/jfg_update_check.cpp): a warning triangle next to the version number. Hovering it says which
 +			   version; a click opens the release page. */
-+			.rl-update { display: inline-block; position: relative; width: 22dp; height: 20dp; margin-left: 10dp; cursor: pointer; }
++			.rl-update { display: none; position: relative; width: 22dp; height: 20dp; margin-left: 10dp; cursor: pointer; }
++			.rl-update.rl-on { display: inline-block; }
 +			.rl-update-tri { position: absolute; top: 0dp; left: 0dp; width: 0dp; height: 0dp; border-left: 11dp #00000000; border-right: 11dp #00000000; border-bottom: 19dp #FFB21A; }
 +			.rl-update:hover .rl-update-tri { border-bottom-color: #FFD36B; }
 +			.rl-update-mark { position: absolute; top: 6dp; left: 0dp; width: 22dp; text-align: center; font-family: "Press Start 2P"; font-size: 11dp; line-height: 13dp; color: #050B1C; }
 +			.rl-update-tip { display: none; position: absolute; bottom: 28dp; left: -120dp; width: 270dp; padding: 8dp 10dp; z-index: 20; text-align: left;
 +				font-size: 13dp; line-height: 19dp; color: #E8F3FF; background-color: #0B1733; border-width: 2dp; border-color: #FFB21A; }
 +			.rl-update:hover .rl-update-tip { display: block; }
++
++			/* Update dialog (opened by the triangle): what is new, the version it updates to, and a confirmation. */
++			.rl-modal { display: none; position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 30; background-color: #050B1CDD; }
++			.rl-modal.rl-on { display: block; }
++			.rl-modal-shadow { position: absolute; top: 56dp; right: 150dp; bottom: 56dp; left: 150dp; background-color: #0A2660; }
++			.rl-modal-box { position: absolute; top: -6dp; right: 6dp; bottom: 6dp; left: -6dp; background-color: #0B1733; border-width: 2dp; border-color: #FFB21A; }
++			.rl-modal-title { position: absolute; top: 22dp; left: 28dp; right: 28dp; font-family: "Press Start 2P"; font-size: 20dp; line-height: 28dp; color: #FFB21A; text-transform: uppercase; }
++			.rl-modal-sub { position: absolute; top: 62dp; left: 28dp; right: 28dp; font-size: 18dp; line-height: 26dp; color: #E8F3FF; }
++			.rl-modal-notes { position: absolute; top: 100dp; left: 28dp; right: 28dp; bottom: 214dp; padding: 12dp 14dp; overflow-y: auto; white-space: pre-wrap;
++				font-size: 15dp; line-height: 22dp; color: #C8D8F0; background-color: #050B1C; border-width: 2dp; border-color: #1F3D73; }
++			.rl-modal-status { position: absolute; bottom: 150dp; left: 28dp; right: 28dp; font-size: 16dp; line-height: 24dp; color: #3CC8FF; }
++			.rl-modal-status.rl-error { color: #FF4A4A; }
++			.rl-progress { position: absolute; bottom: 128dp; left: 28dp; right: 28dp; height: 14dp; background-color: #050B1C; border-width: 2dp; border-color: #1F3D73; }
++			.rl-progress-bar { display: block; height: 100%; background-color: #3CC8FF; }
++			.rl-modal-ask { position: absolute; bottom: 92dp; left: 28dp; right: 28dp; font-size: 15dp; line-height: 22dp; color: #8199BF; }
++			.rl-modal-ask.rl-warn { color: #FFB21A; }
++			.rl-modal-buttons { position: absolute; bottom: 14dp; left: 24dp; right: 28dp; height: 70dp; }
 +
 +			/* Main panel */
 +			.rl-main { top: 34dp; right: 46dp; bottom: 46dp; left: 524dp; }
@@ -852,7 +873,8 @@ index 058aa77..fefd549 100644
 +			.rl-action { display: inline-block; position: relative; top: -4dp; left: -4dp; padding: 14dp 22dp; border-width: 2dp; border-color: #3CC8FF;
 +				background-color: #3CC8FF; color: #050B1C; font-family: "Press Start 2P"; font-size: 15dp; line-height: 18dp; text-transform: uppercase;
 +				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; focus: auto; tab-index: auto; cursor: pointer; }
-+			.rl-action:hover { top: -6dp; left: -6dp; background-color: #1E90E8; border-color: #1E90E8; }
++			.rl-action:hover { background-color: #1E90E8; border-color: #1E90E8; }
++			.rl-action-shadow:hover .rl-action { top: -6dp; left: -6dp; }
 +			#window:not([mouse-active]) .rl-action:focus { top: -6dp; left: -6dp; border-color: #E8F3FF; }
 +			.rl-action--outline { background-color: #050B1C; color: #3CC8FF; }
 +			.rl-action--outline:hover { background-color: #0A2660; color: #3CC8FF; }
@@ -861,7 +883,8 @@ index 058aa77..fefd549 100644
 +				color: #2A4776; font-family: "Press Start 2P"; font-size: 24dp; line-height: 92dp; text-align: center; text-transform: uppercase;
 +				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: none; focus: auto; tab-index: auto; }
 +			.rl-start.rl-ready { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; cursor: pointer; }
-+			.rl-start.rl-ready:hover { top: -8dp; left: -8dp; background-color: #1E90E8; border-color: #1E90E8; }
++			.rl-start.rl-ready:hover { background-color: #1E90E8; border-color: #1E90E8; }
++			.rl-start-shadow:hover .rl-start.rl-ready { top: -8dp; left: -8dp; }
 +			#window:not([mouse-active]) .rl-start.rl-ready:focus { top: -8dp; left: -8dp; border-color: #E8F3FF; }
 +			.rl-start-note { display: block; margin-top: 12dp; font-size: 17dp; text-align: center; color: #8199BF; }
 +			.rl-keys { display: block; margin-top: 30dp; }
@@ -999,7 +1022,7 @@ index 058aa77..fefd549 100644
 +							<div class="rl-separator"></div>
 +							<div class="rl-btn-shadow"><button id="nav_exit" class="rl-btn rl-btn--exit" onclick="exit_game"
 +								style="nav-up: #nav_about; nav-down: #nav_play;">Exit</button></div>
-+							<div class="rl-version">v{{version_number}}<div class="rl-update" data-if="update_available" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp/releases/latest')"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click to open the download page.</div></div></div>
++							<div class="rl-version">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click to see what is new and update.</div></div></div>
  						</div>
  					</div>
 -					<div class="launcher__content-quadrant"></div>
@@ -1166,6 +1189,20 @@ index 058aa77..fefd549 100644
 -				<div class="bottom-left">
 -					<label>v{{version_number}}</label>
  				</div>
++				<div class="rl-modal" data-class-rl-on="update_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
++					<div class="rl-modal-title">Update available</div>
++					<div class="rl-modal-sub">v{{version_number}} &gt; v{{update_version}}. What is new:</div>
++					<div class="rl-modal-notes">{{update_changelog}}</div>
++					<div class="rl-modal-status" data-if="update_stage != 0" data-class-rl-error="update_stage == 2">{{update_status}}</div>
++					<div class="rl-progress" data-if="update_stage == 1"><div class="rl-progress-bar" data-style-width="update_percent + '%'"></div></div>
++					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install">Update to v{{update_version}}? The game restarts when it is done. Your saves and settings are kept.</div>
++					<div class="rl-modal-ask rl-warn" data-if="update_stage == 0 &amp;&amp; !update_can_install">{{update_unavailable}}</div>
++					<div class="rl-modal-buttons">
++						<div class="rl-action-shadow" data-if="update_stage == 0"><button id="rl_update_go" class="rl-action" data-event-click="update_install()">Update now</button></div>
++						<div class="rl-action-shadow" data-if="update_stage == 0 || update_stage == 2"><button class="rl-action rl-action--outline" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp/releases/latest')">Release page</button></div>
++						<div class="rl-action-shadow" data-if="update_stage != 1 &amp;&amp; update_stage != 3"><button id="rl_update_cancel" class="rl-action rl-action--outline" data-event-click="update_close()">{{update_stage == 2 ? 'Close' : 'Cancel'}}</button></div>
++					</div>
++				</div></div></div>
 +				<div class="rl-scanlines"></div>
  			</div>
  		</div>
@@ -3157,10 +3194,10 @@ index d117b72..76acb9c 100644
  };
  
 diff --git a/src/ui/ui_launcher.cpp b/src/ui/ui_launcher.cpp
-index df580ce..af1df79 100644
+index df580ce..e4677d5 100644
 --- a/src/ui/ui_launcher.cpp
 +++ b/src/ui/ui_launcher.cpp
-@@ -7,13 +7,89 @@
+@@ -7,13 +7,110 @@
  #include "librecomp/mods.hpp"
  #include "ultramodern/ultramodern.hpp"
  #include "RmlUi/Core.h"
@@ -3171,10 +3208,12 @@ index df580ce..af1df79 100644
 +#include <iterator>
  
  static std::string version_string;
-+static bool update_available = false;  // a newer release exists (src/jfg/jfg_update_check.cpp): the launcher shows a warning triangle
-+static std::string update_version;
-+void jfg_update_check_start(const std::string& current);
-+bool jfg_update_available(std::string& version);
++#include "jfg/jfg_update_check.h"
++// A newer release exists (src/jfg/jfg_update_check.cpp): the launcher shows a warning triangle next to the version; clicking it
++// opens a dialog with what is new and a confirmation, and the update is then downloaded and installed.
++static bool update_available = false, update_dialog = false, update_can_install = false, update_restarting = false;
++static std::string update_version, update_changelog, update_status, update_unavailable;
++static int update_stage = 0, update_percent = 0;
  
  Rml::DataModelHandle model_handle;
  bool rom_valid = false;
@@ -3229,12 +3268,31 @@ index df580ce..af1df79 100644
 +// Called every UI frame (ui_state.cpp): steps the VibinToast icon while the About page is shown.
 +void jfg_launcher_ui_tick() {
 +    if (model_handle && !update_available) {
-+        std::string latest;
-+        if (jfg_update_available(latest)) {
++        JfgUpdateInfo info;
++        if (jfg_update_available(info)) {
 +            update_available = true;
-+            update_version = latest;
++            update_version = info.version;
++            update_changelog = info.changelog;
++            update_can_install = info.can_install;
++            update_unavailable = info.unavailable;
 +            model_handle.DirtyVariable("update_available");
 +            model_handle.DirtyVariable("update_version");
++            model_handle.DirtyVariable("update_changelog");
++            model_handle.DirtyVariable("update_can_install");
++            model_handle.DirtyVariable("update_unavailable");
++        }
++    }
++    if (model_handle && update_dialog) {
++        const JfgUpdateProgress progress = jfg_update_progress();
++        if (progress.stage != update_stage) { update_stage = progress.stage; model_handle.DirtyVariable("update_stage"); }
++        if (progress.percent != update_percent) { update_percent = progress.percent; model_handle.DirtyVariable("update_percent"); }
++        if (progress.text != update_status) { update_status = progress.text; model_handle.DirtyVariable("update_status"); }
++        if (progress.stage == 3 && !update_restarting) {
++            // Installed: start the new build and leave. (Settings are saved first, like leaving a settings page.)
++            update_restarting = true;
++            jfg_launcher_commit_settings();
++            jfg_update_restart();
++            ultramodern::quit();
 +        }
 +    }
 +    if (!model_handle || launcher_page != "about") return;
@@ -3250,7 +3308,7 @@ index df580ce..af1df79 100644
  extern std::vector<recomp::GameEntry> supported_games;
  
  void open_rom_select_dialog() {
-@@ -24,6 +100,7 @@ void open_rom_select_dialog() {
+@@ -24,6 +121,7 @@ void open_rom_select_dialog() {
                  case recomp::RomValidationError::Good:
                      rom_valid = true;
                      model_handle.DirtyVariable("rom_valid");
@@ -3258,7 +3316,7 @@ index df580ce..af1df79 100644
                      break;
                  case recomp::RomValidationError::FailedToOpen:
                      recompui::message_box("Failed to open ROM file.");
-@@ -39,7 +116,7 @@ void open_rom_select_dialog() {
+@@ -39,7 +137,7 @@ void open_rom_select_dialog() {
                      break;
                  case recomp::RomValidationError::IncorrectVersion:
                      recompui::message_box(
@@ -3267,7 +3325,7 @@ index df580ce..af1df79 100644
                      break;
                  case recomp::RomValidationError::OtherError:
                      recompui::message_box("An unknown error has occurred.");
-@@ -51,15 +128,16 @@ void open_rom_select_dialog() {
+@@ -51,15 +149,16 @@ void open_rom_select_dialog() {
  
  void select_rom() {
      recompui::open_info_prompt("Recomp Setup",
@@ -3287,7 +3345,7 @@ index df580ce..af1df79 100644
      recomp::start_game(supported_games[0].game_id);
      recompui::hide_all_contexts();
  }
-@@ -81,6 +159,10 @@ public:
+@@ -81,6 +180,10 @@ public:
          rom_valid = recomp::is_rom_valid(supported_games[0].game_id);
      }
      void load_document() override {
@@ -3298,7 +3356,7 @@ index df580ce..af1df79 100644
  		launcher_context = recompui::create_context(dino::runtime::get_asset_path("launcher.rml"));
      }
      void register_events(recompui::UiEventListenerInstancer& listener) override {
-@@ -123,9 +205,22 @@ public:
+@@ -123,9 +226,30 @@ public:
          );
          recompui::register_event(listener, "exit_game",
              [](const std::string& param, Rml::Event& event) {
@@ -3312,6 +3370,14 @@ index df580ce..af1df79 100644
 +                if (event.GetId() != Rml::EventId::Keydown || recompui::is_prompt_open()) return;
 +                const auto key = event.GetParameter<Rml::Input::KeyIdentifier>("key_identifier", Rml::Input::KeyIdentifier::KI_UNKNOWN);
 +                if (key != Rml::Input::KeyIdentifier::KI_ESCAPE) return;
++                if (update_dialog) { // Esc closes the update dialog (not while it is installing)
++                    if (update_stage != 1 && update_stage != 3) {
++                        update_dialog = false;
++                        jfg_update_reset();
++                        model_handle.DirtyVariable("update_dialog");
++                    }
++                    return;
++                }
 +                Rml::Element* target = event.GetTargetElement();
 +                Rml::ElementDocument* doc = target ? target->GetOwnerDocument() : nullptr;
 +                if (doc == nullptr) return;
@@ -3321,12 +3387,45 @@ index df580ce..af1df79 100644
      }
      void make_bindings(Rml::Context* context) override {
          Rml::DataModelConstructor constructor = context->CreateDataModel("launcher_model");
-@@ -134,6 +229,30 @@ public:
+@@ -134,6 +258,63 @@ public:
  
          version_string = recomp::get_project_version().to_string();
          constructor.Bind("version_number", &version_string);
 +        constructor.Bind("update_available", &update_available);
 +        constructor.Bind("update_version", &update_version);
++        constructor.Bind("update_dialog", &update_dialog);
++        constructor.Bind("update_changelog", &update_changelog);
++        constructor.Bind("update_can_install", &update_can_install);
++        constructor.Bind("update_unavailable", &update_unavailable);
++        constructor.Bind("update_stage", &update_stage);
++        constructor.Bind("update_percent", &update_percent);
++        constructor.Bind("update_status", &update_status);
++        constructor.BindEventCallback("show_update", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
++            jfg_update_reset();
++            update_stage = 0;
++            update_status.clear();
++            update_dialog = true;
++            model_handle.DirtyVariable("update_dialog");
++            model_handle.DirtyVariable("update_stage");
++            model_handle.DirtyVariable("update_status");
++        });
++        constructor.BindEventCallback("update_close", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
++            if (update_stage == 1 || update_stage == 3) return;
++            update_dialog = false;
++            jfg_update_reset();
++            model_handle.DirtyVariable("update_dialog");
++        });
++        constructor.BindEventCallback("update_install", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
++            if (update_stage != 0) return;
++            if (!update_can_install) { jfg_update_fail(update_unavailable); return; } // the poll in jfg_launcher_ui_tick shows the message
++            jfg_update_install();
++            update_stage = 1;
++            update_percent = 0;
++            update_status = "Starting...";
++            model_handle.DirtyVariable("update_stage");
++            model_handle.DirtyVariable("update_percent");
++            model_handle.DirtyVariable("update_status");
++        });
 +        jfg_update_check_start(version_string);
 +
 +        // JFG PORT: the launcher's pages (see the top of this file).

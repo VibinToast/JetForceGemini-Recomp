@@ -6,9 +6,13 @@ built and tested, unless marked otherwise.
 ## Unreleased
 
 ### Launcher
-- The launcher checks GitHub for a newer release when it opens. If there is one, a warning triangle appears next to the
-  version number; hovering it shows the new version and clicking it opens the release page. (`src/jfg/jfg_update_check.cpp`,
-  `ui_launcher.cpp` and `launcher.rml` via `patches/jfg-base.patch`.)
+- Update from the launcher: a warning triangle next to the version number appears when GitHub has a newer release.
+  Clicking it shows what changed since this build and asks to update (or to open the release page). The zip is
+  downloaded from the release, checked against the SHA-256 GitHub lists for it, unpacked, swapped in (the running exe
+  and DLLs are renamed to `.old`, with a rollback if anything fails) and the game restarts. Saves, settings, texture
+  packs and mods are not touched. Releases need the portable zip attached (`tools/package_release.bat`).
+  (`src/jfg/jfg_update_check.cpp`, `.h`, launcher via `patches/jfg-base.patch`.)
+- Launcher buttons no longer flicker when the cursor is on their edge.
 
 ### Fixes
 - Mouse and keyboard: while the Select / Esc menu is open the mouse no longer turns the camera or aim, or changes weapon, in the
