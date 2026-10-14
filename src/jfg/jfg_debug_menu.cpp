@@ -51,6 +51,7 @@ extern std::atomic<int> rt64_jfg_ssao;            // lib/rt64/src/render/rt64_fr
 extern std::atomic<float> rt64_jfg_ssao_strength;
 extern std::atomic<float> rt64_jfg_ssao_radius;
 extern std::atomic<int> rt64_jfg_bloom;
+extern std::atomic<int> rt64_jfg_paused;
 extern std::atomic<float> rt64_jfg_bloom_intensity;
 extern std::atomic<float> rt64_jfg_bloom_threshold;
 extern std::atomic<float> rt64_jfg_bloom_radius;
@@ -1553,6 +1554,8 @@ extern "C" int jfg_refresh_override(void) {
 // 4:3 overlays (the title screen's oval), and the uncovered sides look broken.
 extern "C" int jfg_widescreen_active(void) {
     static const bool env = std::getenv("JFG_WIDESCREEN") != nullptr; // for tests
+    // The renderer keeps the sides of a widescreen picture empty while the pause screen is up (see FramebufferRenderer).
+    rt64_jfg_paused.store((g_rdram != nullptr && rd8(ADDR_pauseMode) != 0) ? 1 : 0, std::memory_order_relaxed);
     if (!(g.widescreen || env) || g_rdram == nullptr) return 0;
     return rd32(ADDR_mainGameMode) == 0 ? 1 : 0;
 }
