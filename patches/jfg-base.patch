@@ -749,10 +749,10 @@ index c5eb334..dc34871 100644
              </div>
          </form>
 diff --git a/assets/launcher.rml b/assets/launcher.rml
-index 058aa77..672ac99 100644
+index 058aa77..73dfd3a 100644
 --- a/assets/launcher.rml
 +++ b/assets/launcher.rml
-@@ -3,104 +3,379 @@
+@@ -3,104 +3,384 @@
  		<title>Launcher</title>
  		<link type="text/rcss" href="rml.rcss"/>
  		<link type="text/rcss" href="recomp.rcss"/>
@@ -932,6 +932,11 @@ index 058aa77..672ac99 100644
 +			.rl-page .jfg-note { color: #3CC8FF; }
 +			.rl-page .config__wrapper p { font-family: "JetBrains Mono"; font-size: 18dp; line-height: 27dp; color: #E8F3FF; }
 +			.rl-page .config__wrapper p b, .rl-page .config__wrapper p i { color: #3CC8FF; }
++			/* The Graphics page's info text (config__wrapper_scroll) is position: fixed in the game's own menu, which here floated it to
++			   the top right of the window over the options: make it a box beside the options like the other pages. */
++			.rl-page .config__wrapper_scroll, .rl-page .config__wrapper_scroll:last-child { position: relative; margin-left: 18dp; margin-right: 0dp; width: auto; flex: 1 1 100%; height: auto; padding: 16dp; overflow-y: auto; background-color: rgba(3, 8, 22, 0.78); border-radius: 0dp; border-width: 2dp; border-color: #1F3D73; text-align: left; }
++			.rl-page .config__wrapper_scroll p { font-family: "JetBrains Mono"; font-size: 18dp; line-height: 27dp; color: #E8F3FF; }
++			.rl-page .config__wrapper_scroll p b, .rl-page .config__wrapper_scroll p i { color: #3CC8FF; }
 +			.rl-page .button { border-radius: 0dp; border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF;
 +				font-family: "JetBrains Mono"; font-weight: bold; font-size: 19dp; letter-spacing: 1dp; padding: 16dp 20dp; }
 +			.rl-page .button:hover, .rl-page .button:focus { background-color: #0A2660; border-color: #E8F3FF; color: #E8F3FF; }

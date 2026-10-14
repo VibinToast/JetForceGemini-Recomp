@@ -19,6 +19,7 @@ built and tested, unless marked otherwise.
 - Launcher buttons no longer flicker when the cursor is on their edge.
 
 ### Fixes
+- Launcher, Graphics page: the info text is a box beside the options again instead of floating over them at the top right.
 - Opening the Select / Esc menu while moving no longer leaves the character walking: the sticks and the jump button are
   released as if the buttons had come up. (`src/jfg/jfg_debug_menu.cpp`, `controls.cpp` via `patches/jfg-base.patch`.)
 - Mouse and keyboard: while the Select / Esc menu is open the mouse no longer turns the camera or aim, or changes weapon, in the
