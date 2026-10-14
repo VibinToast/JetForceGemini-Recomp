@@ -1636,6 +1636,9 @@ struct CameraControl {
 uint32_t g_tick_count = 0;     // jfg_camera_controls calls
 uint32_t g_boss_seen_tick = 0; // g_tick_count when the boss control last ran
 bool boss_control_active() { return g_boss_seen_tick != 0 && g_tick_count - g_boss_seen_tick <= 2; }
+// Boss fights with the mouse: how far the camera is turned in place (16-bit angle units: the aim's yaw offset beyond the box, same sign),
+// set by boss_controls and applied by jfg_camera_override. 0 when not in use.
+int g_boss_cam_turn = 0;
 
 bool dual_stick_wanted() {
     static const bool env = std::getenv("JFG_DUAL_STICK") != nullptr; // for tests
@@ -2002,6 +2005,7 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     // (C-left / C-right move it sideways relative to where it faces). So the mouse never turns the body - that is held
     // at the direction it had when the fight began (taken again whenever the boss control starts running anew). Left
     // and right move the reticle's offset from that direction instead, up and down tilt the view.
+    constexpr int RETICLE_BOX = 0x1C71;   // 40 degrees: the aim may go this far to either side before the camera turns with it
     constexpr int RETICLE_LIMIT = 0x5555; // 120 degrees either side, as 16-bit angle units (some bosses move round the arena)
     constexpr int PITCH_LIMIT = 0x2AAA;
     static uint32_t last_obj = 0, last_tick = 0;
@@ -2020,6 +2024,12 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
         wr16(data + PD_RETICLE_PITCH, 0);
         wr8(pad + 2, 0);
         wr8(pad + 3, 0);
+        // Past the box the camera turns on the spot, so the boss can be followed to the sides of the arena. It turns
+        // about the player's position, never moving the player.
+        g_boss_cam_turn = reticle > RETICLE_BOX ? reticle - RETICLE_BOX : reticle < -RETICLE_BOX ? reticle + RETICLE_BOX : 0;
+    }
+    else {
+        g_boss_cam_turn = 0;
     }
     last_tick = g_tick_count;
 }
@@ -2272,6 +2282,15 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         wr16(cam + 0, angle_to_s16(-g_fly.heading));
         wr16(cam + 2, angle_to_s16(g_fly.pitch));
         wr16(cam + 4, 0);
+        return;
+    }
+    if (g_boss_cam_turn != 0 && boss_control_active() && !g_cam.overridden) {
+        // Boss fight, mouse and keyboard: the game's camera, turned on the spot by how far the aim has gone to the side.
+        const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
+        for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
+        g_cam.camera_addr = cam;
+        g_cam.overridden = true;
+        wr16(cam + 0, (uint16_t)(rd16(cam + 0) - g_boss_cam_turn)); // camera angle = minus the heading it looks along
         return;
     }
     if ((!g_cam.active && !g_cam.shoulder) || g_cam.overridden) return;

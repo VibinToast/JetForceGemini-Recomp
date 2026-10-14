@@ -8,7 +8,8 @@ built and tested, unless marked otherwise.
 ### Fixes
 - Mouse and keyboard in boss fights: the mouse no longer goes through the game's stick, which made the reticle shake and
   drift. It moves the aim directly, and the character never turns: it stays on the rail, facing the boss, and only
-  steps left and right. (`src/jfg/jfg_debug_menu.cpp`, `boss_controls`.)
+  steps left and right. Once the aim is more than 40 degrees to a side the camera turns on the spot with it, so a boss
+  at the sides of the arena can be followed. (`src/jfg/jfg_debug_menu.cpp`, `boss_controls`, `jfg_camera_override`.)
 
 ## v1.0.0 (2026-10-13)
 
