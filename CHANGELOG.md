@@ -7,7 +7,8 @@ built and tested, unless marked otherwise.
 
 ### Fixes
 - Mouse and keyboard in boss fights: the mouse no longer goes through the game's stick, which made the reticle shake and
-  drift. It turns the body and the aim directly, as in normal aiming. (`src/jfg/jfg_debug_menu.cpp`, `boss_controls`.)
+  drift. It turns the body and the aim directly, as in normal aiming, kept within 40 degrees of the direction the character faced when the fight began, so it only
+  strafes left and right. (`src/jfg/jfg_debug_menu.cpp`, `boss_controls`.)
 
 ## v1.0.0 (2026-10-13)
 

@@ -1999,7 +1999,27 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     // as a stick deflection that made the reticle jump about and drift back towards the middle of the screen, so the
     // aim could not be held. As in normal aiming (aim_controls) it turns the body and the view pitch directly, by
     // exactly how far the mouse moved.
-    if (jfg_mouse_keyboard_active() != 0 && valid_ptr(rd32(obj + 0x68))) aim_controls(obj, pad, frames);
+    //
+    // In a boss fight the character only faces the boss and steps left and right (C-left / C-right move it sideways
+    // relative to where it faces), and the game's own turning is limited. Turning directly has no such limit, so the
+    // character could turn right round and walk anywhere in the arena. The facing is therefore kept within BOSS_TURN_LIMIT
+    // of the direction it had when the fight began (taken again whenever the boss control starts running anew).
+    constexpr int BOSS_TURN_LIMIT = 0x1C71; // 40 degrees either side, as 16-bit angle units
+    static uint32_t last_obj = 0, last_tick = 0;
+    static uint16_t centre = 0;
+    const uint32_t data = rd32(obj + 0x68);
+    if (jfg_mouse_keyboard_active() != 0 && valid_ptr(data)) {
+        if (obj != last_obj || g_tick_count - last_tick > 3) { last_obj = obj; centre = rd16(obj); }
+        aim_controls(obj, pad, frames);
+        const int offset = (int)(int16_t)(uint16_t)(rd16(obj) - centre);
+        if (offset > BOSS_TURN_LIMIT || offset < -BOSS_TURN_LIMIT) {
+            const uint16_t body = (uint16_t)(centre + std::clamp(offset, -BOSS_TURN_LIMIT, BOSS_TURN_LIMIT));
+            wr16(obj, body);
+            wr16(data + PD_BODY_YAW_COPY, body);
+            wr16(data + PD_BODY_YAW, body);
+        }
+    }
+    last_tick = g_tick_count;
 }
 
 // Tests: JFG_DEBUG_PLAYER=<ticks> logs the player's state every that many ticks.
