@@ -1,0 +1,34 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "Jet Force Gemini",
+  "system": "N64",
+  "type": "recomp",
+  "original": {
+    "region": "US",
+    "sha1": "493ced9008dbe932d6e91179b68e8630cf23a023"
+  },
+  "project": "JFG Recomp",
+  "status": "in-progress",
+  "targets": [
+    "Windows"
+  ],
+  "toolchain": "N64recomp",
+  "approach": "Static recompilation of the N64 binary with N64Recomp, using symbols exported from a matching decompilation.",
+  "maintainers": [
+    {
+      "name": "VibinToast",
+      "link": "https://github.com/VibinToast"
+    }
+  ],
+  "help": [
+    "Modding support",
+    "Testing and bug reports"
+  ],
+  "tags": [
+    "n64",
+    "rare",
+    "recompilation",
+    "modding"
+  ],
+  "notes": "Static recompilation of Jet Force Gemini (US). Modding support is planned. Symbols come from the companion Jet Force Gemini decompilation project."
+}
