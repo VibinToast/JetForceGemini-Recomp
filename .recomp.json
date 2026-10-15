@@ -1,14 +1,15 @@
 {
   "$schema": "https://recomp.fyi/schema/v1.json",
   "game": "Jet Force Gemini",
+  "wikidata": "Q1688483",
   "system": "N64",
   "type": "recomp",
+  "status": "playable",
   "original": {
     "region": "US",
     "sha1": "493ced9008dbe932d6e91179b68e8630cf23a023"
   },
   "project": "JFG Recomp",
-  "status": "playable",
   "targets": [
     "Windows"
   ],
@@ -19,10 +20,6 @@
       "name": "VibinToast",
       "link": "https://github.com/VibinToast"
     }
-  ],
-  "help": [
-    "Modding support",
-    "Testing and bug reports"
   ],
   "tags": [
     "n64",
