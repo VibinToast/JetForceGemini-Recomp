@@ -3,6 +3,10 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. Entries under "Unreleased" are in the source but not yet
 built and tested, unless marked otherwise.
 
+## v1.1.3 (2026-10-15)
+
+- Dual-stick camera: keep the camera out of walls with the game's own wall check
+
 ## v1.1.2 (2026-10-14)
 
 - Keep the widescreen sides empty while paused instead of switching the aspect
