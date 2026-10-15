@@ -1,9 +1,11 @@
 # Jet Force Gemini: Recompiled
 
+![Recomp Banner](images/jfg-logo-recomp-transparent.png)
+
 A native 100% playable PC port of Jet Force Gemini (N64, US) for Windows and Linux, made by static recompilation. No emulator:
 the game's code is translated from your ROM and compiled for your PC.
 
-Current Progress is quality of life features.
+Current Progress: Got mostly everything I want.
 
 **No game code or assets are included.** You need your own ROM.
 
@@ -14,50 +16,36 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 
 ## Features
 
-**Launcher**
-- Launcher in Jet Force Gemini colours with Play, Profiles, Gameplay, Visuals, Graphics, Sound, Controls,
-  Stick & Rumble, Texture Packs and About pages. Works with a controller.
-
-**Profiles**
-- Built-in profiles: Default (the original game), Modern, Modern and Balanced (Modern with rebalanced weapons)
-  and Extreme.
-- Your own profiles: save, switch and delete them.
-
 **Controls**
-- Dual-stick controls with a camera-relative left stick, a free camera and a modern button layout.
 - Mouse and keyboard controls.
+- Dual-stick controls with a camera-relative left stick and a modern button layout.
 - Over-the-shoulder aim with a centred reticle, and adjustable aim speed.
-- Jump while aiming.
-- Sniper rifle with a fixed zoom, so you can walk while scoped.
-- Dual-stick and mouse-and-keyboard controls in boss fights.
-- Adjustable movement speed and diagonal boost, plus camera, mouse and invert options.
+- Adjustable movement speed
 - Rumble Pak support, and rebindable controls.
-- Races and Floyd missions keep the original controls automatically.
 
 **Gameplay**
-- START skips cutscenes, the logo screens and the story intro.
-- Adjustable damage taken, jetpack refuel speed and Vela's dive speed.
-- A Weapons editor for each weapon: damage, fire rate, speed, range, spread, throw delay, bolt size, charge speed
-  and mine limit. Faster throws also speed up the throw animation.
+- Skips cutscenes
+- A Weapons editor for each weapon
 - No blood option.
+- Cheats (Skip Tribals yay!)
 
 **Visuals**
+- HD Texture Pack
 - Widescreen.
-- Ambient occlusion (SSAO) and bloom, each with sliders.
+- Ambient occlusion (SSAO) and bloom.
 - Disable LOD and draw distant objects.
-- Fly camera for screenshots (F7), which can freeze the world and hide the HUD.
+- Fly camera for screenshots (F7).
 - On-screen FPS, level and texture pack.
 
 **Texture packs**
-- The JFG 4K texture pack is a separate download. See
+- The JFG HD texture pack is a separate download. See
   [vibintoast.com/projects/jfg-4k](https://vibintoast.com/projects/jfg-4k) for more info.
 - Texture dumping, all in one folder or one folder per level.
 - HD texture packs, picked from a list and switched in-game with F6. A pack is a folder in `bin/texture_packs/<name>`
   or a packed `.rtz` file (a zip with `rt64.json` at its root) in `bin/texture_packs/`.
 - A `.rtz` pack can also go in `bin/mods/`. It is then loaded as a mod, turned on by default, and can be switched
   on and off and reordered in the Mods tab of the settings menu (Select / Esc).
-- Helper scripts in `tools/textures` for collecting newly dumped textures, converting a pack to DDS and packing it
-  into a `.rtz` file.
+
 - To make your own texture pack, see [docs/TEXTURE_PACKS.md](docs/TEXTURE_PACKS.md).
 
 **Tools (F10 toolbar)**
