@@ -216,6 +216,13 @@ func = "camSetFOV"
 before_vram = 0x8003F870
 text = "{ float jfg_fov(uint8_t*, float, uint32_t); ctx->f12.fl = jfg_fov(rdram, ctx->f12.fl, (uint32_t)ctx->r15); }"
 
+# Fog options (src/jfg/jfg_debug_menu.cpp): func_8001BF9C (src/track.c) right after trackGetFog returns, before the fog is
+# put in the display list. $sp = its frame (near s16 at +0x3E, far s16 at +0x3C), which jfg_game_fog may rewrite.
+[[patches.hook]]
+func = "func_8001BF9C_1CB9C"
+before_vram = 0x8001BFD4
+text = "{ void jfg_game_fog(uint8_t*, uint32_t); jfg_game_fog(rdram, (uint32_t)ctx->r29); }"
+
 # Movement speed options (src/jfg/jfg_debug_menu.cpp): objMoveXYZ(object, dx, dy, dz) moves an object with collision;
 # for the player's object the horizontal step is scaled.
 [[patches.hook]]

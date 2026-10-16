@@ -1,12 +1,15 @@
 diff -ruN a/CMakeLists.txt b/CMakeLists.txt
---- a/CMakeLists.txt	2026-10-08 23:27:53.989492667 -0500
-+++ b/CMakeLists.txt	2026-10-08 17:44:28.606604735 -0500
-@@ -523,6 +523,12 @@
+--- a/CMakeLists.txt	2026-10-16 15:14:11.688566000 -0500
++++ b/CMakeLists.txt	2026-10-16 15:14:11.712666300 -0500
+@@ -523,6 +523,15 @@
  build_compute_shader(rt64 "src/shaders/IdleCS.hlsl")
  build_compute_shader(rt64 "src/shaders/LuminanceHistogramCS.hlsl")
  build_pixel_shader(  rt64 "src/shaders/PostBlendDitherNoisePS.hlsl" "src/shaders/PostBlendDitherNoiseAddPS.hlsl" "-D ADD_MODE")
 +build_pixel_shader(  rt64 "src/shaders/SsaoPS.hlsl")
 +build_pixel_shader(  rt64 "src/shaders/SsaoPS.hlsl" "src/shaders/SsaoPSMS.hlsl" "-D MULTISAMPLING")
++build_pixel_shader(  rt64 "src/shaders/FogPS.hlsl")
++build_pixel_shader(  rt64 "src/shaders/FogPS.hlsl" "src/shaders/FogPSMS.hlsl" "-D MULTISAMPLING")
++build_pixel_shader(  rt64 "src/shaders/VignettePS.hlsl")
 +build_pixel_shader(  rt64 "src/shaders/BloomPS.hlsl" "src/shaders/BloomExtractPS.hlsl" "-D BLOOM_EXTRACT")
 +build_pixel_shader(  rt64 "src/shaders/BloomPS.hlsl" "src/shaders/BloomExtractPSMS.hlsl" "-D BLOOM_EXTRACT" "-D MULTISAMPLING")
 +build_pixel_shader(  rt64 "src/shaders/BloomPS.hlsl" "src/shaders/BloomBlurPS.hlsl" "-D BLOOM_BLUR")
@@ -810,8 +813,8 @@ diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
      }
  
 diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:45:00.890333859 +0000
-+++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-14 20:45:00.901333858 +0000
+--- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-16 15:30:40.238336400 -0500
++++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-16 15:30:40.241336700 -0500
 @@ -4,7 +4,11 @@
  
  #include "rt64_framebuffer_renderer.h"
@@ -824,7 +827,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
  
  #include "common/rt64_elapsed_timer.h"
  #include "common/rt64_math.h"
-@@ -49,6 +53,16 @@
+@@ -49,6 +53,28 @@
      };
  };
  
@@ -837,11 +840,23 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +std::atomic<float> rt64_jfg_bloom_threshold{ 0.7f };
 +std::atomic<float> rt64_jfg_bloom_radius{ 6.0f };
 +std::atomic<int> rt64_jfg_paused{ 0 }; // 1 while the game's pause screen is up (set by the game side)
++std::atomic<float> rt64_jfg_fov_tan{ 0.0f }; // tan(half the game's vertical field of view), 0 = not known yet (SsaoPS.hlsl)
++std::atomic<int> rt64_jfg_fog{ 0 };            // depth-based fog (FogPS.hlsl), experimental
++std::atomic<int> rt64_jfg_fog_blocked{ 0 };    // 1 while the game's own fog is within the far plane (set by the game side)
++std::atomic<uint32_t> rt64_jfg_fog_drawn{ 0 };     // scenes the depth-based fog was drawn in (for the F9 menu's status line)
++std::atomic<uint32_t> rt64_jfg_fog_game_scenes{ 0 }; // world scenes whose depth-writing draws blend with the game's fog colour
++std::atomic<float> rt64_jfg_fog_start{ 1500.0f };
++std::atomic<float> rt64_jfg_fog_end{ 9000.0f };
++std::atomic<float> rt64_jfg_fog_density{ 0.5f };
++std::atomic<uint32_t> rt64_jfg_fog_color{ 0xA0B4C8u }; // 0xRRGGBB
++std::atomic<int> rt64_jfg_vignette{ 0 };       // vignette (VignettePS.hlsl)
++std::atomic<float> rt64_jfg_vignette_strength{ 0.4f };
++std::atomic<float> rt64_jfg_vignette_size{ 0.45f };
 +
  namespace RT64 {
      // Helper functions.
      
-@@ -170,6 +184,10 @@
+@@ -170,6 +196,10 @@
      void FramebufferRenderer::resetFramebuffers(RenderWorker *worker, bool ubershadersVisible, float ditherNoiseStrength, const RenderMultisampling &multisampling) {
          instanceDrawCallVector.clear();
          hitGroupVector.clear();
@@ -852,7 +867,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          renderIndicesVector.clear();
          rspSmoothNormalVector.clear();
          frameParams.viewUbershaders = ubershadersVisible;
-@@ -511,8 +529,351 @@
+@@ -511,8 +541,444 @@
          if (fbStorage->colorTarget != nullptr) {
              switchToGraphicsPipeline();
          }
@@ -869,12 +884,24 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +        const bool ssaoOn = (rt64_jfg_ssao.load(std::memory_order_relaxed) != 0) && (ssaoPipeline != nullptr) && targetsPresent;
 +        const bool bloomOn = (rt64_jfg_bloom.load(std::memory_order_relaxed) != 0) && (bloomCompositePipeline != nullptr) &&
 +            targetsPresent && (fbStorage->colorWriteDepthRead != nullptr);
++        // JFG PORT: fog and vignette only on the game's own picture during play: not on the pause screen (its backdrop is drawn
++        // once and kept, so it would get them again every frame) and not on smaller 3D scenes (decided after the scan below).
++        const bool jfgPausedAny = (rt64_jfg_paused.load(std::memory_order_relaxed) != 0);
++        const bool fogWanted = (rt64_jfg_fog.load(std::memory_order_relaxed) != 0) &&
++            (fogPipeline != nullptr) && targetsPresent && (fbStorage->colorWriteDepthRead != nullptr) && !jfgPausedAny;
++        const bool vignetteWanted = (rt64_jfg_vignette.load(std::memory_order_relaxed) != 0) && (vignettePipeline != nullptr) &&
++            targetsPresent && (fbStorage->colorWriteDepthRead != nullptr) && !jfgPausedAny;
++        bool fogScene = false;
++        bool vignetteScene = false;
 +        const uint32_t SsaoMinDepthWrites = 12;
 +        const uint32_t sceneDrawCount = uint32_t(rasterScene.instanceIndices.size());
 +        uint32_t ssaoPosition = UINT32_MAX;
 +        uint32_t bloomPosition = UINT32_MAX;
++        // JFG PORT: where fog, bloom and vignette go (right before the HUD), and the scene's picture is saved first (see
++        // bloomSnapshots); UINT32_MAX when the scene gets none of them.
++        uint32_t effectsPosition = UINT32_MAX;
 +        const uint32_t SsaoMarker = UINT32_MAX;
-+        const uint32_t BloomMarker = UINT32_MAX - 1;
++        const uint32_t EffectsMarker = UINT32_MAX - 1;
 +        thread_local std::vector<uint32_t> drawOrder;
 +        thread_local std::vector<uint32_t> deferredDraws;
 +        drawOrder.clear();
@@ -886,8 +913,9 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +        bool worldScene = false;
 +        const bool jfgPaused = sidesWide && (rt64_jfg_paused.load(std::memory_order_relaxed) != 0);
 +        int32_t sceneTop = INT32_MAX, sceneBottom = INT32_MIN; // vertical extent of the scene's depth-writing draws
-+        if (ssaoOn || bloomOn || sidesWide) {
++        if (ssaoOn || bloomOn || sidesWide || fogWanted || vignetteWanted) {
 +            uint32_t depthWrites = 0;
++            uint32_t fogBlendWrites = 0; // depth-writing draws whose blender mixes in the fog colour (the game's own fog)
 +            uint32_t lastWritePosition = 0;
 +            uint32_t hudPosition = sceneDrawCount;
 +            for (uint32_t pos = 0; pos < sceneDrawCount; pos++) {
@@ -901,6 +929,12 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +                const interop::OtherMode otherMode = drawCall.triangles.shaderDesc.otherMode;
 +                if (otherMode.zUpd()) {
 +                    depthWrites++;
++                    // Blender inputs (bits 16-31 of the other mode, GBL_c1/GBL_c2): first cycle's P at 14-15 and M at 6-7 of
++                    // blenderInputs(); 3 is G_BL_CLR_FOG.
++                    const uint32_t blender = otherMode.blenderInputs();
++                    if ((((blender >> 14) & 3U) == 3U) || (((blender >> 6) & 3U) == 3U)) {
++                        fogBlendWrites++;
++                    }
 +                    sceneTop = std::min(sceneTop, drawCall.triangles.scissor.top);
 +                    sceneBottom = std::max(sceneBottom, drawCall.triangles.scissor.bottom);
 +                    lastWritePosition = pos;
@@ -920,6 +954,18 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +            if (depthWrites >= SsaoMinDepthWrites) {
 +                ssaoPosition = ssaoOn ? (lastWritePosition + 1) : UINT32_MAX;
 +                bloomPosition = bloomOn ? hudPosition : UINT32_MAX;
++                const bool fullHeight = uint64_t(std::max(sceneBottom - sceneTop, 0)) * 10ULL >= uint64_t(fbStorage->colorTarget->height) * 9ULL;
++                // The level's own fog shows when its scenery blends with the fog colour and the fog lies within the far plane.
++                const bool gameFog = (fogBlendWrites > 0) && (rt64_jfg_fog_blocked.load(std::memory_order_relaxed) != 0);
++                if (gameFog && fullHeight) {
++                    rt64_jfg_fog_game_scenes.fetch_add(1, std::memory_order_relaxed);
++                }
++
++                fogScene = fogWanted && fullHeight && !gameFog;
++                vignetteScene = vignetteWanted && fullHeight;
++                if (bloomOn || fogScene || vignetteScene) {
++                    effectsPosition = hudPosition;
++                }
 +            }
 +        }
 +
@@ -944,8 +990,8 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +                    drawOrder.insert(drawOrder.end(), deferredDraws.begin(), deferredDraws.end());
 +                }
 +
-+                if (pos == bloomPosition) {
-+                    drawOrder.emplace_back(BloomMarker);
++                if (pos == effectsPosition) {
++                    drawOrder.emplace_back(EffectsMarker);
 +                }
 +
 +                const uint32_t index = rasterScene.instanceIndices[pos];
@@ -967,63 +1013,22 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +                drawOrder.insert(drawOrder.end(), deferredDraws.begin(), deferredDraws.end());
 +            }
 +
-+            if (bloomPosition == sceneDrawCount) {
-+                drawOrder.emplace_back(BloomMarker);
++            if (effectsPosition == sceneDrawCount) {
++                drawOrder.emplace_back(EffectsMarker);
 +            }
 +        }
 +        else {
 +            drawOrder.assign(rasterScene.instanceIndices.begin(), rasterScene.instanceIndices.end());
-+            if (bloomPosition != UINT32_MAX) {
-+                drawOrder.insert(drawOrder.begin() + bloomPosition, BloomMarker);
++            if (effectsPosition != UINT32_MAX) {
++                drawOrder.insert(drawOrder.begin() + effectsPosition, EffectsMarker);
 +            }
 +        }
-+        auto submitBloom = [&]() {
++        // JFG PORT: keep the scene as it is now, before fog, glow and vignette go on (see bloomSnapshots): the next scene for this
++        // colour buffer starts from it, so the parts the game does not draw again do not get the effects added again and again.
++        auto takeSnapshot = [&]() {
 +            RenderTarget *colorTarget = fbStorage->colorTarget;
 +            const uint32_t width = colorTarget->width;
 +            const uint32_t height = colorTarget->height;
-+            const uint32_t scale = std::max(1U, uint32_t(std::lround(height / 270.0)));
-+            BloomBuffers *buffers = getBloomBuffers(worker, (width + scale - 1) / scale, (height + scale - 1) / scale);
-+            if (buffers == nullptr) {
-+                return;
-+            }
-+
-+            interop::BloomCB cb = {};
-+            cb.threshold = rt64_jfg_bloom_threshold.load(std::memory_order_relaxed);
-+            cb.knee = 0.1f;
-+            cb.intensity = rt64_jfg_bloom_intensity.load(std::memory_order_relaxed);
-+            cb.sigma = rt64_jfg_bloom_radius.load(std::memory_order_relaxed);
-+            cb.scale = scale;
-+            RenderDescriptorSet *sceneSet = makeBloomDescriptorSet(worker, colorTarget->texture.get(), colorTarget->textureView.get());
-+            RenderDescriptorSet *bufferSet[2] = {
-+                makeBloomDescriptorSet(worker, buffers->texture[0].get(), buffers->textureView[0].get()),
-+                makeBloomDescriptorSet(worker, buffers->texture[1].get(), buffers->textureView[1].get())
-+            };
-+
-+            const RenderViewport smallViewport(0.0f, 0.0f, float(buffers->width), float(buffers->height));
-+            const RenderRect smallRect(0, 0, int32_t(buffers->width), int32_t(buffers->height));
-+            auto bloomPass = [&](RenderPipeline *pipeline, RenderTexture *input, RenderTextureLayout inputLayout, uint32_t output, RenderDescriptorSet *set) {
-+                worker->commandList->barriers(RenderBarrierStage::GRAPHICS, {
-+                    RenderTextureBarrier(input, inputLayout),
-+                    RenderTextureBarrier(buffers->texture[output].get(), RenderTextureLayout::COLOR_WRITE)
-+                });
-+                worker->commandList->setFramebuffer(buffers->framebuffer[output].get());
-+                worker->commandList->setPipeline(pipeline);
-+                worker->commandList->setGraphicsPipelineLayout(bloomPipelineLayout);
-+                worker->commandList->setGraphicsDescriptorSet(set, 0);
-+                worker->commandList->setViewports(smallViewport);
-+                worker->commandList->setScissors(smallRect);
-+                worker->commandList->setGraphicsPushConstants(0, &cb);
-+                worker->commandList->drawInstanced(3, 1, 0, 0);
-+            };
-+
-+            // Bright parts of the scene, downsampled into buffer 0; blurred across into 1 and down back into 0.
-+            bloomPass(bloomExtractPipeline, colorTarget->texture.get(), RenderTextureLayout::SHADER_READ, 0, sceneSet);
-+            cb.directionX = 1; cb.directionY = 0;
-+            bloomPass(bloomBlurPipeline, buffers->texture[0].get(), RenderTextureLayout::SHADER_READ, 1, bufferSet[0]);
-+            cb.directionX = 0; cb.directionY = 1;
-+            bloomPass(bloomBlurPipeline, buffers->texture[1].get(), RenderTextureLayout::SHADER_READ, 0, bufferSet[1]);
-+
-+            // Keep the scene as it is now, before the glow goes on (see bloomSnapshots).
 +            {
 +                const RenderFormat snapshotFormat = colorTarget->format;
 +                const uint32_t snapshotSamples = colorTarget->multisampling.sampleCount;
@@ -1084,6 +1089,57 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +                }
 +            }
 +
++            // Back to drawing into the scene target (depth stays read-only).
++            worker->commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(colorTarget->texture.get(), RenderTextureLayout::COLOR_WRITE));
++            worker->commandList->setFramebuffer(fbStorage->colorWriteDepthRead.get());
++            switchToGraphicsPipeline();
++        };
++        auto submitBloom = [&]() {
++            RenderTarget *colorTarget = fbStorage->colorTarget;
++            const uint32_t width = colorTarget->width;
++            const uint32_t height = colorTarget->height;
++            const uint32_t scale = std::max(1U, uint32_t(std::lround(height / 270.0)));
++            BloomBuffers *buffers = getBloomBuffers(worker, (width + scale - 1) / scale, (height + scale - 1) / scale);
++            if (buffers == nullptr) {
++                return;
++            }
++
++            interop::BloomCB cb = {};
++            cb.threshold = rt64_jfg_bloom_threshold.load(std::memory_order_relaxed);
++            cb.knee = 0.1f;
++            cb.intensity = rt64_jfg_bloom_intensity.load(std::memory_order_relaxed);
++            cb.sigma = rt64_jfg_bloom_radius.load(std::memory_order_relaxed);
++            cb.scale = scale;
++            RenderDescriptorSet *sceneSet = makeBloomDescriptorSet(worker, colorTarget->texture.get(), colorTarget->textureView.get());
++            RenderDescriptorSet *bufferSet[2] = {
++                makeBloomDescriptorSet(worker, buffers->texture[0].get(), buffers->textureView[0].get()),
++                makeBloomDescriptorSet(worker, buffers->texture[1].get(), buffers->textureView[1].get())
++            };
++
++            const RenderViewport smallViewport(0.0f, 0.0f, float(buffers->width), float(buffers->height));
++            const RenderRect smallRect(0, 0, int32_t(buffers->width), int32_t(buffers->height));
++            auto bloomPass = [&](RenderPipeline *pipeline, RenderTexture *input, RenderTextureLayout inputLayout, uint32_t output, RenderDescriptorSet *set) {
++                worker->commandList->barriers(RenderBarrierStage::GRAPHICS, {
++                    RenderTextureBarrier(input, inputLayout),
++                    RenderTextureBarrier(buffers->texture[output].get(), RenderTextureLayout::COLOR_WRITE)
++                });
++                worker->commandList->setFramebuffer(buffers->framebuffer[output].get());
++                worker->commandList->setPipeline(pipeline);
++                worker->commandList->setGraphicsPipelineLayout(bloomPipelineLayout);
++                worker->commandList->setGraphicsDescriptorSet(set, 0);
++                worker->commandList->setViewports(smallViewport);
++                worker->commandList->setScissors(smallRect);
++                worker->commandList->setGraphicsPushConstants(0, &cb);
++                worker->commandList->drawInstanced(3, 1, 0, 0);
++            };
++
++            // Bright parts of the scene, downsampled into buffer 0; blurred across into 1 and down back into 0.
++            bloomPass(bloomExtractPipeline, colorTarget->texture.get(), RenderTextureLayout::SHADER_READ, 0, sceneSet);
++            cb.directionX = 1; cb.directionY = 0;
++            bloomPass(bloomBlurPipeline, buffers->texture[0].get(), RenderTextureLayout::SHADER_READ, 1, bufferSet[0]);
++            cb.directionX = 0; cb.directionY = 1;
++            bloomPass(bloomBlurPipeline, buffers->texture[1].get(), RenderTextureLayout::SHADER_READ, 0, bufferSet[1]);
++
 +            // Back to the scene target (depth stays read-only), add the bloom.
 +            worker->commandList->barriers(RenderBarrierStage::GRAPHICS, {
 +                RenderTextureBarrier(buffers->texture[0].get(), RenderTextureLayout::SHADER_READ),
@@ -1110,11 +1166,63 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +            const float radius = rt64_jfg_ssao_radius.load(std::memory_order_relaxed);
 +            memcpy(&ssaoParams.padding.x, &strength, sizeof(float));
 +            memcpy(&ssaoParams.padding.y, &radius, sizeof(float));
++            const float fovTan = rt64_jfg_fov_tan.load(std::memory_order_relaxed);
++            memcpy(&ssaoParams.padding.z, &fovTan, sizeof(float));
 +            worker->commandList->setGraphicsPushConstants(0, &ssaoParams);
 +            worker->commandList->drawInstanced(3, 1, 0, 0);
 +            previousPipeline = nullptr;
 +            previousScissor = RenderRect();
 +            previousCallType = InstanceDrawCall::Type::Unknown;
++        };
++        // JFG PORT: full-screen passes in the scene's own pipeline layout (see FogPS.hlsl / VignettePS.hlsl).
++        auto submitFullScreen = [&](RenderPipeline *pipeline, const interop::RasterParams &params) {
++            worker->commandList->setPipeline(pipeline);
++            worker->commandList->setScissors(RenderRect(0, 0, int32_t(fbStorage->colorTarget->width), int32_t(fbStorage->colorTarget->height)));
++            worker->commandList->setGraphicsPushConstants(0, &params);
++            worker->commandList->drawInstanced(3, 1, 0, 0);
++            previousPipeline = nullptr;
++            previousScissor = RenderRect();
++            previousCallType = InstanceDrawCall::Type::Unknown;
++        };
++        auto submitFog = [&]() {
++            interop::RasterParams fogParams = {};
++            const float start = rt64_jfg_fog_start.load(std::memory_order_relaxed);
++            const float end = rt64_jfg_fog_end.load(std::memory_order_relaxed);
++            const float density = rt64_jfg_fog_density.load(std::memory_order_relaxed);
++            const uint32_t color = rt64_jfg_fog_color.load(std::memory_order_relaxed);
++            memcpy(&fogParams.padding.x, &start, sizeof(float));
++            memcpy(&fogParams.padding.y, &end, sizeof(float));
++            memcpy(&fogParams.padding.z, &density, sizeof(float));
++            fogParams.screenScale.x = float((color >> 16) & 0xFF) / 255.0f;
++            fogParams.screenScale.y = float((color >> 8) & 0xFF) / 255.0f;
++            fogParams.screenOffset.x = float(color & 0xFF) / 255.0f;
++            submitFullScreen(fogPipeline, fogParams);
++        };
++        auto submitVignette = [&]() {
++            interop::RasterParams vignetteParams = {};
++            const float strength = rt64_jfg_vignette_strength.load(std::memory_order_relaxed);
++            const float size = rt64_jfg_vignette_size.load(std::memory_order_relaxed);
++            const float aspect = float(fbStorage->colorTarget->width) / float(std::max(fbStorage->colorTarget->height, 1U));
++            memcpy(&vignetteParams.padding.x, &strength, sizeof(float));
++            memcpy(&vignetteParams.padding.y, &size, sizeof(float));
++            memcpy(&vignetteParams.padding.z, &aspect, sizeof(float));
++            submitFullScreen(vignettePipeline, vignetteParams);
++        };
++        // Right before the HUD: save the clean picture, then fog (so bloom glows over the fogged scene), bloom, vignette.
++        auto submitEffects = [&]() {
++            takeSnapshot();
++            if (fogScene) {
++                submitFog();
++                rt64_jfg_fog_drawn.fetch_add(1, std::memory_order_relaxed);
++            }
++
++            if (bloomPosition != UINT32_MAX) {
++                submitBloom();
++            }
++
++            if (vignetteScene) {
++                submitVignette();
++            }
 +        };
          
 -        for (uint32_t i : rasterScene.instanceIndices) {
@@ -1136,9 +1244,9 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +            }
 +        }
 +
-+        // JFG PORT: a scene without bloom that draws into a colour buffer changes what the saved picture of that buffer was
++        // JFG PORT: a scene without bloom (or fog / vignette) that draws into a colour buffer changes what the saved picture of that buffer was
 +        // made from (a fade to black, another screen), so the picture is dropped: restoring it later would bring back an old image.
-+        if ((bloomPosition == UINT32_MAX) && (sceneDrawCount > 0) && (fbStorage->colorTarget != nullptr)) {
++        if ((effectsPosition == UINT32_MAX) && (sceneDrawCount > 0) && (fbStorage->colorTarget != nullptr)) {
 +            for (const std::unique_ptr<BloomSnapshot> &entry : bloomSnapshots) {
 +                if ((entry->target == fbStorage->colorTarget) && (entry->frame != jfgFrame)) {
 +                    entry->valid = false;
@@ -1146,9 +1254,9 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +            }
 +        }
 +
-+        // JFG PORT: a scene that gets bloom starts from the clean picture saved when the last one for this colour buffer was
++        // JFG PORT: a scene that gets bloom (or fog / vignette) starts from the clean picture saved when the last one for this colour buffer was
 +        // made, so the parts the game does not draw again do not get the glow added to the old glow (see bloomSnapshots).
-+        if ((bloomPosition != UINT32_MAX) && firstSceneOnTarget) {
++        if ((effectsPosition != UINT32_MAX) && firstSceneOnTarget) {
 +            RenderTarget *colorTarget = fbStorage->colorTarget;
 +            for (const std::unique_ptr<BloomSnapshot> &entry : bloomSnapshots) {
 +                if ((entry->target != colorTarget) || !entry->valid || (entry->texture == nullptr) || (entry->frame == jfgFrame) ||
@@ -1196,16 +1304,16 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +                submitSsao();
 +                continue;
 +            }
-+            else if (i == BloomMarker) {
++            else if (i == EffectsMarker) {
 +                switchToDepthRead();
-+                submitBloom();
++                submitEffects();
 +                continue;
 +            }
 +
              const InstanceDrawCall &drawCall = instanceDrawCallVector[i];
              switch (drawCall.type) {
              case InstanceDrawCall::Type::IndexedTriangles: 
-@@ -561,9 +922,22 @@
+@@ -561,9 +1027,22 @@
                      switchToDepthWrite();
                  }
  
@@ -1231,7 +1339,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                  }
  
                  if (previousPipeline != triangles.pipeline) {
-@@ -638,6 +1012,7 @@
+@@ -638,6 +1117,7 @@
              }
          }
  
@@ -1239,7 +1347,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          // Mark targets for resolve.
          if (fbStorage->colorTarget != nullptr) {
              fbStorage->colorTarget->markForResolve();
-@@ -648,6 +1023,51 @@
+@@ -648,6 +1128,51 @@
          }
      }
  
@@ -1291,11 +1399,13 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
      void FramebufferRenderer::updateMultisampling() {
          dummyColorTargetView.reset();
          dummyDepthTargetView.reset();
-@@ -1354,6 +1774,11 @@
+@@ -1354,6 +1879,13 @@
          postBlendDitherNoiseAddPipeline = rasterShaderUber->postBlendDitherNoiseAddPipeline.get();
          postBlendDitherNoiseSubPipeline = rasterShaderUber->postBlendDitherNoiseSubPipeline.get();
          postBlendDitherNoiseSubNegativePipeline = rasterShaderUber->postBlendDitherNoiseSubNegativePipeline.get();
 +        ssaoPipeline = rasterShaderUber->ssaoPipeline.get();
++        fogPipeline = rasterShaderUber->fogPipeline.get();
++        vignettePipeline = rasterShaderUber->vignettePipeline.get();
 +        bloomPipelineLayout = rasterShaderUber->bloomPipelineLayout.get();
 +        bloomExtractPipeline = rasterShaderUber->bloomExtractPipeline.get();
 +        bloomBlurPipeline = rasterShaderUber->bloomBlurPipeline.get();
@@ -1303,7 +1413,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
  
          // Make a new render target draw call.
          RenderTargetDrawCall &targetDrawCall = framebuffer.renderTargetDrawCall;
-@@ -1488,7 +1913,7 @@
+@@ -1488,7 +2020,7 @@
                  // The call's scissor spans the whole width of the framebuffer pair scissor. Custom origin must not be in use to be able to use the stretched viewport.
                  const auto &viewport = drawData.rspViewports[proj.transformsIndex];
                  FixedRect intersectionRect = proj.scissorRect.intersection(viewport.rect(viewportClipRatios));
@@ -1313,13 +1423,15 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                  bool useWideViewport = (viewportOrigin == G_EX_ORIGIN_NONE) && coversWholeWidth && horizontalRatio;
                  if (useWideViewport) {
 diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer_renderer.h
---- a/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:33:03.897403741 +0000
-+++ b/src/render/rt64_framebuffer_renderer.h	2026-10-14 20:33:03.903403741 +0000
-@@ -87,6 +87,46 @@
+--- a/src/render/rt64_framebuffer_renderer.h	2026-10-16 15:14:11.702126100 -0500
++++ b/src/render/rt64_framebuffer_renderer.h	2026-10-16 15:14:11.789315800 -0500
+@@ -87,6 +87,48 @@
          RenderPipeline *postBlendDitherNoiseAddPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubNegativePipeline = nullptr;
 +        RenderPipeline *ssaoPipeline = nullptr; // JFG PORT
++        RenderPipeline *fogPipeline = nullptr; // JFG PORT
++        RenderPipeline *vignettePipeline = nullptr; // JFG PORT
 +        // JFG PORT: bloom. Two small buffers per bloom-buffer size (kept: sizes rarely change, and a buffer may still
 +        // be referenced by the command list being recorded), and the descriptor sets made while recording one workload.
 +        struct BloomBuffers {
@@ -1375,15 +1487,18 @@ diff -ruN a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projectio
                      adjustAspectRatio = (viewportOrigin == G_EX_ORIGIN_NONE) && coversWholeWidth && horizontalRatio;
                  }
 diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cpp
---- a/src/render/rt64_raster_shader.cpp	2026-10-08 23:27:53.983621526 -0500
-+++ b/src/render/rt64_raster_shader.cpp	2026-10-08 17:44:50.784916779 -0500
-@@ -19,6 +19,13 @@
+--- a/src/render/rt64_raster_shader.cpp	2026-10-16 15:14:11.708153300 -0500
++++ b/src/render/rt64_raster_shader.cpp	2026-10-16 15:14:11.821897200 -0500
+@@ -19,6 +19,16 @@
  #include "shaders/PostBlendDitherNoiseAddPS.hlsl.spirv.h"
  #include "shaders/PostBlendDitherNoiseSubPS.hlsl.spirv.h"
  #include "shaders/PostBlendDitherNoiseSubNegativePS.hlsl.spirv.h"
 +#include "shaders/FullScreenVS.hlsl.spirv.h"
 +#include "shaders/SsaoPS.hlsl.spirv.h"
 +#include "shaders/SsaoPSMS.hlsl.spirv.h"
++#include "shaders/FogPS.hlsl.spirv.h"
++#include "shaders/FogPSMS.hlsl.spirv.h"
++#include "shaders/VignettePS.hlsl.spirv.h"
 +#include "shaders/BloomExtractPS.hlsl.spirv.h"
 +#include "shaders/BloomExtractPSMS.hlsl.spirv.h"
 +#include "shaders/BloomBlurPS.hlsl.spirv.h"
@@ -1391,13 +1506,16 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
  #ifdef _WIN32
  #   include "shaders/RasterPSLibrary.hlsl.dxil.h"
  #   include "shaders/RasterPSLibraryMS.hlsl.dxil.h"
-@@ -29,6 +36,13 @@
+@@ -29,6 +39,16 @@
  #   include "shaders/PostBlendDitherNoiseAddPS.hlsl.dxil.h"
  #   include "shaders/PostBlendDitherNoiseSubPS.hlsl.dxil.h"
  #   include "shaders/PostBlendDitherNoiseSubNegativePS.hlsl.dxil.h"
 +#   include "shaders/FullScreenVS.hlsl.dxil.h"
 +#   include "shaders/SsaoPS.hlsl.dxil.h"
 +#   include "shaders/SsaoPSMS.hlsl.dxil.h"
++#   include "shaders/FogPS.hlsl.dxil.h"
++#   include "shaders/FogPSMS.hlsl.dxil.h"
++#   include "shaders/VignettePS.hlsl.dxil.h"
 +#   include "shaders/BloomExtractPS.hlsl.dxil.h"
 +#   include "shaders/BloomExtractPSMS.hlsl.dxil.h"
 +#   include "shaders/BloomBlurPS.hlsl.dxil.h"
@@ -1405,13 +1523,16 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
  #elif defined(__APPLE__)
  #   include "shaders/RasterPSDynamic.hlsl.metal.h"
  #   include "shaders/RasterPSDynamicMS.hlsl.metal.h"
-@@ -42,8 +56,16 @@
+@@ -42,8 +62,19 @@
  #   include "shaders/PostBlendDitherNoiseAddPS.hlsl.metal.h"
  #   include "shaders/PostBlendDitherNoiseSubPS.hlsl.metal.h"
  #   include "shaders/PostBlendDitherNoiseSubNegativePS.hlsl.metal.h"
 +#   include "shaders/FullScreenVS.hlsl.metal.h"
 +#   include "shaders/SsaoPS.hlsl.metal.h"
 +#   include "shaders/SsaoPSMS.hlsl.metal.h"
++#   include "shaders/FogPS.hlsl.metal.h"
++#   include "shaders/FogPSMS.hlsl.metal.h"
++#   include "shaders/VignettePS.hlsl.metal.h"
 +#   include "shaders/BloomExtractPS.hlsl.metal.h"
 +#   include "shaders/BloomExtractPSMS.hlsl.metal.h"
 +#   include "shaders/BloomBlurPS.hlsl.metal.h"
@@ -1422,7 +1543,7 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
  
  #include "rt64_descriptor_sets.h"
  #include "rt64_render_target.h"
-@@ -552,6 +574,124 @@
+@@ -552,6 +583,184 @@
  
          postBlendDesc.pixelShader = postBlendSubNegativePixelShader.get();
          postBlendDitherNoiseSubNegativePipeline = device->createGraphicsPipeline(postBlendDesc);
@@ -1476,6 +1597,66 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
 +            ssaoBlend.dstBlendAlpha = RenderBlend::ONE;
 +            ssaoBlend.blendOpAlpha = RenderBlendOperation::ADD;
 +            ssaoPipeline = device->createGraphicsPipeline(ssaoDesc);
++        }
++
++        // JFG PORT: depth-based fog (blends towards the fog colour by the shader's alpha) and vignette (multiplies, as the
++        // ambient occlusion does). Full-screen triangles like the ambient occlusion pass; see FogPS.hlsl / VignettePS.hlsl.
++        std::unique_ptr<RenderShader> fogPixelShader;
++        std::unique_ptr<RenderShader> vignettePixelShader;
++        switch (shaderFormat) {
++#   ifdef _WIN32
++        case RenderShaderFormat::DXIL:
++            fogPixelShader = useMSAA ? device->createShader(FogPSMSBlobDXIL, std::size(FogPSMSBlobDXIL), "PSMain", shaderFormat) : device->createShader(FogPSBlobDXIL, std::size(FogPSBlobDXIL), "PSMain", shaderFormat);
++            vignettePixelShader = device->createShader(VignettePSBlobDXIL, std::size(VignettePSBlobDXIL), "PSMain", shaderFormat);
++            break;
++#   endif
++        case RenderShaderFormat::SPIRV:
++            fogPixelShader = useMSAA ? device->createShader(FogPSMSBlobSPIRV, std::size(FogPSMSBlobSPIRV), "PSMain", shaderFormat) : device->createShader(FogPSBlobSPIRV, std::size(FogPSBlobSPIRV), "PSMain", shaderFormat);
++            vignettePixelShader = device->createShader(VignettePSBlobSPIRV, std::size(VignettePSBlobSPIRV), "PSMain", shaderFormat);
++            break;
++#   ifdef __APPLE__
++        case RenderShaderFormat::METAL:
++            fogPixelShader = useMSAA ? device->createShader(FogPSMSBlobMSL, std::size(FogPSMSBlobMSL), "PSMain", shaderFormat) : device->createShader(FogPSBlobMSL, std::size(FogPSBlobMSL), "PSMain", shaderFormat);
++            vignettePixelShader = device->createShader(VignettePSBlobMSL, std::size(VignettePSBlobMSL), "PSMain", shaderFormat);
++            break;
++#   endif
++        default:
++            break;
++        }
++
++        if (ssaoVertexShader != nullptr) {
++            RenderGraphicsPipelineDesc effectDesc;
++            effectDesc.renderTargetBlend[0] = RenderBlendDesc::Copy();
++            effectDesc.renderTargetFormat[0] = RenderTarget::colorBufferFormat(shaderLibrary->usesHDR);
++            effectDesc.renderTargetCount = 1;
++            effectDesc.cullMode = RenderCullMode::NONE;
++            effectDesc.depthEnabled = false;
++            effectDesc.depthWriteEnabled = false;
++            effectDesc.depthTargetFormat = RenderFormat::D32_FLOAT;
++            effectDesc.multisampling = multisampling;
++            effectDesc.pipelineLayout = pipelineLayout.get();
++            effectDesc.primitiveTopology = RenderPrimitiveTopology::TRIANGLE_LIST;
++            effectDesc.vertexShader = ssaoVertexShader.get();
++
++            RenderBlendDesc &effectBlend = effectDesc.renderTargetBlend[0];
++            effectBlend.blendEnabled = true;
++            effectBlend.blendOp = RenderBlendOperation::ADD;
++            effectBlend.srcBlendAlpha = RenderBlend::ZERO;
++            effectBlend.dstBlendAlpha = RenderBlend::ONE;
++            effectBlend.blendOpAlpha = RenderBlendOperation::ADD;
++            if (fogPixelShader != nullptr) {
++                effectDesc.pixelShader = fogPixelShader.get();
++                effectBlend.srcBlend = RenderBlend::SRC_ALPHA;
++                effectBlend.dstBlend = RenderBlend::INV_SRC_ALPHA;
++                fogPipeline = device->createGraphicsPipeline(effectDesc);
++            }
++
++            if (vignettePixelShader != nullptr) {
++                effectDesc.pixelShader = vignettePixelShader.get();
++                effectBlend.srcBlend = RenderBlend::ZERO;
++                effectBlend.dstBlend = RenderBlend::SRC_COLOR;
++                vignettePipeline = device->createGraphicsPipeline(effectDesc);
++            }
 +        }
 +
 +        // JFG PORT: bloom passes (see BloomPS.hlsl and submitRasterScene). Own layout: BloomCB + one input texture.
@@ -1548,13 +1729,15 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
  
      RasterShaderUber::~RasterShaderUber() {
 diff -ruN a/src/render/rt64_raster_shader.h b/src/render/rt64_raster_shader.h
---- a/src/render/rt64_raster_shader.h	2026-10-08 23:27:53.983621526 -0500
-+++ b/src/render/rt64_raster_shader.h	2026-10-08 17:44:50.785264543 -0500
-@@ -82,6 +82,12 @@
+--- a/src/render/rt64_raster_shader.h	2026-10-16 15:14:11.709153700 -0500
++++ b/src/render/rt64_raster_shader.h	2026-10-16 15:14:11.852028600 -0500
+@@ -82,6 +82,14 @@
          std::unique_ptr<RenderPipeline> postBlendDitherNoiseAddPipeline;
          std::unique_ptr<RenderPipeline> postBlendDitherNoiseSubPipeline;
          std::unique_ptr<RenderPipeline> postBlendDitherNoiseSubNegativePipeline;
 +        std::unique_ptr<RenderPipeline> ssaoPipeline; // JFG PORT
++        std::unique_ptr<RenderPipeline> fogPipeline; // JFG PORT
++        std::unique_ptr<RenderPipeline> vignettePipeline; // JFG PORT
 +        std::unique_ptr<RenderPipelineLayout> bloomPipelineLayout; // JFG PORT
 +        std::unique_ptr<RenderPipeline> bloomExtractPipeline;
 +        std::unique_ptr<RenderPipeline> bloomBlurPipeline;
@@ -1651,15 +1834,15 @@ diff -ruN a/src/shaders/BloomPS.hlsl b/src/shaders/BloomPS.hlsl
 +}
 diff -ruN a/src/shaders/SsaoPS.hlsl b/src/shaders/SsaoPS.hlsl
 --- a/src/shaders/SsaoPS.hlsl	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/shaders/SsaoPS.hlsl	2026-10-08 17:15:34.551334417 -0500
-@@ -0,0 +1,119 @@
++++ b/src/shaders/SsaoPS.hlsl	1969-12-31 18:00:00.000000000 -0600
+@@ -0,0 +1,125 @@
 +//
 +// RT64 - JFG PORT: screen-space ambient occlusion for Jet Force Gemini.
 +//
 +// Drawn as a full-screen triangle (FullScreenVS) into the colour target with a multiplying blend, at the point of a
 +// frame where the game has finished its 3D scene and starts drawing 2D (see FramebufferRenderer::submitRasterScene),
 +// so the HUD is drawn afterwards and stays untouched. Only the depth buffer is used: view-space positions are rebuilt
-+// from depth with the game's own projection (60 degree vertical field of view, near 10, far 15000), the surface normal
++// from depth with the game's own projection (its current vertical field of view, near 10, far 15000), the surface normal
 +// from neighbouring depths, and occlusion is the share of nearby points that lie above the surface (Alchemy-style AO).
 +//
 +
@@ -1690,7 +1873,13 @@ diff -ruN a/src/shaders/SsaoPS.hlsl b/src/shaders/SsaoPS.hlsl
 +
 +static const float NearZ = 10.0f;
 +static const float FarZ = 15000.0f;
-+static const float TanHalfFovY = 0.57735f; // tan(30 degrees)
++// tan(half the vertical field of view) the game's projection was built with (padding.z, from camSetFOV on the game
++// side: the "Field of view" option and the scope zoom change it); tan(30 degrees), the game's default, when not set.
++float tanHalfFovY() {
++    const float t = asfloat(gConstants.padding.z);
++    return (t > 0.0f) ? t : 0.57735f;
++}
++#define TanHalfFovY tanHalfFovY()
 +static const int SampleCount = 16;
 +
 +// Distance from the camera along the view direction.
@@ -1800,3 +1989,102 @@ diff -ruN a/src/shared/rt64_jfg_bloom.h b/src/shared/rt64_jfg_bloom.h
 +#ifdef HLSL_CPU
 +};
 +#endif
+diff -ruN a/src/shaders/FogPS.hlsl b/src/shaders/FogPS.hlsl
+--- a/src/shaders/FogPS.hlsl	1969-12-31 18:00:00.000000000 -0600
++++ b/src/shaders/FogPS.hlsl	1969-12-31 18:00:00.000000000 -0600
+@@ -0,0 +1,59 @@
++//
++// RT64 - JFG PORT: depth-based distance fog for Jet Force Gemini (experimental).
++//
++// Drawn as a full-screen triangle (FullScreenVS) into the colour target with an alpha blend, right before the HUD of a
++// world scene (see FramebufferRenderer::submitRasterScene), so the HUD stays untouched. The distance comes from the
++// depth buffer with the game's own near and far planes (10, 15000), as in SsaoPS.hlsl. Nothing drawn (depth at the
++// far plane: sky, backdrops, the cleared widescreen sides) gets no fog, so the sky keeps its own colours.
++//
++// Parameters (RasterParams): padding.x / padding.y = where the fog starts / is thickest (game units, as floats),
++// padding.z = the most fog there is (0..1), screenScale.xy and screenOffset.x = the fog colour (0..1).
++//
++
++#include "shared/rt64_raster_params.h"
++
++#include "FbRendererCommon.hlsli"
++
++[[vk::push_constant]] ConstantBuffer<RasterParams> gConstants : register(b0, space0);
++
++#if defined(MULTISAMPLING)
++Texture2DMS<float> gBackgroundDepth : register(t2, space3);
++float loadDepth(int2 p) {
++    return gBackgroundDepth.Load(p, 0);
++}
++#else
++Texture2D<float> gBackgroundDepth : register(t2, space3);
++float loadDepth(int2 p) {
++    return gBackgroundDepth.Load(int3(p, 0));
++}
++#endif
++
++static const float NearZ = 10.0f;
++static const float FarZ = 15000.0f;
++
++// Distance from the camera along the view direction.
++float linearDepth(float d) {
++    const float ndcZ = d * 2.0f - 1.0f;
++    return (2.0f * NearZ * FarZ) / ((FarZ + NearZ) - ndcZ * (FarZ - NearZ));
++}
++
++void PSMain(
++      in float4 vertexPosition : SV_Position
++    , in float2 vertexUV : TEXCOORD0
++    , [[vk::location(0)]] [[vk::index(0)]] out float4 resultColor : SV_TARGET0
++)
++{
++    const float start = asfloat(gConstants.padding.x);
++    const float end = max(asfloat(gConstants.padding.y), start + 1.0f);
++    const float density = asfloat(gConstants.padding.z);
++    const float3 color = float3(gConstants.screenScale.x, gConstants.screenScale.y, gConstants.screenOffset.x);
++
++    const float d = loadDepth(int2(vertexPosition.xy));
++    if (d >= 0.99999f) {
++        resultColor = float4(color, 0.0f);
++        return;
++    }
++
++    const float t = saturate((linearDepth(d) - start) / (end - start));
++    resultColor = float4(color, density * t * t * (3.0f - 2.0f * t));
++}
+diff -ruN a/src/shaders/VignettePS.hlsl b/src/shaders/VignettePS.hlsl
+--- a/src/shaders/VignettePS.hlsl	1969-12-31 18:00:00.000000000 -0600
++++ b/src/shaders/VignettePS.hlsl	1969-12-31 18:00:00.000000000 -0600
+@@ -0,0 +1,32 @@
++//
++// RT64 - JFG PORT: vignette for Jet Force Gemini.
++//
++// Drawn as a full-screen triangle (FullScreenVS) into the colour target with a multiplying blend (as SsaoPS.hlsl),
++// right before the HUD of a world scene and after bloom (see FramebufferRenderer::submitRasterScene), so the HUD is
++// not darkened.
++//
++// Parameters (RasterParams): padding.x = strength (0..1, how dark the corners get), padding.y = size (0..1, how far
++// from the centre the darkening starts, 1 = the corners), padding.z = the colour target's width / height.
++//
++
++#include "shared/rt64_raster_params.h"
++
++[[vk::push_constant]] ConstantBuffer<RasterParams> gConstants : register(b0, space0);
++
++void PSMain(
++      in float4 vertexPosition : SV_Position
++    , in float2 vertexUV : TEXCOORD0
++    , [[vk::location(0)]] [[vk::index(0)]] out float4 resultColor : SV_TARGET0
++)
++{
++    const float strength = asfloat(gConstants.padding.x);
++    const float size = asfloat(gConstants.padding.y);
++    const float aspect = asfloat(gConstants.padding.z);
++
++    // Distance from the centre, round on screen: 0 in the middle, 1 in the corners.
++    const float2 c = (vertexUV - 0.5f) * float2(aspect, 1.0f);
++    const float r = length(c) / length(float2(0.5f * aspect, 0.5f));
++    const float t = saturate((r - size) / max(1.0f - size, 0.001f));
++    const float v = 1.0f - strength * t * t * (3.0f - 2.0f * t);
++    resultColor = float4(v, v, v, 1.0f);
++}

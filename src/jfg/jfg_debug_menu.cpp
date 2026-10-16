@@ -55,6 +55,18 @@ extern std::atomic<int> rt64_jfg_paused;
 extern std::atomic<float> rt64_jfg_bloom_intensity;
 extern std::atomic<float> rt64_jfg_bloom_threshold;
 extern std::atomic<float> rt64_jfg_bloom_radius;
+extern std::atomic<float> rt64_jfg_fov_tan;
+extern std::atomic<int> rt64_jfg_fog;
+extern std::atomic<int> rt64_jfg_fog_blocked;
+extern std::atomic<uint32_t> rt64_jfg_fog_drawn;
+extern std::atomic<uint32_t> rt64_jfg_fog_game_scenes;
+extern std::atomic<float> rt64_jfg_fog_start;
+extern std::atomic<float> rt64_jfg_fog_end;
+extern std::atomic<float> rt64_jfg_fog_density;
+extern std::atomic<uint32_t> rt64_jfg_fog_color;
+extern std::atomic<int> rt64_jfg_vignette;
+extern std::atomic<float> rt64_jfg_vignette_strength;
+extern std::atomic<float> rt64_jfg_vignette_size;
 
 extern "C" {
 // Recompiled game functions (RecompiledFuncs/*.c).
@@ -76,6 +88,8 @@ void osViSwapBuffer_recomp(uint8_t* rdram, recomp_context* ctx);
 void osViBlack_recomp(uint8_t* rdram, recomp_context* ctx);
 void osRecvMesg_recomp(uint8_t* rdram, recomp_context* ctx);
 }
+
+std::string depth_fog_status(); // the F9 menu's depth fog status line (with the fog hooks, below)
 
 namespace {
 
@@ -259,6 +273,18 @@ struct State {
     int  frame_rate = 0;           // 0: the game's own pacing (30, dropping to 20), 1: 60 (runInOneFrame), 2: 60 + interpolated up to the monitor's rate
     bool widescreen = false;       // render the 3D view to the full window width, see jfg_widescreen_active()
     int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
+    bool vignette = false;         // darker screen edges in RT64 (src/shaders/VignettePS.hlsl), see push_render_options()
+    int  vignette_strength = 40;   // vignette: how dark the corners get, percent
+    int  vignette_size = 45;       // vignette: how far from the centre the darkening starts, percent of the way to the corners
+    int  level_fog_distance = 100; // the game's own fog: how far away it is, percent (jfg_game_fog)
+    bool no_level_fog = false;     // the game's own fog: off
+    bool depth_fog = false;        // experimental: fog in RT64 from the depth buffer (src/shaders/FogPS.hlsl), in levels without fog
+    int  fog_start = 1500;         // depth fog: where it starts, game units
+    int  fog_end = 9000;           // depth fog: where it is thickest, game units
+    int  fog_density = 50;         // depth fog: the most fog there is, percent
+    int  fog_color = 0;            // depth fog: colour preset (FOG_COLORS)
+    int  texture_filter = 0;       // 0: the N64's three-point texture filter, 1: bilinear (RT64 threePointFiltering)
+    int  output_filter = 0;        // picture scaling to the window: 0 anti-aliased pixel scaling, 1 linear, 2 nearest
     bool start_skips_cutscenes = true;
     bool dual_stick = false;       // modern twin-stick layout, see jfg_dual_stick()
     bool invert_aim_y = false;     // dual stick: right stick up aims down (the game's original behaviour)
@@ -316,6 +342,9 @@ bool g_reset_pending = false, g_reset_press_start = false; // F5, see jfg_debug_
 // The "Frame rate" option (60 / interpolated) is hidden and off: on the user's PC it made no visible difference
 // (sessions 35-36 in PROGRESS.md). Set to true to bring it back.
 constexpr bool FRAME_RATE_OPTION = true;
+// The "Depth fog" option (FogPS.hlsl in RT64) is hidden and off: in testing nothing showed in any level. The renderer
+// pass, the option and its status line are kept for when it is looked at again. Set to true to bring it back.
+constexpr bool DEPTH_FOG_OPTION = false;
 std::atomic<float> g_fps{ 0.0f }; // game frames per second, for the "Show FPS" option
 std::atomic<float> g_screen_fps{ 0.0f };
 std::atomic<int> g_texture_pack_count{ -1 }; // textures listed in bin/texture_pack/rt64.json, -1 = pack not in use
@@ -409,6 +438,10 @@ const char* const OPTIONS_FILE = "jfg_port_options.txt";
 bool g_options_loaded = false;
 
 // Hands the renderer options to RT64 (read by its render thread every frame).
+// Depth fog colours (0xRRGGBB): Haze, Mist, Dusk, Night. Names in the F9 menu and tools/gen_jfg_config_rml.py.
+constexpr uint32_t FOG_COLORS[] = { 0xA0B4C8u, 0xD8DCE0u, 0xC89A78u, 0x2A3448u };
+constexpr int FOG_COLOR_COUNT = (int)(sizeof(FOG_COLORS) / sizeof(FOG_COLORS[0]));
+
 void push_render_options() {
     rt64_jfg_ssao_strength.store(g.ssao_strength / 100.0f, std::memory_order_relaxed);
     rt64_jfg_ssao_radius.store(float(g.ssao_radius), std::memory_order_relaxed);
@@ -417,6 +450,14 @@ void push_render_options() {
     rt64_jfg_bloom_threshold.store(g.bloom_threshold / 100.0f, std::memory_order_relaxed);
     rt64_jfg_bloom_radius.store(float(g.bloom_radius), std::memory_order_relaxed);
     rt64_jfg_bloom.store(g.bloom ? 1 : 0, std::memory_order_relaxed);
+    rt64_jfg_vignette_strength.store(g.vignette_strength / 100.0f, std::memory_order_relaxed);
+    rt64_jfg_vignette_size.store(g.vignette_size / 100.0f, std::memory_order_relaxed);
+    rt64_jfg_vignette.store(g.vignette ? 1 : 0, std::memory_order_relaxed);
+    rt64_jfg_fog_start.store(float(g.fog_start), std::memory_order_relaxed);
+    rt64_jfg_fog_end.store(float(std::max(g.fog_end, g.fog_start + 100)), std::memory_order_relaxed);
+    rt64_jfg_fog_density.store(g.fog_density / 100.0f, std::memory_order_relaxed);
+    rt64_jfg_fog_color.store(FOG_COLORS[std::clamp(g.fog_color, 0, FOG_COLOR_COUNT - 1)], std::memory_order_relaxed);
+    rt64_jfg_fog.store(g.depth_fog ? 1 : 0, std::memory_order_relaxed);
 }
 
 // Sets one option from its saved form (the options file, profiles).
@@ -438,6 +479,18 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "frame_rate") == 0) g.frame_rate = FRAME_RATE_OPTION ? std::clamp(value, 0, 2) : 0;
     else if (std::strcmp(key, "widescreen") == 0) g.widescreen = value != 0;
     else if (std::strcmp(key, "fov") == 0) g.fov = std::clamp(value, 75, 140);
+    else if (std::strcmp(key, "vignette") == 0) g.vignette = value != 0;
+    else if (std::strcmp(key, "vignette_strength") == 0) g.vignette_strength = std::clamp(value, 0, 100);
+    else if (std::strcmp(key, "vignette_size") == 0) g.vignette_size = std::clamp(value, 0, 90);
+    else if (std::strcmp(key, "level_fog_distance") == 0) g.level_fog_distance = std::clamp(value, 50, 400);
+    else if (std::strcmp(key, "no_level_fog") == 0) g.no_level_fog = value != 0;
+    else if (std::strcmp(key, "depth_fog") == 0) g.depth_fog = DEPTH_FOG_OPTION && value != 0;
+    else if (std::strcmp(key, "fog_start") == 0) g.fog_start = std::clamp(value, 0, 10000);
+    else if (std::strcmp(key, "fog_end") == 0) g.fog_end = std::clamp(value, 500, 15000);
+    else if (std::strcmp(key, "fog_density") == 0) g.fog_density = std::clamp(value, 0, 100);
+    else if (std::strcmp(key, "fog_color") == 0) g.fog_color = std::clamp(value, 0, 3);
+    else if (std::strcmp(key, "texture_filter") == 0) g.texture_filter = std::clamp(value, 0, 1);
+    else if (std::strcmp(key, "output_filter") == 0) g.output_filter = std::clamp(value, 0, 2);
     else if (std::strcmp(key, "start_skips_cutscenes") == 0) g.start_skips_cutscenes = value != 0;
     else if (std::strcmp(key, "dual_stick") == 0) g.dual_stick = value != 0;
     else if (std::strcmp(key, "invert_aim_y") == 0) g.invert_aim_y = value != 0;
@@ -487,6 +540,10 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "no_blood=%d\nstart_skips_cutscenes=%d\n", s.no_blood ? 1 : 0, s.start_skips_cutscenes ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "show_fps=%d\nwidescreen=%d\nframe_rate=%d\n", s.show_fps ? 1 : 0, s.widescreen ? 1 : 0, s.frame_rate); out += buf;
     std::snprintf(buf, sizeof(buf), "fov=%d\n", s.fov); out += buf;
+    std::snprintf(buf, sizeof(buf), "vignette=%d\nvignette_strength=%d\nvignette_size=%d\n", s.vignette ? 1 : 0, s.vignette_strength, s.vignette_size); out += buf;
+    std::snprintf(buf, sizeof(buf), "level_fog_distance=%d\nno_level_fog=%d\n", s.level_fog_distance, s.no_level_fog ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "depth_fog=%d\nfog_start=%d\nfog_end=%d\nfog_density=%d\nfog_color=%d\n", s.depth_fog ? 1 : 0, s.fog_start, s.fog_end, s.fog_density, s.fog_color); out += buf;
+    std::snprintf(buf, sizeof(buf), "texture_filter=%d\noutput_filter=%d\n", s.texture_filter, s.output_filter); out += buf;
     std::snprintf(buf, sizeof(buf), "show_level=%d\nshow_pack=%d\ndump_by_level=%d\n", s.show_level ? 1 : 0, s.show_pack ? 1 : 0, s.dump_by_level ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "no_lod=%d\nfar_objects=%d\n", s.no_lod ? 1 : 0, s.far_objects ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "ssao=%d\nssao_strength=%d\nssao_radius=%d\n", s.ssao ? 1 : 0, s.ssao_strength, s.ssao_radius); out += buf;
@@ -670,6 +727,45 @@ void draw_options() {
                 changed |= options_slider("Threshold (%)##bloom", &g.bloom_threshold, 0, 100);
                 options_help("How bright a colour must be to glow. Lower: more of the picture glows.");
                 changed |= options_slider("Radius##bloom", &g.bloom_radius, 1, 20);
+            }
+            changed |= ImGui::Checkbox("Vignette", &g.vignette);
+            options_help("Darkens the edges and corners of the 3D view. The HUD is drawn afterwards and is not darkened.");
+            if (g.vignette) {
+                changed |= options_slider("Strength (%)##vignette", &g.vignette_strength, 0, 100);
+                changed |= options_slider("Size (%)##vignette", &g.vignette_size, 0, 90);
+                options_help("How far from the middle the darkening starts: higher keeps more of the picture clear.");
+            }
+
+            options_section("Fog");
+            changed |= options_slider("Level fog distance %", &g.level_fog_distance, 50, 400);
+            changed |= ImGui::Checkbox("No level fog", &g.no_level_fog);
+            options_help("The fog the levels have themselves. Some levels use it to hide where the scenery stops being drawn, "
+                         "so moving it back or turning it off can show things appearing in the distance.");
+            if (DEPTH_FOG_OPTION) {
+                changed |= ImGui::Checkbox("Depth fog (experimental)", &g.depth_fog);
+                options_help("Adds distance fog to levels that have no fog of their own (it stays off in levels that do). Worked "
+                             "out from the depth of the 3D view; the sky and the HUD are not fogged.");
+            }
+            if (DEPTH_FOG_OPTION && g.depth_fog) {
+                ImGui::TextDisabled("%s", depth_fog_status().c_str());
+                static const char* const colors[] = { "Haze", "Mist", "Dusk", "Night" };
+                changed |= options_slider("Start##fog", &g.fog_start, 0, 10000);
+                changed |= options_slider("Thickest at##fog", &g.fog_end, 500, 15000);
+                changed |= options_slider("Density (%)##fog", &g.fog_density, 0, 100);
+                ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+                changed |= ImGui::Combo("Colour##fog", &g.fog_color, colors, IM_ARRAYSIZE(colors));
+            }
+
+            options_section("Filtering");
+            {
+                static const char* const textures[] = { "N64 three-point", "Bilinear" };
+                static const char* const outputs[] = { "Anti-aliased pixel scaling", "Linear", "Nearest" };
+                ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+                changed |= ImGui::Combo("Texture filtering", &g.texture_filter, textures, IM_ARRAYSIZE(textures));
+                options_help("Three-point is how the N64 smooths textures; bilinear is smoother, as on PC.");
+                ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+                changed |= ImGui::Combo("Picture scaling", &g.output_filter, outputs, IM_ARRAYSIZE(outputs));
+                options_help("How the picture is scaled to the window. Nearest keeps pixels sharp; linear is softer.");
             }
             ImGui::EndTabItem();
         }
@@ -1552,7 +1648,6 @@ extern "C" int jfg_texture_pack_current(char* buf, int size) {
 extern "C" int jfg_sched_extra_frame(void) {
     return g.frame_rate >= 1 ? 1 : 0;
 }
-
 extern "C" int jfg_refresh_override(void) {
     switch (g.frame_rate) {
         case 1: return 0;
@@ -2008,9 +2103,87 @@ extern "C" float jfg_fov(uint8_t* rdram, float fov, uint32_t zoomed) {
     const float scale = fov_scale_wanted();
     g_fov_applied_scale = scale;
     // A zoomed scope keeps its magnification: the zoom is relative to the game's own view.
-    if (zoomed != 0 || scale == 1.0f || !(fov > 0.0f && fov < CAMERA_MAX_FOV)) return fov;
-    return std::min(fov * scale, CAMERA_MAX_FOV - 0.5f);
+    if (!(zoomed != 0 || scale == 1.0f || !(fov > 0.0f && fov < CAMERA_MAX_FOV))) fov = std::min(fov * scale, CAMERA_MAX_FOV - 0.5f);
+    // The ambient occlusion pass rebuilds positions from depth with the projection's field of view (SsaoPS.hlsl).
+    if (fov > 0.0f && fov < CAMERA_MAX_FOV) rt64_jfg_fov_tan.store(std::tan(fov * (PI_F / 360.0f)), std::memory_order_relaxed);
+    return fov;
 }
+
+// --- the game's own fog -----------------------------------------------------------------------------------------------
+// Each frame the level's fog goes to the RDP from func_8001BF9C (src/track.c): trackGetFog(player, &near, &far, ...) and
+// then gSPFogPosition(near, far). jfg_game_fog (hook right after trackGetFog returns, $sp = its frame: near at +0x3E,
+// far at +0x3C, both s16) moves or removes it, and tells the renderer whether the level has fog at all: the depth-based
+// fog (experimental) stays off in levels that have their own. Fog positions are 0..1000 over the depth range, as
+// gSPFogPosition takes them; trackSetFogOff uses 1018 / 1023, beyond the far plane, for "no fog".
+constexpr float FOG_NEAR_PLANE = 10.0f, FOG_FAR_PLANE = 15000.0f; // the game's projection (src/camera.h)
+constexpr int FOG_POSITION_FAR = 1000, FOG_OFF_NEAR = 1018, FOG_OFF_FAR = 1023;
+
+float fog_position_to_distance(int v) {
+    const float ndc = (float)std::clamp(v, 0, FOG_POSITION_FAR) / 500.0f - 1.0f;
+    return (2.0f * FOG_NEAR_PLANE * FOG_FAR_PLANE) / ((FOG_FAR_PLANE + FOG_NEAR_PLANE) - ndc * (FOG_FAR_PLANE - FOG_NEAR_PLANE));
+}
+
+int fog_distance_to_position(float d) {
+    d = std::clamp(d, FOG_NEAR_PLANE, FOG_FAR_PLANE);
+    const float ndc = ((FOG_FAR_PLANE + FOG_NEAR_PLANE) - (2.0f * FOG_NEAR_PLANE * FOG_FAR_PLANE) / d) / (FOG_FAR_PLANE - FOG_NEAR_PLANE);
+    return (int)std::lround((ndc + 1.0f) * 500.0f);
+}
+
+std::atomic<int> g_level_fog_near{ -1 }, g_level_fog_far{ -1 }; // the level's fog positions last sent (F9 status line)
+
+extern "C" void jfg_game_fog(uint8_t* rdram, uint32_t sp) {
+    g_rdram = rdram;
+    const int near_pos = (int16_t)rd16(sp + 0x3E), far_pos = (int16_t)rd16(sp + 0x3C);
+    g_level_fog_near.store(near_pos, std::memory_order_relaxed);
+    g_level_fog_far.store(far_pos, std::memory_order_relaxed);
+    const bool level_fog = near_pos < FOG_POSITION_FAR;
+    rt64_jfg_fog_blocked.store(level_fog ? 1 : 0, std::memory_order_relaxed);
+    if (!level_fog) return;
+    if (g.no_level_fog) {
+        wr16(sp + 0x3E, (uint16_t)FOG_OFF_NEAR);
+        wr16(sp + 0x3C, (uint16_t)FOG_OFF_FAR);
+        return;
+    }
+    if (g.level_fog_distance == 100) return;
+    // Scaled as distances from the camera, so 200% puts the fog twice as far away.
+    const float scale = (float)g.level_fog_distance / 100.0f;
+    int new_far = far_pos >= FOG_POSITION_FAR ? far_pos : std::min(fog_distance_to_position(fog_position_to_distance(far_pos) * scale), FOG_OFF_FAR);
+    int new_near = std::min(fog_distance_to_position(fog_position_to_distance(near_pos) * scale), new_far - 5);
+    wr16(sp + 0x3E, (uint16_t)(int16_t)new_near);
+    wr16(sp + 0x3C, (uint16_t)(int16_t)new_far);
+}
+
+// The depth fog's status line in the F9 menu: the level's own fog, and what the renderer did over the last half second.
+std::string depth_fog_status() {
+    static uint32_t last_drawn = 0, last_game = 0;
+    static std::chrono::steady_clock::time_point last_check;
+    static bool drawn = false, game = false;
+    const auto now = std::chrono::steady_clock::now();
+    if (now - last_check > std::chrono::milliseconds(500)) {
+        const uint32_t d = rt64_jfg_fog_drawn.load(std::memory_order_relaxed), gs = rt64_jfg_fog_game_scenes.load(std::memory_order_relaxed);
+        drawn = d != last_drawn;
+        game = gs != last_game;
+        last_drawn = d;
+        last_game = gs;
+        last_check = now;
+    }
+    std::string out;
+    char buf[160];
+    const int n = g_level_fog_near.load(std::memory_order_relaxed), f = g_level_fog_far.load(std::memory_order_relaxed);
+    if (n < 0 && f < 0) out = "Level fog: not seen yet.";
+    else if (n >= FOG_POSITION_FAR) { std::snprintf(buf, sizeof(buf), "Level fog: off (%d-%d).", n, f); out = buf; }
+    else {
+        std::snprintf(buf, sizeof(buf), "Level fog: %d-%d (about %.0f to %.0f units).", n, f, fog_position_to_distance(n),
+                      f >= FOG_POSITION_FAR ? FOG_FAR_PLANE : fog_position_to_distance(f));
+        out = buf;
+    }
+    out += game ? " The scenery uses it, so depth fog stays off." : drawn ? " Depth fog is being drawn." : " Depth fog is not being drawn.";
+    return out;
+}
+
+// Read by the renderer (src/renderer/renderer.cpp): the texture and output filtering options.
+extern "C" int jfg_texture_three_point(void) { return g.texture_filter == 0 ? 1 : 0; }
+extern "C" int jfg_output_filtering(void) { return g.output_filter; }
 
 // Hook in the characters' aim control (overlays 15-17), where it skips walking with the sniper rifle because the
 // walk keys also zoom its scope. With the fixed zoom the weapon number is hidden there, so the sniper walks too.
