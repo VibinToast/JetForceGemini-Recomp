@@ -30,6 +30,7 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 - Cheats (Skip Tribals yay!)
 
 **Visuals**
+- 60 FPS
 - HD Texture Pack
 - Widescreen.
 - Ambient occlusion (SSAO) and bloom.
