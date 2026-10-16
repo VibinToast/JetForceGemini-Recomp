@@ -3,6 +3,22 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. Entries under "Unreleased" are in the source but not yet
 built and tested, unless marked otherwise.
 
+## v1.1.4 (2026-10-16)
+
+- Centre the launcher logo between the top of the panel and the Play button
+- Show the Jet Force Gemini Recomp logo in the launcher
+- Shorten the Modern and Balanced profile description
+- Built-in profiles run at 60 fps, with shorter descriptions
+- Update .gitignore
+- Fix 60 fps running at 30-45 and looking like 30
+- Add vignette, level fog distance and texture / picture filtering options
+- Settings menu: keep the tabs clear of the quit and close buttons
+- Add a Field of View slider for gameplay (Display / Visuals)
+- Update .recomp.json
+- Update README.md
+- Updated readme, included banner.
+- Create .recomp.json
+
 ## v1.1.3 (2026-10-15)
 
 - Dual-stick camera: keep the camera out of walls with the game's own wall check
