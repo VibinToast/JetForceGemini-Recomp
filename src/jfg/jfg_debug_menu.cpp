@@ -3368,20 +3368,17 @@ constexpr const char* PROFILE_CHOICE_FILE = "jfg_profile.txt";
 
 struct BuiltinProfile { const char* name; const char* description; const char* text; };
 const BuiltinProfile BUILTIN_PROFILES[] = {
-    { "Default", "The original game: every option and weapon as on the N64 (cutscenes play in full).", "start_skips_cutscenes=0\n" },
-    { "Modern", "Modern controls and looks: dual stick + mouse and keyboard, over-the-shoulder aim with a centred "
-                "reticle, jump while aiming, slightly faster movement and camera, fixed sniper zoom, faster jetpack refuel, "
-                "widescreen, no LOD or draw distance, light ambient occlusion and bloom. "
-                "Original frame rate pacing; weapons as in the original.",
-      "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nframe_rate=0\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
+    { "Default", "The original game, as it played on the N64.", "start_skips_cutscenes=0\n" },
+    { "Modern", "Modern controls and visuals at 60 fps, with the original weapons and gameplay.",
+      "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nframe_rate=1\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
       "no_lod=1\nfar_objects=1\nssao=1\nssao_strength=30\nssao_radius=139\nbloom=1\nbloom_intensity=40\nbloom_threshold=19\n"
       "bloom_radius=6\ndual_stick=1\ninvert_aim_y=0\nswap_triggers=0\ndual_layout=1\ninvert_aim_normal=0\ninvert_camera_y=0\naim_from_character=0\n"
       "move_speed=115\ndiagonal_boost=0\nstrafe_speed=100\ncamera_speed_h=134\ncamera_speed_v=107\naim_shoulder=1\naim_centered=1\naim_speed=92\n"
       "aim_jump=1\nmouse_keyboard=1\nmouse_camera_speed=100\nmouse_aim_speed=100\ninvert_mouse_y=0\nrefuel_speed=482\nsniper_fixed_zoom=1\nsniper_zoom=365\n"
       "damage_taken=100\ndive_speed=100\nfly_speed=100\nfly_freeze=1\nfly_hide_hud=1\n" },
-    { "Modern and Balanced", "Modern's settings with the weapons rebalanced (damage, fire rate, range, spread, "
-                             "bolt speed and size; the flamethrower is left as in the original).",
-      "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nframe_rate=0\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
+    { "Modern and Balanced", "Modern, plus rebalanced weapons. The balance changes are subjective: one opinion of how the "
+                             "weapons should feel.",
+      "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nframe_rate=1\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
       "no_lod=1\nfar_objects=1\nssao=1\nssao_strength=30\nssao_radius=139\nbloom=1\nbloom_intensity=40\nbloom_threshold=19\n"
       "bloom_radius=6\ndual_stick=1\ninvert_aim_y=0\nswap_triggers=0\ndual_layout=1\ninvert_aim_normal=0\ninvert_camera_y=0\naim_from_character=0\n"
       "move_speed=115\ndiagonal_boost=0\nstrafe_speed=100\ncamera_speed_h=134\ncamera_speed_v=107\naim_shoulder=1\naim_centered=1\naim_speed=92\n"
@@ -3402,9 +3399,9 @@ const BuiltinProfile BUILTIN_PROFILES[] = {
       "weapon.12.modify=1\nweapon.12.damage=25\nweapon.12.delay=0\nweapon.12.throw_delay=30\nweapon.12.lifetime=30\nweapon.12.spread_x=80\nweapon.12.spread_y=32\nweapon.12.speed_x100=820\nweapon.12.size=100\nweapon.12.charge=100\nweapon.12.mines=8\nweapon.12.no_heat=0\n"
       "weapon.13.modify=1\nweapon.13.damage=10\nweapon.13.delay=30\nweapon.13.throw_delay=20\nweapon.13.lifetime=100\nweapon.13.spread_x=0\nweapon.13.spread_y=0\nweapon.13.speed_x100=1200\nweapon.13.size=100\nweapon.13.charge=100\nweapon.13.mines=8\nweapon.13.no_heat=0\n"
       "weapon.14.modify=1\nweapon.14.damage=8\nweapon.14.delay=0\nweapon.14.throw_delay=26\nweapon.14.lifetime=30\nweapon.14.spread_x=80\nweapon.14.spread_y=32\nweapon.14.speed_x100=1520\nweapon.14.size=100\nweapon.14.charge=100\nweapon.14.mines=8\nweapon.14.no_heat=0\n" },
-    { "Extreme", "Modern-style looks (ambient occlusion and bloom) at the original 30 fps, turned up: double movement speed with the "
-                 "diagonal boost, fast camera and aim, and over-the-top weapons (rapid fire, big bolts, fast charge, short throws).",
-      "start_skips_cutscenes=1\nframe_rate=0\nwidescreen=1\nno_lod=1\nfar_objects=1\n"
+    { "Extreme", "Modern visuals at 60 fps with everything turned up: much faster movement and over-the-top weapons, "
+                 "just for fun.",
+      "start_skips_cutscenes=1\nframe_rate=1\nwidescreen=1\nno_lod=1\nfar_objects=1\n"
       "ssao=1\nssao_strength=44\nssao_radius=143\nbloom=1\nbloom_intensity=52\nbloom_threshold=34\nbloom_radius=6\n"
       "dual_stick=1\ndual_layout=1\nmouse_keyboard=1\naim_shoulder=1\naim_centered=1\naim_jump=1\n"
       "move_speed=200\ndiagonal_boost=1\nstrafe_speed=150\ncamera_speed_h=150\ncamera_speed_v=150\naim_speed=150\n"
