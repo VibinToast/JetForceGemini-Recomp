@@ -753,7 +753,7 @@ index c5eb334..dc34871 100644
              </div>
          </form>
 diff --git a/assets/launcher.rml b/assets/launcher.rml
-index 058aa77..e7a8d53 100644
+index 058aa77..c4d21f2 100644
 --- a/assets/launcher.rml
 +++ b/assets/launcher.rml
 @@ -3,104 +3,391 @@
@@ -799,7 +799,7 @@ index 058aa77..e7a8d53 100644
 +			.rl-sidebar { top: 34dp; bottom: 46dp; left: 40dp; width: 440dp; }
 +			.rl-sidebar-inner { position: absolute; top: 0; right: 0; bottom: 0; left: 0; padding: 24dp 26dp; }
 +			.rl-logo { display: block; height: 196dp; text-align: center; }
-+			.rl-logo-image { display: block; width: 100%; height: 180dp; margin-top: 6dp; }
++			.rl-logo-image { display: block; width: 100%; height: 180dp; margin-top: -8dp; } /* JFG PORT: equal gaps above the logo and below it (Play button) */
 +			.rl-wordmark { padding-top: 20dp; }
 +			.rl-wordmark__top { display: block; font-size: 26dp; line-height: 34dp; color: #E8202A; }
 +			.rl-wordmark__main { display: block; font-size: 44dp; line-height: 56dp; color: #3CC8FF; }
