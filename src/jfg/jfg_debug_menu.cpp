@@ -258,6 +258,7 @@ struct State {
     bool texture_dump = false;     // write every texture drawn to bin/texture_dump as <hash>.png (not saved: off at start)
     int  frame_rate = 0;           // 0: the game's own pacing (30, dropping to 20), 1: 60 (runInOneFrame), 2: 60 + interpolated up to the monitor's rate
     bool widescreen = false;       // render the 3D view to the full window width, see jfg_widescreen_active()
+    int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
     bool start_skips_cutscenes = true;
     bool dual_stick = false;       // modern twin-stick layout, see jfg_dual_stick()
     bool invert_aim_y = false;     // dual stick: right stick up aims down (the game's original behaviour)
@@ -436,6 +437,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "bloom_radius") == 0) g.bloom_radius = std::clamp(value, 1, 20);
     else if (std::strcmp(key, "frame_rate") == 0) g.frame_rate = FRAME_RATE_OPTION ? std::clamp(value, 0, 2) : 0;
     else if (std::strcmp(key, "widescreen") == 0) g.widescreen = value != 0;
+    else if (std::strcmp(key, "fov") == 0) g.fov = std::clamp(value, 75, 140);
     else if (std::strcmp(key, "start_skips_cutscenes") == 0) g.start_skips_cutscenes = value != 0;
     else if (std::strcmp(key, "dual_stick") == 0) g.dual_stick = value != 0;
     else if (std::strcmp(key, "invert_aim_y") == 0) g.invert_aim_y = value != 0;
@@ -484,6 +486,7 @@ std::string options_text(const State& s) {
     char buf[512];
     std::snprintf(buf, sizeof(buf), "no_blood=%d\nstart_skips_cutscenes=%d\n", s.no_blood ? 1 : 0, s.start_skips_cutscenes ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "show_fps=%d\nwidescreen=%d\nframe_rate=%d\n", s.show_fps ? 1 : 0, s.widescreen ? 1 : 0, s.frame_rate); out += buf;
+    std::snprintf(buf, sizeof(buf), "fov=%d\n", s.fov); out += buf;
     std::snprintf(buf, sizeof(buf), "show_level=%d\nshow_pack=%d\ndump_by_level=%d\n", s.show_level ? 1 : 0, s.show_pack ? 1 : 0, s.dump_by_level ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "no_lod=%d\nfar_objects=%d\n", s.no_lod ? 1 : 0, s.far_objects ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "ssao=%d\nssao_strength=%d\nssao_radius=%d\n", s.ssao ? 1 : 0, s.ssao_strength, s.ssao_radius); out += buf;
@@ -630,6 +633,9 @@ void draw_options() {
             changed |= ImGui::Checkbox("Show texture pack", &g.show_pack);
             changed |= ImGui::Checkbox("Widescreen (fill the window)", &g.widescreen);
             options_help("During gameplay only; the HUD stays in the middle. Things at the far left and right may appear late.");
+            changed |= options_slider("Field of view %", &g.fov, 75, 140);
+            options_help("Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, "
+                         "menus, the pause screen and zoomed scopes keep the game's own.");
             changed |= ImGui::Checkbox("Disable LOD (full-detail models at any distance)", &g.no_lod);
             options_help("Characters and objects normally switch to a simpler model once they are a little way off.");
             changed |= ImGui::Checkbox("Draw distant objects (no object draw distance)", &g.far_objects);
@@ -1975,6 +1981,37 @@ extern "C" float jfg_sniper_zoom(float zoom) {
     return std::clamp((float)g.sniper_zoom / 100.0f, 1.0f, 5.0f);
 }
 
+// --- field of view ---------------------------------------------------------------------------------------------------
+// "Field of view %" option. Every FOV change goes through camSetFOV(fov, force) (src/camera.c): it stores the game's
+// value in camera->fov, divides it for a zoomed scope, and rebuilds the projection when the result differs from the
+// FOV the projection was last built with (D_800FB078). jfg_fov (hook where its zoomed and unzoomed paths meet, $f12 =
+// the FOV about to be used) scales that value, so camera->fov keeps the game's own and the game never sees ours.
+// camSetProjMtx only calls camSetFOV when D_800FB078 differs from camera->fov; while the scale is not 1 they always
+// differ (so leaving gameplay restores the game's FOV at once), but going back to a scale needs a nudge: fov_refresh.
+constexpr uint32_t ADDR_camFovApplied = 0x800FB078; // f32: the FOV the projection was last built with
+constexpr float CAMERA_MAX_FOV = 90.0f;              // camSetFOV ignores a FOV of 90 or more
+float g_fov_applied_scale = 1.0f;                    // the scale wanted when camSetFOV last ran
+
+float fov_scale_wanted() {
+    if (g.fov == 100 || g_rdram == nullptr) return 1.0f;
+    if (rd32(ADDR_mainGameMode) != 0 || rd8(ADDR_pauseMode) != 0 || in_cutscene()) return 1.0f;
+    return (float)g.fov / 100.0f;
+}
+
+// Once per drawn tick, before the scene is drawn (jfg_camera_override).
+void fov_refresh() {
+    if (fov_scale_wanted() != g_fov_applied_scale) wrf(ADDR_camFovApplied, 0.0f); // camSetProjMtx calls camSetFOV again
+}
+
+extern "C" float jfg_fov(uint8_t* rdram, float fov, uint32_t zoomed) {
+    g_rdram = rdram;
+    const float scale = fov_scale_wanted();
+    g_fov_applied_scale = scale;
+    // A zoomed scope keeps its magnification: the zoom is relative to the game's own view.
+    if (zoomed != 0 || scale == 1.0f || !(fov > 0.0f && fov < CAMERA_MAX_FOV)) return fov;
+    return std::min(fov * scale, CAMERA_MAX_FOV - 0.5f);
+}
+
 // Hook in the characters' aim control (overlays 15-17), where it skips walking with the sniper rifle because the
 // walk keys also zoom its scope. With the fixed zoom the weapon number is hidden there, so the sniper walks too.
 extern "C" int jfg_sniper_walk(int weapon) {
@@ -2331,6 +2368,7 @@ void camera_collide(recomp_context* ctx, float fx, float fy, float fz, float& tx
 // Right before the scene is drawn: move the camera round the character to the chosen angles.
 extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
+    fov_refresh();
     if (g_fly.active && g_fly.started && !g_cam.overridden) {
         const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
         for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
