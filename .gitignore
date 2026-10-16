@@ -10,4 +10,5 @@ bin/
 dist/
 bin*/
 *.log
+stitched/
 build_drive.tmp
