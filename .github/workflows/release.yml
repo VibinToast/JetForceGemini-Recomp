@@ -4,7 +4,8 @@
 #
 # - The version must be three numbers, X.Y.Z, and must not have been released before. The tag is vX.Y.Z.
 # - The release notes are the commit messages (first line of each, newest first) between the last release tag and the
-#   branch being released: nothing to write by hand, so write commit messages that read well to players.
+#   branch being released: nothing to write by hand, so write commit messages that read well to players. Commits that
+#   only change the README, .gitignore, .recomp.json, docs and other files players do not see are left out.
 # - It adds them to the top of CHANGELOG.md as the new version (the game shows that file under Changelogs), writes the
 #   version into version.txt (which goes into the game's launcher), commits both, tags vX.Y.Z and publishes the
 #   GitHub release.
@@ -73,7 +74,31 @@ jobs:
           RANGE: ${{ steps.version.outputs.range }}
           REPO: ${{ github.repository }}
         run: |
-          git log --no-merges --format='%s' "$RANGE" | grep -vE '^chore: release v' | sed -E '/^$/d; s/^/- /' | awk '!seen[$0]++' > commits.md || true
+          # Commits that change only files players do not care about (repository files, documentation, README images,
+          # release tools) are left out. Keep IGNORED in step with changelog_ignored_file in src/jfg/jfg_update_check.cpp.
+          python3 - <<'PY'
+          import os, subprocess
+          IGNORED_FILES = {"README.md", "LICENSE", "CHANGELOG.md", "version.txt", ".gitignore", ".gitattributes",
+                           ".recomp.json", "tools/package_release.ps1", "tools/package_release.bat", "tools/set_version.py"}
+          IGNORED_FOLDERS = (".github/", "docs/", "images/")
+          def ignored(path):
+              return path in IGNORED_FILES or path.startswith(IGNORED_FOLDERS)
+          log = subprocess.run(["git", "log", "--no-merges", "--format=%H%x09%s", os.environ["RANGE"]],
+                               capture_output=True, text=True, check=True).stdout
+          lines, seen = [], set()
+          for entry in log.splitlines():
+              sha, _, subject = entry.partition("\t")
+              subject = subject.strip()
+              if not subject or subject.startswith("chore: release v") or subject in seen:
+                  continue
+              files = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", sha],
+                                     capture_output=True, text=True, check=True).stdout.split()
+              if files and all(ignored(f) for f in files):
+                  continue
+              seen.add(subject)
+              lines.append("- " + subject)
+          open("commits.md", "w", encoding="utf-8").write("\n".join(lines) + ("\n" if lines else ""))
+          PY
           python3 - <<'PY'
           import datetime, os, re
           version = os.environ["VERSION"]
