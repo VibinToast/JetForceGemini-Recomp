@@ -339,8 +339,9 @@ constexpr uint32_t ADDR_waitMidiSync = 0x800A326C, ADDR_midiSyncReached = 0x800E
 constexpr int LEVEL_STORY_FIRST = 322, LEVEL_STORY_LAST = 327, LEVEL_CHARACTER_SELECT = 127;
 bool g_story_skip_pending = false;
 bool g_reset_pending = false, g_reset_press_start = false; // F5, see jfg_debug_frame
-// The "Frame rate" option (60 / interpolated) is hidden and off: on the user's PC it made no visible difference
-// (sessions 35-36 in PROGRESS.md). Set to true to bring it back.
+// The "Frame rate" option (60 / interpolated). It used to run at 30-45 and still look like 30: video retrace messages
+// reached the game two at a time, held up behind a surplus controller message the runtime kept putting back into its
+// queue (fixed in src/main.cpp, message_queue_control). False hides it again.
 constexpr bool FRAME_RATE_OPTION = true;
 // The "Depth fog" option (FogPS.hlsl in RT64) is hidden and off: in testing nothing showed in any level. The renderer
 // pass, the option and its status line are kept for when it is looked at again. Set to true to bring it back.
@@ -531,6 +532,8 @@ void load_options() {
         while (std::fscanf(f, "%63[^=]=%d\n", key, &value) == 2) apply_option(key, value);
         std::fclose(f);
     }
+    // JFG_FRAME_RATE=0/1/2 (tests): the "Frame rate" option for this run (saved only if an option is changed in the run).
+    if (const char* env = std::getenv("JFG_FRAME_RATE")) g.frame_rate = std::clamp(std::atoi(env), 0, 2);
     push_render_options();
 }
 

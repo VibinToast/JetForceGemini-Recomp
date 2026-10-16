@@ -1818,7 +1818,7 @@ index 2d0e062..523604c 100644
      }
  }
 diff --git a/src/main.cpp b/src/main.cpp
-index f93f6d3..952fce3 100644
+index f93f6d3..864f83f 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -3,6 +3,9 @@
@@ -1836,7 +1836,7 @@ index f93f6d3..952fce3 100644
  #include "runtime/threads.hpp"
  
 -const std::string version_string = "0.1.18";
-+const std::string version_string = "1.0.0";
++const std::string version_string = "1.1.3";
  
  extern "C" void recomp_entrypoint(uint8_t *rdram, recomp_context *ctx);
  gpr get_entrypoint_address();
@@ -1941,6 +1941,22 @@ index f93f6d3..952fce3 100644
  
      recompui::register_ui_exports();
      dino::runtime::register_overlays();
+@@ -264,7 +310,14 @@ int main(int argc, char** argv) {
+         .gfx_callbacks = gfx_callbacks,
+         .events_callbacks = events_callbacks,
+         .error_handling_callbacks = error_handling_callbacks,
+-        .threads_callbacks = threads_callbacks
++        .threads_callbacks = threads_callbacks,
++        // JFG PORT: a controller (SI) message for a full queue is dropped, as on the N64 (events are sent with
++        // OS_MESG_NOBLOCK), instead of being put back in the runtime's external queue. The game's controller queue holds
++        // one message and every one is the same; with re-queuing, one surplus message (after a level load, say) kept
++        // the idle thread taking it out and putting it back for the whole of every frame, and the video retrace
++        // messages waiting behind it reached the game a frame late: two at a time, 30 times a second, so 60 fps
++        // ran at 30-45 and looked like 30.
++        .message_queue_control = { .requeue_si = false }
+     };
+ 
+     recomp::start(config);
 diff --git a/src/recomp_api/animation.cpp b/src/recomp_api/animation.cpp
 deleted file mode 100644
 index 053e0f6..0000000
