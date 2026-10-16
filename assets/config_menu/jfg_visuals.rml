@@ -152,6 +152,68 @@
                             <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" id="jfg_bloom_radius_input" type="range" min="1" max="20" style="flex: 1; margin: 0dp;" data-value="bloom_radius"/>
                         </div>
                     </div>
+                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Vignette</label></div>
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(17)">
+                        <label class="config-option__title">Vignette</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_vignette" data-checked="vignette" value="1" id="jfg_vignette_on"/>
+                            <label class="config-option__tab-label" for="jfg_vignette_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_vignette" data-checked="vignette" value="0" id="jfg_vignette_off"/>
+                            <label class="config-option__tab-label" for="jfg_vignette_off">Off</label>
+                        </div>
+                    </div>
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(18)">
+                        <label class="config-option__title">Vignette Strength</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{vignette_strength}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" id="jfg_vignette_strength_input" type="range" min="0" max="100" style="flex: 1; margin: 0dp;" data-value="vignette_strength"/>
+                        </div>
+                    </div>
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(19)">
+                        <label class="config-option__title">Vignette Size</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{vignette_size}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" id="jfg_vignette_size_input" type="range" min="0" max="90" style="flex: 1; margin: 0dp;" data-value="vignette_size"/>
+                        </div>
+                    </div>
+                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Fog</label></div>
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(20)">
+                        <label class="config-option__title">Level Fog Distance</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{level_fog_distance}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" id="jfg_level_fog_distance_input" type="range" min="50" max="400" style="flex: 1; margin: 0dp;" data-value="level_fog_distance"/>
+                        </div>
+                    </div>
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(21)">
+                        <label class="config-option__title">No Level Fog</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" name="jfg_no_level_fog" data-checked="no_level_fog" value="1" id="jfg_no_level_fog_on"/>
+                            <label class="config-option__tab-label" for="jfg_no_level_fog_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" name="jfg_no_level_fog" data-checked="no_level_fog" value="0" id="jfg_no_level_fog_off"/>
+                            <label class="config-option__tab-label" for="jfg_no_level_fog_off">Off</label>
+                        </div>
+                    </div>
+                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Filtering</label></div>
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(22)">
+                        <label class="config-option__title">Texture Filtering</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_texture_filter" data-checked="texture_filter" value="0" id="jfg_texture_filter_0"/>
+                            <label class="config-option__tab-label" for="jfg_texture_filter_0">N64 Three-Point</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_texture_filter" data-checked="texture_filter" value="1" id="jfg_texture_filter_1"/>
+                            <label class="config-option__tab-label" for="jfg_texture_filter_1">Bilinear</label>
+                        </div>
+                    </div>
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(23)">
+                        <label class="config-option__title">Picture Scaling</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_output_filter" data-checked="output_filter" value="0" id="jfg_output_filter_0"/>
+                            <label class="config-option__tab-label" for="jfg_output_filter_0">Anti-Aliased</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_output_filter" data-checked="output_filter" value="1" id="jfg_output_filter_1"/>
+                            <label class="config-option__tab-label" for="jfg_output_filter_1">Linear</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_output_filter" data-checked="output_filter" value="2" id="jfg_output_filter_2"/>
+                            <label class="config-option__tab-label" for="jfg_output_filter_2">Nearest</label>
+                        </div>
+                    </div>
 
                 </div>
                 <!-- Descriptions -->
@@ -173,6 +235,13 @@
                     <p data-if="cur_config_index == 14">How strong the glow is.</p>
                     <p data-if="cur_config_index == 15">How bright a colour must be to glow. Lower: more of the picture glows.</p>
                     <p data-if="cur_config_index == 16">How far the glow spreads.</p>
+                    <p data-if="cur_config_index == 17">Darkens the edges and corners of the 3D view. The HUD is not darkened.</p>
+                    <p data-if="cur_config_index == 18">How dark the corners get.</p>
+                    <p data-if="cur_config_index == 19">How far from the middle the darkening starts: higher keeps more of the picture clear.</p>
+                    <p data-if="cur_config_index == 20">How far away the levels' own fog is. Some levels use it to hide where the scenery stops being drawn, so moving it back can show things appearing in the distance.</p>
+                    <p data-if="cur_config_index == 21">Turns the levels' own fog off. Things in the distance may be seen appearing.</p>
+                    <p data-if="cur_config_index == 22"><b>N64 Three-Point</b>: how the N64 smooths textures. <b>Bilinear</b>: smoother, as on PC.</p>
+                    <p data-if="cur_config_index == 23">How the picture is scaled to the window. <b>Anti-Aliased</b>: sharp pixels with smooth edges. <b>Linear</b>: softer. <b>Nearest</b>: sharp pixels.</p>
                 </div>
             </div>
         </form>

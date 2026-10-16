@@ -2650,15 +2650,17 @@ index e6d7716..0960cf4 100644
  }
  
 diff --git a/src/renderer/renderer.cpp b/src/renderer/renderer.cpp
-index 4572744..fc9755b 100644
+index 4572744..81c7f0e 100644
 --- a/src/renderer/renderer.cpp
 +++ b/src/renderer/renderer.cpp
-@@ -1,8 +1,17 @@
+@@ -1,8 +1,19 @@
 +extern "C" int jfg_skip_render_active(void); // src/jfg/jfg_debug_menu.cpp
 +extern "C" int jfg_widescreen_active(void);  // src/jfg/jfg_debug_menu.cpp: the "Widescreen" option of the F9 menu
 +extern "C" int jfg_texture_dump_active(void);
 +extern "C" void jfg_texture_dump_folder(char* buf, int size); // src/jfg/jfg_debug_menu.cpp: "One folder per level"  // src/jfg/jfg_debug_menu.cpp: "Dump textures" (F9 -> Textures)
 +extern "C" int jfg_texture_pack_current(char* buf, int size); // the chosen pack folder (relative, "" = none); returns a change counter
++extern "C" int jfg_texture_three_point(void); // src/jfg/jfg_debug_menu.cpp: "Texture filtering" (1 = the N64's three-point filter)
++extern "C" int jfg_output_filtering(void);    // src/jfg/jfg_debug_menu.cpp: "Picture scaling" (0 anti-aliased pixel scaling, 1 linear, 2 nearest)
 +extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_debug_menu.cpp: "Frame rate" option; -1 = use the Graphics setting, 0 = Original, 1 = Display
  #define HLSL_CPU
  #include "hle/rt64_application.h"
@@ -2671,7 +2673,7 @@ index 4572744..fc9755b 100644
  #include <chrono>
  #include <cstdint>
  #include <memory>
-@@ -168,7 +177,11 @@ RT64::UserConfiguration::AspectRatio to_rt64(ultramodern::renderer::AspectRatio
+@@ -168,7 +179,11 @@ RT64::UserConfiguration::AspectRatio to_rt64(ultramodern::renderer::AspectRatio
          case ultramodern::renderer::AspectRatio::Original:
              return RT64::UserConfiguration::AspectRatio::Original;
          case ultramodern::renderer::AspectRatio::Expand:
@@ -2684,7 +2686,22 @@ index 4572744..fc9755b 100644
          case ultramodern::renderer::AspectRatio::Manual:
              return RT64::UserConfiguration::AspectRatio::Manual;
          case ultramodern::renderer::AspectRatio::OptionCount:
-@@ -250,10 +263,16 @@ void set_application_user_config(RT64::Application* application, const ultramode
+@@ -217,6 +232,14 @@ RT64::UserConfiguration::InternalColorFormat to_rt64(ultramodern::renderer::High
+     }
+ }
+ 
++static RT64::UserConfiguration::Filtering jfg_rt64_filtering(int option) {
++    switch (option) {
++        case 1: return RT64::UserConfiguration::Filtering::Linear;
++        case 2: return RT64::UserConfiguration::Filtering::Nearest;
++        default: return RT64::UserConfiguration::Filtering::AntiAliasedPixelScaling;
++    }
++}
++
+ void set_application_user_config(RT64::Application* application, const ultramodern::renderer::GraphicsConfig& config) {
+     switch (config.res_option) {
+         default:
+@@ -250,13 +273,21 @@ void set_application_user_config(RT64::Application* application, const ultramode
              break;
      }
  
@@ -2701,8 +2718,14 @@ index 4572744..fc9755b 100644
 +    }
      application->userConfig.internalColorFormat = to_rt64(config.hpfb_option);
      application->userConfig.displayBuffering = RT64::UserConfiguration::DisplayBuffering::Triple;
-     application->userConfig.filtering = RT64::UserConfiguration::Filtering::AntiAliasedPixelScaling;
-@@ -296,7 +315,7 @@ ultramodern::renderer::GraphicsApi map_graphics_api(RT64::UserConfiguration::Gra
+-    application->userConfig.filtering = RT64::UserConfiguration::Filtering::AntiAliasedPixelScaling;
++    // JFG PORT: the F9 / Visuals menu's filtering options (also switched while the game runs, see update_game_aspect_override).
++    application->userConfig.filtering = jfg_rt64_filtering(jfg_output_filtering());
++    application->userConfig.threePointFiltering = jfg_texture_three_point() != 0;
+ }
+ 
+ ultramodern::renderer::SetupResult map_setup_result(RT64::Application::SetupResult rt64_result) {
+@@ -296,7 +327,7 @@ ultramodern::renderer::GraphicsApi map_graphics_api(RT64::UserConfiguration::Gra
  }
  
  RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool debug) {
@@ -2711,7 +2734,7 @@ index 4572744..fc9755b 100644
      static unsigned char dummy_rom_header[0x40];
      recompui::set_render_hooks();
  #if !defined(__APPLE__)
-@@ -392,7 +411,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
+@@ -392,7 +423,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
      thread_id = window_handle.thread_id;
  #endif
      const auto rt64_setup_result = app->setup(thread_id);
@@ -2720,7 +2743,7 @@ index 4572744..fc9755b 100644
          static_cast<int>(rt64_setup_result), static_cast<int>(app->chosenGraphicsAPI));
      setup_result = map_setup_result(rt64_setup_result);
      // Get the API that RT64 chose.
-@@ -412,7 +431,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
+@@ -412,7 +443,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
      if (dino::config::running_on_steam_deck()) {
          app->rasterShaderCache->setCompilationEnabled(false);
          app->workloadQueue->ubershadersOnly.store(true, std::memory_order_relaxed);
@@ -2729,7 +2752,7 @@ index 4572744..fc9755b 100644
      }
  
      // Set the application's fullscreen state.
-@@ -447,6 +466,9 @@ RT64Context::~RT64Context() {
+@@ -447,6 +478,9 @@ RT64Context::~RT64Context() {
  }
  
  void RT64Context::send_dl(const OSTask* task) {
@@ -2739,7 +2762,7 @@ index 4572744..fc9755b 100644
      check_texture_pack_actions();
      app->state->rsp->reset();
      constexpr uint32_t DkrRdramMask = 0x007FFFFFU;
-@@ -458,12 +480,12 @@ void RT64Context::preload_common_shaders() {
+@@ -458,12 +492,12 @@ void RT64Context::preload_common_shaders() {
      if ((app != nullptr) && (app->rasterShaderCache != nullptr) &&
          (app->rasterShaderCache->shaderUber != nullptr)) {
          const auto start = std::chrono::steady_clock::now();
@@ -2754,7 +2777,7 @@ index 4572744..fc9755b 100644
                  deck_attract_shader_preload.size());
  
              app->rasterShaderCache->setCompilationEnabled(true);
-@@ -476,18 +498,57 @@ void RT64Context::preload_common_shaders() {
+@@ -476,18 +510,65 @@ void RT64Context::preload_common_shaders() {
              const uint32_t shader_count_after = app->rasterShaderCache->shaderCount();
              app->workloadQueue->ubershadersOnly.store(false, std::memory_order_relaxed);
              fprintf(stderr,
@@ -2808,13 +2831,21 @@ index 4572744..fc9755b 100644
 +                : (rate == 0) ? RT64::UserConfiguration::RefreshRate::Original : to_rt64(config.rr_option);
 +            app->updateUserConfig(false);
 +        }
++        // And the filtering options. Both are read by RT64 every frame, so no framebuffers need to be discarded.
++        const RT64::UserConfiguration::Filtering filtering = jfg_rt64_filtering(jfg_output_filtering());
++        const bool three_point = jfg_texture_three_point() != 0;
++        if ((app->userConfig.filtering != filtering) || (app->userConfig.threePointFiltering != three_point)) {
++            app->userConfig.filtering = filtering;
++            app->userConfig.threePointFiltering = three_point;
++            app->updateUserConfig(false);
++        }
 +    }
 +    return;
 +
      // The track-select backdrop is an authored 320-pixel-wide scrolling page.
      // The post-race and results layouts likewise draw only a 4:3 page while the
      // race scene remains visible behind it. Expanding any of those projections
-@@ -507,7 +568,7 @@ void RT64Context::update_game_aspect_override() {
+@@ -507,7 +588,7 @@ void RT64Context::update_game_aspect_override() {
      const bool postrace_active = rdram[DkrPostRaceViewportOffset ^ 3U] != 0;
      const int32_t game_mode = *reinterpret_cast<const int32_t *>(rdram + DkrGameModeOffset);
      const int32_t current_menu_id = *reinterpret_cast<const int32_t *>(rdram + DkrCurrentMenuIdOffset);
@@ -2823,7 +2854,7 @@ index 4572744..fc9755b 100644
          static int32_t previous_game_mode = INT32_MIN;
          static int32_t previous_menu_id = INT32_MIN;
          if ((game_mode != previous_game_mode) || (current_menu_id != previous_menu_id)) {
-@@ -534,7 +595,7 @@ void RT64Context::update_game_aspect_override() {
+@@ -534,7 +615,7 @@ void RT64Context::update_game_aspect_override() {
      }
  
      app->updateUserConfig(false);
@@ -2832,7 +2863,7 @@ index 4572744..fc9755b 100644
          game_aspect_override ? "enabled" : "disabled");
  }
  
-@@ -574,7 +635,14 @@ bool RT64Context::update_config(const ultramodern::renderer::GraphicsConfig& old
+@@ -574,7 +655,14 @@ bool RT64Context::update_config(const ultramodern::renderer::GraphicsConfig& old
  
  void RT64Context::enable_instant_present() {
      // Enable the present early presentation mode for minimal latency.
@@ -2848,7 +2879,7 @@ index 4572744..fc9755b 100644
  
      app->updateEnhancementConfig();
  }
-@@ -601,8 +669,76 @@ float RT64Context::get_resolution_scale() const {
+@@ -601,8 +689,76 @@ float RT64Context::get_resolution_scale() const {
      }
  }
  
@@ -2925,7 +2956,7 @@ index 4572744..fc9755b 100644
      TexturePackAction cur_action;
      while (texture_pack_action_queue.try_dequeue(cur_action)) {
          std::visit(overloaded{
-@@ -647,11 +783,46 @@ void RT64Context::check_texture_pack_actions() {
+@@ -647,11 +803,46 @@ void RT64Context::check_texture_pack_actions() {
  
          // Build the path list from the sorted mod list.
          std::vector<RT64::ReplacementDirectory> replacement_directories;

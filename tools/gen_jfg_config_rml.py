@@ -76,6 +76,20 @@ VISUALS = [
     ("range", "bloom_intensity", "Bloom Intensity", (0, 300, "%"), "How strong the glow is."),
     ("range", "bloom_threshold", "Bloom Threshold", (0, 100, "%"), "How bright a colour must be to glow. Lower: more of the picture glows."),
     ("range", "bloom_radius", "Bloom Radius", (1, 20, ""), "How far the glow spreads."),
+    ("group", None, "Vignette", None, None),
+    ("bool", "vignette", "Vignette", None, "Darkens the edges and corners of the 3D view. The HUD is not darkened."),
+    ("range", "vignette_strength", "Vignette Strength", (0, 100, "%"), "How dark the corners get."),
+    ("range", "vignette_size", "Vignette Size", (0, 90, "%"), "How far from the middle the darkening starts: higher keeps more of the picture clear."),
+    ("group", None, "Fog", None, None),
+    ("range", "level_fog_distance", "Level Fog Distance", (50, 400, "%"),
+     "How far away the levels' own fog is. Some levels use it to hide where the scenery stops being drawn, so moving it back can show things appearing in the distance."),
+    ("bool", "no_level_fog", "No Level Fog", None, "Turns the levels' own fog off. Things in the distance may be seen appearing."),
+    # Depth fog (depth_fog, fog_start, fog_end, fog_density, fog_color) is hidden for now: DEPTH_FOG_OPTION in jfg_debug_menu.cpp.
+    ("group", None, "Filtering", None, None),
+    ("choice", "texture_filter", "Texture Filtering", [(0, "N64 Three-Point"), (1, "Bilinear")],
+     "<b>N64 Three-Point</b>: how the N64 smooths textures. <b>Bilinear</b>: smoother, as on PC."),
+    ("choice", "output_filter", "Picture Scaling", [(0, "Anti-Aliased"), (1, "Linear"), (2, "Nearest")],
+     "How the picture is scaled to the window. <b>Anti-Aliased</b>: sharp pixels with smooth edges. <b>Linear</b>: softer. <b>Nearest</b>: sharp pixels."),
 ]
 
 # The Textures tab: the texture pack list (TEXTURE_PACKS) comes first, then these.
