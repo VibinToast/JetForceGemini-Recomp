@@ -209,10 +209,10 @@ index 5b41993..b9d280f 100644
 -set_property(TARGET DiddyKongRacingRecompiled PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 +set_property(TARGET JetForceGeminiRecompiled PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 diff --git a/assets/config_menu.rml b/assets/config_menu.rml
-index fb807d6..e3d6c99 100644
+index fb807d6..12a7cf9 100644
 --- a/assets/config_menu.rml
 +++ b/assets/config_menu.rml
-@@ -29,6 +29,15 @@
+@@ -29,6 +29,19 @@
  	<link type="text/template" href="config_menu/sound.rml" />
  	<link type="text/template" href="config_menu/mods.rml" />
  	<link type="text/template" href="config_menu/debug.rml" />
@@ -224,11 +224,15 @@ index fb807d6..e3d6c99 100644
 +	<style>
 +		.jfg-selected { border-color: #e9cd35; background-color: rgba(233, 205, 53, 0.35); color: #f2f2f2; }
 +		.jfg-note { color: #e9cd35; }
++		/* JFG PORT: nine tabs do not fit at the base size: they ran under the quit and close buttons (absolutely placed at
++		   the top right). Slightly smaller tabs, and the tab row keeps clear of the buttons. */
++		#config_tabset tabs { padding-right: 144dp; }
++		#config_tabset tab.tab { padding-left: 16dp; padding-right: 16dp; font-size: 32dp; letter-spacing: 2dp; line-height: 32dp; }
 +	</style>
  </head>
  <body class="window">
  	<!-- <handle move_target="#document"> -->
-@@ -36,7 +45,15 @@
+@@ -36,7 +49,15 @@
  			<div class="centered-page" onclick="close_config_menu_backdrop">
  				<div class="centered-page__modal">
  					<tabset class="tabs" id="config_tabset">
@@ -245,7 +249,7 @@ index fb807d6..e3d6c99 100644
  							<div>General</div>
  							<div class="tab__indicator"></div>
  						</tab>
-@@ -78,6 +95,28 @@
+@@ -78,6 +99,28 @@
  						<panel class="config" data-model="debug_model">
  							<template src="config-menu__debug" />
  						</panel>
