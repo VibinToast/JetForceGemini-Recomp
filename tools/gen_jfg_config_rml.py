@@ -54,6 +54,8 @@ GAMEPLAY = [
 VISUALS = [
     ("group", None, "Display", None, None),
     ("bool", "widescreen", "Widescreen", None, "During gameplay the 3D view fills the window; the HUD stays in the middle. Things at the far left and right may appear late."),
+    ("range", "fov", "Field of View", (75, 140, "%"),
+     "Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, menus, the pause screen and zoomed scopes keep the game's own."),
     ("choice", "frame_rate", "Frame Rate", [(0, "Original"), (1, "60"), (2, "60 + Interpolated")],
      "<b>Original</b>: 30, dropping to 20 like the N64. <b>60</b>: the game updates every video frame; game speed stays the same. <b>60 + Interpolated</b>: the renderer also adds in-between frames up to your monitor's refresh rate; some moving objects may look off."),
     ("bool", "no_lod", "Disable LOD", None, "Characters and objects keep their full-detail model at any distance."),
@@ -206,7 +208,7 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
                 </div>
                 <div class="config__wrapper">
                     <p>A profile is a whole set of the port's settings (Gameplay and Visuals tabs, and the weapon settings of the F10 tools). Choosing one first puts every setting back to the original game, then applies the profile.</p>
-                    <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and looks. <b>Extreme</b>: Modern's looks at 30 fps, with faster movement and over-the-top weapons.</p>
+                    <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and looks. <b>Modern and Balanced</b>: Modern with rebalanced weapons. <b>Extreme</b>: Modern-style looks at 30 fps, with faster movement and over-the-top weapons.</p>
                     <p>Your own profiles are kept in bin\\profiles; changes made while one is active are saved to it. Cheats and the Textures tab (texture pack, dumping) are not part of profiles.</p>
                     <p>Controller: Up/Down and Left/Right move between buttons, A chooses.</p>
                 </div>

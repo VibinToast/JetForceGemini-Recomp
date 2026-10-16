@@ -209,6 +209,13 @@ func = "func_80045F00_46B00"
 before_vram = 0x800462A0
 text = "{ void jfg_camera_override(uint8_t*, recomp_context*); jfg_camera_override(rdram, ctx); }"
 
+# Field of view option (src/jfg/jfg_debug_menu.cpp): camSetFOV, where its zoomed and unzoomed paths meet. $f12 = the FOV
+# about to be applied (camera->fov already holds the game's own), $t7 = the camera's zoom flag (D_800A3174[camNo]).
+[[patches.hook]]
+func = "camSetFOV"
+before_vram = 0x8003F870
+text = "{ float jfg_fov(uint8_t*, float, uint32_t); ctx->f12.fl = jfg_fov(rdram, ctx->f12.fl, (uint32_t)ctx->r15); }"
+
 # Movement speed options (src/jfg/jfg_debug_menu.cpp): objMoveXYZ(object, dx, dy, dz) moves an object with collision;
 # for the player's object the horizontal step is scaled.
 [[patches.hook]]
