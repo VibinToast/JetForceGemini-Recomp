@@ -3376,8 +3376,7 @@ const BuiltinProfile BUILTIN_PROFILES[] = {
       "move_speed=115\ndiagonal_boost=0\nstrafe_speed=100\ncamera_speed_h=134\ncamera_speed_v=107\naim_shoulder=1\naim_centered=1\naim_speed=92\n"
       "aim_jump=1\nmouse_keyboard=1\nmouse_camera_speed=100\nmouse_aim_speed=100\ninvert_mouse_y=0\nrefuel_speed=482\nsniper_fixed_zoom=1\nsniper_zoom=365\n"
       "damage_taken=100\ndive_speed=100\nfly_speed=100\nfly_freeze=1\nfly_hide_hud=1\n" },
-    { "Modern and Balanced", "Modern, plus rebalanced weapons. The balance changes are subjective: one opinion of how the "
-                             "weapons should feel.",
+    { "Modern and Balanced", "Modern, plus rebalanced weapons. The balance changes are subjective.",
       "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nframe_rate=1\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
       "no_lod=1\nfar_objects=1\nssao=1\nssao_strength=30\nssao_radius=139\nbloom=1\nbloom_intensity=40\nbloom_threshold=19\n"
       "bloom_radius=6\ndual_stick=1\ninvert_aim_y=0\nswap_triggers=0\ndual_layout=1\ninvert_aim_normal=0\ninvert_camera_y=0\naim_from_character=0\n"
