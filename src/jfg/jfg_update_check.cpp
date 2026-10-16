@@ -206,9 +206,53 @@ bool is_bot_commit(const nlohmann::json& c) {
     return who.find("[bot]") != std::string::npos || who.find("|bot") != std::string::npos || who.find("github-actions") != std::string::npos;
 }
 
+// Files that change nothing for players: the repository's own files, documentation, images for the README and the release
+// tools. A commit that touches only these is left out of the changelog. Keep in step with IGNORED in
+// .github/workflows/release.yml, which writes CHANGELOG.md and the release notes the same way.
+bool changelog_ignored_file(const std::string& path) {
+    static const char* const files[] = {
+        "README.md", "LICENSE", "CHANGELOG.md", "version.txt", ".gitignore", ".gitattributes", ".recomp.json",
+        "tools/package_release.ps1", "tools/package_release.bat", "tools/set_version.py",
+    };
+    static const char* const folders[] = { ".github/", "docs/", "images/" };
+    for (const char* f : files) if (path == f) return true;
+    for (const char* f : folders) if (path.rfind(f, 0) == 0) return true;
+    return false;
+}
+
+// The commit list does not say which files a commit changed, so that takes one request per commit. The answer never
+// changes, so it is kept in bin\jfg_changelog_cache.txt ("<sha> 1" = only ignored files, "<sha> 0" = something else):
+// each commit is looked up once, which keeps well inside GitHub's limit of 60 requests an hour.
+constexpr const char* CHANGELOG_CACHE_FILE = "jfg_changelog_cache.txt";
+constexpr const char* COMMIT_URL_PREFIX = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/commits/";
+
+bool commit_only_ignored_files(const std::string& sha, std::vector<std::pair<std::string, bool>>& cache, bool& cache_changed) {
+    for (const auto& entry : cache) if (entry.first == sha) return entry.second;
+    std::string body;
+    if (!http_get_string(COMMIT_URL_PREFIX + sha, body)) return false; // unknown: listed (and asked again next time)
+    const nlohmann::json commit = nlohmann::json::parse(body, nullptr, false);
+    if (commit.is_discarded() || !commit.is_object()) return false;
+    const auto files = commit.find("files");
+    if (files == commit.end() || !files->is_array() || files->empty()) return false;
+    bool only_ignored = true;
+    for (const nlohmann::json& f : *files) {
+        if (!f.is_object() || !changelog_ignored_file(json_string(f, "filename"))) { only_ignored = false; break; }
+    }
+    cache.emplace_back(sha, only_ignored);
+    cache_changed = true;
+    return only_ignored;
+}
+
 void commits_thread() {
     std::string body;
     if (!http_get_string(COMMITS_URL, body)) return;
+    std::vector<std::pair<std::string, bool>> cache;
+    if (std::FILE* f = std::fopen(CHANGELOG_CACHE_FILE, "r")) {
+        char sha[64]; int ignored;
+        while (std::fscanf(f, "%63s %d", sha, &ignored) == 2) cache.emplace_back(sha, ignored != 0);
+        std::fclose(f);
+    }
+    bool cache_changed = false;
     const nlohmann::json list = nlohmann::json::parse(body, nullptr, false);
     if (list.is_discarded() || !list.is_array()) return;
     std::string text;
@@ -222,7 +266,14 @@ void commits_thread() {
         const bool release_commit = subject.rfind("chore: release v", 0) == 0;
         if (release_commit) break; // everything from here down is in a released version (and its notes)
         if (subject.empty() || is_bot_commit(c) || subject.rfind("Merge ", 0) == 0) continue;
+        if (commit_only_ignored_files(json_string(c, "sha"), cache, cache_changed)) continue;
         text += "- " + subject + "\n";
+    }
+    if (cache_changed) {
+        if (std::FILE* f = std::fopen(CHANGELOG_CACHE_FILE, "w")) {
+            for (const auto& entry : cache) std::fprintf(f, "%s %d\n", entry.first.c_str(), entry.second ? 1 : 0);
+            std::fclose(f);
+        }
     }
     std::lock_guard<std::mutex> lock(g_mutex);
     // Only what has been pushed to GitHub is listed there; commits that are only on a computer are not.
