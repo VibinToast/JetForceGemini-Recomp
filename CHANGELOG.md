@@ -3,6 +3,14 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. Entries under "Unreleased" are in the source but not yet
 built and tested, unless marked otherwise.
 
+## v1.1.5 (2026-10-17)
+
+- Modern profiles: aim speed 100% and movement speed 110%
+- Run enemies and tribals at their original speed at 60 fps
+- Fix drones flying in and attacking too fast at 60 fps
+- Make new updates hard to miss in the launcher
+- Leave README and other repository-only changes out of the changelogs
+
 ## v1.1.4 (2026-10-16)
 
 - Centre the launcher logo between the top of the panel and the Play button
