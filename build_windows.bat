@@ -167,7 +167,9 @@ rem The version in version.txt (the release workflow updates it) goes into the b
 %PY% "%PORT_DIR%tools\set_version.py" "%PORT_DIR%version.txt" "%WORK%" || exit /b 1
 
 rem ---- 4. JFG files ----------------------------------------------------------
-if not exist "%WORK%\src\jfg" mkdir "%WORK%\src\jfg"
+rem src\jfg holds only the port's files: empty it first, so a file removed or renamed here does not stay in the build.
+if exist "%WORK%\src\jfg" rmdir /s /q "%WORK%\src\jfg"
+mkdir "%WORK%\src\jfg"
 copy /y "%PORT_DIR%src\jfg\*.cpp" "%WORK%\src\jfg\" >nul || ( echo [jfg] ERROR: copying src\jfg failed & exit /b 1 )
 copy /y "%PORT_DIR%src\jfg\*.h" "%WORK%\src\jfg\" >nul || ( echo [jfg] ERROR: copying src\jfg headers failed & exit /b 1 )
 copy /y "%PORT_DIR%src\jfg\*.inc" "%WORK%\src\jfg\" >nul || ( echo [jfg] ERROR: copying src\jfg\*.inc failed & exit /b 1 )

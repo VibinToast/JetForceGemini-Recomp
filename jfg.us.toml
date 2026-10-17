@@ -137,7 +137,7 @@ vram = 0x829B0010
 func = "osRamTest4_6105"
 value = 0x10000003 # beq t7, at, pass -> b pass
 
-# Native debug menu (src/jfg/jfg_debug_menu.cpp): called once per game tick at the entry of the main loop tick.
+# Per-tick entry point (src/jfg/jfg_tick.cpp): called once per game tick at the entry of the main loop tick.
 [[patches.hook]]
 func = "func_80044FAC_45BAC"
 before_vram = 0x80044FAC
@@ -160,7 +160,7 @@ func = "bloodHitSpriteAdd"
 before_vram = 0x82080334
 text = "{ int jfg_no_blood(void); if (jfg_no_blood()) { recomp_exit_function(); return; } }"
 
-# Cutscene skip (src/jfg/jfg_debug_menu.cpp): after joyRead() in the main loop tick, and at the entry of viFrameSync.
+# Cutscene skip (src/jfg/jfg_cutscene_skip.cpp, jfg_frame_rate.cpp): after joyRead() in the main loop tick, and at the entry of viFrameSync.
 [[patches.hook]]
 func = "func_80044FAC_45BAC"
 before_vram = 0x80045250
@@ -202,35 +202,35 @@ func = "n_alEvtqPostEvent"
 before_vram = 0x8008B610
 text = "{ int jfg_evt_skip(uint8_t*, uint32_t, uint32_t); if (jfg_evt_skip(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5)) { recomp_exit_function(); return; } }"
 
-# Dual-stick camera (src/jfg/jfg_debug_menu.cpp): right before the scene is drawn (the "jal trackDraw" in the game
+# Dual-stick camera (src/jfg/jfg_camera.cpp): right before the scene is drawn (the "jal trackDraw" in the game
 # tick), the active camera is moved to the angle the right stick has chosen.
 [[patches.hook]]
 func = "func_80045F00_46B00"
 before_vram = 0x800462A0
 text = "{ void jfg_camera_override(uint8_t*, recomp_context*); jfg_camera_override(rdram, ctx); }"
 
-# Field of view option (src/jfg/jfg_debug_menu.cpp): camSetFOV, where its zoomed and unzoomed paths meet. $f12 = the FOV
+# Field of view option (src/jfg/jfg_visuals.cpp): camSetFOV, where its zoomed and unzoomed paths meet. $f12 = the FOV
 # about to be applied (camera->fov already holds the game's own), $t7 = the camera's zoom flag (D_800A3174[camNo]).
 [[patches.hook]]
 func = "camSetFOV"
 before_vram = 0x8003F870
 text = "{ float jfg_fov(uint8_t*, float, uint32_t); ctx->f12.fl = jfg_fov(rdram, ctx->f12.fl, (uint32_t)ctx->r15); }"
 
-# Fog options (src/jfg/jfg_debug_menu.cpp): func_8001BF9C (src/track.c) right after trackGetFog returns, before the fog is
+# Fog options (src/jfg/jfg_visuals.cpp): func_8001BF9C (src/track.c) right after trackGetFog returns, before the fog is
 # put in the display list. $sp = its frame (near s16 at +0x3E, far s16 at +0x3C), which jfg_game_fog may rewrite.
 [[patches.hook]]
 func = "func_8001BF9C_1CB9C"
 before_vram = 0x8001BFD4
 text = "{ void jfg_game_fog(uint8_t*, uint32_t); jfg_game_fog(rdram, (uint32_t)ctx->r29); }"
 
-# Movement speed options (src/jfg/jfg_debug_menu.cpp): objMoveXYZ(object, dx, dy, dz) moves an object with collision;
+# Movement speed options (src/jfg/jfg_controls.cpp): objMoveXYZ(object, dx, dy, dz) moves an object with collision;
 # for the player's object the horizontal step is scaled.
 [[patches.hook]]
 func = "objMoveXYZ"
 before_vram = 0x80009A04
 text = "{ void jfg_move_scale(uint8_t*, recomp_context*); jfg_move_scale(rdram, ctx); }"
 
-# mainChangeLevel(level, character, entrance?, frontMode, ?, ?) entry: logged with JFG_DEBUG_STATS (src/jfg/jfg_debug_menu.cpp).
+# mainChangeLevel(level, character, entrance?, frontMode, ?, ?) entry: logged with JFG_DEBUG_STATS (src/jfg/jfg_diagnostics.cpp).
 [[patches.hook]]
 func = "mainChangeLevel"
 before_vram = 0x8004665C
@@ -269,7 +269,7 @@ func = "__scTaskReady"
 before_vram = 0x800509B0
 text = "{ int jfg_sched_extra_frame(void); if (jfg_sched_extra_frame()) { ctx->r2 = ctx->r4; recomp_exit_function(); return; } }"
 
-# 60 fps: the squad system (enemies, tribals; overlay 3) at the game's 30 fps cadence (src/jfg/jfg_debug_menu.cpp,
+# 60 fps: the squad system (enemies, tribals; overlay 3) at the game's 30 fps cadence (src/jfg/jfg_frame_rate.cpp,
 # jfg_squad_frames). Much of it works per tick whatever the frame count, so at 60 fps squad members moved, animated and
 # attacked about twice as fast. In 60 fps mode SquaddieControl(obj, frames), SquadronControl(obj, frames) and
 # squadsModuleTick(frames) run on every second tick only, with the frames of both ticks.
@@ -288,7 +288,7 @@ func = "squadsModuleTick"
 before_vram = 0x82036990
 text = "{ int jfg_squad_frames(uint8_t*, uint32_t, int); int r = jfg_squad_frames(rdram, 0, (int32_t)ctx->r4); if (r == 0) { ctx->r2 = 0; recomp_exit_function(); return; } ctx->r4 = (gpr)r; }"
 
-# Weapons tab (src/jfg/jfg_debug_menu.cpp): bolt size for the player's laser bolts, at the end of laserboltInit
+# Weapons tab (src/jfg/jfg_weapons.cpp): bolt size for the player's laser bolts, at the end of laserboltInit
 # (overlay 109; a0 = the new bolt).
 [[patches.hook]]
 func = "laserboltInit"
@@ -301,7 +301,7 @@ func = "mineInit"
 before_vram = 0x826F020C
 text = "{ void jfg_mine_init(uint8_t*, recomp_context*); jfg_mine_init(rdram, ctx); }"
 
-# Boss fights (src/jfg/jfg_debug_menu.cpp, jfg_boss_tick): the player's boss-fight control (overlays 50-52, one per
+# Boss fights (src/jfg/jfg_controls.cpp, jfg_boss_tick): the player's boss-fight control (overlays 50-52, one per
 # character) ran this tick - the dual-stick / mouse and keyboard controls switch to the boss layout.
 [[patches.hook]]
 func = "boyBossControl"
