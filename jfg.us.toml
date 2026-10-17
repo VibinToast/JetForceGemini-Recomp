@@ -269,6 +269,20 @@ func = "__scTaskReady"
 before_vram = 0x800509B0
 text = "{ int jfg_sched_extra_frame(void); if (jfg_sched_extra_frame()) { ctx->r2 = ctx->r4; recomp_exit_function(); return; } }"
 
+# 60 fps: squad members that ignore the frame step (src/jfg/jfg_debug_menu.cpp, jfg_squaddie_rate). The drones' corkscrew
+# attack (overlay 147) moves and decides once per tick whatever the frame count, so at 60 fps they flew in and attacked
+# about twice as fast. Squad members seen in CorkScrewAttackMover(obj, ...) are updated by SquaddieControl(obj, frames)
+# on every second tick only, with the skipped frames added: the game's 30 fps cadence for them.
+[[patches.hook]]
+func = "CorkScrewAttackMover"
+before_vram = 0x829200B8
+text = "{ void jfg_slow_squaddie_seen(uint8_t*, uint32_t); jfg_slow_squaddie_seen(rdram, (uint32_t)ctx->r4); }"
+
+[[patches.hook]]
+func = "SquaddieControl"
+before_vram = 0x82030600
+text = "{ int jfg_squaddie_rate(uint8_t*, uint32_t, int); int r = jfg_squaddie_rate(rdram, (uint32_t)ctx->r4, (int32_t)ctx->r5); if (r == 0) { recomp_exit_function(); return; } ctx->r5 = (gpr)r; }"
+
 # Weapons tab (src/jfg/jfg_debug_menu.cpp): bolt size for the player's laser bolts, at the end of laserboltInit
 # (overlay 109; a0 = the new bolt).
 [[patches.hook]]
