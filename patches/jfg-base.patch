@@ -753,10 +753,10 @@ index c5eb334..dc34871 100644
              </div>
          </form>
 diff --git a/assets/launcher.rml b/assets/launcher.rml
-index 058aa77..c4d21f2 100644
+index 058aa77..b4c62bd 100644
 --- a/assets/launcher.rml
 +++ b/assets/launcher.rml
-@@ -3,104 +3,391 @@
+@@ -3,104 +3,416 @@
  		<title>Launcher</title>
  		<link type="text/rcss" href="rml.rcss"/>
  		<link type="text/rcss" href="recomp.rcss"/>
@@ -899,6 +899,16 @@ index 058aa77..c4d21f2 100644
 +			.rl-start-shadow:hover .rl-start.rl-ready { top: -8dp; left: -8dp; }
 +			#window:not([mouse-active]) .rl-start.rl-ready:focus { top: -8dp; left: -8dp; border-color: #E8F3FF; }
 +			.rl-start-note { display: block; margin-top: 12dp; font-size: 17dp; text-align: center; color: #8199BF; }
++			/* A newer release exists: a bar on the Play page, above the Start button, that opens the update dialog. */
++			.rl-banner-shadow { display: block; position: relative; margin: 26dp 0dp 0dp 6dp; background-color: #5A3A00; }
++			.rl-banner { display: block; position: relative; top: -6dp; left: -6dp; padding: 14dp 20dp; border-width: 2dp; border-color: #FFB21A;
++				background-color: #241600; text-align: left;
++				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: none; focus: auto; tab-index: auto; cursor: pointer; }
++			.rl-banner:hover { background-color: #3A2400; }
++			.rl-banner-shadow:hover .rl-banner { top: -8dp; left: -8dp; }
++			#window:not([mouse-active]) .rl-banner:focus { top: -8dp; left: -8dp; border-color: #E8F3FF; background-color: #3A2400; }
++			.rl-banner-title { display: block; font-family: "Press Start 2P"; font-size: 17dp; line-height: 26dp; color: #FFB21A; text-transform: uppercase; }
++			.rl-banner-text { display: block; margin-top: 6dp; font-size: 17dp; line-height: 24dp; color: #E8F3FF; }
 +			.rl-keys { display: block; margin-top: 30dp; }
 +			.rl-key-row { display: flex; flex-direction: row; font-size: 17dp; line-height: 30dp; }
 +			.rl-key { display: block; flex: 0 0 auto; width: 210dp; color: #FFB21A; font-weight: bold; }
@@ -1039,7 +1049,7 @@ index 058aa77..c4d21f2 100644
 +							<div class="rl-separator"></div>
 +							<div class="rl-btn-shadow"><button id="nav_exit" class="rl-btn rl-btn--exit" onclick="exit_game"
 +								style="nav-up: #nav_about; nav-down: #nav_play;">Exit</button></div>
-+							<div class="rl-version"><div class="rl-version-side"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp')">GitHub</button></div><div class="rl-version-mid">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click to see what is new and update.</div></div></div><div class="rl-version-side"></div></div>
++							<div class="rl-version"><div class="rl-version-side"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp')">GitHub</button></div><div class="rl-version-mid">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click (or use the banner on the Play page) to see what is new and update.</div></div></div><div class="rl-version-side"></div></div>
  						</div>
  					</div>
 -					<div class="launcher__content-quadrant"></div>
@@ -1078,9 +1088,17 @@ index 058aa77..c4d21f2 100644
 +											</div>
 +										</div>
 +									</div></div>
++									<div class="rl-banner-shadow" data-if="update_available">
++										<button id="rl_update_banner" class="rl-banner" data-event-click="show_update()"
++											style="nav-left: #nav_play; nav-up: #rl_browse; nav-down: #rl_start;">
++											<span class="rl-banner-title">Update available: v{{update_version}}</span>
++											<span class="rl-banner-text">See what is new and update. Your saves and settings are kept.</span>
++										</button>
++									</div>
 +									<div class="rl-start-shadow">
 +										<button id="rl_start" class="rl-start" data-class-rl-ready="rom_valid" data-event-click="start_game()"
-+											style="nav-left: #nav_play; nav-up: #rl_browse;">Start Jet Force Gemini</button>
++											data-style-nav-up="update_available ? '#rl_update_banner' : '#rl_browse'"
++											style="nav-left: #nav_play;">Start Jet Force Gemini</button>
 +									</div>
 +									<div class="rl-start-note" data-if="!rom_valid">Load a ROM to start.</div>
 +									<div class="rl-keys">
@@ -1214,12 +1232,19 @@ index 058aa77..c4d21f2 100644
 +					<div class="rl-modal-notes">{{update_changelog}}</div>
 +					<div class="rl-modal-status" data-if="update_stage != 0" data-class-rl-error="update_stage == 2">{{update_status}}</div>
 +					<div class="rl-progress" data-if="update_stage == 1"><div class="rl-progress-bar" data-style-width="update_percent + '%'"></div></div>
-+					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install">Update to v{{update_version}}? The game restarts when it is done. Your saves and settings are kept.</div>
++					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install">Update to v{{update_version}}? The game restarts when it is done. Your saves and settings are kept. "Skip this version" stops this window opening by itself until the next version.</div>
 +					<div class="rl-modal-ask rl-warn" data-if="update_stage == 0 &amp;&amp; !update_can_install">{{update_unavailable}}</div>
 +					<div class="rl-modal-buttons">
-+						<div class="rl-action-shadow" data-if="update_stage == 0"><button id="rl_update_go" class="rl-action" data-event-click="update_install()">Update now</button></div>
-+						<div class="rl-action-shadow" data-if="update_stage == 0 || update_stage == 2"><button class="rl-action rl-action--outline" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp/releases/latest')">Release page</button></div>
-+						<div class="rl-action-shadow" data-if="update_stage != 1 &amp;&amp; update_stage != 3"><button id="rl_update_cancel" class="rl-action rl-action--outline" data-event-click="update_close()">{{update_stage == 2 ? 'Close' : 'Cancel'}}</button></div>
++						<div class="rl-action-shadow" data-if="update_stage == 0"><button id="rl_update_go" class="rl-action" data-event-click="update_install()"
++							style="nav-up: none; nav-down: none; nav-left: none; nav-right: #rl_update_later;">Update now</button></div>
++						<div class="rl-action-shadow" data-if="update_stage != 1 &amp;&amp; update_stage != 3"><button id="rl_update_later" class="rl-action rl-action--outline" data-event-click="update_close()"
++							data-style-nav-left="update_stage == 0 ? '#rl_update_go' : 'none'" data-style-nav-right="update_stage == 0 ? '#rl_update_skip' : '#rl_update_page'"
++							style="nav-up: none; nav-down: none;">{{update_stage == 2 ? 'Close' : 'Later'}}</button></div>
++						<div class="rl-action-shadow" data-if="update_stage == 0"><button id="rl_update_skip" class="rl-action rl-action--outline" data-event-click="update_skip()"
++							style="nav-up: none; nav-down: none; nav-left: #rl_update_later; nav-right: #rl_update_page;">Skip this version</button></div>
++						<div class="rl-action-shadow" data-if="update_stage == 0 || update_stage == 2"><button id="rl_update_page" class="rl-action rl-action--outline" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp/releases/latest')"
++							data-style-nav-left="update_stage == 0 ? '#rl_update_skip' : '#rl_update_later'"
++							style="nav-up: none; nav-down: none; nav-right: none;">Release page</button></div>
 +					</div>
 +				</div></div></div>
 +				<div class="rl-modal" data-class-rl-on="changelog_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
@@ -1227,7 +1252,7 @@ index 058aa77..c4d21f2 100644
 +					<div class="rl-modal-sub">You have v{{version_number}}. Newest changes first.</div>
 +					<div class="rl-modal-notes rl-modal-notes--tall">{{changelog_text}}</div>
 +					<div class="rl-modal-buttons">
-+						<div class="rl-action-shadow"><button id="rl_changelog_close" class="rl-action" data-event-click="changelog_close()">Close</button></div>
++						<div class="rl-action-shadow"><button id="rl_changelog_close" class="rl-action" data-event-click="changelog_close()" style="nav-up: none; nav-down: none; nav-left: none; nav-right: none;">Close</button></div>
 +					</div>
 +				</div></div></div>
 +				<div class="rl-scanlines"></div>
@@ -3280,10 +3305,10 @@ index d117b72..76acb9c 100644
  };
  
 diff --git a/src/ui/ui_launcher.cpp b/src/ui/ui_launcher.cpp
-index df580ce..39302c2 100644
+index df580ce..c285999 100644
 --- a/src/ui/ui_launcher.cpp
 +++ b/src/ui/ui_launcher.cpp
-@@ -7,13 +7,111 @@
+@@ -7,13 +7,212 @@
  #include "librecomp/mods.hpp"
  #include "ultramodern/ultramodern.hpp"
  #include "RmlUi/Core.h"
@@ -3295,12 +3320,19 @@ index df580ce..39302c2 100644
  
  static std::string version_string;
 +#include "jfg/jfg_update_check.h"
-+// A newer release exists (src/jfg/jfg_update_check.cpp): the launcher shows a warning triangle next to the version; clicking it
-+// opens a dialog with what is new and a confirmation, and the update is then downloaded and installed.
++// A newer release exists (src/jfg/jfg_update_check.cpp): the dialog with what is new and a confirmation opens by itself, a
++// banner on the Play page and a warning triangle next to the version open it again, and the update is then downloaded and
++// installed.
 +static bool update_available = false, update_dialog = false, update_can_install = false, update_restarting = false;
 +static std::string update_version, update_changelog, update_status, update_unavailable, changelog_text;
 +static bool changelog_dialog = false;
 +static int update_stage = 0, update_percent = 0;
++// The update dialog opens by itself when the launcher finds a newer release, once per launch, unless the player chose
++// "Skip this version" for it (the version is kept in bin\jfg_update_skipped.txt); the Play page's banner stays either way.
++// Dialogs take the focus when they open (controller players have no other way in) and give it back when they close.
++static constexpr const char* UPDATE_SKIPPED_FILE = "jfg_update_skipped.txt";
++static std::string pending_focus_id;  // focused a couple of UI frames later, once the data bindings have shown the element
++static std::string return_focus_id;   // focused when the open dialog closes
  
  Rml::DataModelHandle model_handle;
  bool rom_valid = false;
@@ -3332,6 +3364,84 @@ index df580ce..39302c2 100644
 +    return LAUNCHER_PAGES[0];
 +}
 +
++// ---- dialogs and the focus (keyboard / controller) -----------------------------------------------------------------
++extern recompui::ContextId launcher_context;
++static int pending_focus_frames = 0;
++
++static Rml::ElementDocument* launcher_document() {
++    return launcher_context == recompui::ContextId::null() ? nullptr : launcher_context.get_document();
++}
++
++// Focuses `id` two UI frames from now: an element a data binding has just shown only exists for the focus after that.
++static void focus_soon(const std::string& id) {
++    pending_focus_id = id;
++    pending_focus_frames = 2;
++}
++
++// Remembers what had the focus, to give it back when the dialog that is opening closes.
++static void remember_focus(Rml::ElementDocument* doc) {
++    return_focus_id.clear();
++    if (doc != nullptr) {
++        if (Rml::Element* focused = doc->GetFocusLeafNode(); focused != nullptr && focused != doc) return_focus_id = focused->GetId();
++    }
++    if (return_focus_id.empty()) return_focus_id = launcher_page_info().nav_id;
++}
++
++static std::string skipped_update_version() {
++    std::ifstream in(UPDATE_SKIPPED_FILE);
++    std::string version;
++    std::getline(in, version);
++    return version;
++}
++
++static void open_update_dialog(Rml::ElementDocument* doc) {
++    if (update_dialog) return;
++    jfg_update_reset();
++    update_stage = 0;
++    update_status.clear();
++    remember_focus(doc);
++    update_dialog = true;
++    model_handle.DirtyVariable("update_dialog");
++    model_handle.DirtyVariable("update_stage");
++    model_handle.DirtyVariable("update_status");
++    focus_soon("rl_update_go");
++}
++
++// "Later" (also Esc / the controller's Back button) and "Skip this version". Not while the update downloads or installs.
++static void close_update_dialog(bool skip_version) {
++    if (!update_dialog || update_stage == 1 || update_stage == 3) return;
++    if (skip_version) {
++        std::ofstream out(UPDATE_SKIPPED_FILE, std::ios::trunc);
++        out << update_version << "\n";
++    }
++    update_dialog = false;
++    jfg_update_reset();
++    model_handle.DirtyVariable("update_dialog");
++    focus_soon(return_focus_id);
++}
++
++static void open_changelog_dialog(Rml::ElementDocument* doc) {
++    // The commits since the last release (from GitHub, when they have arrived) above the changelog shipped with the game.
++    changelog_text = jfg_changelog_commits() + jfg_changelog_text();
++    model_handle.DirtyVariable("changelog_text");
++    remember_focus(doc);
++    changelog_dialog = true;
++    model_handle.DirtyVariable("changelog_dialog");
++    focus_soon("rl_changelog_close");
++}
++
++static void close_changelog_dialog() {
++    if (!changelog_dialog) return;
++    changelog_dialog = false;
++    model_handle.DirtyVariable("changelog_dialog");
++    focus_soon(return_focus_id);
++}
++
++static Rml::ElementDocument* event_document(Rml::Event& event) {
++    Rml::Element* target = event.GetTargetElement();
++    return target != nullptr ? target->GetOwnerDocument() : nullptr;
++}
++
 +// Images the launcher shows, registered under the names its RML uses ("/jfg_vibintoast" -> "jfg_vibintoast").
 +static bool queue_launcher_image(const char* name, const char* file) {
 +    std::ifstream in(dino::runtime::get_asset_path(file), std::ios::binary);
@@ -3354,6 +3464,14 @@ index df580ce..39302c2 100644
 +
 +// Called every UI frame (ui_state.cpp): steps the VibinToast icon while the About page is shown.
 +void jfg_launcher_ui_tick() {
++    if (!pending_focus_id.empty() && --pending_focus_frames <= 0) {
++        if (recompui::is_context_shown(launcher_context)) {
++            if (Rml::ElementDocument* doc = launcher_document()) {
++                if (Rml::Element* element = doc->GetElementById(pending_focus_id)) element->Focus(true);
++            }
++        }
++        pending_focus_id.clear();
++    }
 +    if (model_handle && !update_available) {
 +        JfgUpdateInfo info;
 +        if (jfg_update_available(info)) {
@@ -3367,11 +3485,19 @@ index df580ce..39302c2 100644
 +            model_handle.DirtyVariable("update_changelog");
 +            model_handle.DirtyVariable("update_can_install");
 +            model_handle.DirtyVariable("update_unavailable");
++            // Hard to miss: the dialog opens by itself (not over the game, and not for a version the player skipped).
++            if (recompui::is_context_shown(launcher_context) && !changelog_dialog && skipped_update_version() != update_version) {
++                open_update_dialog(launcher_document());
++            }
 +        }
 +    }
 +    if (model_handle && update_dialog) {
 +        const JfgUpdateProgress progress = jfg_update_progress();
-+        if (progress.stage != update_stage) { update_stage = progress.stage; model_handle.DirtyVariable("update_stage"); }
++        if (progress.stage != update_stage) {
++            update_stage = progress.stage;
++            model_handle.DirtyVariable("update_stage");
++            if (update_stage == 2) focus_soon("rl_update_later"); // the install failed: "Update now" is gone, "Close" stays
++        }
 +        if (progress.percent != update_percent) { update_percent = progress.percent; model_handle.DirtyVariable("update_percent"); }
 +        if (progress.text != update_status) { update_status = progress.text; model_handle.DirtyVariable("update_status"); }
 +        if (progress.stage == 3 && !update_restarting) {
@@ -3395,7 +3521,7 @@ index df580ce..39302c2 100644
  extern std::vector<recomp::GameEntry> supported_games;
  
  void open_rom_select_dialog() {
-@@ -24,6 +122,7 @@ void open_rom_select_dialog() {
+@@ -24,6 +223,7 @@ void open_rom_select_dialog() {
                  case recomp::RomValidationError::Good:
                      rom_valid = true;
                      model_handle.DirtyVariable("rom_valid");
@@ -3403,7 +3529,7 @@ index df580ce..39302c2 100644
                      break;
                  case recomp::RomValidationError::FailedToOpen:
                      recompui::message_box("Failed to open ROM file.");
-@@ -39,7 +138,7 @@ void open_rom_select_dialog() {
+@@ -39,7 +239,7 @@ void open_rom_select_dialog() {
                      break;
                  case recomp::RomValidationError::IncorrectVersion:
                      recompui::message_box(
@@ -3412,7 +3538,7 @@ index df580ce..39302c2 100644
                      break;
                  case recomp::RomValidationError::OtherError:
                      recompui::message_box("An unknown error has occurred.");
-@@ -51,15 +150,16 @@ void open_rom_select_dialog() {
+@@ -51,15 +251,16 @@ void open_rom_select_dialog() {
  
  void select_rom() {
      recompui::open_info_prompt("Recomp Setup",
@@ -3432,7 +3558,7 @@ index df580ce..39302c2 100644
      recomp::start_game(supported_games[0].game_id);
      recompui::hide_all_contexts();
  }
-@@ -81,6 +181,10 @@ public:
+@@ -81,6 +282,10 @@ public:
          rom_valid = recomp::is_rom_valid(supported_games[0].game_id);
      }
      void load_document() override {
@@ -3443,7 +3569,7 @@ index df580ce..39302c2 100644
  		launcher_context = recompui::create_context(dino::runtime::get_asset_path("launcher.rml"));
      }
      void register_events(recompui::UiEventListenerInstancer& listener) override {
-@@ -123,9 +227,35 @@ public:
+@@ -123,9 +328,30 @@ public:
          );
          recompui::register_event(listener, "exit_game",
              [](const std::string& param, Rml::Event& event) {
@@ -3458,16 +3584,11 @@ index df580ce..39302c2 100644
 +                const auto key = event.GetParameter<Rml::Input::KeyIdentifier>("key_identifier", Rml::Input::KeyIdentifier::KI_UNKNOWN);
 +                if (key != Rml::Input::KeyIdentifier::KI_ESCAPE) return;
 +                if (changelog_dialog) {
-+                    changelog_dialog = false;
-+                    model_handle.DirtyVariable("changelog_dialog");
++                    close_changelog_dialog();
 +                    return;
 +                }
-+                if (update_dialog) { // Esc closes the update dialog (not while it is installing)
-+                    if (update_stage != 1 && update_stage != 3) {
-+                        update_dialog = false;
-+                        jfg_update_reset();
-+                        model_handle.DirtyVariable("update_dialog");
-+                    }
++                if (update_dialog) { // Esc / Back is "Later" (not while it is installing)
++                    close_update_dialog(false);
 +                    return;
 +                }
 +                Rml::Element* target = event.GetTargetElement();
@@ -3479,7 +3600,7 @@ index df580ce..39302c2 100644
      }
      void make_bindings(Rml::Context* context) override {
          Rml::DataModelConstructor constructor = context->CreateDataModel("launcher_model");
-@@ -134,6 +264,76 @@ public:
+@@ -134,6 +360,65 @@ public:
  
          version_string = recomp::get_project_version().to_string();
          constructor.Bind("version_number", &version_string);
@@ -3494,31 +3615,20 @@ index df580ce..39302c2 100644
 +        constructor.Bind("update_status", &update_status);
 +        constructor.Bind("changelog_dialog", &changelog_dialog);
 +        constructor.Bind("changelog_text", &changelog_text);
-+        constructor.BindEventCallback("show_changelog", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
-+            // The commits since the last release (from GitHub, when they have arrived) above the changelog shipped with the game.
-+            changelog_text = jfg_changelog_commits() + jfg_changelog_text();
-+            model_handle.DirtyVariable("changelog_text");
-+            changelog_dialog = true;
-+            model_handle.DirtyVariable("changelog_dialog");
++        constructor.BindEventCallback("show_changelog", [](Rml::DataModelHandle, Rml::Event& event, const Rml::VariantList&) {
++            open_changelog_dialog(event_document(event));
 +        });
 +        constructor.BindEventCallback("changelog_close", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
-+            changelog_dialog = false;
-+            model_handle.DirtyVariable("changelog_dialog");
++            close_changelog_dialog();
 +        });
-+        constructor.BindEventCallback("show_update", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
-+            jfg_update_reset();
-+            update_stage = 0;
-+            update_status.clear();
-+            update_dialog = true;
-+            model_handle.DirtyVariable("update_dialog");
-+            model_handle.DirtyVariable("update_stage");
-+            model_handle.DirtyVariable("update_status");
++        constructor.BindEventCallback("show_update", [](Rml::DataModelHandle, Rml::Event& event, const Rml::VariantList&) {
++            open_update_dialog(event_document(event));
 +        });
 +        constructor.BindEventCallback("update_close", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
-+            if (update_stage == 1 || update_stage == 3) return;
-+            update_dialog = false;
-+            jfg_update_reset();
-+            model_handle.DirtyVariable("update_dialog");
++            close_update_dialog(false);
++        });
++        constructor.BindEventCallback("update_skip", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
++            close_update_dialog(true);
 +        });
 +        constructor.BindEventCallback("update_install", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
 +            if (update_stage != 0) return;
