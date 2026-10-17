@@ -1241,19 +1241,25 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     apply_flag(g.all_levels, g.applied_levels, ADDR_allLevelCheat);
 
     // Scripted testing without the UI: JFG_DEBUG_CHEATS=1 turns the four cheats on;
-    // JFG_DEBUG_WARP="seconds,level,character,entrance" warps once that many seconds after start.
+    // JFG_DEBUG_WARP="seconds,level,character,entrance[,reset seconds]" warps once that many seconds after start. With the
+    // fifth number, F5 (back to the title screen) is done first at that time: warping from the start-up screens does not
+    // stay in the level (the splash sequence takes over again).
     {
         static uint32_t tick = 0;
         static const auto start = std::chrono::steady_clock::now();
-        static bool warped = false;
+        static bool warped = false, reset_done = false;
         static const char* warp = std::getenv("JFG_DEBUG_WARP");
         static const bool cheats = std::getenv("JFG_DEBUG_CHEATS") != nullptr;
-        static int w[4] = { -1, 0, 1, 0 };
+        static int w[5] = { -1, 0, 1, 0, -1 };
         if (tick == 0) {
             if (cheats) g.invulnerable = g.infinite_ammo = g.all_weapons = g.all_levels = true;
-            if (warp != nullptr) std::sscanf(warp, "%d,%d,%d,%d", &w[0], &w[1], &w[2], &w[3]);
+            if (warp != nullptr) std::sscanf(warp, "%d,%d,%d,%d,%d", &w[0], &w[1], &w[2], &w[3], &w[4]);
         }
         tick++;
+        if (!reset_done && w[4] >= 0 && std::chrono::steady_clock::now() - start >= std::chrono::seconds(w[4])) {
+            reset_done = true;
+            g_reset_pending = true;
+        }
         if (!warped && w[0] >= 0 && std::chrono::steady_clock::now() - start >= std::chrono::seconds(w[0])) {
             warped = true;
             g.warp_level = w[1]; g.warp_character = w[2]; g.warp_entrance = w[3]; g.pending_warp = true;
@@ -2184,6 +2190,58 @@ std::string depth_fog_status() {
     return out;
 }
 
+// --- 60 fps: squad members that ignore the frame step ----------------------------------------------------------------
+// The game passes each squad member the video frames this tick covers (SquaddieControl(obj, frames)), and most of the
+// squad code scales by it. The drones' corkscrew attack (overlay 147: BTSBGalaxianCorkScrew, CorkScrewAttackMover) does
+// not: measured in Forest Clear (level 54), a drone covered about 6.5 units a tick and rolled its attack chance once a
+// tick whatever the frame count, so at 60 fps drones flew in and attacked two to three times as fast as at 30 / 20 fps.
+// In 60 fps mode such a squad member is updated on every second tick only, with the skipped frames added to the frame
+// count it gets: the game's own 30 fps cadence for those objects, everything else stays at 60. (Measured: a drone moves
+// by its velocity once per SquaddieControl call and not at all in between, so this gives exactly the 30 fps speed.)
+// A squad member counts as one while the corkscrew mover has run for it in the last few seconds (keyed by the object and
+// its data pointer, as objects are reused), and the list is emptied when the level changes.
+namespace {
+struct SlowSquaddie { uint32_t obj, data, last_seen, frames; };
+std::vector<SlowSquaddie> g_slow_squaddies;
+uint32_t g_game_ticks = 0;     // main loop ticks (jfg_frame_sync)
+int g_slow_squaddies_level = -1;
+constexpr uint32_t SLOW_SQUADDIE_FORGET_TICKS = 180;
+}
+
+extern "C" void jfg_slow_squaddie_seen(uint8_t* rdram, uint32_t obj) {
+    g_rdram = rdram;
+    const uint32_t data = rd32(obj + 0x68);
+    for (SlowSquaddie& s : g_slow_squaddies) {
+        if (s.obj != obj) continue;
+        if (s.data != data) { s.data = data; s.frames = 0; }
+        s.last_seen = g_game_ticks;
+        return;
+    }
+    g_slow_squaddies.push_back({ obj, data, g_game_ticks, 0 });
+}
+
+// Returns the frame count to update `obj` with this tick, or 0 to leave it out this tick.
+extern "C" int jfg_squaddie_rate(uint8_t* rdram, uint32_t obj, int frames) {
+    g_rdram = rdram;
+    const int level = (int16_t)rd16(ADDR_currentLevel);
+    if (level != g_slow_squaddies_level) { g_slow_squaddies.clear(); g_slow_squaddies_level = level; }
+    if (g.frame_rate < 1 || g.skipping || g_slow_squaddies.empty()) return frames;
+    for (size_t i = 0; i < g_slow_squaddies.size(); i++) {
+        SlowSquaddie& s = g_slow_squaddies[i];
+        if (s.obj != obj) continue;
+        if (g_game_ticks - s.last_seen > SLOW_SQUADDIE_FORGET_TICKS || s.data != rd32(obj + 0x68)) {
+            g_slow_squaddies.erase(g_slow_squaddies.begin() + (std::ptrdiff_t)i);
+            return frames;
+        }
+        s.frames += (uint32_t)std::max(frames, 1);
+        if (s.frames < 2) return 0;
+        const int total = (int)s.frames;
+        s.frames = 0;
+        return total;
+    }
+    return frames;
+}
+
 // Read by the renderer (src/renderer/renderer.cpp): the texture and output filtering options.
 extern "C" int jfg_texture_three_point(void) { return g.texture_filter == 0 ? 1 : 0; }
 extern "C" int jfg_output_filtering(void) { return g.output_filter; }
@@ -2858,6 +2916,7 @@ extern "C" int jfg_vi_skip(uint8_t* rdram_, recomp_context* ctx) {
 // Right after viFrameSync() returned in the main loop tick: $v0 = video frames the next tick simulates (clamped to 6).
 extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
     g_rdram = rdram_;
+    g_game_ticks++;
     {
         static const bool pacing = std::getenv("JFG_DEBUG_PACING") != nullptr;
         const auto now = std::chrono::steady_clock::now();
