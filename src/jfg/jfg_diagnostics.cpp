@@ -1,0 +1,104 @@
+// Jet Force Gemini port: logs and error reports - out of memory, the game's own error breaks, level changes and the
+// game's osSyncPrintf messages.
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <string>
+
+#include "ultramodern/error_handling.hpp"
+#include "jfg_game.h"
+#include "jfg_hooks.h"
+#include "jfg_options.h"
+#include "jfg_port.h"
+
+namespace jfg {
+
+// --- out of memory and game assertions --------------------------------------------------------------------------
+constexpr uint32_t ADDR_gFreeQueueCount = 0x800FDD88; // s32: frees waiting out mmSetDelay() ticks (gFreeQueue)
+
+void jfg_log_line(const char* file, const char* text) {
+    std::fprintf(stderr, "[jfg] %s\n", text);
+    if (std::FILE* f = std::fopen(file, "a")) {
+        const std::time_t now = std::time(nullptr);
+        char stamp[32];
+        std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+        std::fprintf(f, "%s  %s\n", stamp, text);
+        std::fclose(f);
+    }
+}
+
+// mmAlloc, after mempool_slot_find ($v0 = block or 0; size and colour are at 0x30/0x34($sp)). A level load asks for
+// big blocks (the track buffer is 0x9F000 bytes, see func_overlay_24_000001F8) while earlier frees may still wait in
+// the delayed free queue. When the heap has no room, release that queue and try once more; log either way to
+// bin/jfg_memory.log.
+extern "C" void jfg_mm_alloc_check(uint8_t* rdram_, recomp_context* ctx) {
+    {
+        // Tests: JFG_DEBUG_FAIL_ALLOC=<size hex> makes the first allocation of that size look failed (it leaks).
+        static const char* const fail = std::getenv("JFG_DEBUG_FAIL_ALLOC");
+        static bool failed_once = false;
+        if (fail != nullptr && !failed_once && (uint32_t)ctx->r2 != 0) {
+            g_rdram = rdram_;
+            if (rd32((uint32_t)ctx->r29 + 0x30) == (uint32_t)std::strtoul(fail, nullptr, 16)) { failed_once = true; ctx->r2 = 0; }
+        }
+    }
+    if ((uint32_t)ctx->r2 != 0) return;
+    g_rdram = rdram_;
+    static thread_local bool retrying = false;
+    if (retrying) return;
+    const uint32_t sp = (uint32_t)ctx->r29;
+    const uint32_t size = rd32(sp + 0x30), colour = rd32(sp + 0x34);
+    const int pending = (int)rd32(ADDR_gFreeQueueCount);
+    uint32_t block = 0;
+    if (pending > 0) {
+        retrying = true;
+        call_game(mmFlushFreeStack, ctx, {});
+        block = call_game(mmAlloc, ctx, { size, colour });
+        retrying = false;
+    }
+    char line[256];
+    std::snprintf(line, sizeof(line), "mmAlloc(0x%X) found no room (level %d, next %d, %d delayed frees); %s", size, (int)(int16_t)rd16(ADDR_currentLevel),
+        (int)(int16_t)rd16(ADDR_nextLevel), pending, block != 0 ? "retry after releasing them worked" : "still no room");
+    jfg_log_line("jfg_memory.log", line);
+    if (block != 0) ctx->r2 = (gpr)(int32_t)block;
+}
+
+// mathBreakPoint: the game stopped itself on a failed check (on the N64 this is a debugger break). Leave a note and a
+// message instead of letting the runtime's exit() run its shutdown (which has crashed and left an empty crash.log).
+extern "C" void jfg_game_break(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    char line[320];
+    std::snprintf(line, sizeof(line), "game error (break) called from 0x%08X; level %d, next level %d, game mode %d, last mmAlloc result 0x%08X",
+        (uint32_t)ctx->r31, (int)(int16_t)rd16(ADDR_currentLevel), (int)(int16_t)rd16(ADDR_nextLevel), (int)rd32(ADDR_mainGameMode), (uint32_t)ctx->r2);
+    jfg_log_line("jfg_error.log", line);
+    std::string msg = std::string("Jet Force Gemini stopped with an internal game error.\n\n") + line +
+        "\n\nThe details were saved to jfg_error.log (and jfg_memory.log, if it exists) in the game folder.";
+    ultramodern::error_handling::message_box(msg.c_str());
+    std::fflush(nullptr);
+    std::_Exit(1);
+}
+
+// Entry of mainChangeLevel (hook in jfg.us.toml): logs the arguments with JFG_DEBUG_STATS.
+extern "C" void jfg_change_level_log(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    static const bool log = std::getenv("JFG_DEBUG_STATS") != nullptr;
+    if (!log) return;
+    const uint32_t sp = (uint32_t)ctx->r29;
+    std::fprintf(stderr, "[jfg] mainChangeLevel(%d, %d, %d, %d, %d, %d) from level %d, game mode %d, ra %08X\n", (int)ctx->r4, (int)ctx->r5, (int)ctx->r6, (int)ctx->r7,
+        (int)rd32(sp + 0x10), (int)rd32(sp + 0x14), (int)(int16_t)rd16(ADDR_currentLevel), (int)rd32(ADDR_mainGameMode), (uint32_t)ctx->r31);
+}
+
+// Replaces osSyncPrintf(fmt, ...): the format string goes to stderr, unformatted.
+extern "C" void jfg_sync_printf(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t fmt = (uint32_t)ctx->r4;
+    static int budget = 200; // a warning repeated every frame must not flood the log
+    if (budget <= 0 || fmt < 0x80000000u || fmt >= 0x80800000u) return;
+    budget--;
+    char buf[160]; size_t n = 0;
+    for (; n < sizeof(buf) - 1; n++) { const char c = (char)rd8(fmt + (uint32_t)n); if (c == 0) break; buf[n] = c; }
+    while (n > 0 && buf[n - 1] == '\n') n--;
+    buf[n] = 0;
+    std::fprintf(stderr, "[game] %s  (args %08X %08X %08X)\n", buf, (uint32_t)ctx->r5, (uint32_t)ctx->r6, (uint32_t)ctx->r7);
+}
+
+} // namespace jfg

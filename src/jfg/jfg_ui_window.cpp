@@ -1,0 +1,366 @@
+// Jet Force Gemini port: native debug menu (Dear ImGui).
+//
+// Opened and closed with F9 or the ` (grave) key. Drawn through the base project's debug UI backend
+// (src/debug_ui), which already owns an ImGui context and renders it on top of the game.
+//
+// This file: the F9 window and the tabs it shares with F10's toolbar (Cheats, Level warp). The other tabs are in
+// jfg_profiles.cpp, jfg_weapons.cpp and jfg_ui_items.cpp.
+#include <algorithm>
+#include <cfloat>
+#include <cstdio>
+#include <filesystem>
+#include <mutex>
+#include <string>
+#include <vector>
+
+#include "imgui/imgui.h"
+#include "jfg_game.h"
+#include "jfg_hooks.h"
+#include "jfg_options.h"
+#include "jfg_port.h"
+
+namespace jfg {
+
+namespace {
+void draw_status() {
+    const int level = (int16_t)rd16(ADDR_currentLevel);
+    const int next = (int16_t)rd16(ADDR_nextLevel);
+    const int character = (int16_t)rd16(ADDR_currentCharacter);
+    const char* name = (level >= 0 && level < (int)g_level_names.size()) ? g_level_names[level].c_str() : "?";
+    ImGui::Text("Level %d: %s", level, name);
+    ImGui::Text("Next level %d   game mode %d   character %d (%s)", next, (int)rd32(ADDR_mainGameMode), character,
+        (character >= 0 && character < 3) ? character_names[character] : "?");
+}
+
+// Layout helpers for the Options tab: a coloured heading with space above it, dimmed wrapped help text.
+void options_section(const char* title) {
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.9f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.80f, 1.0f, 1.0f));
+    ImGui::SeparatorText(title);
+    ImGui::PopStyleColor();
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.2f));
+}
+void options_help(const char* text) {
+    ImGui::Indent(ImGui::GetFontSize() * 1.6f);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::PushTextWrapPos(ImGui::GetContentRegionMax().x - ImGui::GetFontSize());
+    ImGui::TextUnformatted(text);
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+    ImGui::Unindent(ImGui::GetFontSize() * 1.6f);
+}
+bool options_slider(const char* label, int* value, int lo, int hi) {
+    ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+    ImGui::SliderInt(label, value, lo, hi);
+    return ImGui::IsItemDeactivatedAfterEdit();
+}
+
+void draw_options() {
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, ImGui::GetFontSize() * 0.55f));
+    bool changed = false;
+
+    // Sub-tabs, one per group of features.
+    if (ImGui::BeginTabBar("options_tabs", ImGuiTabBarFlags_FittingPolicyResizeDown)) {
+        if (ImGui::BeginTabItem("General")) {
+            options_section("General");
+            changed |= ImGui::Checkbox("No blood (as in the Japanese version)", &g.no_blood);
+            changed |= ImGui::Checkbox("START skips cutscenes", &g.start_skips_cutscenes);
+            options_help("Also skips the logo screens at start-up and the story intro after creating a file. A skipped cutscene "
+                         "still runs to its end at full machine speed, so everything it does (flags, items, the next level) still "
+                         "happens.");
+            if (g.skipping) ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Skipping...");
+            if (ImGui::Button("Back to the title screen (F5)")) g_reset_pending = true;
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Display")) {
+            options_section("Display");
+            changed |= ImGui::Checkbox("Show FPS", &g.show_fps);
+            changed |= ImGui::Checkbox("Show level number and name", &g.show_level);
+            changed |= ImGui::Checkbox("Show texture pack", &g.show_pack);
+            changed |= ImGui::Checkbox("Widescreen (fill the window)", &g.widescreen);
+            options_help("During gameplay only; the HUD stays in the middle. Things at the far left and right may appear late.");
+            changed |= options_slider("Field of view %", &g.fov, 75, 140);
+            options_help("Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, "
+                         "menus, the pause screen and zoomed scopes keep the game's own.");
+            changed |= ImGui::Checkbox("Disable LOD (full-detail models at any distance)", &g.no_lod);
+            options_help("Characters and objects normally switch to a simpler model once they are a little way off.");
+            changed |= ImGui::Checkbox("Draw distant objects (no object draw distance)", &g.far_objects);
+            options_help("Objects normally fade out and disappear beyond a set distance. With this they stay drawn. Takes effect "
+                         "for the objects in play; level scenery itself is not affected.");
+            if (FRAME_RATE_OPTION) {
+                static const char* const rates[] = { "Original (30, drops to 20)", "60", "60 + interpolated (monitor rate)" };
+                ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+                changed |= ImGui::Combo("Frame rate", &g.frame_rate, rates, IM_ARRAYSIZE(rates));
+                options_help("60: the game updates every video frame instead of every second one; game speed stays the same. If a "
+                             "frame runs long, the game simply advances further in the next one. "
+                             "Interpolated: the renderer also adds in-between frames up to your monitor's refresh rate (like the "
+                             "Graphics menu's Framerate: Display); some moving objects may look off. With Original, the Graphics "
+                             "menu's own Framerate setting applies.");
+            }
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Effects")) {
+            options_section("Ambient occlusion and bloom");
+            changed |= ImGui::Checkbox("Ambient occlusion (SSAO)", &g.ssao);
+            options_help("Darkens creases, corners and the ground around objects, worked out from the depth of the 3D view. "
+                         "The HUD is drawn afterwards and is not affected.");
+            if (g.ssao) {
+                changed |= options_slider("Strength (%)##ssao", &g.ssao_strength, 10, 300);
+                changed |= options_slider("Radius##ssao", &g.ssao_radius, 10, 300);
+            }
+            changed |= ImGui::Checkbox("Bloom", &g.bloom);
+            options_help("Bright parts of the 3D view (lights, explosions, sky, shots) glow softly into their surroundings. The "
+                         "HUD is drawn afterwards and does not glow.");
+            if (g.bloom) {
+                changed |= options_slider("Intensity (%)##bloom", &g.bloom_intensity, 0, 300);
+                changed |= options_slider("Threshold (%)##bloom", &g.bloom_threshold, 0, 100);
+                options_help("How bright a colour must be to glow. Lower: more of the picture glows.");
+                changed |= options_slider("Radius##bloom", &g.bloom_radius, 1, 20);
+            }
+            changed |= ImGui::Checkbox("Vignette", &g.vignette);
+            options_help("Darkens the edges and corners of the 3D view. The HUD is drawn afterwards and is not darkened.");
+            if (g.vignette) {
+                changed |= options_slider("Strength (%)##vignette", &g.vignette_strength, 0, 100);
+                changed |= options_slider("Size (%)##vignette", &g.vignette_size, 0, 90);
+                options_help("How far from the middle the darkening starts: higher keeps more of the picture clear.");
+            }
+
+            options_section("Fog");
+            changed |= options_slider("Level fog distance %", &g.level_fog_distance, 50, 400);
+            changed |= ImGui::Checkbox("No level fog", &g.no_level_fog);
+            options_help("The fog the levels have themselves. Some levels use it to hide where the scenery stops being drawn, "
+                         "so moving it back or turning it off can show things appearing in the distance.");
+            if (DEPTH_FOG_OPTION) {
+                changed |= ImGui::Checkbox("Depth fog (experimental)", &g.depth_fog);
+                options_help("Adds distance fog to levels that have no fog of their own (it stays off in levels that do). Worked "
+                             "out from the depth of the 3D view; the sky and the HUD are not fogged.");
+            }
+            if (DEPTH_FOG_OPTION && g.depth_fog) {
+                ImGui::TextDisabled("%s", depth_fog_status().c_str());
+                static const char* const colors[] = { "Haze", "Mist", "Dusk", "Night" };
+                changed |= options_slider("Start##fog", &g.fog_start, 0, 10000);
+                changed |= options_slider("Thickest at##fog", &g.fog_end, 500, 15000);
+                changed |= options_slider("Density (%)##fog", &g.fog_density, 0, 100);
+                ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+                changed |= ImGui::Combo("Colour##fog", &g.fog_color, colors, IM_ARRAYSIZE(colors));
+            }
+
+            options_section("Filtering");
+            {
+                static const char* const textures[] = { "N64 three-point", "Bilinear" };
+                static const char* const outputs[] = { "Anti-aliased pixel scaling", "Linear", "Nearest" };
+                ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+                changed |= ImGui::Combo("Texture filtering", &g.texture_filter, textures, IM_ARRAYSIZE(textures));
+                options_help("Three-point is how the N64 smooths textures; bilinear is smoother, as on PC.");
+                ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+                changed |= ImGui::Combo("Picture scaling", &g.output_filter, outputs, IM_ARRAYSIZE(outputs));
+                options_help("How the picture is scaled to the window. Nearest keeps pixels sharp; linear is softer.");
+            }
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Controls")) {
+            options_section("Controller");
+            ImGui::BeginDisabled(g.dual_stick);
+            changed |= ImGui::Checkbox("Invert aim up/down (normal controls)", &g.invert_aim_normal);
+            ImGui::EndDisabled();
+            changed |= ImGui::Checkbox("Dual-stick controls", &g.dual_stick);
+            options_help("Right stick: moves the camera around the character. Left stick: runs in the pushed direction as seen "
+                         "from the camera. While the aim button is held the right stick aims and the left stick moves, as in a "
+                         "first-person game. Menus, the title screen, cutscenes, Floyd missions and the races (Mizar race, "
+                         "multiplayer races) keep the normal layout.");
+
+            if (g.dual_stick || g.mouse_keyboard) {
+                options_section("Dual-stick settings");
+                changed |= ImGui::Checkbox("Invert aim up/down (dual stick)", &g.invert_aim_y);
+                changed |= ImGui::Checkbox("Invert camera up/down", &g.invert_camera_y);
+                changed |= ImGui::Checkbox("Aim where the character faces (not where the camera looks)", &g.aim_from_character);
+                changed |= ImGui::Checkbox("Camera collision", &g.camera_collision);
+                options_help("Keeps the camera from going through walls and floors when it is swung round the character, using the "
+                             "game's own wall check. With it off the camera can end up outside the level.");
+                changed |= options_slider("Camera left/right %", &g.camera_speed_h, 25, 300);
+                changed |= options_slider("Camera up/down %", &g.camera_speed_v, 25, 300);
+                ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
+                changed |= ImGui::Checkbox("Diagonal speed boost", &g.diagonal_boost);
+                options_help("With the original controls, running forward while sidestepping adds the two speeds together, so "
+                             "going diagonally is about 40% faster. This gives the left stick the same boost when it is pushed "
+                             "diagonally; the slider sets how much the sideways part counts.");
+                ImGui::BeginDisabled(!g.diagonal_boost);
+                changed |= options_slider("Strafe speed %", &g.strafe_speed, 0, 200);
+                ImGui::EndDisabled();
+                ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
+                changed |= ImGui::Checkbox("Built-in button layout", &g.dual_layout);
+                options_help("LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. "
+                             "D-pad: weapon select; up/down zoom while aiming. View / right-stick click: N64 L. Untick to use your "
+                             "own controller bindings instead.");
+                changed |= ImGui::Checkbox("Swap triggers (RT aims, LT fires)", &g.swap_triggers);
+            }
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Mouse/Keyboard")) {
+            options_section("Mouse and keyboard");
+            changed |= ImGui::Checkbox("Mouse and keyboard controls", &g.mouse_keyboard);
+            options_help("Plays like the dual-stick controls (switched on with it): WASD run, the mouse turns the camera, hold the "
+                         "right button to aim and click the left to fire, the wheel changes weapon (down: next, up: previous; "
+                         "Q / E too). Space jumps, Left Ctrl or C crouches, Enter is START, Tab is N64 L, 1-4 are the D-pad "
+                         "(1 / 3 zoom in / out while aiming). The cursor is captured during gameplay only; F9 and menus free it.");
+            if (g.mouse_keyboard) {
+                changed |= options_slider("Mouse camera speed %", &g.mouse_camera_speed, 10, 400);
+                changed |= options_slider("Mouse aim speed %", &g.mouse_aim_speed, 10, 400);
+                changed |= ImGui::Checkbox("Invert mouse up/down", &g.invert_mouse_y);
+            }
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Move & Aim")) {
+            options_section("Movement (any control layout)");
+            changed |= options_slider("Movement speed %", &g.move_speed, 50, 300);
+
+            options_section("Aiming (any control layout)");
+            changed |= ImGui::Checkbox("Over-the-shoulder view while aiming", &g.aim_shoulder);
+            changed |= ImGui::Checkbox("Keep the reticle centered", &g.aim_centered);
+            changed |= ImGui::Checkbox("Jump while aiming", &g.aim_jump);
+            options_help("The jump button (C-up; A in the dual-stick layout, Space with mouse and keyboard) jumps while aiming, "
+                         "also while walking or strafing: the character leaves the aim for the jump, the left stick steers it "
+                         "like a normal jump, and it aims again on landing if the aim button is still held. Moving the left "
+                         "stick forward while aiming still just walks. The sniper scope zooms with the D-pad (dual stick) or "
+                         "1 / 3 (mouse and keyboard); on the original layout C-up jumps instead of zooming.");
+            changed |= options_slider("Aim speed %", &g.aim_speed, 20, 200);
+            changed |= ImGui::Checkbox("Sniper rifle: fixed zoom", &g.sniper_fixed_zoom);
+            changed |= options_slider("Sniper zoom %", &g.sniper_zoom, 100, 500);
+            options_help("With the fixed zoom the zoom buttons do nothing, so walking forward and back while aiming the "
+                         "sniper rifle works as with the other weapons.");
+
+            options_section("Player");
+            changed |= options_slider("Damage taken %", &g.damage_taken, 0, 400);
+            changed |= options_slider("Jetpack refuel speed %", &g.refuel_speed, 25, 1000);
+            changed |= options_slider("Vela's dive speed %", &g.dive_speed, 50, 400);
+
+            options_section("Fly camera (F7)");
+            if (ImGui::Button(g_fly.active ? "Stop flying (F7)" : "Fly camera (F7)")) g_fly_toggle_request = true;
+            changed |= options_slider("Fly speed %", &g.fly_speed, 10, 1000);
+            changed |= ImGui::Checkbox("Freeze the game while flying", &g.fly_freeze);
+            changed |= ImGui::Checkbox("Hide the HUD while flying", &g.fly_hide_hud);
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Textures")) {
+            options_section("Textures");
+            ImGui::Checkbox("Dump textures to bin\\texture_dump", &g.texture_dump);
+            changed |= ImGui::Checkbox("One folder per level", &g.dump_by_level);
+            options_help("Dumps into bin\\texture_dump\\<level number> <level name> instead. Each level starts its own set, so "
+                         "textures used in several levels are saved in each of them.");
+            options_help("Saves every texture the game draws, the first time it appears, as <hash>.png. Leave it on while you "
+                         "play through the areas you want; it is off again at the next start. Upscale the files without "
+                         "renaming them and put them in a pack folder (below).");
+            {
+                static int dumped = -1, frame = 0;
+                if (frame++ % 60 == 0) { // count the dumped files about once a second while the menu is open
+                    std::error_code ec; int n = 0;
+                    for (std::filesystem::recursive_directory_iterator it("texture_dump", ec), end; !ec && it != end; it.increment(ec)) {
+                        if (it->is_regular_file(ec)) n++;
+                    }
+                    dumped = ec ? -1 : n;
+                }
+                if (dumped >= 0) ImGui::TextDisabled("bin\\texture_dump: %d files", dumped);
+            }
+            {
+                static std::vector<std::string> packs;
+                static int frame = 0;
+                if (frame++ % 60 == 0) packs = list_texture_packs(); // look for new pack folders about once a second
+                std::string current;
+                { std::lock_guard lock(g_pack_mutex); current = g_pack_folder; }
+                ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+                if (ImGui::BeginCombo("Texture pack", pack_display_name(current).c_str())) {
+                    if (ImGui::Selectable(pack_display_name("").c_str(), current.empty())) set_texture_pack("");
+                    for (const std::string& p : packs) {
+                        if (ImGui::Selectable(pack_display_name(p).c_str(), p == current)) set_texture_pack(p);
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Reload")) set_texture_pack(current);
+                const int n = g_texture_pack_count.load();
+                if (!current.empty() && n >= 0) ImGui::TextDisabled("%s: %d replacement textures loaded", current.c_str(), n);
+            }
+            options_help("Put each pack in its own folder (bin\\texture_packs\\<name>) or as a packed .rtz file (bin\\texture_packs\\<name>.rtz). Images named like the dumps replace "
+                         "those textures, at any size; a suffix after the name (as Upscayl adds) is fine. F6 switches to the "
+                         "next pack (and to Off) while playing, to compare. Reload after adding or changing files.");
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
+    push_render_options();
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight()));
+    ImGui::PopStyleVar();
+    if (changed) save_options();
+}
+} // namespace
+
+void draw_cheats() {
+    ImGui::Checkbox("Invulnerable (game's invulnerabilityCheat)", &g.invulnerable);
+    ImGui::Checkbox("Unlimited ammo (game's DebugAmmoFlag)", &g.infinite_ammo);
+    ImGui::Checkbox("All weapons (game's allweaponsCheat)", &g.all_weapons);
+    ImGui::Checkbox("All levels open (game's allLevelCheat)", &g.all_levels);
+    bool game_debug = rd32(ADDR_debugMenuEnable) != 0;
+    if (ImGui::Checkbox("Game's own debug display (debugMenuEnable)", &game_debug)) {
+        wr32(ADDR_debugMenuEnable, game_debug ? 1 : 0);
+    }
+    ImGui::Checkbox("Skip the Tribal check (all Tribals count as rescued)", &g.skip_tribal_check);
+    ImGui::TextDisabled("The first four switch the game's own retail cheat flags. The Tribal check makes the game's\n"
+                        "\"all Tribals rescued\" test pass (game flag 88) without changing your save.");
+}
+
+void draw_warp() {
+    if (g.warp_character < 0) {
+        const int c = (int16_t)rd16(ADDR_currentCharacter);
+        g.warp_character = (c >= 0 && c < 3) ? c : 1;
+    }
+    ImGui::InputText("Filter", g.level_filter, sizeof(g.level_filter));
+    if (ImGui::BeginListBox("##levels", ImVec2(-FLT_MIN, 14 * ImGui::GetTextLineHeightWithSpacing()))) {
+        for (int i = 0; i < (int)g_level_names.size(); i++) {
+            if (!contains_ci(g_level_names[i], g.level_filter)) continue;
+            char label[64];
+            std::snprintf(label, sizeof(label), "%3d  %s", i, g_level_names[i].c_str());
+            if (ImGui::Selectable(label, g.warp_level == i)) g.warp_level = i;
+        }
+        ImGui::EndListBox();
+    }
+    ImGui::InputInt("Level number", &g.warp_level);
+    g.warp_level = std::clamp(g.warp_level, 0, std::max(0, (int)g_level_names.size() - 1));
+    ImGui::Combo("Character", &g.warp_character, character_names, 3);
+    ImGui::InputInt("Entrance", &g.warp_entrance);
+    if (ImGui::Button("Go to level")) g.pending_warp = true;
+    ImGui::SameLine();
+    if (ImGui::Button("Restart current level")) {
+        g.warp_level = (int16_t)rd16(ADDR_currentLevel);
+        g.pending_warp = true;
+    }
+    ImGui::TextDisabled("Names are the developers' internal ones (Forest = Goldwood, CargoShip = S.S. Anubis,\n"
+                        "AlphaSewer = Sekhmet, ...). Entries ending in Seq are cutscenes. Use from inside a game.");
+}
+
+// F9: the original all-in-one window (jfg_debug_frame, while the debug UI is open without the toolbar).
+void draw_debug_window(recomp_context* ctx) {
+    ImGui::GetIO().FontGlobalScale = 1.0f; // the toolbar scales globally; this window scales itself
+    ImGui::SetNextWindowSize(ImVec2(720, 820), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Jet Force Gemini debug menu (F9 closes)")) {
+        ImGui::SetWindowFontScale(std::max(1.0f, ImGui::GetIO().DisplaySize.y / 720.0f));
+        draw_status();
+        ImGui::Separator();
+        const bool in_game = valid_ptr(rd32(ADDR_gameplay));
+        if (ImGui::BeginTabBar("tabs")) {
+            if (ImGui::BeginTabItem("Profiles")) { draw_profiles(); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Cheats")) { draw_cheats(); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Options")) { draw_options(); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Level warp")) { draw_warp(); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Weapons")) { draw_weapons(); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Items")) {
+                if (in_game) draw_inventory(ctx); else ImGui::TextDisabled("No game loaded.");
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
+    }
+    ImGui::End();
+}
+
+} // namespace jfg

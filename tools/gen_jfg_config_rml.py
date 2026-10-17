@@ -2,7 +2,7 @@
 """Generates the port's tabs of the "Select" config menu (assets/config_menu/jfg_*.rml) and the list of option keys
 each tab binds (src/jfg/jfg_config_keys.inc). Run from the repository root after changing the lists below:
     python3 tools/gen_jfg_config_rml.py
-The options themselves (ranges, defaults, saving) live in src/jfg/jfg_debug_menu.cpp (apply_option / options_text)."""
+The options themselves (ranges, defaults, saving) live in src/jfg/jfg_options.h and jfg_options.cpp (apply_option / options_text)."""
 import html, os
 
 # (kind, key, title, extra, help). kind: group | bool | range (extra = (min, max, suffix)) | choice (extra = [(value, label)])
@@ -84,7 +84,7 @@ VISUALS = [
     ("range", "level_fog_distance", "Level Fog Distance", (50, 400, "%"),
      "How far away the levels' own fog is. Some levels use it to hide where the scenery stops being drawn, so moving it back can show things appearing in the distance."),
     ("bool", "no_level_fog", "No Level Fog", None, "Turns the levels' own fog off. Things in the distance may be seen appearing."),
-    # Depth fog (depth_fog, fog_start, fog_end, fog_density, fog_color) is hidden for now: DEPTH_FOG_OPTION in jfg_debug_menu.cpp.
+    # Depth fog (depth_fog, fog_start, fog_end, fog_density, fog_color) is hidden for now: DEPTH_FOG_OPTION in jfg_options.h.
     ("group", None, "Filtering", None, None),
     ("choice", "texture_filter", "Texture Filtering", [(0, "N64 Three-Point"), (1, "Bilinear")],
      "<b>N64 Three-Point</b>: how the N64 smooths textures. <b>Bilinear</b>: smoother, as on PC."),

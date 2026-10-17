@@ -376,7 +376,7 @@ diff -ruN a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
  
  #include "rt64_workload_queue.h"
  
-+// JFG PORT: number of frames handed to the swap chain, read by the "Show FPS" display (src/jfg/jfg_debug_menu.cpp).
++// JFG PORT: number of frames handed to the swap chain, read by the "Show FPS" display (src/jfg/jfg_frame_rate.cpp).
 +std::atomic<uint32_t> rt64_jfg_present_count{ 0 };
 +
  namespace RT64 {
@@ -831,7 +831,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
      };
  };
  
-+// JFG PORT: screen-space ambient occlusion settings, written by the port's debug menu (src/jfg/jfg_debug_menu.cpp).
++// JFG PORT: screen-space ambient occlusion settings, written by the port's options (src/jfg/jfg_options.cpp, push_render_options).
 +std::atomic<int> rt64_jfg_ssao{ 0 };
 +std::atomic<float> rt64_jfg_ssao_strength{ 1.0f };
 +std::atomic<float> rt64_jfg_ssao_radius{ 150.0f };

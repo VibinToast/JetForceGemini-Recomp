@@ -58,6 +58,7 @@ apply_once .                           "$HERE/patches/jfg-base.patch"
 apply_once lib/rt64                    "$HERE/patches/rt64-jfg.patch"
 python3 "$HERE/tools/set_version.py" "$HERE/version.txt" .   # version.txt (updated by the release workflow) -> the launcher
 
+rm -rf src/jfg   # only the port's files: emptied so a file removed or renamed here does not stay in the build
 mkdir -p src/jfg include tools
 cp "$HERE"/src/jfg/*.cpp src/jfg/
 cp "$HERE"/src/jfg/*.h "$HERE"/src/jfg/*.inc src/jfg/

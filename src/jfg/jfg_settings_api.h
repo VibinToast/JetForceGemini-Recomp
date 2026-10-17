@@ -1,5 +1,5 @@
 // JFG PORT: the port's settings (the F9 Options / Profiles tabs) for the "Select" config menu (src/ui/ui_config.cpp).
-// Implemented in jfg_debug_menu.cpp. Called from the UI thread, like the F9 menu.
+// Implemented in jfg_settings_api.cpp. Called from the UI thread, like the F9 menu.
 #pragma once
 
 #include <string>

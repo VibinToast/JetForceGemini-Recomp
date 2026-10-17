@@ -1627,7 +1627,7 @@ index 7b53d07..a6c8c4c 100644
 +
 +#include "SDL.h"
 +
-+// Dual-stick controls for Jet Force Gemini (src/jfg/jfg_debug_menu.cpp).
++// Dual-stick controls for Jet Force Gemini (src/jfg/jfg_controls.cpp).
 +extern "C" int jfg_dual_stick_active(void);
 +extern "C" int jfg_invert_aim_normal(uint16_t buttons);
 +extern "C" int jfg_dual_stick_layout(void);
@@ -1786,7 +1786,7 @@ index 2d0e062..523604c 100644
  
  #include "controls.hpp"
  
-+// Mouse and keyboard controls for Jet Force Gemini (src/jfg/jfg_debug_menu.cpp).
++// Mouse and keyboard controls for Jet Force Gemini (src/jfg/jfg_controls.cpp).
 +extern "C" int jfg_mouse_keyboard_active(void);
 +extern "C" void jfg_mouse_motion(int dx, int dy);
 +extern "C" void jfg_mouse_wheel(int notches);
@@ -2695,14 +2695,14 @@ index 4572744..81c7f0e 100644
 --- a/src/renderer/renderer.cpp
 +++ b/src/renderer/renderer.cpp
 @@ -1,8 +1,19 @@
-+extern "C" int jfg_skip_render_active(void); // src/jfg/jfg_debug_menu.cpp
-+extern "C" int jfg_widescreen_active(void);  // src/jfg/jfg_debug_menu.cpp: the "Widescreen" option of the F9 menu
++extern "C" int jfg_skip_render_active(void); // src/jfg/jfg_cutscene_skip.cpp
++extern "C" int jfg_widescreen_active(void);  // src/jfg/jfg_visuals.cpp: the "Widescreen" option of the F9 menu
 +extern "C" int jfg_texture_dump_active(void);
-+extern "C" void jfg_texture_dump_folder(char* buf, int size); // src/jfg/jfg_debug_menu.cpp: "One folder per level"  // src/jfg/jfg_debug_menu.cpp: "Dump textures" (F9 -> Textures)
++extern "C" void jfg_texture_dump_folder(char* buf, int size); // src/jfg/jfg_texture_packs.cpp: "One folder per level"  // src/jfg/jfg_texture_packs.cpp: "Dump textures" (F9 -> Textures)
 +extern "C" int jfg_texture_pack_current(char* buf, int size); // the chosen pack folder (relative, "" = none); returns a change counter
-+extern "C" int jfg_texture_three_point(void); // src/jfg/jfg_debug_menu.cpp: "Texture filtering" (1 = the N64's three-point filter)
-+extern "C" int jfg_output_filtering(void);    // src/jfg/jfg_debug_menu.cpp: "Picture scaling" (0 anti-aliased pixel scaling, 1 linear, 2 nearest)
-+extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_debug_menu.cpp: "Frame rate" option; -1 = use the Graphics setting, 0 = Original, 1 = Display
++extern "C" int jfg_texture_three_point(void); // src/jfg/jfg_visuals.cpp: "Texture filtering" (1 = the N64's three-point filter)
++extern "C" int jfg_output_filtering(void);    // src/jfg/jfg_visuals.cpp: "Picture scaling" (0 anti-aliased pixel scaling, 1 linear, 2 nearest)
++extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_frame_rate.cpp: "Frame rate" option; -1 = use the Graphics setting, 0 = Original, 1 = Display
  #define HLSL_CPU
  #include "hle/rt64_application.h"
  #include "renderer.hpp"
@@ -2924,7 +2924,7 @@ index 4572744..81c7f0e 100644
      }
  }
  
-+extern "C" void jfg_texture_pack_set_count(int count); // src/jfg/jfg_debug_menu.cpp: shown in Options -> Textures
++extern "C" void jfg_texture_pack_set_count(int count); // src/jfg/jfg_texture_packs.cpp: shown in Options -> Textures
 +// JFG PORT: writes texture_pack/rt64.json listing every image whose name starts with a 16-digit RT64 texture hash
 +// (as written by "Dump textures"), so a folder of upscaled dumps is a texture pack without any other tool.
 +// Returns the number of textures listed.
