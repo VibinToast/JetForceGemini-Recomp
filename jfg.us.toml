@@ -203,11 +203,18 @@ before_vram = 0x8008B610
 text = "{ int jfg_evt_skip(uint8_t*, uint32_t, uint32_t); if (jfg_evt_skip(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5)) { recomp_exit_function(); return; } }"
 
 # Dual-stick camera (src/jfg/jfg_camera.cpp): right before the scene is drawn (the "jal trackDraw" in the game
-# tick), the active camera is moved to the angle the right stick has chosen.
+# tick), the active camera is moved to the angle the right stick has chosen. Then, at 60 fps, squad members are given
+# the in-between positions they are drawn at (src/jfg/jfg_frame_rate.cpp, jfg_squad_draw_begin).
 [[patches.hook]]
 func = "func_80045F00_46B00"
 before_vram = 0x800462A0
-text = "{ void jfg_camera_override(uint8_t*, recomp_context*); jfg_camera_override(rdram, ctx); }"
+text = "{ void jfg_camera_override(uint8_t*, recomp_context*); void jfg_squad_draw_begin(uint8_t*); jfg_camera_override(rdram, ctx); jfg_squad_draw_begin(rdram); }"
+
+# 60 fps: right after trackDraw returns, squad members get their own positions back (src/jfg/jfg_frame_rate.cpp).
+[[patches.hook]]
+func = "func_80045F00_46B00"
+before_vram = 0x800462A8
+text = "{ void jfg_squad_draw_end(uint8_t*); jfg_squad_draw_end(rdram); }"
 
 # Field of view option (src/jfg/jfg_visuals.cpp): camSetFOV, where its zoomed and unzoomed paths meet. $f12 = the FOV
 # about to be applied (camera->fov already holds the game's own), $t7 = the camera's zoom flag (D_800A3174[camNo]).
@@ -262,12 +269,19 @@ text = "{ int jfg_sched_extra_frame(void); ctx->r8 = (gpr)(int32_t)((int32_t)ctx
 # 60 fps, second part: the scheduler only starts a frame's graphics task once the previous frame's buffer swap has
 # taken effect (__scTaskReady: VI current framebuffer != next framebuffer -> wait for the next retrace). With the
 # runtime's VI that check still sees the swap as pending at the retrace that applies it, which put every frame one more
-# retrace behind. (The third part, the main loop's own wait, is jfg_vi_skip in src/jfg.) The renderer draws a whole frame at once and shows the buffer the VI points at, so with 60 fps on the
-# task is let through.
+# retrace behind. (The third part, the main loop's own wait, is jfg_vi_skip in src/jfg.) Letting every task through
+# instead made RT64 draw the next frame into the buffer still on screen, which lost the CPU-drawn reticles. So at 60 fps
+# the task waits for one retrace since the swap was asked for, counted at the entry of __scHandleRetrace
+# (src/jfg/jfg_frame_rate.cpp, jfg_sched_task_ready); at the original rate the game's own check runs.
+[[patches.hook]]
+func = "__scHandleRetrace"
+before_vram = 0x80050154
+text = "{ void jfg_sched_retrace(void); jfg_sched_retrace(); }"
+
 [[patches.hook]]
 func = "__scTaskReady"
 before_vram = 0x800509B0
-text = "{ int jfg_sched_extra_frame(void); if (jfg_sched_extra_frame()) { ctx->r2 = ctx->r4; recomp_exit_function(); return; } }"
+text = "{ int jfg_sched_task_ready(void); int r = jfg_sched_task_ready(); if (r == 1) { ctx->r2 = ctx->r4; recomp_exit_function(); return; } if (r == 0) { ctx->r2 = 0; recomp_exit_function(); return; } }"
 
 # 60 fps: the squad system (enemies, tribals; overlay 3) at the game's 30 fps cadence (src/jfg/jfg_frame_rate.cpp,
 # jfg_squad_frames). Much of it works per tick whatever the frame count, so at 60 fps squad members moved, animated and

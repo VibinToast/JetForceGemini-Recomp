@@ -23,8 +23,12 @@ int jfg_evt_skip(uint8_t* rdram, uint32_t evtq, uint32_t evt);         // entry 
 // jfg_frame_rate.cpp
 int jfg_vi_skip(uint8_t* rdram, recomp_context* ctx);                  // entry of viFrameSync
 uint32_t jfg_frame_sync(uint8_t* rdram, uint32_t frames);              // main loop tick, right after viFrameSync
-int jfg_sched_extra_frame(void);                                       // __scHandleRetrace, __scTaskReady
+int jfg_sched_extra_frame(void);                                       // __scHandleRetrace
+void jfg_sched_retrace(void);                                          // entry of __scHandleRetrace
+int jfg_sched_task_ready(void);                                        // entry of __scTaskReady
 int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames);     // SquaddieControl, SquadronControl, squadsModuleTick
+void jfg_squad_draw_begin(uint8_t* rdram);                             // func_80045F00, right before trackDraw
+void jfg_squad_draw_end(uint8_t* rdram);                               // func_80045F00, right after trackDraw
 // jfg_controls.cpp
 void jfg_move_scale(uint8_t* rdram, recomp_context* ctx);              // entry of objMoveXYZ
 void jfg_boss_tick(void);                                              // entry of boyBossControl, dogBossControl, girlBossControl

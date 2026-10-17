@@ -69,6 +69,7 @@ constexpr uint32_t ADDR_buttonsPressed       = 0x800FB0F0; // u16 gControllerBut
 constexpr uint32_t ADDR_sPlayerID            = 0x800FB100; // u8 sPlayerID[4]
 constexpr uint16_t START_BUTTON              = 0x1000;
 constexpr uint32_t ADDR_otherScreen          = 0x800FECB8; // s32*, the buffer viFrameSync hands to osViSwapBuffer
+constexpr uint32_t ADDR_currentScreen        = 0x800FECB0; // s32*, the buffer the next frame is drawn into
 
 constexpr uint32_t GAME_CHARACTERS_OFFSET = 0x15C;
 constexpr uint32_t GAME_CHARACTER_SIZE    = 0x76;

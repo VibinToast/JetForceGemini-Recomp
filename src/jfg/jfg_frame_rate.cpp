@@ -5,6 +5,9 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
 #include "jfg_game.h"
 #include "jfg_hooks.h"
@@ -21,6 +24,50 @@ std::atomic<float> g_screen_fps{ 0.0f };
 // the scheduler hands each finished frame back after one retrace instead of two (60 fps instead of 30).
 extern "C" int jfg_sched_extra_frame(void) {
     return g.frame_rate >= 1 ? 1 : 0;
+}
+
+// 60 fps: the next frame's graphics task waits for the buffer swap. The game double-buffers: after asking the VI for the
+// frame it has just finished (jfg_vi_skip), it sends the next frame's task at once, and that task draws into the other
+// buffer - the one still on screen until the VI applies the swap at the next retrace. The game's scheduler holds such
+// a task back (__scTaskReady: "pending swap"), but with the runtime's VI that check still reports the swap as pending at
+// the retrace that applies it, so it cost a retrace every frame and is bypassed at 60 fps. Without any hold, though, RT64
+// rendered the next frame into the buffer on screen before the retrace, and at the retrace showed that new picture -
+// without the things the game draws with the CPU after the graphics task (the reticles of most weapons, see
+// enable_instant_present in renderer.cpp), which then never reached the screen. Whether it went wrong depended on where
+// in the frame the tick ended, so it changed with frame-rate switches (measured with an event trace). So the task is
+// held until the retrace that applies the swap has come (counted here: the hardware's rule, without the runtime's late
+// flag) and RT64 has taken that retrace's screen update, which shows the buffer the task draws into one last time. The
+// second part matters because the runtime's VI thread queues the screen update and the scheduler queues the task from
+// different threads, and its queue does not keep their order: the trace showed the task drawn first. RT64 renders a
+// frame in about 2 ms, so this keeps 60 fps; the picture is one frame later.
+namespace {
+std::atomic<uint32_t> g_retraces{ 0 };      // __scHandleRetrace calls (scheduler thread)
+std::atomic<uint32_t> g_swap_retrace{ 0 };  // g_retraces when the last swap was asked for
+std::atomic<uint32_t> g_swap_screens{ 0 };  // rt64_jfg_screen_updates then
+std::atomic<uint32_t> g_swap_draw_fb{ 0 };  // the buffer the next frame draws into (physical address)
+std::atomic<bool> g_swap_pending{ false };
+}
+
+// Entry of __scHandleRetrace: one more retrace, before the scheduler looks at its waiting tasks.
+extern "C" void jfg_sched_retrace(void) {
+    g_retraces.fetch_add(1, std::memory_order_acq_rel);
+}
+
+// Entry of __scTaskReady: 1 = the task may start, 0 = not yet (a swap is still pending), -1 = the game's own check.
+extern "C" int jfg_sched_task_ready(void) {
+    if (g.frame_rate < 1) { g_swap_pending.store(false, std::memory_order_release); return -1; }
+    if (!g_swap_pending.load(std::memory_order_acquire)) return 1;
+    if (g_retraces.load(std::memory_order_acquire) == g_swap_retrace.load(std::memory_order_acquire)) return 0;
+    // The applying retrace has come. Its screen update was queued just before the scheduler was told; wait (briefly, it
+    // takes RT64 well under a millisecond) until RT64 has taken it, so the task cannot be drawn before it.
+    const uint32_t screens = g_swap_screens.load(std::memory_order_acquire), fb = g_swap_draw_fb.load(std::memory_order_acquire);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(4);
+    while (!(rt64_jfg_screen_updates.load(std::memory_order_acquire) != screens && rt64_jfg_screen_fb.load(std::memory_order_acquire) == fb)) {
+        if (std::chrono::steady_clock::now() > deadline) break;
+        std::this_thread::yield();
+    }
+    g_swap_pending.store(false, std::memory_order_release);
+    return 1;
 }
 
 // Read by the renderer thread (src/renderer/renderer.cpp) for the "Frame rate" option: -1 = keep the Graphics menu's
@@ -52,12 +99,18 @@ namespace {
 uint32_t g_game_ticks = 0;          // main loop ticks (jfg_frame_sync)
 uint32_t g_squad_frames = 0;        // video frames the squad system has not been given yet, including this tick's
 bool g_squad_runs = true;           // the squad system runs this tick
+uint32_t g_tick_frames = 1;         // video frames this tick simulates
+std::vector<uint32_t> g_squad_members; // the members SquaddieControl was called for this tick (objects)
+void squad_draw_restore();
 }
 
 // Called with the frames of the tick about to run.
 void squad_cadence_next_tick(uint32_t frames) {
+    squad_draw_restore(); // normally done right after trackDraw already
+    g_squad_members.clear();
+    g_tick_frames = std::max<uint32_t>(frames, 1);
     if (g_squad_runs) g_squad_frames = 0;     // the previous tick handed them over
-    g_squad_frames += std::max<uint32_t>(frames, 1);
+    g_squad_frames += g_tick_frames;
     // Only 60 fps ticks are paired up; at the original rate (2 or 3 frames a tick) and while a cutscene is skipped
     // (6 frames a tick) every tick runs as in the game.
     g_squad_runs = g.frame_rate < 1 || g.skipping || g_squad_frames >= 2;
@@ -67,9 +120,159 @@ void squad_cadence_next_tick(uint32_t frames) {
 // count to run with this tick, or 0 to leave the call out. `member` is the squad member (SquaddieControl), else 0.
 extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
     g_rdram = rdram;
-    (void)member;
+    if (member != 0) g_squad_members.push_back(member);
     if (g.frame_rate < 1 || g.skipping) return frames;
     return g_squad_runs ? (int)g_squad_frames : 0;
+}
+
+// --- 60 fps: squad members drawn in between their updates ---------------------------------------------------------
+// With the squad system on every second tick, squad members move and animate 30 times a second while everything else
+// does 60. So on a tick where the squad system ran, each member is drawn halfway between where it was after its previous
+// update and where it is now, and on the tick in between where it is: the drawn positions are evenly spaced, 60 a second,
+// one video frame behind the game's own state. Only the drawing sees this: the values are written into the object right
+// before trackDraw (jfg_squad_draw_begin) and put back right after it (jfg_squad_draw_end), the way the game itself
+// shifts the player for drawing (objDoPlayerTumble / objUndoPlayerTumble). The game's logic, collision and speeds are
+// untouched. With "60 + interpolated", RT64's in-between frames are then built from evenly spaced frames as well.
+// Smoothed: the position (object + 0x0C, three floats), the rotation (+0x00, three s16 angles) and the animation phase
+// (+0x28, 0..1, objAnimDframe) while the animation (+0x3B) stays the same; the model instance is asked to pose its
+// skeleton again from them (modGenAnimMatrices, below). Left as they are: a member that has moved
+// further than a jump (a respawn, a teleport), whose object now holds something else (+0x40, the object definition),
+// and every tick that is not the usual 60 fps pattern (slow ticks, the original rate and a cutscene skip, where the
+// squad system runs every tick anyway). JFG_NO_SQUAD_SMOOTH=1 turns it off, for comparing.
+namespace {
+struct SquadPose {
+    float x = 0, y = 0, z = 0, phase = 0;
+    uint16_t rot[3] = {};
+    int8_t anim = 0;
+    uint32_t def = 0;
+};
+struct SquadTrack {
+    SquadPose last;             // as after the member's last update
+    uint32_t updated_tick = 0;  // g_game_ticks at that update, 0 = none
+    uint32_t posed_tick = 0;    // g_game_ticks of the last in-between tick on which the game itself re-posed the model
+};
+std::unordered_map<uint32_t, SquadTrack> g_squad_tracks; // by object
+struct SquadDrawn { uint32_t obj; SquadPose real, drawn; };
+std::vector<SquadDrawn> g_squad_drawn;                   // objects that hold drawn values until jfg_squad_draw_end
+uint32_t g_squad_smoothed = 0;                           // members drawn in between, for JFG_DEBUG_STATS
+
+SquadPose read_pose(uint32_t obj) {
+    SquadPose p;
+    p.x = rdf(obj + 0x0C); p.y = rdf(obj + 0x10); p.z = rdf(obj + 0x14);
+    p.phase = rdf(obj + 0x28);
+    for (uint32_t i = 0; i < 3; i++) p.rot[i] = rd16(obj + 2 * i);
+    p.anim = (int8_t)rd8(obj + 0x3B);
+    p.def = rd32(obj + 0x40);
+    return p;
+}
+
+// Puts back what the game had, field by field, unless the game itself changed the field while drawing.
+void squad_draw_restore() {
+    for (const SquadDrawn& d : g_squad_drawn) {
+        const uint32_t o = d.obj;
+        if (rdf(o + 0x0C) == d.drawn.x) wrf(o + 0x0C, d.real.x);
+        if (rdf(o + 0x10) == d.drawn.y) wrf(o + 0x10, d.real.y);
+        if (rdf(o + 0x14) == d.drawn.z) wrf(o + 0x14, d.real.z);
+        if (rdf(o + 0x28) == d.drawn.phase) wrf(o + 0x28, d.real.phase);
+        for (uint32_t i = 0; i < 3; i++) if (rd16(o + 2 * i) == d.drawn.rot[i]) wr16(o + 2 * i, d.real.rot[i]);
+    }
+    g_squad_drawn.clear();
+}
+
+uint16_t half_angle(uint16_t from, uint16_t to) {
+    return (uint16_t)(from + (int16_t)(uint16_t)(to - from) / 2);
+}
+
+// The member's model instance (obj->unk6C[obj->unk3A]), the one objPrintModelObject poses, or 0. Its +0x0A asks the
+// draw to pose it again; +0x0B is the index of its double-buffered matrices / vertex colours (0 or 1).
+// Only for animated 3D models: the draw picks the object's kind from its definition (+0x40, then +0x1E: 0 model,
+// 1 sprite, 4 custom; func_8000DDAC), and only for a model is +0x6C a list of model instances. For a sprite it is
+// sprite data, and writing +0x0A there corrupted it (the level flickered and the game froze).
+uint32_t model_instance(uint32_t obj) {
+    const uint32_t def = rd32(obj + 0x40);
+    if (!valid_ptr(def) || rd8(def + 0x1E) != 0) return 0;
+    const uint32_t list = rd32(obj + 0x6C);
+    if (!valid_ptr(list)) return 0;
+    const int index = (int8_t)rd8(obj + 0x3A);
+    if (index < 0 || index > 7) return 0;
+    const uint32_t inst = rd32(list + 4u * (uint32_t)index);
+    if (!valid_ptr(inst) || rd8(inst + 0x0B) > 1) return 0;
+    const uint32_t model = rd32(inst); // the model: +0x4E non-zero = animated (objPrintModelObject's test)
+    if (!valid_ptr(model) || rd8(model + 0x4E) == 0) return 0;
+    return inst;
+}
+} // namespace
+
+// func_80045F00, right before trackDraw (with jfg_camera_override).
+extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
+    g_rdram = rdram;
+    squad_draw_restore();
+    static const bool off = std::getenv("JFG_NO_SQUAD_SMOOTH") != nullptr;
+    if (off || g.frame_rate < 1 || g.skipping) { g_squad_tracks.clear(); return; }
+    if (!g_squad_runs) {
+        // The tick in between: drawn where they are. Note which models the game poses itself this tick: only those
+        // are animating, and only those are posed again on the next update tick (see below).
+        for (uint32_t obj : g_squad_members) {
+            if (!valid_ptr(obj)) continue;
+            const uint32_t inst = model_instance(obj);
+            if (inst != 0 && rd8(inst + 0x0A) != 0) g_squad_tracks[obj].posed_tick = g_game_ticks;
+        }
+        return;
+    }
+    // The usual 60 fps pattern: this update covers this tick and the one before it, which had none.
+    const bool even = g_squad_frames == 2 && g_tick_frames == 1;
+    constexpr float JUMP = 300.0f; // squad members cover about 8 units per update
+    for (uint32_t obj : g_squad_members) {
+        if (!valid_ptr(obj)) continue;
+        SquadTrack& t = g_squad_tracks[obj];
+        if (t.updated_tick == g_game_ticks) continue; // already handled this tick
+        const SquadPose now = read_pose(obj);
+        const SquadPose before = t.last;
+        const bool had_update = t.updated_tick != 0 && g_game_ticks - t.updated_tick == 2;
+        t.last = now;
+        t.updated_tick = g_game_ticks;
+        if (!even || !had_update || before.def != now.def) continue;
+        const float dx = now.x - before.x, dy = now.y - before.y, dz = now.z - before.z;
+        if (!(dx * dx + dy * dy + dz * dz < JUMP * JUMP)) continue;
+        SquadPose mid = now;
+        mid.x = before.x + dx * 0.5f; mid.y = before.y + dy * 0.5f; mid.z = before.z + dz * 0.5f;
+        for (int i = 0; i < 3; i++) mid.rot[i] = half_angle(before.rot[i], now.rot[i]);
+        if (now.anim == before.anim) {
+            // The phase wraps from 1 back to 0 in looping animations: take the short way round.
+            float d = now.phase - before.phase;
+            if (d < -0.5f) d += 1.0f;
+            else if (d > 0.5f) d -= 1.0f;
+            float p = before.phase + d * 0.5f;
+            if (p >= 1.0f) p -= 1.0f;
+            else if (p < 0.0f) p += 1.0f;
+            mid.phase = p;
+        }
+        wrf(obj + 0x0C, mid.x); wrf(obj + 0x10, mid.y); wrf(obj + 0x14, mid.z);
+        wrf(obj + 0x28, mid.phase);
+        for (uint32_t i = 0; i < 3; i++) wr16(obj + 2 * i, mid.rot[i]);
+        // Animated models are posed by the draw only when their model instance asks for it (+0x0A), and squad
+        // members' instances ask on the tick after their update, not on the update tick itself. Without this the
+        // skeleton (and with it the whole model) would keep the pose from the tick before and move 30 times a second.
+        // Each pose also flips the model's double buffers, so only models the game itself posed on the tick before
+        // (animating, set up) and that are fully opaque (+0x39 = 0xFF; a dying member fading out is not) are asked:
+        // posing the others made fading bodies blink and could pose a model that is not set up yet.
+        const uint32_t inst = model_instance(obj);
+        if (inst != 0 && t.posed_tick == g_game_ticks - 1 && rd8(obj + 0x39) == 0xFF) wr8(inst + 0x0A, 1);
+        g_squad_drawn.push_back({ obj, now, read_pose(obj) });
+        g_squad_smoothed++;
+    }
+    // Members not seen for a while (freed, out of play) are forgotten.
+    if ((g_game_ticks & 63) == 0) {
+        for (auto it = g_squad_tracks.begin(); it != g_squad_tracks.end();) {
+            if (g_game_ticks - it->second.updated_tick > 8) it = g_squad_tracks.erase(it); else ++it;
+        }
+    }
+}
+
+// func_80045F00, right after trackDraw: the game gets its own values back.
+extern "C" void jfg_squad_draw_end(uint8_t* rdram) {
+    g_rdram = rdram;
+    squad_draw_restore();
 }
 
 // Entry of viFrameSync(mesg). Returns 1 when the call has been handled here (skip in progress).
@@ -95,6 +298,11 @@ extern "C" int jfg_vi_skip(uint8_t* rdram_, recomp_context* ctx) {
         while ((int32_t)call_game(osRecvMesg_recomp, ctx, { ADDR_gVideoMesgQueue, 0, 0 /* NOBLOCK */ }) != -1) frames++;
         if (frames == 0) { call_game(osRecvMesg_recomp, ctx, { ADDR_gVideoMesgQueue, 0, 1 /* BLOCK */ }); frames = 1; }
         call_game(osViSwapBuffer_recomp, ctx, { rd32(ADDR_otherScreen) });
+        // The next frame's task waits for the retrace that applies this swap (jfg_sched_task_ready).
+        g_swap_retrace.store(g_retraces.load(std::memory_order_acquire), std::memory_order_release);
+        g_swap_screens.store(rt64_jfg_screen_updates.load(std::memory_order_acquire), std::memory_order_release);
+        g_swap_draw_fb.store(rd32(ADDR_currentScreen) & 0x1FFFFFFFu, std::memory_order_release);
+        g_swap_pending.store(true, std::memory_order_release);
         wr8(ADDR_gSkipVideoDeltaAdjust, 0);
         ctx->r2 = frames;
         return 1;
@@ -194,6 +402,8 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
                     (int)rd8(ADDR_tuneSeqNo), valid_ptr(rd32(ADDR_tuneSeqPlayer)) ? (int)rd32(rd32(ADDR_tuneSeqPlayer) + 0x2C) : -1);
                 if (g_cam.player != 0) std::fprintf(stderr, "[jfg] player at %.0f %.0f %.0f, speed factor %.2f\n", rdf(g_cam.player + 0x0C), rdf(g_cam.player + 0x10), rdf(g_cam.player + 0x14), g_cam.move_factor);
                 std::fprintf(stderr, "[jfg] robotMission %d, dual stick active %d, game mode %d, vi mode %d, next level %d\n", (int)rd8(ADDR_robotMission), jfg_dual_stick_active(), (int)rd32(ADDR_mainGameMode), (int)rd8(ADDR_sResolutionIndex), (int)(int16_t)rd16(ADDR_nextLevel));
+                std::fprintf(stderr, "[jfg] squad: %d members this tick, %u drawn in between since the last line\n", (int)g_squad_members.size(), g_squad_smoothed);
+                g_squad_smoothed = 0;
                 { load_level_names(); const int lv = (int16_t)rd16(ADDR_currentLevel); if (lv >= 0 && lv < (int)g_level_names.size()) std::fprintf(stderr, "[jfg] level name '%s'\n", g_level_names[lv].c_str()); }
                 n = 0; sum = 0; t0 = std::chrono::steady_clock::now();
             }

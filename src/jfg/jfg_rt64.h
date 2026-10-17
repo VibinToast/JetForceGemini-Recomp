@@ -4,6 +4,9 @@
 #include <atomic>
 #include <cstdint>
 
+extern std::atomic<uint32_t> rt64_jfg_screen_fb;      // lib/rt64/src/hle/rt64_state.cpp (JFG patch): framebuffer of the latest screen update
+extern std::atomic<uint32_t> rt64_jfg_screen_updates; // ... and how many screen updates RT64 has taken
+
 extern std::atomic<uint32_t> rt64_jfg_present_count; // lib/rt64/src/hle/rt64_present_queue.cpp (JFG patch)
 extern std::atomic<int> rt64_jfg_ssao;            // lib/rt64/src/render/rt64_framebuffer_renderer.cpp (JFG patch)
 extern std::atomic<float> rt64_jfg_ssao_strength;
