@@ -2190,56 +2190,42 @@ std::string depth_fog_status() {
     return out;
 }
 
-// --- 60 fps: squad members that ignore the frame step ----------------------------------------------------------------
-// The game passes each squad member the video frames this tick covers (SquaddieControl(obj, frames)), and most of the
-// squad code scales by it. The drones' corkscrew attack (overlay 147: BTSBGalaxianCorkScrew, CorkScrewAttackMover) does
-// not: measured in Forest Clear (level 54), a drone covered about 6.5 units a tick and rolled its attack chance once a
-// tick whatever the frame count, so at 60 fps drones flew in and attacked two to three times as fast as at 30 / 20 fps.
-// In 60 fps mode such a squad member is updated on every second tick only, with the skipped frames added to the frame
-// count it gets: the game's own 30 fps cadence for those objects, everything else stays at 60. (Measured: a drone moves
-// by its velocity once per SquaddieControl call and not at all in between, so this gives exactly the 30 fps speed.)
-// A squad member counts as one while the corkscrew mover has run for it in the last few seconds (keyed by the object and
-// its data pointer, as objects are reused), and the list is emptied when the level changes.
+// --- 60 fps: the squad system at the game's own 30 fps cadence --------------------------------------------------------
+// Enemies, tribals and the other squad members (overlay 3: SquaddieControl per member, SquadronControl per group,
+// squadsModuleTick once a tick) are passed the video frames a tick covers, but much of what they do is still per tick:
+// a member moves by its velocity once per SquaddieControl call, behaviours roll their chances and step their counters
+// once per call. Measured in Forest Clear (level 54) with the frame rate at 60: ants, tribals and drones moved about twice
+// as fast in real time as at the original rate (median 298 against 144 units a second, game time 60 frames a second in
+// both), animated faster and attacked more often. With this, a squad member covers the same distance per update as at
+// the original rate (8.13 against 8.19 units, measured) at 30 updates a second.
+// In 60 fps mode the whole squad system therefore runs on every second tick only: all three functions are left out on
+// the other tick, and the frame count they get covers both ticks (2, or more after a slow tick). That is exactly the
+// cadence the game has at 30 fps, so squad members behave as they do there; everything else stays at 60. Squad members
+// are then also drawn moving 30 times a second.
+// The decision is made once per tick in jfg_frame_sync (squad_cadence_next_tick), so a squadron and its members always
+// run on the same tick.
 namespace {
-struct SlowSquaddie { uint32_t obj, data, last_seen, frames; };
-std::vector<SlowSquaddie> g_slow_squaddies;
-uint32_t g_game_ticks = 0;     // main loop ticks (jfg_frame_sync)
-int g_slow_squaddies_level = -1;
-constexpr uint32_t SLOW_SQUADDIE_FORGET_TICKS = 180;
+uint32_t g_game_ticks = 0;          // main loop ticks (jfg_frame_sync)
+uint32_t g_squad_frames = 0;        // video frames the squad system has not been given yet, including this tick's
+bool g_squad_runs = true;           // the squad system runs this tick
 }
 
-extern "C" void jfg_slow_squaddie_seen(uint8_t* rdram, uint32_t obj) {
-    g_rdram = rdram;
-    const uint32_t data = rd32(obj + 0x68);
-    for (SlowSquaddie& s : g_slow_squaddies) {
-        if (s.obj != obj) continue;
-        if (s.data != data) { s.data = data; s.frames = 0; }
-        s.last_seen = g_game_ticks;
-        return;
-    }
-    g_slow_squaddies.push_back({ obj, data, g_game_ticks, 0 });
+// Called with the frames of the tick about to run.
+void squad_cadence_next_tick(uint32_t frames) {
+    if (g_squad_runs) g_squad_frames = 0;     // the previous tick handed them over
+    g_squad_frames += std::max<uint32_t>(frames, 1);
+    // Only 60 fps ticks are paired up; at the original rate (2 or 3 frames a tick) and while a cutscene is skipped
+    // (6 frames a tick) every tick runs as in the game.
+    g_squad_runs = g.frame_rate < 1 || g.skipping || g_squad_frames >= 2;
 }
 
-// Returns the frame count to update `obj` with this tick, or 0 to leave it out this tick.
-extern "C" int jfg_squaddie_rate(uint8_t* rdram, uint32_t obj, int frames) {
+// Hooks at the entry of SquaddieControl(obj, frames), SquadronControl(obj, frames) and squadsModuleTick(frames): the frame
+// count to run with this tick, or 0 to leave the call out. `member` is the squad member (SquaddieControl), else 0.
+extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
     g_rdram = rdram;
-    const int level = (int16_t)rd16(ADDR_currentLevel);
-    if (level != g_slow_squaddies_level) { g_slow_squaddies.clear(); g_slow_squaddies_level = level; }
-    if (g.frame_rate < 1 || g.skipping || g_slow_squaddies.empty()) return frames;
-    for (size_t i = 0; i < g_slow_squaddies.size(); i++) {
-        SlowSquaddie& s = g_slow_squaddies[i];
-        if (s.obj != obj) continue;
-        if (g_game_ticks - s.last_seen > SLOW_SQUADDIE_FORGET_TICKS || s.data != rd32(obj + 0x68)) {
-            g_slow_squaddies.erase(g_slow_squaddies.begin() + (std::ptrdiff_t)i);
-            return frames;
-        }
-        s.frames += (uint32_t)std::max(frames, 1);
-        if (s.frames < 2) return 0;
-        const int total = (int)s.frames;
-        s.frames = 0;
-        return total;
-    }
-    return frames;
+    (void)member;
+    if (g.frame_rate < 1 || g.skipping) return frames;
+    return g_squad_runs ? (int)g_squad_frames : 0;
 }
 
 // Read by the renderer (src/renderer/renderer.cpp): the texture and output filtering options.
@@ -3047,8 +3033,9 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
         }
     }
     static const int force_frames = std::getenv("JFG_DEBUG_FORCE_FRAMES") ? std::atoi(std::getenv("JFG_DEBUG_FORCE_FRAMES")) : 0; // tests: frames per tick
-    if (force_frames > 0 && !g.skipping) return (uint32_t)force_frames;
-    return g.skipping ? 6 : frames;
+    const uint32_t result = (force_frames > 0 && !g.skipping) ? (uint32_t)force_frames : (g.skipping ? 6 : frames);
+    squad_cadence_next_tick(result);
+    return result;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
