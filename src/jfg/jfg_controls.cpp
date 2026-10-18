@@ -96,11 +96,21 @@ extern "C" int jfg_dual_stick_layout(void) {
     return g.dual_layout ? 1 : 0;
 }
 
+// Floyd missions with mouse and keyboard on: the dual-stick controls stay off (they are built around the character, and
+// a controller keeps the game's own Floyd controls), but the mouse and keyboard fly Floyd: their own keyboard layout
+// (src/input/controls.cpp) and the mouse steering (jfg_floyd_steer).
+extern "C" int jfg_floyd_mouse_active(void) {
+    if (!g.mouse_keyboard || g_fly.active || g_rdram == nullptr) return 0;
+    if (rd32(ADDR_mainGameMode) != 0 || rd8(ADDR_pauseMode) != 0 || rd8(ADDR_robotMission) == 0 || in_cutscene()) return 0;
+    return dino::debug_ui::game_has_input() ? 1 : 0;
+}
+
 // Mouse and keyboard (src/input/controls.cpp, src/input/input.cpp): 1 while the mouse and keyboard play the game -
-// the option is on, the dual-stick controls are in charge (gameplay, not paused, no cutscene) and the debug UI is
-// closed (or F10's toolbar is open but handed the mouse and keyboard to the game with Alt / a click outside it).
-// The cursor is captured (relative mouse mode) exactly then.
+// the option is on, the dual-stick controls are in charge (gameplay, not paused, no cutscene) or a Floyd mission is
+// under way, and the debug UI is closed (or F10's toolbar is open but handed the mouse and keyboard to the game with
+// Alt / a click outside it). The cursor is captured (relative mouse mode) exactly then.
 extern "C" int jfg_mouse_keyboard_active(void) {
+    if (jfg_floyd_mouse_active()) return 1;
     return (g.mouse_keyboard || g_fly.active) && jfg_dual_stick_active() && dino::debug_ui::game_has_input() ? 1 : 0;
 }
 
@@ -350,6 +360,55 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
         g_boss_cam_turn = 0;
     }
     last_tick = g_tick_count;
+}
+
+// --- Floyd missions --------------------------------------------------------------------------------------------------
+// Floyd flies like a plane (sidekickControl, data = Floyd's object + 0x68): the stick sets a turn rate (+0x66) and a
+// pitch rate (+0x68) that ease in and out and are added to the heading (+0x60, stick right lowers it) and the pitch
+// (+0x62, clamped to 90 degrees either way); the roll (+0x64) eases towards the turn rate (-20 x rate). N64 A is thrust,
+// B brakes, Z fires at the crosshair, which springs to where the stick points. In one mode (player data + 0x10D = 3) the
+// pitch drifts back to level every tick. Through the stick the mouse would fight all that easing (its movement comes
+// in lumps, as in the boss fights), so it turns and pitches Floyd directly: by exactly how far it moved, with the
+// game's stick left as it is (the A / D keys and a controller still turn Floyd the game's way). The levelling drift is
+// left out while the mouse flies, and the roll gets a bank of its own from the mouse's turn rate.
+//
+// Two hooks in sidekickControl, s0 = Floyd's data, sp + 0x124 = the tick's frames. Phase 0 (0x8002FC28, before the roll
+// is eased): the bank added last tick is taken off again, so the game eases its own roll. Phase 1 (0x8002FC70, after the
+// roll, before heading, pitch and roll are copied to the object): the mouse's turn, pitch and bank are put in.
+extern "C" void jfg_floyd_steer(uint8_t* rdram_, recomp_context* ctx, int phase) {
+    g_rdram = rdram_;
+    constexpr uint32_t FLOYD_YAW = 0x60, FLOYD_PITCH = 0x62, FLOYD_ROLL = 0x64, FLOYD_PITCH_RATE = 0x68;
+    constexpr int PITCH_LIMIT = 0x4000, ROLL_LIMIT = 520 * 20; // the game's own limits (full stick: rate 520)
+    static uint32_t bank_data = 0, pitch_data = 0, pitch_tick = 0;
+    static int bank_added = 0, pitch = 0;
+    static float bank = 0.0f;
+    const uint32_t data = (uint32_t)ctx->r16;
+    if (!valid_ptr(data)) return;
+    if (phase == 0) {
+        if (bank_added != 0 && data == bank_data) wr16(data + FLOYD_ROLL, (uint16_t)(rd16(data + FLOYD_ROLL) - bank_added));
+        bank_added = 0;
+        return;
+    }
+    if (!jfg_floyd_mouse_active()) { bank = 0.0f; pitch_data = 0; return; }
+    const int frames = std::clamp((int)rd32((uint32_t)ctx->r29 + 0x124), 1, 6);
+    // Heading: right lowers it, as with the stick.
+    wr16(data + FLOYD_YAW, (uint16_t)(rd16(data + FLOYD_YAW) - g_mouse_aim_x));
+    // Pitch: carried on from what was written last tick plus what the game's own pitch rate added (a controller's stick),
+    // so the levelling drift does not pull it back. Taken from the game afresh when Floyd or the mission is new.
+    if (data != pitch_data || g_tick_count - pitch_tick > 1) pitch = (int16_t)rd16(data + FLOYD_PITCH);
+    else pitch += (int16_t)rd16(data + FLOYD_PITCH_RATE) * frames;
+    static const int pitch_sign = std::getenv("JFG_FLOYD_PITCH_SIGN") ? std::atoi(std::getenv("JFG_FLOYD_PITCH_SIGN")) : 1; // tests
+    pitch = std::clamp(pitch + pitch_sign * g_mouse_aim_y, -PITCH_LIMIT, PITCH_LIMIT);
+    wr16(data + FLOYD_PITCH, (uint16_t)(int16_t)pitch);
+    pitch_data = data;
+    pitch_tick = g_tick_count;
+    // Bank: as the game banks for a turn rate (roll = -20 x rate per frame; the mouse's rate is minus its step per frame),
+    // smoothed, since the mouse's steps come in lumps.
+    const float target = std::clamp(20.0f * (float)g_mouse_aim_x / (float)frames, (float)-ROLL_LIMIT, (float)ROLL_LIMIT);
+    bank += (target - bank) * std::min(1.0f, 0.2f * (float)frames);
+    bank_added = (int)std::lround(bank);
+    bank_data = data;
+    wr16(data + FLOYD_ROLL, (uint16_t)(rd16(data + FLOYD_ROLL) + bank_added));
 }
 
 // Tests: JFG_DEBUG_PLAYER=<ticks> logs the player's state every that many ticks.
