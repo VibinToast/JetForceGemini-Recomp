@@ -463,6 +463,20 @@ void jfg_camera_controls(recomp_context* ctx) {
         const float moved = std::sqrt((x - g_cam.last_x) * (x - g_cam.last_x) + (z - g_cam.last_z) * (z - g_cam.last_z));
         if (level != g_cam.level || obj != g_cam.last_player || moved > 400.0f) g_cam.face_reset = true;
         g_cam.level = level; g_cam.last_player = obj; g_cam.last_x = x; g_cam.last_z = z;
+        // JFG_DEBUG_ARRIVE=1 logs the first 120 ticks in each new place: the character, the game's camera and ours.
+        static const bool log_arrive = std::getenv("JFG_DEBUG_ARRIVE") != nullptr;
+        static int arrive_ticks = 1000;
+        if (g_cam.face_reset) arrive_ticks = 0;
+        if (log_arrive && arrive_ticks < 120) {
+            const uint32_t c = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
+            const uint32_t data = rd32(obj + 0x68);
+            std::fprintf(stderr, "[arrive] %d lvl %d obj %08X pos %.0f %.0f facing %.1f game %.1f cam %.0f %.0f free %.1f act %d show %d reset %d st %d stick %d %d L %.2f %.2f\n",
+                arrive_ticks, level, obj, x, z, wrap_angle(angle_from_s16(rd16(obj)) + PI_F) * 180.0f / PI_F,
+                -angle_from_s16(rd16(c)) * 180.0f / PI_F, rdf(c + 0x0C), rdf(c + 0x14), g_cam.heading * 180.0f / PI_F, (int)was_active,
+                g_cam.showing, (int)g_cam.face_reset, valid_ptr(data) ? rd8(data + PD_STATE) : -1, (int)(int8_t)rd8(pad + 2), (int)(int8_t)rd8(pad + 3),
+                (float)g_stick_lx, (float)g_stick_ly);
+        }
+        arrive_ticks++;
     }
     if (!jfg_dual_stick_active()) { g_cam.was_aiming = false; return; }
     if (boss_control_active()) { boss_controls(obj, pad, aiming); g_cam.was_aiming = false; return; }
@@ -477,7 +491,7 @@ void jfg_camera_controls(recomp_context* ctx) {
         const float px = rdf(obj + 0x0C), pz = rdf(obj + 0x14), cx = rdf(cam + 0x0C), cz = rdf(cam + 0x14);
         const float flat = std::sqrt((px - cx) * (px - cx) + (pz - cz) * (pz - cz));
         const float off = flat < 30.0f ? 0.0f : std::fabs(wrap_angle(std::atan2(px - cx, pz - cz) - game_heading));
-        const bool away = flat > 2000.0f || off > 50.0f * PI_F / 180.0f;
+        const bool away = (flat > 2000.0f || off > 50.0f * PI_F / 180.0f) && g_cam.arrive_hold <= 0 && !g_cam.face_reset;
         // a couple of ticks of grace, so a single odd frame (a wall pushing the camera in) does not let go
         g_cam.showing = away ? g_cam.showing + 1 : 0;
         static const bool log_cam = std::getenv("JFG_DEBUG_CAM") != nullptr;
@@ -506,10 +520,20 @@ void jfg_camera_controls(recomp_context* ctx) {
         g_cam.elevation = 0;
         return;
     }
+    const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
+    const float lx = g_stick_lx, ly = g_stick_ly, rx = g_stick_rx, ry = g_stick_ry;
     if (g_cam.face_reset) { // somewhere new: start behind the character, looking the way it faces
         g_cam.heading = wrap_angle(angle_from_s16(rd16(obj)) + PI_F);
         g_cam.elevation = 0;
         g_cam.face_reset = false;
+        g_cam.arrive_hold = 60;
+    }
+    else if (g_cam.arrive_hold > 0) {
+        // Until the player turns the camera, it keeps to the character's facing - only while the left stick is not
+        // pushed sideways (the character turns to the stick, and a camera following it would turn it round in circles).
+        if (std::fabs(rx) > 0.2f || std::fabs(ry) > 0.2f || g_mouse_cam_x != 0.0f || g_mouse_cam_y != 0.0f) g_cam.arrive_hold = 0;
+        else if (std::fabs(lx) < 0.3f) g_cam.heading = wrap_angle(angle_from_s16(rd16(obj)) + PI_F);
+        g_cam.arrive_hold -= (int)frames;
     }
     else if (!was_active || g_cam.was_aiming) { // (re)start from the game's camera
         g_cam.heading = game_heading;
@@ -517,9 +541,6 @@ void jfg_camera_controls(recomp_context* ctx) {
     }
     g_cam.was_aiming = false;
     g_cam.active = true;
-
-    const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
-    const float lx = g_stick_lx, ly = g_stick_ly, rx = g_stick_rx, ry = g_stick_ry;
 
     // Right stick: 150 degrees a second sideways, 75 up/down, at full deflection.
     constexpr float YAW_RATE = 150.0f / 60.0f * (PI_F / 180.0f), PITCH_RATE = 75.0f / 60.0f * (PI_F / 180.0f);
