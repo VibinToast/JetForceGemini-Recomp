@@ -3,6 +3,11 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. Entries under "Unreleased" are in the source but not yet
 built and tested, unless marked otherwise.
 
+## v1.1.8 (2026-10-18)
+
+- Old shadow pictures no longer show up as black boxes in place of textures
+- Texture packs (.rtz) bigger than 2 GB made with Python load again
+
 ## v1.1.7 (2026-10-18)
 
 - ToDo's and known issues
