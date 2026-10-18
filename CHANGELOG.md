@@ -3,6 +3,17 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. Entries under "Unreleased" are in the source but not yet
 built and tested, unless marked otherwise.
 
+## v1.1.7 (2026-10-18)
+
+- ToDo's and known issues
+- Reduce recorded junk thrown into trace_log.
+- Reflective floors no longer show a 4:3 box in widescreen
+- Going through a door with dual-stick or mouse and keyboard no longer turns the camera towards the exit
+- Character shadows have a soft edge again
+- Character shadows are now drawn at full resolution instead of blocky
+- Smooth character shadows instead of blocky ones
+- The update window no longer pops up by itself, and a new bin\jfg_launcher.txt can turn off update checks or start the game directly
+
 ## v1.1.6 (2026-10-18)
 
 - Fix Mizar's first phase never ending at 60 fps
