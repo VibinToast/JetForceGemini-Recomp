@@ -35,6 +35,7 @@ void jfg_squad_draw_end(uint8_t* rdram);                               // func_8
 void jfg_move_scale(uint8_t* rdram, recomp_context* ctx);              // entry of objMoveXYZ
 void jfg_boss_tick(void);                                              // entry of boyBossControl, dogBossControl, girlBossControl
 void jfg_platform_move(int on);                                        // controlPlatform, around its objMoveXYZ call
+void jfg_floyd_steer(uint8_t* rdram, recomp_context* ctx, int phase);  // sidekickControl, around Floyd's roll easing
 // jfg_camera.cpp
 void jfg_camera_override(uint8_t* rdram, recomp_context* ctx);         // func_80045F00, right before the scene is drawn
 int jfg_freeze_world(void);                                            // func_80045F00, world tick or pause tick
@@ -72,6 +73,7 @@ uint32_t jfg_cart_read32(uint32_t address);                            // osCart
 int jfg_dual_stick_active(void);
 int jfg_dual_stick_layout(void);
 int jfg_mouse_keyboard_active(void);
+int jfg_floyd_mouse_active(void);
 void jfg_mouse_wheel(int notches);
 void jfg_mouse_motion(int dx, int dy);
 int jfg_invert_aim_normal(uint16_t buttons);

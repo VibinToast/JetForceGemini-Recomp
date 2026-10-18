@@ -437,6 +437,18 @@ func = "girlBossControl"
 before_vram = 0x82330000
 text = "{ void jfg_boss_tick(void); jfg_boss_tick(); }"
 
+# Floyd missions with the mouse (src/jfg/jfg_controls.cpp, jfg_floyd_steer): sidekickControl (s0 = Floyd's data), before
+# the roll is eased (phase 0) and after it, before heading, pitch and roll are copied to Floyd's object (phase 1).
+[[patches.hook]]
+func = "sidekickControl"
+before_vram = 0x8002FC28
+text = "{ void jfg_floyd_steer(uint8_t*, recomp_context*, int); jfg_floyd_steer(rdram, ctx, 0); }"
+
+[[patches.hook]]
+func = "sidekickControl"
+before_vram = 0x8002FC70
+text = "{ void jfg_floyd_steer(uint8_t*, recomp_context*, int); jfg_floyd_steer(rdram, ctx, 1); }"
+
 # Jetpack fuel pads (overlay 100, refuelControl): the fuel added this tick (t3) scaled by the "Refuel speed" option,
 # just before it is stored in the player's data (+0x58C); the game clamps it to the maximum right after.
 [[patches.hook]]
