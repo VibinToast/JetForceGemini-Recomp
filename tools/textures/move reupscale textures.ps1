@@ -1,7 +1,7 @@
-# Moves the dumped textures that need upscaling (again) into texture_reupscale, using the dump's draw_trace.txt.
+# Copies the dumped textures that need upscaling (again) into texture_reupscale, using the dump's draw_trace.txt.
 #
 #   .\move reupscale textures.ps1                        (pack: bin\texture_packs\4K-Toasty-HD)
-#   .\move reupscale textures.ps1 -ListOnly              only count them and write the list, move nothing
+#   .\move reupscale textures.ps1 -ListOnly              only count them and write the list, copy nothing
 #   .\move reupscale textures.ps1 -Pack 16x_LSDIRDAT     another folder in bin\texture_packs
 #   .\move reupscale textures.ps1 -Bin D:\JFG\bin        a bin folder somewhere else
 #
@@ -25,9 +25,10 @@
 # pick a texture rather than leave it: a few textures may be upscaled again for nothing, none should be missed.
 #
 # What it does: reads every draw_trace.txt in texture_dump (also the per-level sub-folders of "One folder per level"),
-# moves one file per picked hash from texture_dump to bin\texture_reupscale (never overwriting), and puts a copy of the
-# traces (joined into one draw_trace.txt) and of texture_info.txt next to them, so Toasty upscales that folder as a
-# traced dump. reupscale.txt lists each picked hash and why. Nothing is deleted; the pack is not touched.
+# copies one file per picked hash from texture_dump to bin\texture_reupscale (never overwriting one already there), and
+# puts a copy of the traces (joined into one draw_trace.txt) and of texture_info.txt next to them, so Toasty upscales
+# that folder as a traced dump. reupscale.txt lists each picked hash and why. The dump keeps all its files, nothing is
+# deleted, and the pack is not touched.
 #
 # Afterwards: upscale bin\texture_reupscale with Toasty, put the results in the pack folder under the same names
 # (replacing the old files; same hash, so the pack's rt64.json entries stay right, and the game rebuilds the list of a
@@ -286,19 +287,19 @@ foreach ($r in $counts.Keys) { "  {0,-8} {1}" -f $r, $counts[$r] }
 
 New-Item -ItemType Directory -Force $dest | Out-Null
 $picked.Keys | ForEach-Object { "$_ $($picked[$_] -join ',')" } | Set-Content (Join-Path $dest "reupscale.txt")
-if ($ListOnly) { "List only: nothing moved. Hashes and reasons in $dest\reupscale.txt"; exit 0 }
+if ($ListOnly) { "List only: nothing copied. Hashes and reasons in $dest\reupscale.txt"; exit 0 }
 
-# 5. Move them, with the traces and texture_info.txt copied next to them for Toasty.
-$moved = 0
+# 5. Copy them, with the traces and texture_info.txt next to them for Toasty.
+$copied = 0
 foreach ($h in $picked.Keys) {
     $f = $dumped[$h]
     $target = Join-Path $dest $f.Name
     if (Test-Path $target) { continue }   # never overwrite
-    Move-Item -LiteralPath $f.FullName -Destination $target
-    $moved++
+    Copy-Item -LiteralPath $f.FullName -Destination $target
+    $copied++
 }
 $traces | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Set-Content (Join-Path $dest "draw_trace.txt")
 $infos = @(Get-ChildItem $dump -Recurse -File -Filter texture_info.txt)
 if ($infos.Count -gt 0) { $infos | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Set-Content (Join-Path $dest "texture_info.txt") }
-"$moved textures moved to $dest (with draw_trace.txt and texture_info.txt). Upscale that folder with Toasty, then put"
+"$copied textures copied to $dest (with draw_trace.txt and texture_info.txt). Upscale that folder with Toasty, then put"
 "the results in $packDir under the same names."
