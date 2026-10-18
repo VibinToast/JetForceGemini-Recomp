@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "jfg_game.h"
@@ -201,6 +202,25 @@ uint32_t model_instance(uint32_t obj) {
     if (!valid_ptr(model) || rd8(model + 0x4E) == 0) return 0;
     return inst;
 }
+
+// The objects still in play: the game's two object lists (ObjList, NoAddObjList; objSetupObject puts each object in one).
+// Members are noted when SquaddieControl runs (objObjectsTick), but objDoFrees runs after that and before trackDraw, so a
+// member that died this tick may be freed by the time it is drawn. Writing a drawn pose into it then wrote into freed
+// memory, which by then could belong to another object: squad links pointing nowhere, crashes and freezes in fights
+// (2026-10-17). Only members found here are touched.
+std::unordered_set<uint32_t> g_live_objects;
+void read_live_objects() {
+    constexpr uint32_t ADDR_ObjList = 0x800F2CA4, ADDR_ObjListCount = 0x800F2CA8, ADDR_NoAddObjList = 0x800F2CB4, ADDR_NoAddObjListCount = 0x800F2CB8;
+    g_live_objects.clear();
+    const uint32_t lists[2][2] = { { ADDR_ObjList, ADDR_ObjListCount }, { ADDR_NoAddObjList, ADDR_NoAddObjListCount } };
+    for (const auto& l : lists) {
+        const uint32_t list = rd32(l[0]);
+        const int count = (int)rd32(l[1]);
+        if (!valid_ptr(list) || count <= 0 || count > 4096) continue;
+        for (int i = 0; i < count; i++) g_live_objects.insert(rd32(list + 4u * (uint32_t)i));
+    }
+}
+bool live_object(uint32_t obj) { return valid_ptr(obj) && g_live_objects.count(obj) != 0; }
 } // namespace
 
 // func_80045F00, right before trackDraw (with jfg_camera_override).
@@ -209,11 +229,15 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
     squad_draw_restore();
     static const bool off = std::getenv("JFG_NO_SQUAD_SMOOTH") != nullptr;
     if (off || g.frame_rate < 1 || g.skipping) { g_squad_tracks.clear(); return; }
+    read_live_objects();
+    for (auto it = g_squad_tracks.begin(); it != g_squad_tracks.end();) { // freed: its memory may hold a new object later
+        if (!live_object(it->first)) it = g_squad_tracks.erase(it); else ++it;
+    }
     if (!g_squad_runs) {
         // The tick in between: drawn where they are. Note which models the game poses itself this tick: only those
         // are animating, and only those are posed again on the next update tick (see below).
         for (uint32_t obj : g_squad_members) {
-            if (!valid_ptr(obj)) continue;
+            if (!live_object(obj)) continue;
             const uint32_t inst = model_instance(obj);
             if (inst != 0 && rd8(inst + 0x0A) != 0) g_squad_tracks[obj].posed_tick = g_game_ticks;
         }
@@ -223,7 +247,7 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
     const bool even = g_squad_frames == 2 && g_tick_frames == 1;
     constexpr float JUMP = 300.0f; // squad members cover about 8 units per update
     for (uint32_t obj : g_squad_members) {
-        if (!valid_ptr(obj)) continue;
+        if (!live_object(obj)) continue;
         SquadTrack& t = g_squad_tracks[obj];
         if (t.updated_tick == g_game_ticks) continue; // already handled this tick
         const SquadPose now = read_pose(obj);
