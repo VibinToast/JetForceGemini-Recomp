@@ -59,6 +59,9 @@ struct CameraControl {
     // Arriving somewhere new (another room through a door, a respawn, a teleport): the free camera starts again
     // behind the character, looking the way it faces, instead of keeping the heading from the place it came from.
     bool face_reset = true;
+    // Game frames after an arrival in which the camera stays behind the character: the game's own camera is still
+    // swinging in from wherever it was (in the last room's coordinates), which is not one of its shots to wait out.
+    int arrive_hold = 0;
     int level = -1;
     uint32_t last_player = 0;
     float last_x = 0, last_z = 0;
