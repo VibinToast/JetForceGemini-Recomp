@@ -131,6 +131,29 @@ extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
     return g_squad_runs ? (int)g_squad_frames : 0;
 }
 
+// --- 60 fps: angles that ease towards a target ---------------------------------------------------------------------
+// Replaces dAngle(angle, target, t) (charControl.c): angle + (shortest signed difference * t), the product truncated.
+// Callers ease an angle with t = 1 - damping^frames (Powerf), so with one frame per tick t is about half what it is at
+// 30 fps, and the step truncates to 0 while the angle is still a little short of the target: it never arrives. Mizar's
+// first phase waits for his rotation to reach 0x8000 exactly (mizarControl, the three dAngle calls at +0x301C..): at
+// 60 fps it stayed at 0x8020 and the fight did not go on until the frame rate was switched back (2026-10-18). Same
+// arithmetic as the game; in 60 fps mode only, a step that truncates to 0 with a difference left and t > 0 is 1 unit.
+extern "C" void jfg_dangle(uint8_t* rdram, recomp_context* ctx) {
+    g_rdram = rdram;
+    const int32_t angle = (int16_t)(uint32_t)ctx->r4;
+    const int32_t target = (int32_t)ctx->r5;
+    const uint32_t t_bits = (uint32_t)ctx->r6;
+    float t;
+    std::memcpy(&t, &t_bits, sizeof(t));
+    int32_t diff = (target - angle) & 0xFFFF;
+    const int32_t back = (angle - target) & 0xFFFF;
+    if (back < diff) diff = -back;
+    const float product = (float)diff * t;
+    int32_t step = (product > -2147483648.0f && product < 2147483648.0f) ? (int32_t)product : 0x7FFFFFFF; // cvt.w.s, toward 0
+    if (step == 0 && diff != 0 && t > 0.0f && g.frame_rate >= 1 && !g.skipping) step = diff > 0 ? 1 : -1;
+    ctx->r2 = (gpr)(int32_t)(int16_t)(angle + step);
+}
+
 // --- 60 fps: squad members drawn in between their updates ---------------------------------------------------------
 // With the squad system on every second tick, squad members move and animate 30 times a second while everything else
 // does 60. So on a tick where the squad system ran, each member is drawn halfway between where it was after its previous
