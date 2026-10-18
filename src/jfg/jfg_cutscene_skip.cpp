@@ -169,13 +169,32 @@ extern "C" int jfg_snd_skip(uint8_t* rdram_, uint32_t sp) {
     return 1;
 }
 
+// Sound-effect player events (gsSnd.c) and the fields of its event queue (US version: count of queued events at +0x10,
+// of events dropped because the queue was full at +0x12) and of the player (frameTime at +0x4C).
+constexpr uint16_t AL_SNDP_PAN_EVT = 1 << 2, AL_SNDP_VOL_EVT = 1 << 3, AL_SNDP_PITCH_EVT = 1 << 4, AL_SNDP_API_EVT = 1 << 5,
+                   AL_SNDP_FX_EVT = 1 << 8, AL_SNDP_STOP_EVT = 1 << 10, AL_SNDP_GROUP_VOL_EVT = 1 << 11;
+constexpr uint16_t SNDP_UPDATE_EVTS = AL_SNDP_PAN_EVT | AL_SNDP_VOL_EVT | AL_SNDP_PITCH_EVT | AL_SNDP_FX_EVT | AL_SNDP_GROUP_VOL_EVT;
+constexpr int SNDP_RESERVE = 16; // free queue items kept for everything but the game thread's updates
+
+int free_events(uint32_t evtq, int limit) { // evtq->freeList.next chain, counted up to limit
+    int n = 0;
+    for (uint32_t p = rd32(evtq); p >= 0x80000000u && p < 0x80800000u && n < limit; p = rd32(p)) n++;
+    return n;
+}
+
 // Entry of n_alEvtqPostEvent(evtq, evt, delta). Returns 1 to drop the event: during a skip, everything the game's main
-// thread posts except "stop" events, and those too if the queue is nearly full (see jfg.us.toml).
+// thread posts except "stop" events, and those too if the queue is nearly full (see jfg.us.toml). Outside a skip, the
+// main thread's volume, pan, pitch and effect updates of sounds already playing when the sound-effect queue (200
+// items) is nearly full: once it is full the game drops whatever comes next, the player's own periodic event too,
+// which froze the game (see jfg_evt_next). Starting and stopping sounds is never dropped there.
 extern "C" int jfg_evt_skip(uint8_t* rdram_, uint32_t evtq, uint32_t evt) {
-    if (!g.skipping || std::this_thread::get_id() != g_main_thread) return 0;
+    if (std::this_thread::get_id() != g_main_thread) return 0;
     g_rdram = rdram_;
-    int free_items = 0;
-    for (uint32_t p = rd32(evtq); p >= 0x80000000u && p < 0x80800000u && free_items < 12; p = rd32(p)) free_items++; // evtq->freeList.next chain
+    if (!g.skipping) {
+        if (evtq != rd32(ADDR_gSoundPlayerPtr) + 0x14 || (rd16(evt) & SNDP_UPDATE_EVTS) == 0) return 0;
+        return free_events(evtq, SNDP_RESERVE) < SNDP_RESERVE ? 1 : 0;
+    }
+    const int free_items = free_events(evtq, 12);
     if (evtq != rd32(ADDR_gSoundPlayerPtr) + 0x14) {
         // A sequence player (music, ambience): everything goes through, or the music of the skipped cutscene would
         // never be stopped or replaced. If its queue is filling up, the next tick waits for a real video frame so the
@@ -183,9 +202,26 @@ extern "C" int jfg_evt_skip(uint8_t* rdram_, uint32_t evtq, uint32_t evt) {
         if (free_items < 12) g_audio_catch_up = true;
         return free_items < 2 ? 1 : 0;
     }
-    constexpr uint16_t AL_SNDP_STOP_EVT = 1 << 10;
     if (rd16(evt) != AL_SNDP_STOP_EVT) return 1;
     return free_items < 8 ? 1 : 0;
+}
+
+// Entry of n_alEvtqNextEvent(evtq, evt). The sound-effect player keeps one periodic event (AL_SNDP_API_EVT) in its queue
+// at all times and posts it again each time it comes up, so the queue is never empty here. If it is, that event was
+// lost (the queue was full when it was posted again), and the player's handler (func_80084468) would freeze the game:
+// an empty queue returns a "nonsense" event due right now, and the handler asks for the next one until one is not due
+// right now, forever (audio thread at 100%, picture stuck). The event is put back first, as the player itself posts it.
+extern "C" void jfg_evt_next(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t evtq = (uint32_t)ctx->r4;
+    const uint32_t sndp = rd32(ADDR_gSoundPlayerPtr);
+    if (sndp == 0 || evtq != sndp + 0x14 || rd32(evtq + 8) != 0 || rd32(evtq) == 0) return; // other queue, events queued, or no free item
+    const uint32_t evt = ((uint32_t)ctx->r29 - 0x40u) & ~0x7u; // inside the gap call_game leaves below $sp
+    for (uint32_t i = 0; i < 0x10; i += 4) wr32(evt + i, 0);
+    wr16(evt, AL_SNDP_API_EVT);
+    call_game(n_alEvtqPostEvent, ctx, { evtq, evt, rd32(sndp + 0x4C) });
+    static int logged = 0;
+    if (logged++ < 3) std::fprintf(stderr, "[jfg] sound player lost its periodic event (%u events dropped so far); put back\n", (unsigned)rd16(evtq + 0x12));
 }
 
 } // namespace jfg
