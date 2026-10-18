@@ -936,18 +936,20 @@ diff -ruN a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
          void setVertexEXV1(uint32_t address, uint32_t vtxCount, uint32_t dstIndex);
          void setVertexColorPD(uint32_t address);
 diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
---- a/src/hle/rt64_state.cpp	2026-10-18 03:12:28.421619600 -0500
-+++ b/src/hle/rt64_state.cpp	2026-10-18 03:12:28.421619600 -0500
-@@ -6,6 +6,8 @@
+--- a/src/hle/rt64_state.cpp	2026-10-18 04:25:08.192236500 -0500
++++ b/src/hle/rt64_state.cpp	2026-10-18 04:25:08.193238200 -0500
+@@ -6,6 +6,10 @@
  
  #include <cassert>
  #include <cinttypes>
 +#include <cstdio>
++#include <deque>
 +#include <unordered_map>
++#include <unordered_set>
  
  #include "im3d/im3d.h"
  #include "im3d/im3d_math.h"
-@@ -27,6 +29,10 @@
+@@ -27,6 +31,10 @@
  #define MI_INTR_DP          0x00000020
  #define MI_INTR_SP          0x00000001
  
@@ -958,7 +960,140 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
  namespace RT64 {
      const float ShiftScaleMap[] = {
          1.0f,
-@@ -104,6 +110,8 @@
+@@ -47,6 +55,132 @@
+         2.0f
+     };
+ 
++    // JFG PORT: draw_trace.txt without repeats. Rectangles are logged every frame, so a menu or the credits held for
++    // minutes wrote the same lines 60 times a second (1.1 GB for the whole game). Each frame's lines are held, and its
++    // rectangle lines are written only if no earlier frame drew the same ones: compared without the frame number, with
++    // each call number as the step from the line before (the 3D draws before the HUD vary in number; Toasty_Upscaler
++    // reads only how calls relate) and with the scene tag. Triangle lines are always written, and so are the last
++    // TraceSettleFrames frames before the scene tag changes (Toasty's SCENE_SETTLE). The same rule as Toasty's
++    // compact-trace, see "Frames without repeats" in its RT64_INTEGRATION.md. The last few frames of a session are
++    // still held when the game closes and are not written.
++    struct TraceCompactor {
++        static constexpr size_t TraceSettleFrames = 3;
++
++        struct Line {
++            uint32_t fb;
++            uint32_t call;
++            bool rect;
++            std::string rest; // the line after "call N": " rect ..." or " tris ...", up to and with "\n"
++        };
++
++        struct Frame {
++            uint64_t number = 0;
++            std::string scene;
++            std::vector<Line> lines;
++            bool whole = false;
++        };
++
++        std::deque<Frame> pending;
++        Frame current;
++        bool hasCurrent = false;
++        std::string lastScene;
++        std::unordered_set<uint64_t> seen;
++
++        void add(FILE *file, uint64_t frame, uint32_t fb, uint32_t call, bool rect, std::string rest, const std::string &scene) {
++            if (hasCurrent && (current.number != frame)) {
++                endFrame(file);
++            }
++
++            if (!hasCurrent) {
++                current = Frame();
++                current.number = frame;
++                current.scene = scene;
++                hasCurrent = true;
++            }
++
++            current.lines.push_back({ fb, call, rect, std::move(rest) });
++        }
++
++        // Writes everything held, then starts over (a new file).
++        void flush(FILE *file) {
++            endFrame(file);
++            while (!pending.empty()) {
++                writeFirst(file);
++            }
++
++            seen.clear();
++            lastScene.clear();
++        }
++
++    private:
++        void endFrame(FILE *file) {
++            if (!hasCurrent) {
++                return;
++            }
++
++            if (current.scene != lastScene) {
++                for (Frame &f : pending) {
++                    f.whole = true;
++                }
++
++                lastScene = current.scene;
++            }
++
++            pending.push_back(std::move(current));
++            hasCurrent = false;
++            while (pending.size() > TraceSettleFrames) {
++                writeFirst(file);
++            }
++        }
++
++        void writeFirst(FILE *file) {
++            Frame f = std::move(pending.front());
++            pending.pop_front();
++            bool skipRects = false;
++            if (!f.whole) {
++                std::vector<const Line *> rects;
++                for (const Line &l : f.lines) {
++                    if (l.rect) {
++                        rects.push_back(&l);
++                    }
++                }
++
++                if (!rects.empty()) {
++                    // Calls go up within a frame, so a step over 1 means the same as any other; if they ever go back,
++                    // the exact steps are compared.
++                    bool backwards = false;
++                    for (size_t i = 1; i < rects.size(); i++) {
++                        backwards = backwards || (rects[i]->call < rects[i - 1]->call);
++                    }
++
++                    std::string key;
++                    for (size_t i = 0; i < rects.size(); i++) {
++                        int64_t step = (i == 0) ? -1 : (int64_t(rects[i]->call) - int64_t(rects[i - 1]->call));
++                        if (!backwards && (step > 2)) {
++                            step = 2;
++                        }
++
++                        key += std::to_string(rects[i]->fb) + ' ' + std::to_string(step) + rects[i]->rest;
++                    }
++
++                    skipRects = !seen.insert(XXH3_64bits(key.data(), key.size())).second;
++                }
++            }
++
++            if (file == nullptr) {
++                return;
++            }
++
++            for (const Line &l : f.lines) {
++                if (!(skipRects && l.rect)) {
++                    fprintf(file, "frame %" PRIu64 " fb %u call %u%s", f.number, l.fb, l.call, l.rest.c_str());
++                }
++            }
++
++            fflush(file);
++        }
++    };
++
+     // State
+ 
+     State::State(uint8_t *RDRAM, uint32_t *MI_INTR_REG, void (*checkInterrupts)()) {
+@@ -104,6 +238,8 @@
          drawCall.rect.reset();
          drawCall.rectDsdx = 0;
          drawCall.rectDtdy = 0;
@@ -967,7 +1102,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          drawCall.rectLeftOrigin = G_EX_ORIGIN_NONE;
          drawCall.rectRightOrigin = G_EX_ORIGIN_NONE;
          drawCall.scissorRect.reset();
-@@ -220,7 +228,7 @@
+@@ -220,7 +356,7 @@
              // Detect the tile count based on the LOD setting.
              const bool usesLOD = (drawCall.otherMode.textLOD() == G_TL_LOD);
              if (usesLOD) {
@@ -976,7 +1111,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
              }
              // Detect the tile count based on what texels it uses.
              else {
-@@ -496,6 +504,8 @@
+@@ -496,6 +632,8 @@
          // Reset attributes for the next draw call to be recorded.
          drawCall.rectDsdx = 0;
          drawCall.rectDtdy = 0;
@@ -985,7 +1120,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          drawCall.loadIndex = 0;
          drawCall.loadCount = 0;
          drawCall.minWorldMatrix = USHRT_MAX;
-@@ -770,6 +780,166 @@
+@@ -770,6 +908,179 @@
                      const uint32_t rdpTileLimit = gameCall.callDesc.tileIndex + gameCall.callDesc.tileCount;
                      while (rdpTileCursor < rdpTileLimit) {
                          uploadTile(rdpTileCursor, fbPair, gameCall.callDesc);
@@ -999,9 +1134,11 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 +                            if (traceTile.valid && !traceTile.tileCopyUsed) {
 +                                static std::string traceDir;
 +                                static FILE *traceFile = nullptr;
++                                static TraceCompactor traceCompactor;
 +                                static std::unordered_map<uint64_t, std::pair<interop::int2, interop::int2>> traceTrisLogged; // key -> widest texcoord extent logged
 +                                const std::string dirString = dumpingTexturesDirectory.u8string();
 +                                if (traceFile == nullptr || traceDir != dirString) {
++                                    traceCompactor.flush(traceFile);
 +                                    if (traceFile != nullptr) {
 +                                        fclose(traceFile);
 +                                    }
@@ -1113,19 +1250,28 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 +                                    const char *filt = (textFilt == G_TF_POINT) ? "point" : ((textFilt == G_TF_AVERAGE) ? "average" : "bilerp");
 +                                    const uint32_t src = rdp->rice.lastLoadOpByTMEM[tile.tmem].texture.address;
 +
-+                                    fprintf(traceFile, "frame %" PRIu64 " fb %u call %u", uint64_t(workload.submissionFrame), uint32_t(p), td.callIndex);
++                                    // The line after "frame N fb F call C"; traceCompactor writes it with those.
++                                    char line[1024];
++                                    int used = 0;
++                                    auto put = [&](const char *format, auto... values) {
++                                        if ((used >= 0) && (used < int(sizeof(line)))) {
++                                            const int n = snprintf(line + used, sizeof(line) - used, format, values...);
++                                            used = (n < 0) ? -1 : std::min(used + n, int(sizeof(line)) - 1);
++                                        }
++                                    };
++
 +                                    if (isRect) {
-+                                        fprintf(traceFile, " rect x %d..%d y %d..%d dsdx %d dtdy %d", td.rect.ulx, td.rect.lrx, td.rect.uly, td.rect.lry, int(td.rectDsdx), int(td.rectDtdy));
++                                        put(" rect x %d..%d y %d..%d dsdx %d dtdy %d", td.rect.ulx, td.rect.lrx, td.rect.uly, td.rect.lry, int(td.rectDsdx), int(td.rectDtdy));
 +                                    }
 +                                    else {
-+                                        fprintf(traceFile, " tris %u", td.triangleCount);
++                                        put(" tris %u", td.triangleCount);
 +                                    }
 +
-+                                    fprintf(traceFile, " tex %016" PRIx64 " size %ux%u ws %c wt %c filt %s", uint64_t(traceTile.tmemHashOrID), uint32_t(traceTile.sampleWidth), uint32_t(traceTile.sampleHeight), wrapS, wrapT, filt);
++                                    put(" tex %016" PRIx64 " size %ux%u ws %c wt %c filt %s", uint64_t(traceTile.tmemHashOrID), uint32_t(traceTile.sampleWidth), uint32_t(traceTile.sampleHeight), wrapS, wrapT, filt);
 +                                    if (isRect) {
 +                                        // Where the rectangle's top-left samples: the texrect's S and T (s10.5) minus the tile's
 +                                        // upper-left corner (10.2), in texels.
-+                                        fprintf(traceFile, " st %s %s", texels(td.rectS / 32.0 - tile.uls / 4.0).c_str(), texels(td.rectT / 32.0 - tile.ult / 4.0).c_str());
++                                        put(" st %s %s", texels(td.rectS / 32.0 - tile.uls / 4.0).c_str(), texels(td.rectT / 32.0 - tile.ult / 4.0).c_str());
 +                                    }
 +                                    else if (validUV) {
 +                                        // The texcoord extent the draw samples (whole texels, as RT64 tracks it), with the tile's
@@ -1133,18 +1279,20 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 +                                        const double xScale = ShiftScaleMap[tile.shifts];
 +                                        const double yScale = ShiftScaleMap[tile.shiftt];
 +                                        const auto &extent = traceTrisLogged[trisKey];
-+                                        fprintf(traceFile, " uv %s..%s %s..%s",
++                                        put(" uv %s..%s %s..%s",
 +                                            texels(extent.first.x * xScale - tile.uls / 4.0).c_str(), texels(extent.second.x * xScale - tile.uls / 4.0).c_str(),
 +                                            texels(extent.first.y * yScale - tile.ult / 4.0).c_str(), texels(extent.second.y * yScale - tile.ult / 4.0).c_str());
 +                                    }
 +
-+                                    fprintf(traceFile, " src %08x om %08x:%08x cc %08x:%08x", src, uint32_t(td.otherMode.H), uint32_t(td.otherMode.L), uint32_t(td.colorCombiner.H), uint32_t(td.colorCombiner.L));
++                                    put(" src %08x om %08x:%08x cc %08x:%08x", src, uint32_t(td.otherMode.H), uint32_t(td.otherMode.L), uint32_t(td.colorCombiner.H), uint32_t(td.colorCombiner.L));
 +                                    if (!isRect) {
-+                                        fprintf(traceFile, " gm %08x", td.geometryMode);
++                                        put(" gm %08x", td.geometryMode);
 +                                    }
 +
-+                                    fprintf(traceFile, " scene %s\n", traceSceneCurrent.c_str());
-+                                    fflush(traceFile);
++                                    put(" scene %s\n", traceSceneCurrent.c_str());
++                                    if (used > 0) {
++                                        traceCompactor.add(traceFile, uint64_t(workload.submissionFrame), uint32_t(p), td.callIndex, isRect, std::string(line, used), traceSceneCurrent);
++                                    }
 +                                }
 +                            }
 +                        }
@@ -1152,7 +1300,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
                          rdpTileCursor++;
                      }
                  }
-@@ -1875,6 +2045,13 @@
+@@ -1875,6 +2186,13 @@
  
          const bool presentEarly = !ext.presentQueue->viewRDRAM && (ext.enhancementConfig->presentation.mode == EnhancementConfiguration::Presentation::Mode::PresentEarly);
          const uint32_t screenFbAddress = newVI.fbAddress();
@@ -1166,7 +1314,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          const hlslpp::uint2 screenFbSize = newVI.fbSize();
          const uint8_t screenFbSiz = newVI.fbSiz();
          const bool viVisible = newVI.visible();
-@@ -2298,7 +2475,7 @@
+@@ -2298,7 +2616,7 @@
                      else if (dumpTextures) {
                          if (dumpingTexturesDirectory.empty()) {
                              dumpingTexturesDirectory = FileDialog::getDirectoryPath();
