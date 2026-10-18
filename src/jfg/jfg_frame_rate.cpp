@@ -101,7 +101,9 @@ uint32_t g_game_ticks = 0;          // main loop ticks (jfg_frame_sync)
 uint32_t g_squad_frames = 0;        // video frames the squad system has not been given yet, including this tick's
 bool g_squad_runs = true;           // the squad system runs this tick
 uint32_t g_tick_frames = 1;         // video frames this tick simulates
-std::vector<uint32_t> g_squad_members; // the members SquaddieControl was called for this tick (objects)
+struct SquadMember { uint32_t obj, def; }; // a member SquaddieControl was called for this tick, and its definition then
+std::vector<SquadMember> g_squad_members;
+int g_squad_members_level = -1;     // the level they were noted in
 void squad_draw_restore();
 }
 
@@ -121,7 +123,10 @@ void squad_cadence_next_tick(uint32_t frames) {
 // count to run with this tick, or 0 to leave the call out. `member` is the squad member (SquaddieControl), else 0.
 extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
     g_rdram = rdram;
-    if (member != 0) g_squad_members.push_back(member);
+    if (member != 0) {
+        g_squad_members.push_back({ member, rd32(member + 0x40) });
+        g_squad_members_level = (int16_t)rd16(ADDR_currentLevel);
+    }
     if (g.frame_rate < 1 || g.skipping) return frames;
     return g_squad_runs ? (int)g_squad_frames : 0;
 }
@@ -229,15 +234,26 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
     squad_draw_restore();
     static const bool off = std::getenv("JFG_NO_SQUAD_SMOOTH") != nullptr;
     if (off || g.frame_rate < 1 || g.skipping) { g_squad_tracks.clear(); return; }
+    // Around a level change nothing is smoothed and everything is forgotten: the next level's objects are set up in the
+    // memory the last level's used, so a member noted this tick may be gone and its address hold a new object (a
+    // crash going through a loading zone, 2026-10-18).
+    const int level = (int16_t)rd16(ADDR_currentLevel);
+    if (level != (int16_t)rd16(ADDR_nextLevel) || (!g_squad_members.empty() && level != g_squad_members_level)) {
+        g_squad_tracks.clear();
+        return;
+    }
     read_live_objects();
     for (auto it = g_squad_tracks.begin(); it != g_squad_tracks.end();) { // freed: its memory may hold a new object later
         if (!live_object(it->first)) it = g_squad_tracks.erase(it); else ++it;
     }
+    // Still in play and still the same object (the definition it had when it was noted).
+    auto same = [](const SquadMember& m) { return live_object(m.obj) && rd32(m.obj + 0x40) == m.def; };
     if (!g_squad_runs) {
         // The tick in between: drawn where they are. Note which models the game poses itself this tick: only those
         // are animating, and only those are posed again on the next update tick (see below).
-        for (uint32_t obj : g_squad_members) {
-            if (!live_object(obj)) continue;
+        for (const SquadMember& m : g_squad_members) {
+            if (!same(m)) continue;
+            const uint32_t obj = m.obj;
             const uint32_t inst = model_instance(obj);
             if (inst != 0 && rd8(inst + 0x0A) != 0) g_squad_tracks[obj].posed_tick = g_game_ticks;
         }
@@ -246,8 +262,9 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
     // The usual 60 fps pattern: this update covers this tick and the one before it, which had none.
     const bool even = g_squad_frames == 2 && g_tick_frames == 1;
     constexpr float JUMP = 300.0f; // squad members cover about 8 units per update
-    for (uint32_t obj : g_squad_members) {
-        if (!live_object(obj)) continue;
+    for (const SquadMember& m : g_squad_members) {
+        if (!same(m)) continue;
+        const uint32_t obj = m.obj;
         SquadTrack& t = g_squad_tracks[obj];
         if (t.updated_tick == g_game_ticks) continue; // already handled this tick
         const SquadPose now = read_pose(obj);
