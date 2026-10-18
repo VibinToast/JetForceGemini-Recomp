@@ -57,6 +57,7 @@ void jfg_squad_spawn_after(uint8_t* rdram, recomp_context* ctx);       // overla
 void jfg_objsetup_enter(uint8_t* rdram, recomp_context* ctx);          // entry of objSetupObject
 void jfg_objsetup_step(uint8_t* rdram, recomp_context* ctx, int step); // objSetupObject, after each call that can fail
 void jfg_objsetup_exit(uint8_t* rdram, recomp_context* ctx);           // objSetupObject, its exit (0x80006E04)
+void jfg_squads_check_enemy(uint8_t* rdram, recomp_context* ctx);      // replaces squadsCheckEnemyPointers
 void jfg_game_break(uint8_t* rdram, recomp_context* ctx);              // mathBreakPoint
 void jfg_change_level_log(uint8_t* rdram, recomp_context* ctx);        // entry of mainChangeLevel
 void jfg_sync_printf(uint8_t* rdram, recomp_context* ctx);             // replaces osSyncPrintf
