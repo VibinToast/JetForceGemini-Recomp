@@ -273,6 +273,14 @@ func = "squadsFireWeapon"
 before_vram = 0x82028648
 text = "{ if ((uint32_t)ctx->r2 == 0) goto L_82029670; }"
 
+# squadsCheckEnemyPointers (run whenever an object is freed) is replaced by a copy that checks each squad link before
+# following it: in a boss fight it reached a squad member freed while still linked and crashed (src/jfg/jfg_diagnostics.cpp,
+# jfg_squads_check_enemy; a broken link is logged to bin/jfg_memory.log).
+[[patches.hook]]
+func = "squadsCheckEnemyPointers"
+before_vram = 0x800515D0
+text = "{ void jfg_squads_check_enemy(uint8_t*, recomp_context*); jfg_squads_check_enemy(rdram, ctx); recomp_exit_function(); return; }"
+
 # objSetupObject returning NULL (an object could not be created): which step failed, with object counts and free heap,
 # logged to bin/jfg_memory.log (src/jfg/jfg_diagnostics.cpp, jfg_objsetup_*). Entry, the return of each call that can
 # fail, and the one exit.
@@ -379,7 +387,7 @@ before_vram = 0x82036990
 text = "{ int jfg_squad_frames(uint8_t*, uint32_t, int); int r = jfg_squad_frames(rdram, 0, (int32_t)ctx->r4); if (r == 0) { ctx->r2 = 0; recomp_exit_function(); return; } ctx->r4 = (gpr)r; }"
 
 # The loop that brings a squadron's members into play (func_overlay_3_000148C0: while created < wanted, create or reuse
-# one) never ended when a member could not be created (heap full): the game froze. A pass that adds nobody is counted
+# one) never ended when a member could not be created: the game froze. A pass that adds nobody is counted
 # (src/jfg/jfg_diagnostics.cpp, jfg_squad_spawn_before/after); the squadron gets one member fewer.
 [[patches.hook]]
 func = "func_overlay_3_000148C0_1EE9DA0"
