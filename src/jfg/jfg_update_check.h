@@ -1,6 +1,15 @@
 // JFG PORT: update check and installer for the launcher (src/jfg/jfg_update_check.cpp, src/ui/ui_launcher.cpp).
 #pragma once
+#include <filesystem>
 #include <string>
+
+// The launcher's own settings, bin\jfg_launcher.txt (written with explanations when it is missing):
+//   check_for_updates=1|0   0: the launcher makes no requests to GitHub (no update check, no list of recent changes);
+//   rom=<path>              a ROM to start the game with straight away, without the launcher (relative to bin).
+// Read once at start-up (src/main.cpp), before the launcher or the update check runs.
+void jfg_launcher_config_load(const std::filesystem::path& app_folder);
+bool jfg_launcher_check_updates();
+std::string jfg_launcher_config_rom(); // an absolute path, or "" when none is set
 
 struct JfgUpdateInfo {
     std::string version;    // the release it would update to, like "1.2.0"
