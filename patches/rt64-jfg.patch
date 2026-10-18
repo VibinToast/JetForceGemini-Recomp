@@ -1226,8 +1226,8 @@ diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
      }
  
 diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-16 15:30:40.238336400 -0500
-+++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-16 15:30:40.241336700 -0500
+--- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-18 03:16:41.277776700 -0500
++++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-18 03:16:41.277776700 -0500
 @@ -4,7 +4,11 @@
  
  #include "rt64_framebuffer_renderer.h"
@@ -1280,7 +1280,23 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          renderIndicesVector.clear();
          rspSmoothNormalVector.clear();
          frameParams.viewUbershaders = ubershadersVisible;
-@@ -511,8 +541,444 @@
+@@ -250,6 +280,7 @@
+                     gpuTile.flags.fromCopy = true;
+                     gpuTile.flags.rawTMEM = false;
+                     gpuTile.flags.hasMipmaps = false;
++                    gpuTile.flags.jfgSoft = tileCopy.jfgSmallSource; // JFG PORT
+                 }
+             }
+             else {
+@@ -272,6 +303,7 @@
+                 gpuTile.flags.rawTMEM = !textureReplaced && callTile.rawTMEM;
+                 gpuTile.flags.hasMipmaps = hasMipmaps;
+                 gpuTile.flags.shiftedByHalf = shiftedByHalf;
++                gpuTile.flags.jfgSoft = false; // JFG PORT
+             }
+         }
+     }
+@@ -511,8 +543,444 @@
          if (fbStorage->colorTarget != nullptr) {
              switchToGraphicsPipeline();
          }
@@ -1726,7 +1742,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
              const InstanceDrawCall &drawCall = instanceDrawCallVector[i];
              switch (drawCall.type) {
              case InstanceDrawCall::Type::IndexedTriangles: 
-@@ -561,9 +1027,22 @@
+@@ -561,9 +1029,22 @@
                      switchToDepthWrite();
                  }
  
@@ -1752,7 +1768,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                  }
  
                  if (previousPipeline != triangles.pipeline) {
-@@ -638,6 +1117,7 @@
+@@ -638,6 +1119,7 @@
              }
          }
  
@@ -1760,7 +1776,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          // Mark targets for resolve.
          if (fbStorage->colorTarget != nullptr) {
              fbStorage->colorTarget->markForResolve();
-@@ -648,6 +1128,51 @@
+@@ -648,6 +1130,51 @@
          }
      }
  
@@ -1812,7 +1828,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
      void FramebufferRenderer::updateMultisampling() {
          dummyColorTargetView.reset();
          dummyDepthTargetView.reset();
-@@ -1354,6 +1879,13 @@
+@@ -1354,6 +1881,13 @@
          postBlendDitherNoiseAddPipeline = rasterShaderUber->postBlendDitherNoiseAddPipeline.get();
          postBlendDitherNoiseSubPipeline = rasterShaderUber->postBlendDitherNoiseSubPipeline.get();
          postBlendDitherNoiseSubNegativePipeline = rasterShaderUber->postBlendDitherNoiseSubNegativePipeline.get();
@@ -1826,7 +1842,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
  
          // Make a new render target draw call.
          RenderTargetDrawCall &targetDrawCall = framebuffer.renderTargetDrawCall;
-@@ -1488,7 +2020,7 @@
+@@ -1488,7 +2022,7 @@
                  // The call's scissor spans the whole width of the framebuffer pair scissor. Custom origin must not be in use to be able to use the stretched viewport.
                  const auto &viewport = drawData.rspViewports[proj.transformsIndex];
                  FixedRect intersectionRect = proj.scissorRect.intersection(viewport.rect(viewportClipRatios));
@@ -2514,8 +2530,8 @@ diff -ruN a/src/hle/rt64_draw_call.h b/src/hle/rt64_draw_call.h
          uint16_t rectRightOrigin;
          FixedRect scissorRect;
 diff -ruN a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_manager.cpp
---- a/src/hle/rt64_framebuffer_manager.cpp	2026-10-18 03:12:28.516633600 -0500
-+++ b/src/hle/rt64_framebuffer_manager.cpp	2026-10-18 03:12:28.517634000 -0500
+--- a/src/hle/rt64_framebuffer_manager.cpp	2026-10-18 03:16:41.177227600 -0500
++++ b/src/hle/rt64_framebuffer_manager.cpp	2026-10-18 03:16:41.177227600 -0500
 @@ -6,6 +6,8 @@
  
  #include <cassert>
@@ -2525,7 +2541,23 @@ diff -ruN a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_mana
  
  #include "xxHash/xxh3.h"
  
-@@ -815,11 +817,36 @@
+@@ -127,6 +129,7 @@
+         const uint32_t tileHeight = std::clamp<long>(lround((fbTile.bottom - fbTile.top) * resolutionScale.y), 1L, RenderTarget::MaxDimension);
+         tileCopy.id = op.createTileCopy.id;
+         tileCopy.address = op.createTileCopy.address;
++        tileCopy.jfgSmallSource = (fbIt->second.width <= 128); // JFG PORT: see GPUTileFlags::jfgSoft
+         tileCopy.usedWidth = tileWidth;
+         tileCopy.usedHeight = tileHeight;
+         tileCopy.left = std::clamp<long>(lround(fbTile.left * resolutionScale.x), 0, RenderTarget::MaxDimension);
+@@ -294,6 +297,7 @@
+ 
+         TileCopy &dstTile = tileCopies[op.reinterpretTile.dstId];
+         dstTile.id = op.reinterpretTile.dstId;
++        dstTile.jfgSmallSource = srcTile.jfgSmallSource; // JFG PORT
+         dstTile.ulScaleS = op.reinterpretTile.ulScaleS;
+         dstTile.ulScaleS = op.reinterpretTile.ulScaleS;
+         dstTile.texelShift = op.reinterpretTile.texelShift;
+@@ -815,11 +819,36 @@
          assert(RDRAM != nullptr);
  
          differentFbs.clear();
@@ -2562,3 +2594,63 @@ diff -ruN a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_mana
                  differentFbs.push_back(&it->second);
  
                  if (updateHashes) {
+diff -ruN a/src/hle/rt64_framebuffer_manager.h b/src/hle/rt64_framebuffer_manager.h
+--- a/src/hle/rt64_framebuffer_manager.h	2026-10-18 03:16:41.075195600 -0500
++++ b/src/hle/rt64_framebuffer_manager.h	2026-10-18 03:16:41.075195600 -0500
+@@ -96,6 +96,7 @@
+             bool readDepthFromStorage = false;
+             bool needsDiscard = false;
+             bool ignore = false;
++            bool jfgSmallSource = false; // JFG PORT: copied from a framebuffer 128 pixels wide or less (render to texture)
+             std::unique_ptr<RenderFramebuffer> framebuffer;
+         };
+ 
+diff -ruN a/src/shared/rt64_gpu_tile.h b/src/shared/rt64_gpu_tile.h
+--- a/src/shared/rt64_gpu_tile.h	2026-10-18 03:16:41.236169400 -0500
++++ b/src/shared/rt64_gpu_tile.h	2026-10-18 03:16:41.236169400 -0500
+@@ -18,6 +18,7 @@
+             uint rawTMEM : 1;
+             uint hasMipmaps : 1;
+             uint shiftedByHalf : 1;
++            uint jfgSoft : 1; // JFG PORT: a copy of a small framebuffer, sampled with a soft edge (TextureSampler.hlsli)
+         };
+ 
+         uint value;
+@@ -49,6 +50,10 @@
+     bool gpuTileFlagShiftedByHalf(GPUTileFlags flags) {
+         return flags & 0x20;
+     }
++
++    bool gpuTileFlagJfgSoft(GPUTileFlags flags) {
++        return flags & 0x40;
++    }
+ #endif
+     struct GPUTile {
+         float2 ulScale;
+diff -ruN a/src/shaders/TextureSampler.hlsli b/src/shaders/TextureSampler.hlsli
+--- a/src/shaders/TextureSampler.hlsli	2026-10-18 03:16:41.329792600 -0500
++++ b/src/shaders/TextureSampler.hlsli	2026-10-18 03:16:41.329792600 -0500
+@@ -335,6 +335,23 @@
+     }
+ #endif
+ 
++    // JFG PORT: a picture the game rendered into a small framebuffer (Jet Force Gemini's character shadows, 64x64) is drawn from
++    // RT64's high-resolution copy of it, with a hard outline; on the N64 it was magnified from 64x64 and had a soft edge.
++    // Averaged over a 3x3 grid of bilinear samples 0.6 of an original texel apart, it gets a soft edge again, without steps.
++    if (gpuTileFlagJfgSoft(gpuTile.flags) && !flagHasMipmaps) {
++        const float2 jfgOffset = gpuTile.tcScale * 0.6f;
++        float4 jfgSum = sampleTextureLevel(rdpTile, gpuTile, true, false, true, uvCoord + float2(-jfgOffset.x, -jfgOffset.y), tlut, canDecodeTMEM, 0, usesHDR);
++        jfgSum += sampleTextureLevel(rdpTile, gpuTile, true, false, true, uvCoord + float2(0.0f, -jfgOffset.y), tlut, canDecodeTMEM, 0, usesHDR);
++        jfgSum += sampleTextureLevel(rdpTile, gpuTile, true, false, true, uvCoord + float2(jfgOffset.x, -jfgOffset.y), tlut, canDecodeTMEM, 0, usesHDR);
++        jfgSum += sampleTextureLevel(rdpTile, gpuTile, true, false, true, uvCoord + float2(-jfgOffset.x, 0.0f), tlut, canDecodeTMEM, 0, usesHDR);
++        jfgSum += sampleTextureLevel(rdpTile, gpuTile, true, false, true, uvCoord, tlut, canDecodeTMEM, 0, usesHDR);
++        jfgSum += sampleTextureLevel(rdpTile, gpuTile, true, false, true, uvCoord + float2(jfgOffset.x, 0.0f), tlut, canDecodeTMEM, 0, usesHDR);
++        jfgSum += sampleTextureLevel(rdpTile, gpuTile, true, false, true, uvCoord + float2(-jfgOffset.x, jfgOffset.y), tlut, canDecodeTMEM, 0, usesHDR);
++        jfgSum += sampleTextureLevel(rdpTile, gpuTile, true, false, true, uvCoord + float2(0.0f, jfgOffset.y), tlut, canDecodeTMEM, 0, usesHDR);
++        jfgSum += sampleTextureLevel(rdpTile, gpuTile, true, false, true, uvCoord + float2(jfgOffset.x, jfgOffset.y), tlut, canDecodeTMEM, 0, usesHDR);
++        textureSamples[0] = jfgSum / 9.0f;
++    }
++
+     // Compute the result from the RDP samples.
+     float4 textureColor;
+     if (!flagHasMipmaps) {
