@@ -20,6 +20,7 @@ void jfg_after_joy(uint8_t* rdram, recomp_context* ctx);               // main l
 int jfg_rcp_skip(uint8_t* rdram, uint32_t type);                       // entry of rcpFast3d
 int jfg_snd_skip(uint8_t* rdram, uint32_t sp);                         // entry of ad_sndp_play
 int jfg_evt_skip(uint8_t* rdram, uint32_t evtq, uint32_t evt);         // entry of n_alEvtqPostEvent
+void jfg_evt_next(uint8_t* rdram, recomp_context* ctx);                 // entry of n_alEvtqNextEvent
 // jfg_frame_rate.cpp
 int jfg_vi_skip(uint8_t* rdram, recomp_context* ctx);                  // entry of viFrameSync
 uint32_t jfg_frame_sync(uint8_t* rdram, uint32_t frames);              // main loop tick, right after viFrameSync
