@@ -1226,8 +1226,8 @@ diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
      }
  
 diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-18 03:16:41.277776700 -0500
-+++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-18 03:16:41.277776700 -0500
+--- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-18 04:01:33.673145600 -0500
++++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-18 04:01:33.673145600 -0500
 @@ -4,7 +4,11 @@
  
  #include "rt64_framebuffer_renderer.h"
@@ -1851,6 +1851,17 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                  bool horizontalRatio = !intersectionRect.isEmpty() && (intersectionRect.width(true, true) > intersectionRect.height(true, true));
                  bool useWideViewport = (viewportOrigin == G_EX_ORIGIN_NONE) && coversWholeWidth && horizontalRatio;
                  if (useWideViewport) {
+@@ -1539,7 +2073,9 @@
+                     int32_t horizontalMisalignment = 0;
+ 
+                     // A rect that spans the whole width of the scissor.
+-                    if ((call.callDesc.rect.ulx <= fbPair.scissorRect.ulx) && (call.callDesc.rect.lrx >= fbPair.scissorRect.lrx)) {
++                    // JFG PORT: one pixel short counts too (see rt64_projection_processor.cpp). The reflective floors' picture is cleared
++                    // with a fill to 319 under a scissor to 320; kept at 4:3, its sides were never cleared and the floors showed a 4:3 box.
++                    if ((call.callDesc.rect.ulx <= fbPair.scissorRect.ulx) && (call.callDesc.rect.lrx + 4 >= fbPair.scissorRect.lrx)) {
+                         invRatioScale = 1.0f;
+                     }
+                     // A regular rectangle that should correct its misalignment.
 diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer_renderer.h
 --- a/src/render/rt64_framebuffer_renderer.h	2026-10-16 15:14:11.702126100 -0500
 +++ b/src/render/rt64_framebuffer_renderer.h	2026-10-16 15:14:11.789315800 -0500
@@ -1904,8 +1915,8 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer
          std::unique_ptr<FramebufferRendererDescriptorTextureSet> descTextureSet;
          std::unique_ptr<RenderTexture> dummyColorTarget;
 diff -ruN a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projection_processor.cpp
---- a/src/render/rt64_projection_processor.cpp	2026-10-08 23:27:53.983621526 -0500
-+++ b/src/render/rt64_projection_processor.cpp	2026-10-08 14:33:09.038796998 -0500
+--- a/src/render/rt64_projection_processor.cpp	2026-10-18 04:01:33.726057300 -0500
++++ b/src/render/rt64_projection_processor.cpp	2026-10-18 04:01:33.726057300 -0500
 @@ -92,7 +92,7 @@
                  }
  
