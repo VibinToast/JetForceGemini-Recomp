@@ -391,9 +391,21 @@ diff -ruN a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
              }
          }
 diff -ruN a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
---- a/src/hle/rt64_rdp.cpp	2026-10-17 20:18:20.229238700 -0500
-+++ b/src/hle/rt64_rdp.cpp	2026-10-17 20:18:20.229238700 -0500
-@@ -274,6 +274,7 @@
+--- a/src/hle/rt64_rdp.cpp	2026-10-18 02:53:16.806164400 -0500
++++ b/src/hle/rt64_rdp.cpp	2026-10-18 02:53:16.807163200 -0500
+@@ -152,6 +152,11 @@
+     void RDP::checkFramebufferOverlap(uint32_t tmemStart, uint32_t tmemWords, uint32_t tmemMask, uint32_t addressStart, uint32_t addressEnd, uint32_t tileWidth, uint32_t tileHeight, bool RGBA32, bool makeTileCopy) {
+         auto &fbManager = state->framebufferManager;
+         Framebuffer *fb = fbManager.findMostRecentContaining(addressStart, addressEnd);
++
++        // JFG PORT: note which TMEM words now hold a rendered picture (see jfgFbTMEM), whatever happens below.
++        for (uint32_t w = 0; w < std::min(tmemWords, uint32_t(RDP_TMEM_WORDS)); w++) {
++            jfgFbTMEM[(tmemStart + w) & RDP_TMEM_MASK64] = (fb != nullptr);
++        }
+         if (fb != nullptr) {
+             const bool gpuCopiesEnabled = state->ext.emulatorConfig->framebuffer.copyWithGPU;
+             if (!gpuCopiesEnabled) {
+@@ -274,6 +279,7 @@
      }
  
      void RDP::setColorImage(uint8_t fmt, uint8_t siz, uint16_t width, uint32_t address) {
@@ -401,7 +413,7 @@ diff -ruN a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
          // Make sure the new color image is actually different. Some games will set the color image
          // multiple times despite setting the exact same parameters.
          const uint32_t newAddress = maskAddress(address);
-@@ -1279,6 +1280,8 @@
+@@ -1279,6 +1285,8 @@
          drawCall.rect = drawRect;
          drawCall.rectDsdx = dsdx;
          drawCall.rectDtdy = dtdy;
@@ -936,8 +948,8 @@ diff -ruN a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
          void setVertexEXV1(uint32_t address, uint32_t vtxCount, uint32_t dstIndex);
          void setVertexColorPD(uint32_t address);
 diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
---- a/src/hle/rt64_state.cpp	2026-10-17 20:18:20.115761300 -0500
-+++ b/src/hle/rt64_state.cpp	2026-10-17 20:18:20.115761300 -0500
+--- a/src/hle/rt64_state.cpp	2026-10-18 02:54:21.099511300 -0500
++++ b/src/hle/rt64_state.cpp	2026-10-18 02:54:21.100511400 -0500
 @@ -6,6 +6,8 @@
  
  #include <cassert>
@@ -976,7 +988,15 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
              }
              // Detect the tile count based on what texels it uses.
              else {
-@@ -496,6 +504,8 @@
+@@ -277,6 +285,7 @@
+                     const bool RGBA32 = (tile.siz == G_IM_SIZ_32b) && (tile.fmt == G_IM_FMT_RGBA);
+                     const uint32_t lineShift = RGBA32 ? 1 : 0;
+                     dstCallTile.lineWidth = tile.line << ((4 + lineShift) - tile.siz);
++                    dstCallTile.jfgFromFramebuffer = rdp->jfgFbTMEM[tile.tmem & RDP_TMEM_MASK64]; // JFG PORT
+ 
+                     // Estimate sampling width and height based on masks ands tiles, whichever are smaller.
+                     const bool clampS = (tile.masks == 0) || (tile.cms & G_TX_CLAMP);
+@@ -496,6 +505,8 @@
          // Reset attributes for the next draw call to be recorded.
          drawCall.rectDsdx = 0;
          drawCall.rectDtdy = 0;
@@ -985,7 +1005,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          drawCall.loadIndex = 0;
          drawCall.loadCount = 0;
          drawCall.minWorldMatrix = USHRT_MAX;
-@@ -770,6 +780,166 @@
+@@ -770,6 +781,166 @@
                      const uint32_t rdpTileLimit = gameCall.callDesc.tileIndex + gameCall.callDesc.tileCount;
                      while (rdpTileCursor < rdpTileLimit) {
                          uploadTile(rdpTileCursor, fbPair, gameCall.callDesc);
@@ -1152,7 +1172,34 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
                          rdpTileCursor++;
                      }
                  }
-@@ -1875,6 +2045,13 @@
+@@ -995,6 +1166,26 @@
+                     auto &flags = shaderDesc.flags;
+                     flags.rect = (proj.type == Projection::Type::Rectangle);
+                     flags.linearFiltering = linearFiltering || forceLinearFiltering;
++
++                    // JFG PORT: a picture the game rendered and reads back as a texture at its native size, without a GPU tile
++                    // copy (Jet Force Gemini's character shadows: each silhouette is rendered into a 64x64 buffer, then
++                    // stretched over the ground), is sampled with true bilinear filtering. With the three-point filter such
++                    // magnified pictures came out blocky; they are soft images, not pixel art.
++                    if (!flags.linearFiltering && (callDesc.tileCount > 0)) {
++                        for (uint32_t t = 0; t < callDesc.tileCount; t++) {
++                            const DrawCallTile &jfgTile = workload.drawData.callTiles[callDesc.tileIndex + t];
++                            if (jfgTile.valid && jfgTile.jfgFromFramebuffer && !jfgTile.tileCopyUsed) {
++                                flags.linearFiltering = true;
++                                static const bool jfgLog = std::getenv("RT64_JFG_FB_TEX_LOG") != nullptr; // debug aid
++                                static uint32_t jfgLogged = 0;
++                                if (jfgLog && ((jfgLogged++ % 600) == 0)) {
++                                    fprintf(stderr, "[RT64] bilinear for a rendered texture: %u draws so far (this one %ux%u)\n", jfgLogged, uint32_t(jfgTile.sampleWidth), uint32_t(jfgTile.sampleHeight));
++                                }
++
++                                break;
++                            }
++                        }
++                    }
+                     flags.usesTexture0 = callDesc.colorCombiner.usesTexture(callDesc.otherMode, 0, oneCycleHardwareBug);
+                     flags.usesTexture1 = callDesc.colorCombiner.usesTexture(callDesc.otherMode, 1, oneCycleHardwareBug);
+                     flags.blenderApproximation = static_cast<unsigned>(blenderEmuReqs.approximateEmulation);
+@@ -1875,6 +2066,13 @@
  
          const bool presentEarly = !ext.presentQueue->viewRDRAM && (ext.enhancementConfig->presentation.mode == EnhancementConfiguration::Presentation::Mode::PresentEarly);
          const uint32_t screenFbAddress = newVI.fbAddress();
@@ -1166,7 +1213,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          const hlslpp::uint2 screenFbSize = newVI.fbSize();
          const uint8_t screenFbSiz = newVI.fbSiz();
          const bool viVisible = newVI.visible();
-@@ -2298,7 +2475,7 @@
+@@ -2298,7 +2496,7 @@
                      else if (dumpTextures) {
                          if (dumpingTexturesDirectory.empty()) {
                              dumpingTexturesDirectory = FileDialog::getDirectoryPath();
@@ -2502,8 +2549,8 @@ diff -ruN a/src/shaders/VignettePS.hlsl b/src/shaders/VignettePS.hlsl
 +    resultColor = float4(v, v, v, 1.0f);
 +}
 diff -ruN a/src/hle/rt64_draw_call.h b/src/hle/rt64_draw_call.h
---- a/src/hle/rt64_draw_call.h	2026-10-17 20:18:20.277285500 -0500
-+++ b/src/hle/rt64_draw_call.h	2026-10-17 20:18:20.277285500 -0500
+--- a/src/hle/rt64_draw_call.h	2026-10-18 02:53:16.853911000 -0500
++++ b/src/hle/rt64_draw_call.h	2026-10-18 02:53:16.854986300 -0500
 @@ -77,6 +77,8 @@
          FixedRect rect;
          int16_t rectDsdx;
@@ -2513,3 +2560,26 @@ diff -ruN a/src/hle/rt64_draw_call.h b/src/hle/rt64_draw_call.h
          uint16_t rectLeftOrigin;
          uint16_t rectRightOrigin;
          FixedRect scissorRect;
+@@ -152,6 +154,7 @@
+         uint8_t reinterpretFmt;
+         bool rawTMEM;
+         bool valid;
++        bool jfgFromFramebuffer; // JFG PORT: the tile's TMEM was loaded from a framebuffer (RDP::jfgFbTMEM)
+ 
+         bool validTexcoords() const {
+             return (minTexcoord.x <= maxTexcoord.x) && (minTexcoord.y <= maxTexcoord.y);
+diff -ruN a/src/hle/rt64_rdp.h b/src/hle/rt64_rdp.h
+--- a/src/hle/rt64_rdp.h	2026-10-18 02:53:16.698839900 -0500
++++ b/src/hle/rt64_rdp.h	2026-10-18 02:53:16.699839000 -0500
+@@ -145,6 +145,11 @@
+         void crash(CrashReason reason);
+         void checkFramebufferPair();
+         void checkFramebufferOverlap(uint32_t tmemStart, uint32_t tmemWords, uint32_t tmemMask, uint32_t addressStart, uint32_t addressEnd, uint32_t tileWidth, uint32_t tileHeight, bool RGBA32, bool makeTileCopy);
++
++        // JFG PORT: the TMEM words (64-bit) last loaded from memory a framebuffer was rendered into (checkFramebufferOverlap).
++        // A draw that samples them without a GPU tile copy gets a picture the game rendered, read back at its native size;
++        // see DrawCallTile::jfgFromFramebuffer.
++        bool jfgFbTMEM[RDP_TMEM_WORDS] = {};
+         void checkImageOverlap(uint32_t addressStart, uint32_t addressEnd);
+         int32_t movedFromOrigin(int32_t x, uint16_t ori);
+         uint32_t maskAddress(uint32_t address);
