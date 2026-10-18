@@ -2689,8 +2689,8 @@ diff -ruN a/src/hle/rt64_draw_call.h b/src/hle/rt64_draw_call.h
          uint16_t rectRightOrigin;
          FixedRect scissorRect;
 diff -ruN a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_manager.cpp
---- a/src/hle/rt64_framebuffer_manager.cpp	2026-10-18 03:16:41.177227600 -0500
-+++ b/src/hle/rt64_framebuffer_manager.cpp	2026-10-18 03:16:41.177227600 -0500
+--- a/src/hle/rt64_framebuffer_manager.cpp	2026-10-18 13:17:09.453934000 -0500
++++ b/src/hle/rt64_framebuffer_manager.cpp	2026-10-18 13:17:09.454931600 -0500
 @@ -6,6 +6,8 @@
  
  #include <cassert>
@@ -2716,7 +2716,13 @@ diff -ruN a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_mana
          dstTile.ulScaleS = op.reinterpretTile.ulScaleS;
          dstTile.ulScaleS = op.reinterpretTile.ulScaleS;
          dstTile.texelShift = op.reinterpretTile.texelShift;
-@@ -815,11 +819,36 @@
+@@ -811,15 +815,33 @@
+         }
+     }
+ 
++    static const bool jfgSmallNoRAM = std::getenv("RT64_JFG_SMALL_FB_RAM") == nullptr; // JFG PORT: see checkRAM
++
+     void FramebufferManager::checkRAM(const uint8_t *RDRAM, std::vector<Framebuffer *> &differentFbs, bool updateHashes) {
          assert(RDRAM != nullptr);
  
          differentFbs.clear();
@@ -2725,8 +2731,10 @@ diff -ruN a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_mana
 +        // framebuffer, its memory changed every frame by about the silhouette's size (under the quarter that discards a
 +        // framebuffer), and the shadow drawn from RT64's high-resolution copy came out blocky. Without the paste it is drawn
 +        // at full resolution, with no trails (2026-10-18). Full-size framebuffers keep it (CPU-drawn reticles need it).
++        // The changes still go through uploadRAM, which skips only the paste: memory reused for something else (a quarter or
++        // more of it changed) still discards the framebuffer. Skipping that too left an old shadow picture drawn as a black
++        // box of blurred silhouettes in place of a texture later loaded there (Lee Walkway, 2026-10-18).
 +        // RT64_JFG_SMALL_FB_RAM=1 pastes as before; RT64_JFG_SHADOW_LOG=1 logs these changes.
-+        static const bool jfgSmallNoRAM = std::getenv("RT64_JFG_SMALL_FB_RAM") == nullptr;
 +        static const bool jfgShadowLog = std::getenv("RT64_JFG_SHADOW_LOG") != nullptr;
 +        static uint32_t jfgShadowLogged = 0;
          auto it = framebuffers.begin();
@@ -2734,25 +2742,27 @@ diff -ruN a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_mana
              const uint8_t *fbRAM = &RDRAM[it->first];
              uint64_t currentHash = XXH3_64bits(fbRAM, it->second.RAMBytes);
              if (currentHash != it->second.RAMHash) {
-+                if (it->second.width <= 128) {
-+                    if (jfgShadowLog && (jfgShadowLogged++ < 200)) {
-+                        fprintf(stderr, "[RT64 shadow] RAM of fb %06X %ux%u changed (modified so far %u)%s\n", it->first, it->second.width, it->second.height,
-+                            it->second.modifiedBytes, jfgSmallNoRAM ? ", ignored" : "");
-+                    }
-+
-+                    if (jfgSmallNoRAM) {
-+                        if (updateHashes) {
-+                            it->second.RAMHash = currentHash;
-+                        }
-+
-+                        it++;
-+                        continue;
-+                    }
++                if ((it->second.width <= 128) && jfgShadowLog && (jfgShadowLogged++ < 200)) {
++                    fprintf(stderr, "[RT64 shadow] RAM of fb %06X %ux%u changed (modified so far %u)%s\n", it->first, it->second.width, it->second.height,
++                        it->second.modifiedBytes, jfgSmallNoRAM ? ", not pasted" : "");
 +                }
 +
                  differentFbs.push_back(&it->second);
  
                  if (updateHashes) {
+@@ -855,6 +877,12 @@
+             const bool discardFb = canDiscard && (fb->modifiedBytes >= differentBytesLimit);
+             if (discardFb) {
+                 fbDiscards.emplace_back(fb->addressStart);
++                if ((fb->width <= 128) && (std::getenv("RT64_JFG_SHADOW_LOG") != nullptr)) {
++                    fprintf(stderr, "[RT64 shadow] fb %06X %ux%u discarded (%u of %u bytes changed)\n", fb->addressStart, fb->width, fb->height, fb->modifiedBytes, fb->RAMBytes);
++                }
++            }
++            else if (jfgSmallNoRAM && (fb->width <= 128)) {
++                // JFG PORT: small framebuffers are not pasted into (see checkRAM).
+             }
+             else {
+                 FramebufferOperation changesOp;
 diff -ruN a/src/hle/rt64_framebuffer_manager.h b/src/hle/rt64_framebuffer_manager.h
 --- a/src/hle/rt64_framebuffer_manager.h	2026-10-18 03:16:41.075195600 -0500
 +++ b/src/hle/rt64_framebuffer_manager.h	2026-10-18 03:16:41.075195600 -0500
