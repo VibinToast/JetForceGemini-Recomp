@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iterator>
 #include <mutex>
@@ -571,13 +572,71 @@ void cleanup_thread() {
 #endif
 } // namespace
 
+// ---- the launcher's settings (bin\jfg_launcher.txt) -----------------------------------------------------------------------
+namespace {
+bool g_check_updates = true;
+std::string g_config_rom;
+constexpr const char* LAUNCHER_CONFIG_FILE = "jfg_launcher.txt";
+constexpr const char* LAUNCHER_CONFIG_TEMPLATE =
+    "# Jet Force Gemini: Recompiled - launcher settings. Lines starting with # are ignored.\n"
+    "\n"
+    "# 1: the launcher looks for a newer release on GitHub when it opens (a banner on the Play page shows one).\n"
+    "# 0: it never contacts GitHub (no update check, no list of recent changes).\n"
+    "check_for_updates=1\n"
+    "\n"
+    "# Path to your Jet Force Gemini (US) ROM, e.g. rom=C:\\Games\\jfg.z64 (a path without a drive is relative to this\n"
+    "# folder). When it is set and the ROM checks out, the game starts straight away without the launcher. Leave it\n"
+    "# empty to use the launcher. Start the game with --launcher to get the launcher anyway. The first seconds of play can\n"
+    "# stutter a little, since the launcher otherwise gives the renderer time to prepare its shaders.\n"
+    "rom=\n";
+
+std::string trim(const std::string& s) {
+    const size_t a = s.find_first_not_of(" \t\r\n"), b = s.find_last_not_of(" \t\r\n");
+    return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
+}
+} // namespace
+
+void jfg_launcher_config_load(const fs::path& app_folder) {
+    const fs::path file = app_folder / LAUNCHER_CONFIG_FILE;
+    std::ifstream in(file, std::ios::binary);
+    if (!in) {
+        std::ofstream out(file, std::ios::binary);
+        out << LAUNCHER_CONFIG_TEMPLATE;
+        return;
+    }
+    std::string line;
+    while (std::getline(in, line)) {
+        line = trim(line);
+        if (line.empty() || line[0] == '#') continue;
+        const size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        const std::string key = trim(line.substr(0, eq));
+        std::string value = trim(line.substr(eq + 1));
+        if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size() - 2);
+        if (key == "check_for_updates") g_check_updates = value != "0" && value != "false" && value != "no";
+        else if (key == "rom" && !value.empty()) {
+            fs::path rom{ std::u8string(value.begin(), value.end()) };
+            if (rom.is_relative()) rom = app_folder / rom;
+            std::error_code ec;
+            const fs::path absolute = fs::absolute(rom, ec);
+            const std::u8string u8 = (ec ? rom : absolute).u8string();
+            g_config_rom.assign(u8.begin(), u8.end());
+        }
+    }
+}
+bool jfg_launcher_check_updates() { return g_check_updates; }
+std::string jfg_launcher_config_rom() { return g_config_rom; }
+
 void jfg_update_check_start(const std::string& current) {
     static bool started = false;
     if (started) return;
     started = true;
     try {
-        std::thread(check_thread, current).detach();
-        std::thread(commits_thread).detach();
+        // check_for_updates=0: no requests to GitHub at all. Finishing an installed update (removing the old files) still runs.
+        if (g_check_updates) {
+            std::thread(check_thread, current).detach();
+            std::thread(commits_thread).detach();
+        }
 #ifdef _WIN32
         std::thread(cleanup_thread).detach();
 #endif
