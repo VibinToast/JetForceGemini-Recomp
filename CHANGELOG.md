@@ -3,6 +3,19 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. Entries under "Unreleased" are in the source but not yet
 built and tested, unless marked otherwise.
 
+## v1.1.6 (2026-10-18)
+
+- Fix Mizar's first phase never ending at 60 fps
+- Fix a crash going through a loading zone at 60 fps
+- Fix crashes and freezes in busy fights at 60 fps: smoothed enemies no longer touch enemies that were just removed
+- Fix a crash in boss fights when an enemy that had already been removed was still listed in its squad
+- The re-upscale texture script now copies textures instead of moving them, so the dump stays complete
+- Fix a freeze and a crash when the game could not create an enemy or a turret shot
+- Fix a rare freeze in play where the picture stopped and the game hung
+- Texture dumps now record how each texture is drawn, for better HD texture packs
+- Smoother enemies at 60 fps, and weapon reticles no longer vanish at 60 fps
+- Reorganise the port's code into smaller files (no change in the game)
+
 ## v1.1.5 (2026-10-17)
 
 - Modern profiles: aim speed 100% and movement speed 110%
