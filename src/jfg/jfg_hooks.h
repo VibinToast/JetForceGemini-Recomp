@@ -73,6 +73,7 @@ void jfg_dual_stick_release(void);
 int jfg_texture_dump_active(void);                                     // jfg_texture_packs.cpp
 void jfg_texture_pack_set_count(int count);                            // jfg_texture_packs.cpp
 void jfg_texture_dump_folder(char* buf, int size);                     // jfg_texture_packs.cpp
+void jfg_texture_dump_scene(char* buf, int size);                      // jfg_texture_packs.cpp
 int jfg_texture_pack_current(char* buf, int size);                     // jfg_texture_packs.cpp
 int jfg_refresh_override(void);                                        // jfg_frame_rate.cpp
 int jfg_widescreen_active(void);                                       // jfg_visuals.cpp

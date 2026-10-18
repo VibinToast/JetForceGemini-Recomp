@@ -31,7 +31,7 @@ std::string pack_display_name(const std::string& folder);
 void set_texture_pack(const std::string& folder); // saves the choice and makes the renderer (re)load it
 void load_texture_pack_choice();
 void next_texture_pack();                         // F6
-void update_dump_folder();                        // texture dumping, "One folder per level"
+void update_dump_folder();                        // texture dumping, "One folder per level", and the scene tag of draw_trace.txt
 
 // --- jfg_frame_rate.cpp ------------------------------------------------------------------------------------------
 extern std::atomic<float> g_fps;        // game frames per second, for the "Show FPS" option
