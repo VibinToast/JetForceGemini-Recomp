@@ -107,6 +107,7 @@ extern "C" void jfg_texture_pack_set_count(int count) { g_texture_pack_count = c
 // Worked out on the game thread (jfg_debug_frame, where the level names are loaded) and read by the renderer thread.
 std::mutex g_dump_folder_mutex;
 std::string g_dump_folder;
+void update_dump_scene();
 extern "C" void jfg_texture_dump_folder(char* buf, int size) {
     std::lock_guard lock(g_dump_folder_mutex);
     std::snprintf(buf, (size_t)size, "%s", g_dump_folder.c_str());
@@ -126,8 +127,52 @@ void update_dump_folder() {
             if (!name.empty()) folder += " " + name;
         }
     }
-    std::lock_guard lock(g_dump_folder_mutex);
-    g_dump_folder = folder;
+    {
+        std::lock_guard lock(g_dump_folder_mutex);
+        g_dump_folder = folder;
+    }
+    update_dump_scene();
+}
+
+// Texture dumping: the scene tag RT64 stamps on each line of draw_trace.txt (Toasty_Upscaler's RT64_INTEGRATION.md,
+// "Scene tags"), from the game's own level number and name: "<number>_<name>" in a level, "front_<level>" for the title
+// and menus (the front end draws over a backdrop level), "pause_menu", "loading" while no level is set, "boot" before
+// the game is up. RT64 switches to a new tag only after it has held for a few frames.
+std::mutex g_dump_scene_mutex;
+std::string g_dump_scene = "boot";
+extern "C" void jfg_texture_dump_scene(char* buf, int size) {
+    std::lock_guard lock(g_dump_scene_mutex);
+    std::snprintf(buf, (size_t)size, "%s", g_dump_scene.c_str());
+}
+void update_dump_scene() {
+    if (g_rdram == nullptr || !jfg_texture_dump_active()) return;
+    load_level_names();
+    const int level = (int16_t)rd16(ADDR_currentLevel);
+    std::string tag;
+    if (level < 0) tag = "loading";
+    else {
+        char num[16];
+        std::snprintf(num, sizeof(num), "%03d", level);
+        tag = num;
+        if (level < (int)g_level_names.size()) {
+            std::string name;
+            for (char c : g_level_names[level]) {
+                const char l = (char)std::tolower((unsigned char)c);
+                const char out = (std::isalnum((unsigned char)l) || l == '-' || l == '.') ? l : '_';
+                if (out != '_' || (!name.empty() && name.back() != '_')) name += out;
+            }
+            while (!name.empty() && name.back() == '_') name.pop_back();
+            if (!name.empty()) tag += "_" + name;
+        }
+    }
+    const int mode = (int)rd32(ADDR_mainGameMode);
+    if (mode == 0 && rd8(ADDR_pauseMode) != 0) tag = "pause_menu";
+    else if (mode == 1) tag = "front_" + tag;
+    else if (mode == 6) tag = "boot";
+    else if (mode != 0) tag = "mode" + std::to_string(mode) + "_" + tag;
+    if (tag.size() > 48) tag.resize(48);
+    std::lock_guard lock(g_dump_scene_mutex);
+    g_dump_scene = tag;
 }
 extern "C" int jfg_texture_pack_current(char* buf, int size) {
     std::lock_guard lock(g_pack_mutex);

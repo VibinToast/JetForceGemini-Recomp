@@ -391,8 +391,8 @@ diff -ruN a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
              }
          }
 diff -ruN a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
---- a/src/hle/rt64_rdp.cpp	2026-10-08 23:27:53.995535414 -0500
-+++ b/src/hle/rt64_rdp.cpp	2026-10-06 23:21:22.766691279 -0500
+--- a/src/hle/rt64_rdp.cpp	2026-10-17 20:18:20.229238700 -0500
++++ b/src/hle/rt64_rdp.cpp	2026-10-17 20:18:20.229238700 -0500
 @@ -274,6 +274,7 @@
      }
  
@@ -401,10 +401,19 @@ diff -ruN a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
          // Make sure the new color image is actually different. Some games will set the color image
          // multiple times despite setting the exact same parameters.
          const uint32_t newAddress = maskAddress(address);
+@@ -1279,6 +1280,8 @@
+         drawCall.rect = drawRect;
+         drawCall.rectDsdx = dsdx;
+         drawCall.rectDtdy = dtdy;
++        drawCall.rectS = uls; // JFG PORT
++        drawCall.rectT = ult;
+         drawCall.rectLeftOrigin = extAlignment.leftOrigin;
+         drawCall.rectRightOrigin = extAlignment.rightOrigin;
+ 
 diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
---- a/src/hle/rt64_rdp_tmem.cpp	2026-10-08 23:27:53.979226572 -0500
-+++ b/src/hle/rt64_rdp_tmem.cpp	2026-10-08 23:23:07.469892419 -0500
-@@ -2,6 +2,10 @@
+--- a/src/hle/rt64_rdp_tmem.cpp	2026-10-17 20:18:19.985232600 -0500
++++ b/src/hle/rt64_rdp_tmem.cpp	2026-10-17 20:18:19.986237300 -0500
+@@ -2,10 +2,16 @@
  // RT64
  //
  
@@ -415,7 +424,13 @@ diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
  #include "rt64_rdp_tmem.h"
  
  #include <cassert>
-@@ -36,8 +40,9 @@
+ #include <cinttypes>
++#include <cstdio>
++#include <cstdlib>
+ 
+ #include "xxHash/xxh3.h"
+ 
+@@ -36,13 +42,14 @@
              textureCache->queueGPUUploadTMEM(hash, creationFrame, TMEM, RDP_TMEM_BYTES, width, height, 0, LoadTile(), false);
          }
          
@@ -427,10 +442,24 @@ diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
              // Since width and height are not exactly guaranteed to be sane values when using raw TMEM, ensure we only dump textures when the values make sense.
              const bool validTextureCheck = (width > 0x0) && (height > 0x0);
              const bool bigTextureCheck = (width > 0x1000) || (height > 0x1000);
-@@ -65,6 +70,133 @@
+             if (validTextureCheck && !bigTextureCheck) {
+-                dumpTexture(hash, state, loadTile, width, height, tlut);
++                dumpTexture(hash, state, loadTile, width, height, tlut, creationFrame);
+             }
+         }
+ 
+@@ -59,19 +66,271 @@
+ 
+         // Dump memory contents into a file if the process is active.
+         if (!state->dumpingTexturesDirectory.empty()) {
+-            dumpTexture(hash, state, loadTile, width, height, tlut);
++            dumpTexture(hash, state, loadTile, width, height, tlut, creationFrame);
+         }
+ 
          return hash;
      }
  
+-    void TextureManager::dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut) {
 +    // JFG PORT: CPU version of sampleTMEM() in shaders/TextureDecoder.hlsli, so a dumped texture looks exactly the
 +    // way RT64 decodes it for drawing.
 +    namespace {
@@ -499,12 +528,75 @@ diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
 +                return expand(0, 0, 0, 255);
 +            }
 +        }
++
++        // A source is dynamic once it has shown more than DynamicHashLimit distinct textures and changed on at least
++        // DynamicChangeFrames of the last DynamicWindowFrames frames. 12 of 30, not the 20 of 30 Toasty_Upscaler's
++        // RT64_INTEGRATION.md suggests: at 60 fps the game draws a frame per tick, but enemies and tribals update only
++        // every 2nd tick, so a texture they redraw per update changes on 15 of 30 frames.
++        const size_t DynamicHashLimit = 16;
++        const size_t DynamicChangeFrames = 12;
++        const uint64_t DynamicWindowFrames = 30;
 +    };
 +
-+    void TextureManager::dumpTexturePng(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut) {
++    bool TextureManager::dumpSourceIsDynamic(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, uint64_t creationFrame, DumpSource *&source) {
++        const LoadOperation &loadOp = state->rdp->rice.lastLoadOpByTMEM[loadTile.tmem];
++        const DumpSourceKey key(loadOp.texture.address, loadTile.fmt, loadTile.siz, width, height, tlut, loadTile.palette);
++        auto inserted = dumpSources.emplace(key, DumpSource());
++        DumpSource &src = inserted.first->second;
++        source = &src;
++        if (inserted.second) {
++            src.firstFrame = creationFrame;
++        }
++
++        if (src.dynamic) {
++            return true;
++        }
++
++        // Tracked before the already-dumped check: a hash seen before is still a change when it differs from the last
++        // one, which is how a looping animation looks.
++        if (hash != src.lastHash) {
++            if ((src.lastHash != 0) && (src.changeFrames.empty() || (src.changeFrames.back() != creationFrame))) {
++                src.changeFrames.push_back(creationFrame);
++            }
++
++            src.lastHash = hash;
++            if (src.hashes.size() <= DynamicHashLimit) {
++                src.hashes.insert(hash);
++            }
++        }
++
++        while (!src.changeFrames.empty() && (src.changeFrames.front() + DynamicWindowFrames <= creationFrame)) {
++            src.changeFrames.pop_front();
++        }
++
++        if ((src.hashes.size() <= DynamicHashLimit) || (src.changeFrames.size() < DynamicChangeFrames)) {
++            return false;
++        }
++
++        // Flagged: move what was already written aside (not deleted, so a false positive can be undone) and log why.
++        src.dynamic = true;
++        const std::filesystem::path dynamicDirectory = state->dumpingTexturesDirectory / "_dynamic";
++        std::error_code ec;
++        std::filesystem::create_directories(dynamicDirectory, ec);
++        for (const std::filesystem::path &path : src.written) {
++            std::filesystem::rename(path, dynamicDirectory / path.filename(), ec);
++        }
++
++        FILE *log = fopen((state->dumpingTexturesDirectory / "dynamic_sources.txt").u8string().c_str(), "ab");
++        if (log != nullptr) {
++            fprintf(log, "address %08x size %ux%u fmt %u siz %u tlut %u palette %u: %zu+ distinct textures, first frame %" PRIu64 ", flagged frame %" PRIu64 ", %zu files moved to _dynamic\n",
++                loadOp.texture.address, width, height, loadTile.fmt, loadTile.siz, tlut, loadTile.palette, src.hashes.size(), src.firstFrame, creationFrame, src.written.size());
++            fclose(log);
++        }
++
++        src.written.clear();
++        return true;
++    }
++
++    bool TextureManager::dumpTexturePng(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, std::filesystem::path &path) {
 +        const uint32_t stride = uint32_t(loadTile.line) << 3;
 +        if ((width == 0) || (height == 0) || (width > 1024) || (height > 1024) || (stride == 0)) {
-+            return;
++            return false;
 +        }
 +
 +        // A texture whose rows would not fit in TMEM cannot have been loaded whole: the size comes from the tile's wrap
@@ -512,7 +604,7 @@ diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
 +        // palette textures only have half of TMEM for their texels.
 +        const bool halfTMEM = (tlut > 0) || ((loadTile.fmt == G_IM_FMT_RGBA) && (loadTile.siz == G_IM_SIZ_32b));
 +        if (uint32_t(height) * stride > (halfTMEM ? 0x800U : 0x1000U)) {
-+            return;
++            return false;
 +        }
 +
 +        // Likewise a row wider than the tile's line (rows would overlap): the width is a wrap size, not loaded data.
@@ -521,7 +613,7 @@ diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
 +        if (rowBytes > stride) {
 +            static int logged = 0;
 +            if (logged++ < 8) fprintf(stderr, "[JFG] texture dump: skipped %ux%u fmt %u siz %u line %u (%u bytes per row)\n", width, height, loadTile.fmt, loadTile.siz, loadTile.line, rowBytes);
-+            return;
++            return false;
 +        }
 +
 +        const uint8_t *T = reinterpret_cast<const uint8_t *>(state->rdp->TMEM);
@@ -547,21 +639,72 @@ diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
 +            if (shadow && (visible > 0)) {
 +                static int skipped = 0;
 +                if (++skipped <= 3) fprintf(stderr, "[JFG] texture dump: skipped character shadow %016" PRIx64 "\n", hash);
-+                return;
++                return false;
 +            }
 +        }
 +
 +        char name[64];
 +        snprintf(name, sizeof(name), "%016" PRIx64 ".png", hash);
-+        const std::filesystem::path path = state->dumpingTexturesDirectory / name;
++        path = state->dumpingTexturesDirectory / name;
 +        const std::string pathString = path.u8string();
-+        stbi_write_png(pathString.c_str(), width, height, 4, pixels.data(), int(width) * 4);
++        if (stbi_write_png(pathString.c_str(), width, height, 4, pixels.data(), int(width) * 4) == 0) {
++            return false;
++        }
++
++        // texture_info.txt: what never changes for this hash, one line as its PNG is written (Toasty_Upscaler's
++        // RT64_INTEGRATION.md, "Per texture"): the format the PNG was decoded with, the palette, and the RDRAM
++        // addresses it was loaded from.
++        static const char *const FmtNames[] = { "RGBA", "YUV", "CI", "IA", "I" };
++        const char *fmtName = (loadTile.fmt < 5) ? FmtNames[loadTile.fmt] : "RGBA";
++        const char *tlutName = (tlut == G_TT_RGBA16) ? "rgba16" : ((tlut == G_TT_IA16) ? "ia16" : "none");
++        const bool CI4 = (loadTile.fmt == G_IM_FMT_CI) && (loadTile.siz == G_IM_SIZ_4b);
++        const uint32_t src = state->rdp->rice.lastLoadOpByTMEM[loadTile.tmem].texture.address;
++        FILE *info = fopen((state->dumpingTexturesDirectory / "texture_info.txt").u8string().c_str(), "ab");
++        if (info != nullptr) {
++            fprintf(info, "tex %016" PRIx64 " fmt %s siz %u tlut %s pal %u line %u src %08x", hash, fmtName, 4U << loadTile.siz, tlutName, CI4 ? uint32_t(loadTile.palette) : 0U, uint32_t(loadTile.line), src);
++            if ((loadTile.fmt == G_IM_FMT_CI) && (tlut > 0)) {
++                const uint32_t paletteTMEM = (RDP_TMEM_WORDS >> 1) + (CI4 ? (uint32_t(loadTile.palette) << 4) : 0);
++                fprintf(info, " tlutsrc %08x", state->rdp->rice.lastLoadOpByTMEM[paletteTMEM].texture.address);
++            }
++
++            fprintf(info, "\n");
++            fclose(info);
++        }
++
++        return true;
 +    }
 +
-     void TextureManager::dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut) {
++    void TextureManager::resetDump(const std::filesystem::path &directory) {
++        dumpedSet.clear();
++        dumpSources.clear();
++
++        // JFG PORT: a dump continued in a folder that already holds PNGs (a new session) does not write those textures,
++        // or their texture_info.txt lines, again. Their names start with the hash, in the folder or _dynamic/.
++        if (directory.empty()) {
++            return;
++        }
++
++        std::error_code ec;
++        for (const std::filesystem::path &folder : { directory, directory / "_dynamic" }) {
++            for (std::filesystem::directory_iterator it(folder, ec), end; !ec && (it != end); it.increment(ec)) {
++                const std::string name = it->path().filename().u8string();
++                if ((name.size() >= 20) && (it->path().extension() == ".png") && (name.find_first_not_of("0123456789abcdef") == 16)) {
++                    dumpedSet.insert(std::strtoull(name.substr(0, 16).c_str(), nullptr, 16));
++                }
++            }
++        }
++    }
++
++    void TextureManager::dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, uint64_t creationFrame) {
++        // JFG PORT: textures the game redraws on most frames are not dumped (see dumpSourceIsDynamic). Only for PNG dumps.
++        DumpSource *source = nullptr;
++        if (state->dumpingTexturesPng && state->dumpingTexturesSkipDynamic && dumpSourceIsDynamic(hash, state, loadTile, width, height, tlut, creationFrame, source)) {
++            return;
++        }
++
          if (dumpedSet.find(hash) != dumpedSet.end()) {
              return;
-@@ -72,6 +204,13 @@
+         }
  
          // Insert into set regardless of whether the dump is successful or not.
          dumpedSet.insert(hash);
@@ -569,20 +712,60 @@ diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
 +        // JFG PORT: PNG dumping for texture packs. The file name is the hash RT64 looks replacements up by, which is
 +        // what the "rt64" auto path of a replacement database matches on.
 +        if (state->dumpingTexturesPng) {
-+            dumpTexturePng(hash, state, loadTile, width, height, tlut);
++            std::filesystem::path path;
++            if (dumpTexturePng(hash, state, loadTile, width, height, tlut, path) && (source != nullptr)) {
++                source->written.push_back(path);
++            }
++
 +            return;
 +        }
          
          // Dump the entirety of TMEM.
          char baseName[64];
 diff -ruN a/src/hle/rt64_rdp_tmem.h b/src/hle/rt64_rdp_tmem.h
---- a/src/hle/rt64_rdp_tmem.h	2026-10-08 23:27:53.979226572 -0500
-+++ b/src/hle/rt64_rdp_tmem.h	2026-10-08 00:15:11.593873431 -0500
-@@ -20,6 +20,7 @@
+--- a/src/hle/rt64_rdp_tmem.h	2026-10-17 20:18:20.028812500 -0500
++++ b/src/hle/rt64_rdp_tmem.h	2026-10-17 20:18:20.028812500 -0500
+@@ -4,7 +4,11 @@
+ 
+ #pragma once
+ 
++#include <deque>
++#include <filesystem>
++#include <map>
+ #include <set>
++#include <tuple>
+ 
+ #include "hle/rt64_draw_call.h"
+ #include "render/rt64_texture_cache.h"
+@@ -13,13 +17,30 @@
+     struct State;
+ 
+     struct TextureManager {
++        // JFG PORT: one source of dumped textures, an RDRAM address read through one tile shape. A source whose texture
++        // changes on most frames (an effect the game redraws every frame) is marked dynamic and no longer dumped, since
++        // its textures can never be matched by a replacement.
++        typedef std::tuple<uint32_t, uint8_t, uint8_t, uint16_t, uint16_t, uint32_t, uint8_t> DumpSourceKey; // address, fmt, siz, width, height, tlut, palette
++        struct DumpSource {
++            uint64_t lastHash = 0;
++            uint64_t firstFrame = 0;
++            std::set<uint64_t> hashes;
++            std::deque<uint64_t> changeFrames;
++            std::vector<std::filesystem::path> written;
++            bool dynamic = false;
++        };
++
+         std::set<uint64_t> hashSet;
+         std::set<uint64_t> dumpedSet;
++        std::map<DumpSourceKey, DumpSource> dumpSources; // JFG PORT
+ 
+         void uploadEmpty(State *state, TextureCache *textureCache, uint64_t creationFrame, uint16_t width, uint16_t height, uint64_t replacementHash);
          uint64_t uploadTMEM(State *state, const LoadTile &loadTile, TextureCache *textureCache, uint64_t creationFrame, uint16_t byteOffset, uint16_t byteCount, uint16_t width, uint16_t height, uint32_t tlut);
          uint64_t uploadTexture(State *state, const LoadTile &loadTile, TextureCache *textureCache, uint64_t creationFrame, uint16_t width, uint16_t height, uint32_t tlut);
-         void dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut);
-+        void dumpTexturePng(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut); // JFG PORT
+-        void dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut);
++        void dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, uint64_t creationFrame);
++        bool dumpSourceIsDynamic(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, uint64_t creationFrame, DumpSource *&source); // JFG PORT
++        bool dumpTexturePng(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, std::filesystem::path &path); // JFG PORT
++        void resetDump(const std::filesystem::path &directory); // JFG PORT
          void removeHashes(const std::vector<uint64_t> &hashes);
      };
  };
@@ -753,9 +936,18 @@ diff -ruN a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
          void setVertexEXV1(uint32_t address, uint32_t vtxCount, uint32_t dstIndex);
          void setVertexColorPD(uint32_t address);
 diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
---- a/src/hle/rt64_state.cpp	2026-10-17 14:54:22.145144000 -0500
-+++ b/src/hle/rt64_state.cpp	2026-10-17 14:54:22.145144000 -0500
-@@ -27,6 +27,10 @@
+--- a/src/hle/rt64_state.cpp	2026-10-17 20:18:20.115761300 -0500
++++ b/src/hle/rt64_state.cpp	2026-10-17 20:18:20.115761300 -0500
+@@ -6,6 +6,8 @@
+ 
+ #include <cassert>
+ #include <cinttypes>
++#include <cstdio>
++#include <unordered_map>
+ 
+ #include "im3d/im3d.h"
+ #include "im3d/im3d_math.h"
+@@ -27,6 +29,10 @@
  #define MI_INTR_DP          0x00000020
  #define MI_INTR_SP          0x00000001
  
@@ -766,7 +958,16 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
  namespace RT64 {
      const float ShiftScaleMap[] = {
          1.0f,
-@@ -220,7 +224,7 @@
+@@ -104,6 +110,8 @@
+         drawCall.rect.reset();
+         drawCall.rectDsdx = 0;
+         drawCall.rectDtdy = 0;
++        drawCall.rectS = 0; // JFG PORT
++        drawCall.rectT = 0;
+         drawCall.rectLeftOrigin = G_EX_ORIGIN_NONE;
+         drawCall.rectRightOrigin = G_EX_ORIGIN_NONE;
+         drawCall.scissorRect.reset();
+@@ -220,7 +228,7 @@
              // Detect the tile count based on the LOD setting.
              const bool usesLOD = (drawCall.otherMode.textLOD() == G_TL_LOD);
              if (usesLOD) {
@@ -775,7 +976,183 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
              }
              // Detect the tile count based on what texels it uses.
              else {
-@@ -1875,6 +1879,13 @@
+@@ -496,6 +504,8 @@
+         // Reset attributes for the next draw call to be recorded.
+         drawCall.rectDsdx = 0;
+         drawCall.rectDtdy = 0;
++        drawCall.rectS = 0; // JFG PORT
++        drawCall.rectT = 0;
+         drawCall.loadIndex = 0;
+         drawCall.loadCount = 0;
+         drawCall.minWorldMatrix = USHRT_MAX;
+@@ -770,6 +780,166 @@
+                     const uint32_t rdpTileLimit = gameCall.callDesc.tileIndex + gameCall.callDesc.tileCount;
+                     while (rdpTileCursor < rdpTileLimit) {
+                         uploadTile(rdpTileCursor, fbPair, gameCall.callDesc);
++
++                        // JFG PORT: while dumping PNGs, log how each draw uses its texture (rectangle or triangles, screen
++                        // position, size, hash, wrap, filter, source address, modes, scene) to <dump dir>/draw_trace.txt,
++                        // for Toasty_Upscaler's stitching and padding (format in its RT64_INTEGRATION.md). Log only, it
++                        // changes nothing.
++                        if (!dumpingTexturesDirectory.empty() && dumpingTexturesPng) {
++                            const DrawCallTile &traceTile = workload.drawData.callTiles[rdpTileCursor];
++                            if (traceTile.valid && !traceTile.tileCopyUsed) {
++                                static std::string traceDir;
++                                static FILE *traceFile = nullptr;
++                                static std::unordered_map<uint64_t, std::pair<interop::int2, interop::int2>> traceTrisLogged; // key -> widest texcoord extent logged
++                                const std::string dirString = dumpingTexturesDirectory.u8string();
++                                if (traceFile == nullptr || traceDir != dirString) {
++                                    if (traceFile != nullptr) {
++                                        fclose(traceFile);
++                                    }
++
++                                    traceDir = dirString;
++                                    traceTrisLogged.clear();
++                                    traceFile = fopen((dumpingTexturesDirectory / "draw_trace.txt").u8string().c_str(), "ab");
++                                }
++
++                                // The scene tag: lowercase [a-z0-9_.-], at most 48 characters, "unknown" until the host
++                                // names one. It changes only after the host's value has held for TraceSceneFrames frames,
++                                // so a scene change that flickers (level loads) keeps the old tag.
++                                const uint32_t TraceSceneFrames = 3;
++                                static std::string traceSceneCurrent = "unknown";
++                                static std::string traceScenePending;
++                                static uint32_t traceScenePendingFrames = 0;
++                                static uint64_t traceSceneFrame = UINT64_MAX;
++                                if (traceSceneFrame != workload.submissionFrame) {
++                                    traceSceneFrame = workload.submissionFrame;
++                                    std::string requested;
++                                    for (char c : traceScene) {
++                                        if (requested.size() >= 48) {
++                                            break;
++                                        }
++
++                                        const char l = ((c >= 'A') && (c <= 'Z')) ? char(c - 'A' + 'a') : c;
++                                        const bool allowed = ((l >= 'a') && (l <= 'z')) || ((l >= '0') && (l <= '9')) || (l == '_') || (l == '.') || (l == '-');
++                                        requested += allowed ? l : '_';
++                                    }
++
++                                    if (requested.empty()) {
++                                        requested = "unknown";
++                                    }
++
++                                    if (requested == traceSceneCurrent) {
++                                        traceScenePendingFrames = 0;
++                                    }
++                                    else {
++                                        traceScenePendingFrames = (requested == traceScenePending) ? (traceScenePendingFrames + 1) : 1;
++                                        traceScenePending = requested;
++                                        if (traceScenePendingFrames >= TraceSceneFrames) {
++                                            traceSceneCurrent = requested;
++                                            traceScenePendingFrames = 0;
++                                        }
++                                    }
++                                }
++
++                                const DrawCall &td = gameCall.callDesc;
++                                const bool isRect = (proj.type == Projection::Type::Rectangle);
++
++                                // Wrap mode per axis: W repeat, M mirror, C clamp (clamp flag set, or no wrap mask).
++                                auto axisMode = [](uint8_t cm, uint8_t mask) -> char {
++                                    if (((cm & 2) != 0) || (mask == 0)) {
++                                        return 'C';
++                                    }
++
++                                    return ((cm & 1) != 0) ? 'M' : 'W';
++                                };
++
++                                const char wrapS = axisMode(traceTile.loadTile.cms, traceTile.loadTile.masks);
++                                const char wrapT = axisMode(traceTile.loadTile.cmt, traceTile.loadTile.maskt);
++
++                                // Rectangles are logged every time because their layout per frame matters. 3D draws are
++                                // logged the first time a texture shows up with a given wrap mode in a scene, so the file
++                                // stays small during gameplay and a texture shared by several scenes is tagged in each,
++                                // and again whenever the texcoord extent seen for that key grows (the uv field).
++                                bool logLine = true;
++                                const bool validUV = traceTile.validTexcoords();
++                                uint64_t trisKey = 0;
++                                if (!isRect) {
++                                    const uint64_t sceneKey = XXH3_64bits(traceSceneCurrent.data(), traceSceneCurrent.size());
++                                    trisKey = XXH3_64bits_withSeed(&traceTile.tmemHashOrID, sizeof(traceTile.tmemHashOrID), sceneKey) ^ (uint64_t(wrapS) << 56) ^ (uint64_t(wrapT) << 48);
++                                    auto inserted = traceTrisLogged.emplace(trisKey, std::make_pair(traceTile.minTexcoord, traceTile.maxTexcoord));
++                                    logLine = inserted.second;
++                                    if (!logLine && validUV) {
++                                        auto &extent = inserted.first->second;
++                                        const bool known = (extent.first.x <= extent.second.x) && (extent.first.y <= extent.second.y);
++                                        const bool grew = !known || (traceTile.minTexcoord.x < extent.first.x) || (traceTile.minTexcoord.y < extent.first.y) ||
++                                            (traceTile.maxTexcoord.x > extent.second.x) || (traceTile.maxTexcoord.y > extent.second.y);
++                                        if (grew) {
++                                            extent.first.x = known ? std::min(extent.first.x, traceTile.minTexcoord.x) : traceTile.minTexcoord.x;
++                                            extent.first.y = known ? std::min(extent.first.y, traceTile.minTexcoord.y) : traceTile.minTexcoord.y;
++                                            extent.second.x = known ? std::max(extent.second.x, traceTile.maxTexcoord.x) : traceTile.maxTexcoord.x;
++                                            extent.second.y = known ? std::max(extent.second.y, traceTile.maxTexcoord.y) : traceTile.maxTexcoord.y;
++                                            logLine = true;
++                                        }
++                                    }
++                                }
++
++                                if ((traceFile != nullptr) && logLine) {
++                                    // Texel values with up to two decimals and no trailing zeros: 0, 32, 15.5, -0.25.
++                                    auto texels = [](double v) -> std::string {
++                                        char s[32];
++                                        snprintf(s, sizeof(s), "%.2f", v);
++                                        std::string r(s);
++                                        while (!r.empty() && (r.back() == '0')) {
++                                            r.pop_back();
++                                        }
++
++                                        if (!r.empty() && (r.back() == '.')) {
++                                            r.pop_back();
++                                        }
++
++                                        return ((r == "-0") || r.empty()) ? std::string("0") : r;
++                                    };
++
++                                    const LoadTile &tile = traceTile.loadTile;
++                                    const uint32_t textFilt = td.otherMode.textFilt();
++                                    const char *filt = (textFilt == G_TF_POINT) ? "point" : ((textFilt == G_TF_AVERAGE) ? "average" : "bilerp");
++                                    const uint32_t src = rdp->rice.lastLoadOpByTMEM[tile.tmem].texture.address;
++
++                                    fprintf(traceFile, "frame %" PRIu64 " fb %u call %u", uint64_t(workload.submissionFrame), uint32_t(p), td.callIndex);
++                                    if (isRect) {
++                                        fprintf(traceFile, " rect x %d..%d y %d..%d dsdx %d dtdy %d", td.rect.ulx, td.rect.lrx, td.rect.uly, td.rect.lry, int(td.rectDsdx), int(td.rectDtdy));
++                                    }
++                                    else {
++                                        fprintf(traceFile, " tris %u", td.triangleCount);
++                                    }
++
++                                    fprintf(traceFile, " tex %016" PRIx64 " size %ux%u ws %c wt %c filt %s", uint64_t(traceTile.tmemHashOrID), uint32_t(traceTile.sampleWidth), uint32_t(traceTile.sampleHeight), wrapS, wrapT, filt);
++                                    if (isRect) {
++                                        // Where the rectangle's top-left samples: the texrect's S and T (s10.5) minus the tile's
++                                        // upper-left corner (10.2), in texels.
++                                        fprintf(traceFile, " st %s %s", texels(td.rectS / 32.0 - tile.uls / 4.0).c_str(), texels(td.rectT / 32.0 - tile.ult / 4.0).c_str());
++                                    }
++                                    else if (validUV) {
++                                        // The texcoord extent the draw samples (whole texels, as RT64 tracks it), with the tile's
++                                        // shift and upper-left corner applied the way RT64 sizes its own sampling.
++                                        const double xScale = ShiftScaleMap[tile.shifts];
++                                        const double yScale = ShiftScaleMap[tile.shiftt];
++                                        const auto &extent = traceTrisLogged[trisKey];
++                                        fprintf(traceFile, " uv %s..%s %s..%s",
++                                            texels(extent.first.x * xScale - tile.uls / 4.0).c_str(), texels(extent.second.x * xScale - tile.uls / 4.0).c_str(),
++                                            texels(extent.first.y * yScale - tile.ult / 4.0).c_str(), texels(extent.second.y * yScale - tile.ult / 4.0).c_str());
++                                    }
++
++                                    fprintf(traceFile, " src %08x om %08x:%08x cc %08x:%08x", src, uint32_t(td.otherMode.H), uint32_t(td.otherMode.L), uint32_t(td.colorCombiner.H), uint32_t(td.colorCombiner.L));
++                                    if (!isRect) {
++                                        fprintf(traceFile, " gm %08x", td.geometryMode);
++                                    }
++
++                                    fprintf(traceFile, " scene %s\n", traceSceneCurrent.c_str());
++                                    fflush(traceFile);
++                                }
++                            }
++                        }
++
+                         rdpTileCursor++;
+                     }
+                 }
+@@ -1875,6 +2045,13 @@
  
          const bool presentEarly = !ext.presentQueue->viewRDRAM && (ext.enhancementConfig->presentation.mode == EnhancementConfiguration::Presentation::Mode::PresentEarly);
          const uint32_t screenFbAddress = newVI.fbAddress();
@@ -789,14 +1166,25 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          const hlslpp::uint2 screenFbSize = newVI.fbSize();
          const uint8_t screenFbSiz = newVI.fbSiz();
          const bool viVisible = newVI.visible();
+@@ -2298,7 +2475,7 @@
+                     else if (dumpTextures) {
+                         if (dumpingTexturesDirectory.empty()) {
+                             dumpingTexturesDirectory = FileDialog::getDirectoryPath();
+-                            textureManager.dumpedSet.clear();
++                            textureManager.resetDump(dumpingTexturesDirectory); // JFG PORT
+                         }
+                         else {
+                             dumpingTexturesDirectory.clear();
 diff -ruN a/src/hle/rt64_state.h b/src/hle/rt64_state.h
---- a/src/hle/rt64_state.h	2026-10-08 23:27:53.979226572 -0500
-+++ b/src/hle/rt64_state.h	2026-10-08 00:15:11.593254467 -0500
-@@ -115,6 +115,7 @@
+--- a/src/hle/rt64_state.h	2026-10-17 20:18:20.144440500 -0500
++++ b/src/hle/rt64_state.h	2026-10-17 20:18:20.144440500 -0500
+@@ -115,6 +115,9 @@
          ProfilingTimer screenCpuProfiler = ProfilingTimer(120);
          ProfilingTimer viChangedProfiler = ProfilingTimer(120);
          std::filesystem::path dumpingTexturesDirectory;
-+        bool dumpingTexturesPng = false; // JFG PORT: dump each texture as <hash>.png only (decoded from TMEM), ready for a replacement pack
++        bool dumpingTexturesPng = false; // JFG PORT: dump each texture as <hash>.png only (decoded from TMEM), ready for a replacement pack, and log draw_trace.txt
++        bool dumpingTexturesSkipDynamic = true; // JFG PORT: stop dumping sources that change on most frames (dynamic_sources.txt)
++        std::string traceScene = "unknown"; // JFG PORT: the level or screen on screen, set by the host before each display list; stamped on every draw_trace.txt line
          bool configurationSaveQueued = false;
          uint64_t workloadId = 0;
          uint64_t presentId = 0;
@@ -2113,3 +2501,15 @@ diff -ruN a/src/shaders/VignettePS.hlsl b/src/shaders/VignettePS.hlsl
 +    const float v = 1.0f - strength * t * t * (3.0f - 2.0f * t);
 +    resultColor = float4(v, v, v, 1.0f);
 +}
+diff -ruN a/src/hle/rt64_draw_call.h b/src/hle/rt64_draw_call.h
+--- a/src/hle/rt64_draw_call.h	2026-10-17 20:18:20.277285500 -0500
++++ b/src/hle/rt64_draw_call.h	2026-10-17 20:18:20.277285500 -0500
+@@ -77,6 +77,8 @@
+         FixedRect rect;
+         int16_t rectDsdx;
+         int16_t rectDtdy;
++        int16_t rectS; // JFG PORT: the texture rectangle's S and T (s10.5), for the texture dump's draw_trace.txt
++        int16_t rectT;
+         uint16_t rectLeftOrigin;
+         uint16_t rectRightOrigin;
+         FixedRect scissorRect;
