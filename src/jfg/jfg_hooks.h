@@ -51,7 +51,12 @@ uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_bits); // e
 void jfg_mine_init(uint8_t* rdram, recomp_context* ctx);               // end of mineInit
 void jfg_bolt_init(uint8_t* rdram, recomp_context* ctx);               // end of laserboltInit
 // jfg_diagnostics.cpp
-void jfg_mm_alloc_check(uint8_t* rdram, recomp_context* ctx);          // mmAlloc, after mempool_slot_find
+void jfg_mm_alloc_check(uint8_t* rdram, recomp_context* ctx);          // mmAlloc and mmAlloc2, after mempool_slot_find
+void jfg_squad_spawn_before(uint8_t* rdram, recomp_context* ctx);      // overlay 3 +0x14C9C, the squad member loop
+void jfg_squad_spawn_after(uint8_t* rdram, recomp_context* ctx);       // overlay 3 +0x14CA4, after its call
+void jfg_objsetup_enter(uint8_t* rdram, recomp_context* ctx);          // entry of objSetupObject
+void jfg_objsetup_step(uint8_t* rdram, recomp_context* ctx, int step); // objSetupObject, after each call that can fail
+void jfg_objsetup_exit(uint8_t* rdram, recomp_context* ctx);           // objSetupObject, its exit (0x80006E04)
 void jfg_game_break(uint8_t* rdram, recomp_context* ctx);              // mathBreakPoint
 void jfg_change_level_log(uint8_t* rdram, recomp_context* ctx);        // entry of mainChangeLevel
 void jfg_sync_printf(uint8_t* rdram, recomp_context* ctx);             // replaces osSyncPrintf
