@@ -73,6 +73,7 @@ void draw_options() {
             options_help("Saves to the file you are playing a few seconds after arriving in a level, and every few minutes of "
                          "play, as Z on the pause screen does. Not during cutscenes, races, Floyd missions or while paused.");
             changed |= options_slider("Minutes between auto saves (0: only on arriving)", &g.auto_save_minutes, 0, 30);
+            changed |= ImGui::Checkbox("Show save notification (\"Game saved\" in the corner)", &g.save_notification);
             if (ImGui::Button("Back to the title screen (F5)")) g_reset_pending = true;
             ImGui::EndTabItem();
         }

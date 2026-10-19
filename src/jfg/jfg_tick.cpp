@@ -152,7 +152,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     const float pack_toast_t = std::chrono::duration<float>(std::chrono::steady_clock::now() - g_pack_toast).count();
     const bool pack_toast = g_pack_toast.time_since_epoch().count() != 0 && pack_toast_t < 3.0f;
     const float save_toast_t = std::chrono::duration<float>(std::chrono::steady_clock::now() - g_save_toast).count();
-    const bool save_toast = g_save_toast.time_since_epoch().count() != 0 && save_toast_t < 2.5f;
+    const bool save_toast = g.save_notification && g_save_toast.time_since_epoch().count() != 0 && save_toast_t < 2.5f;
     dino::debug_ui::backend::set_overlay(hint_active || g.show_fps || g.show_level || g.show_pack || pack_toast || save_toast);
 
     dino::debug_ui::ui_frame_begin();
