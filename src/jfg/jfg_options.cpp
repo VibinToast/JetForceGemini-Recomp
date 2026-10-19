@@ -45,6 +45,9 @@ void push_render_options() {
 // Sets one option from its saved form (the options file, profiles).
 void apply_option(const char* key, int value) {
     if (std::strcmp(key, "no_blood") == 0) g.no_blood = value != 0;
+    else if (std::strcmp(key, "gore_keep_blood") == 0) g.gore_keep_blood = value != 0;
+    else if (std::strcmp(key, "gore_keep_limbs") == 0) g.gore_keep_limbs = value != 0;
+    else if (std::strcmp(key, "blood_amount") == 0) g.blood_amount = std::clamp(value, 100, 400);
     else if (std::strcmp(key, "show_fps") == 0) g.show_fps = value != 0;
     else if (std::strcmp(key, "show_level") == 0) g.show_level = value != 0;
     else if (std::strcmp(key, "show_pack") == 0) g.show_pack = value != 0;
@@ -155,6 +158,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "unlimited_continues=%d\npermanent_tribals=%d\n", s.unlimited_continues ? 1 : 0, s.permanent_tribals ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "sprint=%d\nsprint_speed=%d\n", s.sprint ? 1 : 0, s.sprint_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "pause_in_menu=%d\n", s.pause_in_menu ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "gore_keep_blood=%d\ngore_keep_limbs=%d\nblood_amount=%d\n", s.gore_keep_blood ? 1 : 0, s.gore_keep_limbs ? 1 : 0, s.blood_amount); out += buf;
     return out;
 }
 
