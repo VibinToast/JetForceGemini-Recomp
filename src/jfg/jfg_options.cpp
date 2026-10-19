@@ -93,8 +93,8 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "move_speed") == 0) g.move_speed = std::clamp(value, 25, 400);
     else if (std::strcmp(key, "sprint") == 0) g.sprint = value != 0;
     else if (std::strcmp(key, "sprint_speed") == 0) g.sprint_speed = std::clamp(value, 100, 300);
-    else if (std::strcmp(key, "diagonal_boost") == 0) g.diagonal_boost = value != 0;
-    else if (std::strcmp(key, "strafe_speed") == 0) g.strafe_speed = std::clamp(value, 0, 300);
+    else if (std::strcmp(key, "sprint_aiming") == 0) g.sprint_aiming = value != 0;
+    else if (std::strcmp(key, "normalize_diagonal") == 0) g.normalize_diagonal = value != 0;
     else if (std::strcmp(key, "invert_aim_normal") == 0) g.invert_aim_normal = value != 0;
     else if (std::strcmp(key, "invert_camera_y") == 0) g.invert_camera_y = value != 0;
     else if (std::strcmp(key, "camera_speed_h") == 0) g.camera_speed_h = std::clamp(value, 10, 400);
@@ -149,14 +149,14 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "dual_stick=%d\ninvert_aim_y=%d\nswap_triggers=%d\ndual_layout=%d\n", s.dual_stick ? 1 : 0, s.invert_aim_y ? 1 : 0, s.swap_triggers ? 1 : 0, s.dual_layout ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "invert_aim_normal=%d\ninvert_camera_y=%d\naim_from_character=%d\n", s.invert_aim_normal ? 1 : 0, s.invert_camera_y ? 1 : 0, s.aim_from_character ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "camera_collision=%d\n", s.camera_collision ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "move_speed=%d\ndiagonal_boost=%d\nstrafe_speed=%d\n", s.move_speed, s.diagonal_boost ? 1 : 0, s.strafe_speed); out += buf;
+    std::snprintf(buf, sizeof(buf), "move_speed=%d\nnormalize_diagonal=%d\n", s.move_speed, s.normalize_diagonal ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "camera_speed_h=%d\ncamera_speed_v=%d\naim_shoulder=%d\naim_centered=%d\naim_speed=%d\n", s.camera_speed_h, s.camera_speed_v, s.aim_shoulder ? 1 : 0, s.aim_centered ? 1 : 0, s.aim_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "aim_jump=%d\n", s.aim_jump ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "mouse_keyboard=%d\nmouse_camera_speed=%d\nmouse_aim_speed=%d\ninvert_mouse_y=%d\n", s.mouse_keyboard ? 1 : 0, s.mouse_camera_speed, s.mouse_aim_speed, s.invert_mouse_y ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "refuel_speed=%d\nsniper_fixed_zoom=%d\nsniper_zoom=%d\ndamage_taken=%d\ndive_speed=%d\n", s.refuel_speed, s.sniper_fixed_zoom ? 1 : 0, s.sniper_zoom, s.damage_taken, s.dive_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "fly_speed=%d\nfly_freeze=%d\nfly_hide_hud=%d\n", s.fly_speed, s.fly_freeze ? 1 : 0, s.fly_hide_hud ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "unlimited_continues=%d\npermanent_tribals=%d\n", s.unlimited_continues ? 1 : 0, s.permanent_tribals ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "sprint=%d\nsprint_speed=%d\n", s.sprint ? 1 : 0, s.sprint_speed); out += buf;
+    std::snprintf(buf, sizeof(buf), "sprint=%d\nsprint_speed=%d\nsprint_aiming=%d\n", s.sprint ? 1 : 0, s.sprint_speed, s.sprint_aiming ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "pause_in_menu=%d\n", s.pause_in_menu ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "gore_keep_blood=%d\ngore_keep_limbs=%d\nblood_amount=%d\n", s.gore_keep_blood ? 1 : 0, s.gore_keep_limbs ? 1 : 0, s.blood_amount); out += buf;
     return out;

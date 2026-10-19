@@ -51,7 +51,7 @@ struct CameraControl {
     float elevation = 0;        // added to the game's own camera elevation, radians
     uint32_t player = 0;        // the character's object this tick, for jfg_move_scale
     float move_factor = 1.0f;   // ground speed multiplier this tick
-    float sprint_factor = 1.0f; // the part of it that is sprinting (also speeds up the character's animation)
+    float sprint_factor = 1.0f; // the part of it that is sprinting (also speeds up the character's animation, not the jump's)
     bool shoulder = false;      // aiming with the over-the-shoulder option this tick
     float shoulder_blend = 0;   // 0..1: how far the view has moved from the game's camera to the shoulder
     bool overridden = false;    // the camera in RDRAM currently holds our values; saved[] holds the game's
@@ -83,9 +83,9 @@ void jfg_camera_controls(recomp_context* ctx); // game thread, right after joyRe
 // Aiming. The character control data (object + 0x68) holds, as 16-bit angles: the direction the body faces (+0x11C,
 // copy +0x106, and the object's yaw) and the view pitch (+0x1E2, limited to 60 degrees); the reticle's offset from
 // them (yaw +0x1CE, copies +0x1DC and +0x246; pitch +0x1E0); and their sums, the aim direction (yaw +0x1C6/+0x1CA;
-// pitch +0x1C8/+0x1CC/+0x1D0/+0x1DE). The byte at +0x568 is 0x0B while the character is in its aiming state.
+// pitch +0x1C8/+0x1CC/+0x1D0/+0x1DE). The byte at +0x568 is the character's state: 0x0B aiming, 3 jumping (and falling).
 constexpr uint32_t PD_BODY_YAW = 0x11C, PD_BODY_YAW_COPY = 0x106, PD_VIEW_PITCH = 0x1E2, PD_RETICLE_YAW = 0x1CE, PD_RETICLE_PITCH = 0x1E0, PD_STATE = 0x568;
-constexpr uint8_t PD_STATE_AIMING = 0x0B;
+constexpr uint8_t PD_STATE_AIMING = 0x0B, PD_STATE_JUMP = 3;
 
 // --- jfg_camera.cpp ----------------------------------------------------------------------------------------------
 // Fly camera (F7 / F10 > Tools): a free camera for screenshots. While it is on, the sticks / WASD and the mouse fly

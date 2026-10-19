@@ -70,8 +70,8 @@ struct State {
     int  move_speed = 100;         // how fast the character moves over the ground, percent (any layout)
     bool sprint = false;           // hold left-stick click / Left Shift to run faster (jfg_camera_controls)
     int  sprint_speed = 160;       // sprint: ground speed while it is held, percent
-    bool diagonal_boost = false;  // dual stick: faster when the left stick is pushed diagonally, as running + sidestepping was
-    int  strafe_speed = 100;       // dual stick: weight of the sideways part in that boost, percent
+    bool sprint_aiming = false;    // sprint also works while aiming (the aim walk)
+    bool normalize_diagonal = false; // running while sidestepping is no faster than running alone (jfg_move_scale)
     bool camera_collision = true;  // dual stick: the camera stays inside the level (the game's own wall check)
     bool aim_from_character = false; // dual stick: on aiming, the view turns to the character instead of the character to the view
     bool dual_layout = true;       // dual stick: built-in controller layout instead of the controller bindings
