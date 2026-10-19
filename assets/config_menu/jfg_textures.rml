@@ -21,9 +21,9 @@
                     <div class="config-option" data-event-mouseover="set_cur_config_index(0)">
                         <label class="config-option__title">Show Texture Pack</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_show_pack" data-checked="show_pack" value="1" id="jfg_show_pack_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_show_pack" data-checked="show_pack" value="1" id="jfg_show_pack_on" style="nav-down: #jfg_texture_dump_on;"/>
                             <label class="config-option__tab-label" for="jfg_show_pack_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_show_pack" data-checked="show_pack" value="0" id="jfg_show_pack_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_show_pack" data-checked="show_pack" value="0" id="jfg_show_pack_off" style="nav-down: #jfg_texture_dump_off;"/>
                             <label class="config-option__tab-label" for="jfg_show_pack_off">Off</label>
                         </div>
                     </div>
@@ -31,18 +31,18 @@
                     <div class="config-option" data-event-mouseover="set_cur_config_index(1)">
                         <label class="config-option__title">Dump Textures</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(1)" name="jfg_texture_dump" data-checked="texture_dump" value="1" id="jfg_texture_dump_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(1)" name="jfg_texture_dump" data-checked="texture_dump" value="1" id="jfg_texture_dump_on" style="nav-up: #jfg_show_pack_on; nav-down: #jfg_dump_by_level_on;"/>
                             <label class="config-option__tab-label" for="jfg_texture_dump_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(1)" name="jfg_texture_dump" data-checked="texture_dump" value="0" id="jfg_texture_dump_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(1)" name="jfg_texture_dump" data-checked="texture_dump" value="0" id="jfg_texture_dump_off" style="nav-up: #jfg_show_pack_off; nav-down: #jfg_dump_by_level_off;"/>
                             <label class="config-option__tab-label" for="jfg_texture_dump_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(2)">
                         <label class="config-option__title">One Folder per Level</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_dump_by_level" data-checked="dump_by_level" value="1" id="jfg_dump_by_level_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_dump_by_level" data-checked="dump_by_level" value="1" id="jfg_dump_by_level_on" style="nav-up: #jfg_texture_dump_on; nav-down: none;"/>
                             <label class="config-option__tab-label" for="jfg_dump_by_level_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_dump_by_level" data-checked="dump_by_level" value="0" id="jfg_dump_by_level_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_dump_by_level" data-checked="dump_by_level" value="0" id="jfg_dump_by_level_off" style="nav-up: #jfg_texture_dump_off; nav-down: none;"/>
                             <label class="config-option__tab-label" for="jfg_dump_by_level_off">Off</label>
                         </div>
                     </div>

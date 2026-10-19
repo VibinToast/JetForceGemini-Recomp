@@ -11,9 +11,9 @@
                     <div class="config-option" data-event-mouseover="set_cur_config_index(0)">
                         <label class="config-option__title">Widescreen</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_widescreen" data-checked="widescreen" value="1" id="jfg_widescreen_on" style="nav-up: #tab_jfg_visuals"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_widescreen" data-checked="widescreen" value="1" id="jfg_widescreen_on" style="nav-up: #tab_jfg_visuals; nav-down: #jfg_fov_input;"/>
                             <label class="config-option__tab-label" for="jfg_widescreen_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_widescreen" data-checked="widescreen" value="0" id="jfg_widescreen_off" style="nav-up: #tab_jfg_visuals"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_widescreen" data-checked="widescreen" value="0" id="jfg_widescreen_off" style="nav-up: #tab_jfg_visuals; nav-down: #jfg_fov_input;"/>
                             <label class="config-option__tab-label" for="jfg_widescreen_off">Off</label>
                         </div>
                     </div>
@@ -21,53 +21,53 @@
                         <label class="config-option__title">Field of View</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{fov}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(1)" id="jfg_fov_input" type="range" min="75" max="140" style="flex: 1; margin: 0dp;" data-value="fov"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(1)" id="jfg_fov_input" type="range" min="75" max="140" style="flex: 1; margin: 0dp; nav-up: #jfg_widescreen_on; nav-down: #jfg_frame_rate_0;" data-value="fov"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(2)">
                         <label class="config-option__title">Frame Rate</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_frame_rate" data-checked="frame_rate" value="0" id="jfg_frame_rate_0"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_frame_rate" data-checked="frame_rate" value="0" id="jfg_frame_rate_0" style="nav-up: #jfg_fov_input; nav-down: #jfg_no_lod_on;"/>
                             <label class="config-option__tab-label" for="jfg_frame_rate_0">Original</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_frame_rate" data-checked="frame_rate" value="1" id="jfg_frame_rate_1"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_frame_rate" data-checked="frame_rate" value="1" id="jfg_frame_rate_1" style="nav-up: #jfg_fov_input; nav-down: #jfg_no_lod_off;"/>
                             <label class="config-option__tab-label" for="jfg_frame_rate_1">60</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_frame_rate" data-checked="frame_rate" value="2" id="jfg_frame_rate_2"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_frame_rate" data-checked="frame_rate" value="2" id="jfg_frame_rate_2" style="nav-up: #jfg_fov_input; nav-down: #jfg_no_lod_off;"/>
                             <label class="config-option__tab-label" for="jfg_frame_rate_2">60 + Interpolated</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(3)">
                         <label class="config-option__title">Disable LOD</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(3)" name="jfg_no_lod" data-checked="no_lod" value="1" id="jfg_no_lod_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(3)" name="jfg_no_lod" data-checked="no_lod" value="1" id="jfg_no_lod_on" style="nav-up: #jfg_frame_rate_0; nav-down: #jfg_far_objects_on;"/>
                             <label class="config-option__tab-label" for="jfg_no_lod_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(3)" name="jfg_no_lod" data-checked="no_lod" value="0" id="jfg_no_lod_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(3)" name="jfg_no_lod" data-checked="no_lod" value="0" id="jfg_no_lod_off" style="nav-up: #jfg_frame_rate_1; nav-down: #jfg_far_objects_off;"/>
                             <label class="config-option__tab-label" for="jfg_no_lod_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(4)">
                         <label class="config-option__title">Draw Distant Objects</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(4)" name="jfg_far_objects" data-checked="far_objects" value="1" id="jfg_far_objects_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(4)" name="jfg_far_objects" data-checked="far_objects" value="1" id="jfg_far_objects_on" style="nav-up: #jfg_no_lod_on; nav-down: #jfg_show_fps_on;"/>
                             <label class="config-option__tab-label" for="jfg_far_objects_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(4)" name="jfg_far_objects" data-checked="far_objects" value="0" id="jfg_far_objects_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(4)" name="jfg_far_objects" data-checked="far_objects" value="0" id="jfg_far_objects_off" style="nav-up: #jfg_no_lod_off; nav-down: #jfg_show_fps_off;"/>
                             <label class="config-option__tab-label" for="jfg_far_objects_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(5)">
                         <label class="config-option__title">Show FPS</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(5)" name="jfg_show_fps" data-checked="show_fps" value="1" id="jfg_show_fps_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(5)" name="jfg_show_fps" data-checked="show_fps" value="1" id="jfg_show_fps_on" style="nav-up: #jfg_far_objects_on; nav-down: #jfg_show_level_on;"/>
                             <label class="config-option__tab-label" for="jfg_show_fps_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(5)" name="jfg_show_fps" data-checked="show_fps" value="0" id="jfg_show_fps_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(5)" name="jfg_show_fps" data-checked="show_fps" value="0" id="jfg_show_fps_off" style="nav-up: #jfg_far_objects_off; nav-down: #jfg_show_level_off;"/>
                             <label class="config-option__tab-label" for="jfg_show_fps_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(6)">
                         <label class="config-option__title">Show Level</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(6)" name="jfg_show_level" data-checked="show_level" value="1" id="jfg_show_level_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(6)" name="jfg_show_level" data-checked="show_level" value="1" id="jfg_show_level_on" style="nav-up: #jfg_show_fps_on; nav-down: #jfg_fly_speed_input;"/>
                             <label class="config-option__tab-label" for="jfg_show_level_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(6)" name="jfg_show_level" data-checked="show_level" value="0" id="jfg_show_level_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(6)" name="jfg_show_level" data-checked="show_level" value="0" id="jfg_show_level_off" style="nav-up: #jfg_show_fps_off; nav-down: #jfg_fly_speed_input;"/>
                             <label class="config-option__tab-label" for="jfg_show_level_off">Off</label>
                         </div>
                     </div>
@@ -76,24 +76,24 @@
                         <label class="config-option__title">Fly Speed</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{fly_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" id="jfg_fly_speed_input" type="range" min="10" max="1000" style="flex: 1; margin: 0dp;" data-value="fly_speed"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" id="jfg_fly_speed_input" type="range" min="10" max="1000" style="flex: 1; margin: 0dp; nav-up: #jfg_show_level_on; nav-down: #jfg_fly_freeze_on;" data-value="fly_speed"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(8)">
                         <label class="config-option__title">Freeze While Flying</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_fly_freeze" data-checked="fly_freeze" value="1" id="jfg_fly_freeze_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_fly_freeze" data-checked="fly_freeze" value="1" id="jfg_fly_freeze_on" style="nav-up: #jfg_fly_speed_input; nav-down: #jfg_fly_hide_hud_on;"/>
                             <label class="config-option__tab-label" for="jfg_fly_freeze_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_fly_freeze" data-checked="fly_freeze" value="0" id="jfg_fly_freeze_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_fly_freeze" data-checked="fly_freeze" value="0" id="jfg_fly_freeze_off" style="nav-up: #jfg_fly_speed_input; nav-down: #jfg_fly_hide_hud_off;"/>
                             <label class="config-option__tab-label" for="jfg_fly_freeze_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(9)">
                         <label class="config-option__title">Hide HUD While Flying</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" name="jfg_fly_hide_hud" data-checked="fly_hide_hud" value="1" id="jfg_fly_hide_hud_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" name="jfg_fly_hide_hud" data-checked="fly_hide_hud" value="1" id="jfg_fly_hide_hud_on" style="nav-up: #jfg_fly_freeze_on; nav-down: #jfg_ssao_on;"/>
                             <label class="config-option__tab-label" for="jfg_fly_hide_hud_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" name="jfg_fly_hide_hud" data-checked="fly_hide_hud" value="0" id="jfg_fly_hide_hud_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" name="jfg_fly_hide_hud" data-checked="fly_hide_hud" value="0" id="jfg_fly_hide_hud_off" style="nav-up: #jfg_fly_freeze_off; nav-down: #jfg_ssao_off;"/>
                             <label class="config-option__tab-label" for="jfg_fly_hide_hud_off">Off</label>
                         </div>
                     </div>
@@ -101,9 +101,9 @@
                     <div class="config-option" data-event-mouseover="set_cur_config_index(10)">
                         <label class="config-option__title">Ambient Occlusion (SSAO)</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_ssao" data-checked="ssao" value="1" id="jfg_ssao_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_ssao" data-checked="ssao" value="1" id="jfg_ssao_on" style="nav-up: #jfg_fly_hide_hud_on; nav-down: #jfg_ssao_strength_input;"/>
                             <label class="config-option__tab-label" for="jfg_ssao_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_ssao" data-checked="ssao" value="0" id="jfg_ssao_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_ssao" data-checked="ssao" value="0" id="jfg_ssao_off" style="nav-up: #jfg_fly_hide_hud_off; nav-down: #jfg_ssao_strength_input;"/>
                             <label class="config-option__tab-label" for="jfg_ssao_off">Off</label>
                         </div>
                     </div>
@@ -111,23 +111,23 @@
                         <label class="config-option__title">SSAO Strength</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{ssao_strength}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(11)" id="jfg_ssao_strength_input" type="range" min="10" max="300" style="flex: 1; margin: 0dp;" data-value="ssao_strength"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(11)" id="jfg_ssao_strength_input" type="range" min="10" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_ssao_on; nav-down: #jfg_ssao_radius_input;" data-value="ssao_strength"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(12)">
                         <label class="config-option__title">SSAO Radius</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{ssao_radius}}</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" id="jfg_ssao_radius_input" type="range" min="10" max="300" style="flex: 1; margin: 0dp;" data-value="ssao_radius"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" id="jfg_ssao_radius_input" type="range" min="10" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_ssao_strength_input; nav-down: #jfg_bloom_on;" data-value="ssao_radius"/>
                         </div>
                     </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Bloom</label></div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(13)">
                         <label class="config-option__title">Bloom</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" name="jfg_bloom" data-checked="bloom" value="1" id="jfg_bloom_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" name="jfg_bloom" data-checked="bloom" value="1" id="jfg_bloom_on" style="nav-up: #jfg_ssao_radius_input; nav-down: #jfg_bloom_intensity_input;"/>
                             <label class="config-option__tab-label" for="jfg_bloom_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" name="jfg_bloom" data-checked="bloom" value="0" id="jfg_bloom_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" name="jfg_bloom" data-checked="bloom" value="0" id="jfg_bloom_off" style="nav-up: #jfg_ssao_radius_input; nav-down: #jfg_bloom_intensity_input;"/>
                             <label class="config-option__tab-label" for="jfg_bloom_off">Off</label>
                         </div>
                     </div>
@@ -135,30 +135,30 @@
                         <label class="config-option__title">Bloom Intensity</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{bloom_intensity}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" id="jfg_bloom_intensity_input" type="range" min="0" max="300" style="flex: 1; margin: 0dp;" data-value="bloom_intensity"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" id="jfg_bloom_intensity_input" type="range" min="0" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_bloom_on; nav-down: #jfg_bloom_threshold_input;" data-value="bloom_intensity"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(15)">
                         <label class="config-option__title">Bloom Threshold</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{bloom_threshold}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(15)" id="jfg_bloom_threshold_input" type="range" min="0" max="100" style="flex: 1; margin: 0dp;" data-value="bloom_threshold"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(15)" id="jfg_bloom_threshold_input" type="range" min="0" max="100" style="flex: 1; margin: 0dp; nav-up: #jfg_bloom_intensity_input; nav-down: #jfg_bloom_radius_input;" data-value="bloom_threshold"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(16)">
                         <label class="config-option__title">Bloom Radius</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{bloom_radius}}</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" id="jfg_bloom_radius_input" type="range" min="1" max="20" style="flex: 1; margin: 0dp;" data-value="bloom_radius"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" id="jfg_bloom_radius_input" type="range" min="1" max="20" style="flex: 1; margin: 0dp; nav-up: #jfg_bloom_threshold_input; nav-down: #jfg_vignette_on;" data-value="bloom_radius"/>
                         </div>
                     </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Vignette</label></div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(17)">
                         <label class="config-option__title">Vignette</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_vignette" data-checked="vignette" value="1" id="jfg_vignette_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_vignette" data-checked="vignette" value="1" id="jfg_vignette_on" style="nav-up: #jfg_bloom_radius_input; nav-down: #jfg_vignette_strength_input;"/>
                             <label class="config-option__tab-label" for="jfg_vignette_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_vignette" data-checked="vignette" value="0" id="jfg_vignette_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_vignette" data-checked="vignette" value="0" id="jfg_vignette_off" style="nav-up: #jfg_bloom_radius_input; nav-down: #jfg_vignette_strength_input;"/>
                             <label class="config-option__tab-label" for="jfg_vignette_off">Off</label>
                         </div>
                     </div>
@@ -166,14 +166,14 @@
                         <label class="config-option__title">Vignette Strength</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{vignette_strength}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" id="jfg_vignette_strength_input" type="range" min="0" max="100" style="flex: 1; margin: 0dp;" data-value="vignette_strength"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" id="jfg_vignette_strength_input" type="range" min="0" max="100" style="flex: 1; margin: 0dp; nav-up: #jfg_vignette_on; nav-down: #jfg_vignette_size_input;" data-value="vignette_strength"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(19)">
                         <label class="config-option__title">Vignette Size</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{vignette_size}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" id="jfg_vignette_size_input" type="range" min="0" max="90" style="flex: 1; margin: 0dp;" data-value="vignette_size"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" id="jfg_vignette_size_input" type="range" min="0" max="90" style="flex: 1; margin: 0dp; nav-up: #jfg_vignette_strength_input; nav-down: #jfg_level_fog_distance_input;" data-value="vignette_size"/>
                         </div>
                     </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Fog</label></div>
@@ -181,15 +181,15 @@
                         <label class="config-option__title">Level Fog Distance</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{level_fog_distance}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" id="jfg_level_fog_distance_input" type="range" min="50" max="400" style="flex: 1; margin: 0dp;" data-value="level_fog_distance"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" id="jfg_level_fog_distance_input" type="range" min="50" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_vignette_size_input; nav-down: #jfg_no_level_fog_on;" data-value="level_fog_distance"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(21)">
                         <label class="config-option__title">No Level Fog</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" name="jfg_no_level_fog" data-checked="no_level_fog" value="1" id="jfg_no_level_fog_on"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" name="jfg_no_level_fog" data-checked="no_level_fog" value="1" id="jfg_no_level_fog_on" style="nav-up: #jfg_level_fog_distance_input; nav-down: #jfg_texture_filter_0;"/>
                             <label class="config-option__tab-label" for="jfg_no_level_fog_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" name="jfg_no_level_fog" data-checked="no_level_fog" value="0" id="jfg_no_level_fog_off"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" name="jfg_no_level_fog" data-checked="no_level_fog" value="0" id="jfg_no_level_fog_off" style="nav-up: #jfg_level_fog_distance_input; nav-down: #jfg_texture_filter_1;"/>
                             <label class="config-option__tab-label" for="jfg_no_level_fog_off">Off</label>
                         </div>
                     </div>
@@ -197,20 +197,20 @@
                     <div class="config-option" data-event-mouseover="set_cur_config_index(22)">
                         <label class="config-option__title">Texture Filtering</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_texture_filter" data-checked="texture_filter" value="0" id="jfg_texture_filter_0"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_texture_filter" data-checked="texture_filter" value="0" id="jfg_texture_filter_0" style="nav-up: #jfg_no_level_fog_on; nav-down: #jfg_output_filter_0;"/>
                             <label class="config-option__tab-label" for="jfg_texture_filter_0">N64 Three-Point</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_texture_filter" data-checked="texture_filter" value="1" id="jfg_texture_filter_1"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_texture_filter" data-checked="texture_filter" value="1" id="jfg_texture_filter_1" style="nav-up: #jfg_no_level_fog_off; nav-down: #jfg_output_filter_1;"/>
                             <label class="config-option__tab-label" for="jfg_texture_filter_1">Bilinear</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(23)">
                         <label class="config-option__title">Picture Scaling</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_output_filter" data-checked="output_filter" value="0" id="jfg_output_filter_0"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_output_filter" data-checked="output_filter" value="0" id="jfg_output_filter_0" style="nav-up: #jfg_texture_filter_0; nav-down: none;"/>
                             <label class="config-option__tab-label" for="jfg_output_filter_0">Anti-Aliased</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_output_filter" data-checked="output_filter" value="1" id="jfg_output_filter_1"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_output_filter" data-checked="output_filter" value="1" id="jfg_output_filter_1" style="nav-up: #jfg_texture_filter_1; nav-down: none;"/>
                             <label class="config-option__tab-label" for="jfg_output_filter_1">Linear</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_output_filter" data-checked="output_filter" value="2" id="jfg_output_filter_2"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_output_filter" data-checked="output_filter" value="2" id="jfg_output_filter_2" style="nav-up: #jfg_texture_filter_1; nav-down: none;"/>
                             <label class="config-option__tab-label" for="jfg_output_filter_2">Nearest</label>
                         </div>
                     </div>

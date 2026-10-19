@@ -53,7 +53,7 @@ constexpr const char* COMMITS_URL = "https://api.github.com/repos/VibinToast/Jet
 constexpr const char* ZIP_SUFFIX = "-windows-x64-portable.zip";
 
 struct Release {
-    std::string tag, version, body, zip_name, zip_url, sha_url, zip_digest; // zip_digest: GitHub's own SHA-256 of the zip, lower case hex
+    std::string tag, version, date, body, zip_name, zip_url, sha_url, zip_digest; // zip_digest: GitHub's own SHA-256 of the zip, lower case hex; date: YYYY-MM-DD
 };
 
 std::mutex g_mutex;
@@ -278,8 +278,8 @@ void commits_thread() {
     }
     std::lock_guard<std::mutex> lock(g_mutex);
     // Only what has been pushed to GitHub is listed there; commits that are only on a computer are not.
-    g_commits = text.empty() ? "Since the last release: no new commits on GitHub yet.\n\n"
-                             : "Since the last release (not in a version yet)\n" + text + "\n";
+    g_commits = text.empty() ? "## Since the last release\nNo new changes on GitHub yet.\n\n"
+                             : "## Since the last release\nOn GitHub, not in a version yet.\n" + text + "\n";
 }
 
 // ---- finding releases ---------------------------------------------------------------------------------------------------
@@ -299,6 +299,7 @@ void check_thread(std::string current) {
         release.version = strip_v(release.tag);
         if (parse_version(release.version).empty()) continue;
         release.body = json_string(r, "body");
+        release.date = json_string(r, "published_at").substr(0, 10);
         const auto assets = r.find("assets");
         if (assets != r.end() && assets->is_array()) {
             for (const nlohmann::json& a : *assets) {
@@ -332,7 +333,18 @@ void check_thread(std::string current) {
         notes.erase(std::remove(notes.begin(), notes.end(), '\r'), notes.end());
         while (!notes.empty() && std::isspace((unsigned char)notes.back())) notes.pop_back();
         if (notes.empty()) notes = "(no notes)";
-        changelog += "v" + release.version + "\n" + notes + "\n\n";
+        // Markdown for jfg_changelog_rml: a heading per release; headings inside the notes become subheadings.
+        std::string body, line;
+        for (size_t i = 0; i <= notes.size(); i++) {
+            if (i < notes.size() && notes[i] != '\n') { line += notes[i]; continue; }
+            if (!line.empty() && line[0] == '#') {
+                const size_t text_start = line.find_first_not_of("# ");
+                line = "### " + (text_start == std::string::npos ? std::string() : line.substr(text_start));
+            }
+            body += line + "\n";
+            line.clear();
+        }
+        changelog += "## v" + release.version + (release.date.empty() ? "" : " (" + release.date + ")") + "\n" + body + "\n";
     }
 
     std::lock_guard<std::mutex> lock(g_mutex);
@@ -686,19 +698,61 @@ std::string jfg_changelog_text() {
         while ((n = std::fread(buffer, 1, sizeof(buffer), f)) > 0) text.append(buffer, n);
         std::fclose(f);
     }
-    if (text.empty()) return "The changelog was not found next to the game. It is on the release page.";
+    if (text.empty()) return "The changelog was not found next to the game. It is on the release page.\n";
     text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
-    text.erase(std::remove(text.begin(), text.end(), '`'), text.end());
-    // Start at the first version heading (the file opens with a few lines about itself); headings lose their # marks.
+    // Start at the first version heading (the file opens with a few lines about itself).
     const size_t first = text.find("\n## ");
     if (first != std::string::npos) text.erase(0, first + 1);
+    return text;
+}
+
+// Markdown (as CHANGELOG.md and the release notes write it) to RML for the launcher's dialogs: "## v1.2.3 (date)" is a
+// version heading, tagged Installed / New against this build; "### x" a subheading; "- x" / "* x" an item; any other
+// line a note. The styles are the .rl-cl-* classes in assets/launcher.rml.
+std::string jfg_changelog_rml(const std::string& markdown, const std::string& installed) {
+    auto escape = [](const std::string& in) {
+        std::string out;
+        for (size_t i = 0; i < in.size(); i++) {
+            const char c = in[i];
+            const bool bold_mark = c == '*' && ((i + 1 < in.size() && in[i + 1] == '*') || (i > 0 && in[i - 1] == '*'));
+            if (c == '`' || bold_mark) continue;
+            if (c == '&') out += "&amp;";
+            else if (c == '<') out += "&lt;";
+            else if (c == '>') out += "&gt;";
+            else if (c == '{' && i + 1 < in.size() && in[i + 1] == '{') out += "{ "; // never a data binding
+            else out += c;
+        }
+        return out;
+    };
     std::string out, line;
-    for (size_t i = 0; i <= text.size(); i++) {
-        if (i < text.size() && text[i] != '\n') { line += text[i]; continue; }
-        if (line.rfind("## ", 0) == 0) { if (!out.empty()) out += "\n"; out += line.substr(3) + "\n"; }
-        else if (line.rfind("### ", 0) == 0) out += line.substr(4) + ":\n";
-        else out += line + "\n";
+    bool first_heading = true;
+    for (size_t i = 0; i <= markdown.size(); i++) {
+        if (i < markdown.size() && markdown[i] != '\n') { line += markdown[i]; continue; }
+        const size_t start = line.find_first_not_of(" \t");
+        size_t end = line.find_last_not_of(" \t");
+        const std::string t = start == std::string::npos ? std::string() : line.substr(start, end - start + 1);
         line.clear();
+        if (t.rfind("## ", 0) == 0) {
+            std::string title = t.substr(3), date;
+            const size_t open = title.find(" (");
+            if (open != std::string::npos && title.back() == ')') {
+                date = title.substr(open + 2, title.size() - open - 3);
+                title = title.substr(0, open);
+            }
+            const std::string version = strip_v(title);
+            std::string tag;
+            if (!parse_version(version).empty() && !parse_version(installed).empty()) {
+                const int cmp = compare_versions(version, installed);
+                if (cmp == 0) tag = "<span class=\"rl-cl-tag\">Installed</span>";
+                else if (cmp > 0) tag = "<span class=\"rl-cl-tag rl-cl-new\">New</span>";
+            }
+            out += std::string("<div class=\"rl-cl-version") + (first_heading ? " rl-cl-first" : "") + "\"><span class=\"rl-cl-ver\">" + escape(title) +
+                "</span>" + (date.empty() ? "" : "<span class=\"rl-cl-date\">" + escape(date) + "</span>") + tag + "</div>";
+            first_heading = false;
+        }
+        else if (t.rfind("### ", 0) == 0) out += "<div class=\"rl-cl-sub\">" + escape(t.substr(4)) + "</div>";
+        else if (t.rfind("- ", 0) == 0 || t.rfind("* ", 0) == 0) out += "<div class=\"rl-cl-item\"><span class=\"rl-cl-dot\">&gt;</span>" + escape(t.substr(2)) + "</div>";
+        else if (!t.empty() && t[0] != '#') out += "<div class=\"rl-cl-note\">" + escape(t) + "</div>";
     }
     return out;
 }

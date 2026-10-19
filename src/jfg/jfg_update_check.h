@@ -13,7 +13,7 @@ std::string jfg_launcher_config_rom(); // an absolute path, or "" when none is s
 
 struct JfgUpdateInfo {
     std::string version;    // the release it would update to, like "1.2.0"
-    std::string changelog;  // the notes of every release newer than this build, newest first
+    std::string changelog;  // the notes of every release newer than this build, newest first, as markdown (jfg_changelog_rml)
     bool can_install = false; // the release has a build for this system and a checksum for it
     std::string unavailable;  // when !can_install: why, for the dialog
 };
@@ -38,9 +38,14 @@ void jfg_update_fail(const std::string& message);
 // After stage 3: starts the new build. The caller then quits this one.
 void jfg_update_restart();
 
-// The text of CHANGELOG.md that ships in assets/jfg_launcher, tidied for showing as plain text (newest first).
+// The markdown of CHANGELOG.md that ships in assets/jfg_launcher, from its first version heading (newest first).
 std::string jfg_changelog_text();
 
-// The commits made since the last release, from GitHub (empty until they have arrived, or when offline), as a few lines of
-// text. Commits by GitHub's bots (the release commit of the Release workflow) are left out.
+// The commits made since the last release, from GitHub (empty until they have arrived, or when offline), as markdown: a
+// "## Since the last release" heading and one "- " line each. Commits by GitHub's bots (the release commit of the Release
+// workflow) are left out.
 std::string jfg_changelog_commits();
+
+// Changelog markdown (the two above, JfgUpdateInfo::changelog) as RML for the launcher's dialogs, with the version
+// headings tagged Installed / New against `installed`.
+std::string jfg_changelog_rml(const std::string& markdown, const std::string& installed);
