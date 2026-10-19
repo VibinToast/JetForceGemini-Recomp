@@ -362,8 +362,8 @@ diff -ruN a/src/hle/rt64_interpreter.cpp b/src/hle/rt64_interpreter.cpp
          // Every RSP task starts with an empty display-list stack on hardware.
          // A malformed or torn display list that aborted mid-run can leave
 diff -ruN a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
---- a/src/hle/rt64_present_queue.cpp	2026-10-08 23:27:53.979226572 -0500
-+++ b/src/hle/rt64_present_queue.cpp	2026-10-07 23:55:07.805732272 -0500
+--- a/src/hle/rt64_present_queue.cpp	2026-10-19 14:13:05.585067200 -0500
++++ b/src/hle/rt64_present_queue.cpp	2026-10-19 14:13:05.586067700 -0500
 @@ -2,6 +2,7 @@
  // RT64
  //
@@ -390,6 +390,15 @@ diff -ruN a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
                  presentProfiler.logAndRestart();
              }
          }
+@@ -504,7 +509,7 @@
+                 skipPresent = skipPresent || ext.swapChain->isEmpty();
+ 
+                 Present &present = presents[processCursor];
+-                ext.workloadQueue->waitForWorkloadId(present.workloadId);
++                ext.workloadQueue->waitForWorkloadId(present.workloadId, true); // JFG PORT: see jfgPresentBlocked
+ 
+                 if (!presentThreadRunning) {
+                     continue;
 diff -ruN a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
 --- a/src/hle/rt64_rdp.cpp	2026-10-18 03:12:37.491643100 -0500
 +++ b/src/hle/rt64_rdp.cpp	2026-10-18 03:12:37.491665300 -0500
@@ -2873,9 +2882,40 @@ diff -ruN a/src/contrib/miniz/miniz.c b/src/contrib/miniz/miniz.c
                  if (((mz_uint64)MZ_READ_LE32(p + MZ_ZIP_CDH_LOCAL_HEADER_OFS) + MZ_ZIP_LOCAL_DIR_HEADER_SIZE + comp_size) > pZip->m_archive_size)
                      return mz_zip_set_error(pZip, MZ_ZIP_INVALID_HEADER_OR_CORRUPTED);
 diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
---- a/src/hle/rt64_workload_queue.cpp	2026-10-19 13:25:24.269796000 -0500
-+++ b/src/hle/rt64_workload_queue.cpp	2026-10-19 13:25:24.270796600 -0500
-@@ -126,7 +126,7 @@
+--- a/src/hle/rt64_workload_queue.cpp	2026-10-19 14:13:05.484056800 -0500
++++ b/src/hle/rt64_workload_queue.cpp	2026-10-19 14:13:05.485058300 -0500
+@@ -93,11 +93,29 @@
+         std::unique_lock<std::mutex> threadLock(threadMutex);
+     }
+ 
+-    void WorkloadQueue::waitForWorkloadId(uint64_t waitId) {
++    void WorkloadQueue::waitForWorkloadId(uint64_t waitId, bool presentQueue) {
+         std::unique_lock<std::mutex> workloadLock(workloadIdMutex);
++        // JFG PORT: tell a configuration update waiting for interpolated frames that the present queue will not get to
++        // them (threadConfigurationUpdate); it froze the game at start-up when the previous present showed fewer
++        // interpolated frames than were made.
++        const bool blocks = presentQueue && (waitId > workloadId) && threadsRunning;
++        if (blocks) {
++            {
++                std::scoped_lock<std::mutex> interpolatedLock(ext.sharedResources->interpolatedMutex);
++                jfgPresentBlocked = true;
++            }
++
++            ext.sharedResources->interpolatedCondition.notify_all();
++        }
++
+         workloadIdCondition.wait(workloadLock, [&]() {
+             return (waitId <= workloadId) || !threadsRunning;
+         });
++
++        if (blocks) {
++            std::scoped_lock<std::mutex> interpolatedLock(ext.sharedResources->interpolatedMutex);
++            jfgPresentBlocked = false;
++        }
+     }
+ 
+     void WorkloadQueue::setup(const External &ext) {
+@@ -126,7 +144,7 @@
      }
  
      void WorkloadQueue::threadConfigurationUpdate(hlslpp::uint2 viFbSize, WorkloadConfiguration &workloadConfig) {
@@ -2884,7 +2924,7 @@ diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
          const bool sizeChanged = ext.sharedResources->swapChainSizeChanged;
          ext.sharedResources->swapChainSizeChanged = false;
          
-@@ -261,11 +261,17 @@
+@@ -261,11 +279,17 @@
          if (ext.sharedResources->fbConfigChanged || sizeChanged) {
              {
                  // Wait until the other queue has stopped using the interpolated color targets.
@@ -2895,14 +2935,15 @@ diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
                  std::unique_lock<std::mutex> interpolatedLock(ext.sharedResources->interpolatedMutex);
                  InterpolatedFrameCounters &curFrameCounters = ext.sharedResources->interpolatedFrames[ext.sharedResources->interpolatedFramesIndex];
                  ext.sharedResources->interpolatedCondition.wait(interpolatedLock, [&]() {
-                     return curFrameCounters.presented >= curFrameCounters.available;
+-                    return curFrameCounters.presented >= curFrameCounters.available;
++                    return (curFrameCounters.presented >= curFrameCounters.available) || jfgPresentBlocked;
                  });
 +                interpolatedLock.unlock();
 +                lock.lock();
              }
  
              std::scoped_lock<std::mutex> managerLock(ext.sharedResources->managerMutex);
-@@ -811,7 +817,7 @@
+@@ -811,7 +835,7 @@
                      }
  
                      // Do the resolve if using MSAA while target override is active and we're on the correct framebuffer pair index.
@@ -2911,7 +2952,7 @@ diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
                          overrideTarget->resize(ext.workloadGraphicsWorker, colorTarget->width, colorTarget->height);
                          overrideTarget->resolveFromTarget(ext.workloadGraphicsWorker, colorTarget, ext.shaderLibrary);
                      }
-@@ -1000,6 +1006,13 @@
+@@ -1000,6 +1024,13 @@
                              continue;
                          }
  
@@ -2947,3 +2988,25 @@ diff -ruN a/src/hle/rt64_workload.cpp b/src/hle/rt64_workload.cpp
          drawData.prevViewTransforms.clear();
          drawData.prevProjTransforms.clear();
          drawData.prevViewProjTransforms.clear();
+diff -ruN a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
+--- a/src/hle/rt64_workload_queue.h	2026-10-19 14:13:05.548056000 -0500
++++ b/src/hle/rt64_workload_queue.h	2026-10-19 14:13:05.548056000 -0500
+@@ -79,6 +79,9 @@
+         std::mutex workerMutex;
+         std::mutex threadMutex;
+         std::atomic<bool> threadsRunning = false;
++        // JFG PORT: the present queue is waiting for a workload that is not done yet (written under interpolatedMutex).
++        // It has finished every earlier present, so interpolated frames still counted as available will never be shown.
++        bool jfgPresentBlocked = false;
+         std::atomic<bool> rtEnabled = false;
+         std::atomic<bool> ubershadersOnly = false;
+         std::atomic<bool> ubershadersVisible = false;
+@@ -108,7 +111,7 @@
+         void repeatLastWorkload();
+         uint32_t previousWriteCursor() const;
+         void waitForIdle();
+-        void waitForWorkloadId(uint64_t waitId);
++        void waitForWorkloadId(uint64_t waitId, bool presentQueue = false); // JFG PORT: presentQueue, see jfgPresentBlocked
+         void setup(const External &ext);
+         void updateMultisampling();
+         void threadConfigurationUpdate(hlslpp::uint2 viFbSize, WorkloadConfiguration &workloadConfig);
