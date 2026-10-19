@@ -3120,7 +3120,7 @@ index 3da3d55..ffe6015 100644
      if (window == nullptr) {
          exit_error("Failed to create window: %s\n", SDL_GetError());
 diff --git a/src/ui/ui_config.cpp b/src/ui/ui_config.cpp
-index d117b72..6d0c102 100644
+index d117b72..85301ed 100644
 --- a/src/ui/ui_config.cpp
 +++ b/src/ui/ui_config.cpp
 @@ -12,6 +12,8 @@
@@ -3241,7 +3241,7 @@ index d117b72..6d0c102 100644
      }
  };
  
-+// JFG PORT: the controller's triggers switch tabs (LT the one to the left, RT to the right, wrapping round), skipping
++// JFG PORT: the controller's bumpers switch tabs (LB the one to the left, RB to the right, wrapping round), skipping
 +// hidden ones (Debug). The new tab gets the focus, so Down goes into its options.
 +void jfg_config_step_tab(int dir) {
 +    if (recompui::is_prompt_open()) return;
@@ -3749,7 +3749,7 @@ index df580ce..8eab3bd 100644
          model_handle = constructor.GetModelHandle();
      }
 diff --git a/src/ui/ui_state.cpp b/src/ui/ui_state.cpp
-index 503692a..1cf6b87 100644
+index 503692a..53a6971 100644
 --- a/src/ui/ui_state.cpp
 +++ b/src/ui/ui_state.cpp
 @@ -33,6 +33,9 @@
@@ -3773,33 +3773,23 @@ index 503692a..1cf6b87 100644
              };
  
              for (const FontFace& face : font_faces) {
-@@ -679,6 +686,25 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+@@ -650,6 +657,15 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                  break;
-             case SDL_EventType::SDL_CONTROLLERAXISMOTION:
-                 SDL_ControllerAxisEvent* axis_event = &cur_event.caxis;
-+                // JFG PORT: in the config menu the triggers switch tabs, once per pull (src/ui/ui_config.cpp).
-+                if (axis_event->axis == SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_TRIGGERLEFT || axis_event->axis == SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_TRIGGERRIGHT) {
-+                    static bool trigger_held[2] = {};
-+                    const int side = axis_event->axis == SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_TRIGGERRIGHT ? 1 : 0;
-+                    const float value = axis_event->value * (1 / 32768.0f);
-+                    if (!trigger_held[side] && value > 0.5f) {
-+                        trigger_held[side] = true;
-+                        if (context_capturing_input && recompui::is_context_shown(recompui::get_config_context_id()) &&
-+                            !recompui::is_context_shown(recompui::get_config_sub_menu_context_id())) {
-+                            ::jfg_config_step_tab(side ? 1 : -1);
-+                        }
-+                        non_mouse_interacted = true;
-+                        cont_interacted = true;
-+                    }
-+                    else if (trigger_held[side] && value < 0.2f) {
-+                        trigger_held[side] = false;
-+                    }
+ 
+             case SDL_EventType::SDL_CONTROLLERBUTTONDOWN: {
++                // JFG PORT: in the config menu the bumpers switch tabs, LB left and RB right (src/ui/ui_config.cpp).
++                const uint8_t button = cur_event.cbutton.button;
++                if ((button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER || button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) && context_capturing_input &&
++                    recompui::is_context_shown(recompui::get_config_context_id()) && !recompui::is_context_shown(recompui::get_config_sub_menu_context_id())) {
++                    ::jfg_config_step_tab(button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1 : -1);
++                    non_mouse_interacted = true;
++                    cont_interacted = true;
 +                    break;
 +                }
-                 if (axis_event->axis != SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_LEFTY && axis_event->axis != SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_LEFTX) {
-                     break;
-                 }
-@@ -747,6 +773,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+                 int sdl_key = cont_button_to_key(cur_event.cbutton);
+                 if (context_capturing_input && sdl_key) {
+                     ui_state->context->ProcessKeyDown(RmlSDL::ConvertKey(sdl_key), 0);
+@@ -747,6 +763,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
              }
  
              if (open_config) {
@@ -3807,7 +3797,7 @@ index 503692a..1cf6b87 100644
                  recompui::show_context(recompui::get_config_context_id(), "");
              }
          }
-@@ -794,6 +821,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+@@ -794,6 +811,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
          prev_width = width;
          prev_height = height;
  
@@ -3815,7 +3805,7 @@ index 503692a..1cf6b87 100644
          ui_state->context->Update();
          ui_state->context->Render();
          ui_state->render_interface.end(command_list, swap_chain_framebuffer);
-@@ -946,7 +974,8 @@ void recompui::drop_files(const std::list<std::filesystem::path> &file_list) {
+@@ -946,7 +964,8 @@ void recompui::drop_files(const std::list<std::filesystem::path> &file_list) {
      // If the config menu isn't open, open it in the mods tab.
      if (!recompui::is_context_shown(recompui::get_config_context_id())) {
          recompui::hide_all_contexts();
