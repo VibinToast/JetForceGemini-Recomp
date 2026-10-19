@@ -41,11 +41,20 @@ extern "C" uint32_t jfg_hit_flash(uint32_t color) {
 }
 
 // "Hide Floyd". sidekickControl(obj, ...) updates Floyd; its entry notes his object kind (behaviorId, +0x48), and
-// objPrintObject(dList, mtx, vtx, obj) draws nothing for an object of that kind while the option is on. The kind is
-// kept rather than the object, so he stays hidden while paused and a reused object address hides nothing else.
-// Not in a Floyd mission or a co-op game, where a player flies him.
+// objPrintObject(dList, mtx, vtx, obj) draws nothing for an object of that kind while the option is on. His shadow is
+// made in shadowGenerate, from the object's shadow data (+0x50): the loop skips an object without any. His sounds
+// (among them a looping one, 0x138, whose volume the code works out each tick) are all started by sidekickControl
+// itself, so amSndPlay does nothing while it runs for a hidden Floyd. The kind is kept rather than the object, so he stays hidden while
+// paused and a reused object address hides nothing else. Not in a Floyd mission or a co-op game, where a player
+// flies him.
 static int g_floyd_kind = -1;
+static bool g_floyd_muted = false;
 constexpr uint32_t ADDR_cooperativeGame = 0x800A4FC8; // u8
+
+static bool floyd_hidden(uint32_t obj) {
+    if (!g.hide_floyd || g_floyd_kind < 0 || !valid_ptr(obj) || (int16_t)rd16(obj + 0x48) != g_floyd_kind) return false;
+    return rd8(ADDR_robotMission) == 0 && rd8(ADDR_cooperativeGame) == 0;
+}
 
 extern "C" void jfg_floyd_seen(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
@@ -54,14 +63,32 @@ extern "C" void jfg_floyd_seen(uint8_t* rdram_, recomp_context* ctx) {
     const int kind = (int16_t)rd16(obj + 0x48);
     if (kind != g_floyd_kind && std::getenv("JFG_DEBUG_FLOYD")) std::fprintf(stderr, "[jfg] Floyd: behaviorId %d\n", kind);
     g_floyd_kind = kind;
+    g_floyd_muted = floyd_hidden(obj);
+}
+
+// sidekickControl's return.
+extern "C" void jfg_floyd_done(void) { g_floyd_muted = false; }
+
+// Entry of amSndPlay(id, handle): 1 = play nothing.
+extern "C" int jfg_floyd_mute(uint32_t id) {
+    if (!g_floyd_muted) return 0;
+    static const bool log = std::getenv("JFG_DEBUG_FLOYD") != nullptr;
+    if (log) std::fprintf(stderr, "[jfg] Floyd: sound 0x%X muted\n", id & 0xFFFF);
+    return 1;
 }
 
 extern "C" int jfg_hide_object(uint8_t* rdram_, recomp_context* ctx) {
-    if (!g.hide_floyd || g_floyd_kind < 0) return 0;
     g_rdram = rdram_;
-    const uint32_t obj = (uint32_t)ctx->r7;
-    if (!valid_ptr(obj) || (int16_t)rd16(obj + 0x48) != g_floyd_kind) return 0;
-    return rd8(ADDR_robotMission) == 0 && rd8(ADDR_cooperativeGame) == 0 ? 1 : 0;
+    return floyd_hidden((uint32_t)ctx->r7) ? 1 : 0;
+}
+
+// shadowGenerate, after the object ($s7) and its shadow data ($s6) are loaded: no shadow data, no shadow.
+extern "C" void jfg_hide_shadow(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    if (!floyd_hidden((uint32_t)ctx->r23)) return;
+    static bool logged = false;
+    if (!logged && ctx->r22 != 0 && std::getenv("JFG_DEBUG_FLOYD")) { std::fprintf(stderr, "[jfg] Floyd: shadow skipped\n"); logged = true; }
+    ctx->r22 = 0;
 }
 
 // "Disable LOD". objPrintModelObject draws an object with its next, simpler model (model index + 1) when the object

@@ -192,6 +192,25 @@ func = "objPrintObject"
 before_vram = 0x8000DB94
 text = "{ int jfg_hide_object(uint8_t*, recomp_context*); if (jfg_hide_object(rdram, ctx)) { recomp_exit_function(); return; } }"
 
+# His shadow: shadowGenerate's object loop, after `lw $s6, 0x50($s7)` (the object's shadow data) and before the
+# `beq $s6, $zero` that skips an object without any.
+[[patches.hook]]
+func = "shadowGenerate"
+before_vram = 0x8001DB6C
+text = "{ void jfg_hide_shadow(uint8_t*, recomp_context*); jfg_hide_shadow(rdram, ctx); }"
+
+# His sounds: amSndPlay(id, handle) plays nothing from the entry of sidekickControl (jfg_floyd_seen) to its only
+# return (`jr $ra`), so the sounds Floyd's own code starts are muted.
+[[patches.hook]]
+func = "sidekickControl"
+before_vram = 0x80031088
+text = "{ void jfg_floyd_done(void); jfg_floyd_done(); }"
+
+[[patches.hook]]
+func = "amSndPlay"
+before_vram = 0x80001248
+text = "{ int jfg_floyd_mute(uint32_t); if (jfg_floyd_mute((uint32_t)ctx->r4)) { recomp_exit_function(); return; } }"
+
 # Cutscene skip (src/jfg/jfg_cutscene_skip.cpp, jfg_frame_rate.cpp): after joyRead() in the main loop tick, and at the entry of viFrameSync.
 [[patches.hook]]
 func = "func_80044FAC_45BAC"

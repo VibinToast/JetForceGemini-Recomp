@@ -238,7 +238,7 @@
                     <p data-if="cur_config_index == 1">Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, menus, the pause screen and zoomed scopes keep the game's own.</p>
                     <p data-if="cur_config_index == 2"><b>Original</b>: 30, dropping to 20 like the N64. <b>60</b>: the game updates every video frame; game speed stays the same. <b>60 + Interpolated</b>: the renderer also adds in-between frames up to your monitor's refresh rate; some moving objects may look off.</p>
                     <p data-if="cur_config_index == 3">How strongly the screen turns red when your character is hit. 100% is the original game; 0% turns the red flash off.</p>
-                    <p data-if="cur_config_index == 4">Floyd is not drawn while he follows your character; he still flies along and shoots. Floyd missions and a second player flying him show him as usual.</p>
+                    <p data-if="cur_config_index == 4">Floyd, his shadow and his sounds are gone while he follows your character; he still flies along and shoots. Floyd missions and a second player flying him show him as usual.</p>
                     <p data-if="cur_config_index == 5">Characters and objects keep their full-detail model at any distance.</p>
                     <p data-if="cur_config_index == 6">Objects no longer fade out and disappear beyond their draw distance. Level scenery itself is not affected.</p>
                     <p data-if="cur_config_index == 7">The game's frame rate in the top right corner.</p>

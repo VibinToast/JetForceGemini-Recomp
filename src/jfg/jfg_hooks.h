@@ -46,6 +46,9 @@ void jfg_game_fog(uint8_t* rdram, uint32_t sp);                        // func_8
 uint32_t jfg_hit_flash(uint32_t color);                                // entry of frontFlashScreen
 void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // entry of sidekickControl
 int jfg_hide_object(uint8_t* rdram, recomp_context* ctx);              // entry of objPrintObject
+void jfg_hide_shadow(uint8_t* rdram, recomp_context* ctx);             // shadowGenerate, per object
+void jfg_floyd_done(void);                                             // return of sidekickControl
+int jfg_floyd_mute(uint32_t id);                                       // entry of amSndPlay
 // jfg_gameplay.cpp
 int jfg_no_blood(void);                                                // entry of bloodSpurtAdd, bloodHitSpriteAdd
 int jfg_refuel_amount(int amount);                                     // refuelControl
