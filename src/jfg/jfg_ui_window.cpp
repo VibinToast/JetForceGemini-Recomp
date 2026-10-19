@@ -78,6 +78,9 @@ void draw_options() {
             options_help("Saving in the middle of an area also keeps what was done there (Tribals rescued, cleared rooms, "
                          "continues) and the room you were in; loading the file puts it all back. Off: the game's own "
                          "behaviour, where an area starts over from its entrance after loading.");
+            changed |= ImGui::Checkbox("Permanent Tribal saves", &g.permanent_tribals);
+            options_help("A Tribal you rescued stays rescued: going back into its area, a game over or loading the file does "
+                         "not bring it back. Kept with each save of the file.");
             if (ImGui::Button("Back to the title screen (F5)")) g_reset_pending = true;
             ImGui::EndTabItem();
         }

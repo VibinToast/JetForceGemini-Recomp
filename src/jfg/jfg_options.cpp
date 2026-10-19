@@ -78,6 +78,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "auto_save_minutes") == 0) g.auto_save_minutes = std::clamp(value, 0, 30);
     else if (std::strcmp(key, "save_notification") == 0) g.save_notification = value != 0;
     else if (std::strcmp(key, "keep_area_progress") == 0) g.keep_area_progress = value != 0;
+    else if (std::strcmp(key, "permanent_tribals") == 0) g.permanent_tribals = value != 0;
     else if (std::strcmp(key, "dual_stick") == 0) g.dual_stick = value != 0;
     else if (std::strcmp(key, "invert_aim_y") == 0) g.invert_aim_y = value != 0;
     else if (std::strcmp(key, "swap_triggers") == 0) g.swap_triggers = value != 0;
@@ -147,7 +148,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "mouse_keyboard=%d\nmouse_camera_speed=%d\nmouse_aim_speed=%d\ninvert_mouse_y=%d\n", s.mouse_keyboard ? 1 : 0, s.mouse_camera_speed, s.mouse_aim_speed, s.invert_mouse_y ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "refuel_speed=%d\nsniper_fixed_zoom=%d\nsniper_zoom=%d\ndamage_taken=%d\ndive_speed=%d\n", s.refuel_speed, s.sniper_fixed_zoom ? 1 : 0, s.sniper_zoom, s.damage_taken, s.dive_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "fly_speed=%d\nfly_freeze=%d\nfly_hide_hud=%d\n", s.fly_speed, s.fly_freeze ? 1 : 0, s.fly_hide_hud ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "unlimited_continues=%d\n", s.unlimited_continues ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "unlimited_continues=%d\npermanent_tribals=%d\n", s.unlimited_continues ? 1 : 0, s.permanent_tribals ? 1 : 0); out += buf;
     return out;
 }
 

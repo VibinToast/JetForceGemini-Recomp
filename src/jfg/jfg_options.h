@@ -59,6 +59,7 @@ struct State {
     int  auto_save_minutes = 5;    // auto save: minutes of play between saves, 0 = only on arriving in a level
     bool save_notification = true; // auto save: "Game saved" in the bottom right corner
     bool keep_area_progress = false; // saves keep an unfinished region's progress and room (jfg_area_progress.cpp)
+    bool permanent_tribals = false; // rescued Tribals stay rescued when their region is entered again (jfg_tribal_saves.cpp)
     bool dual_stick = false;       // modern twin-stick layout, see jfg_dual_stick()
     bool invert_aim_y = false;     // dual stick: right stick up aims down (the game's original behaviour)
     int  move_speed = 100;         // how fast the character moves over the ground, percent (any layout)
