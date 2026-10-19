@@ -54,7 +54,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     # The workflow's own release commit is never released again.
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore: release v') }}
+    if: "!startsWith(github.event.head_commit.message, 'chore: release v')"
     steps:
       - uses: actions/checkout@v4
         with:
