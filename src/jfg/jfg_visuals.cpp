@@ -1,5 +1,5 @@
 // Jet Force Gemini port: visual options, for the game hooks and the renderer - widescreen, field of view, the levels'
-// own fog (and the hidden depth fog), LOD and draw distance, texture and picture filtering.
+// own fog (and the hidden depth fog), LOD and draw distance, texture and picture filtering, the red flash on a hit.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -26,6 +26,18 @@ extern "C" int jfg_widescreen_active(void) {
     rt64_jfg_paused.store((g_rdram != nullptr && rd8(ADDR_pauseMode) != 0) ? 1 : 0, std::memory_order_relaxed);
     if (!(g.widescreen || env) || g_rdram == nullptr) return 0;
     return rd32(ADDR_mainGameMode) == 0 ? 1 : 0;
+}
+
+// "Hit flash opacity": entry of frontFlashScreen. The characters' control code (overlays 15-17) calls it with red
+// (0xFF0000FF) for a few ticks after a hit; fxScreenEffect then draws the picture again multiplied by that colour
+// (combiner TEXEL0 * PRIMITIVE), which leaves only its red. Raising green and blue towards white weakens the tint
+// evenly. Returns the colour to use; 0 skips the flash.
+extern "C" uint32_t jfg_hit_flash(uint32_t color) {
+    constexpr uint32_t HIT_RED = 0xFF0000FFu;
+    if (color != HIT_RED || g.hit_flash >= 100) return color;
+    if (g.hit_flash <= 0) return 0;
+    const uint32_t gb = (uint32_t)std::lround(255.0 * (100 - g.hit_flash) / 100.0);
+    return 0xFF0000FFu | (gb << 16) | (gb << 8);
 }
 
 // "Disable LOD". objPrintModelObject draws an object with its next, simpler model (model index + 1) when the object

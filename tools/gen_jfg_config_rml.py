@@ -68,6 +68,8 @@ VISUALS = [
      "Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, menus, the pause screen and zoomed scopes keep the game's own."),
     ("choice", "frame_rate", "Frame Rate", [(0, "Original"), (1, "60"), (2, "60 + Interpolated")],
      "<b>Original</b>: 30, dropping to 20 like the N64. <b>60</b>: the game updates every video frame; game speed stays the same. <b>60 + Interpolated</b>: the renderer also adds in-between frames up to your monitor's refresh rate; some moving objects may look off."),
+    ("range", "hit_flash", "Hit Flash Opacity", (0, 100, "%"),
+     "How strongly the screen turns red when your character is hit. 100% is the original game; 0% turns the red flash off."),
     ("bool", "no_lod", "Disable LOD", None, "Characters and objects keep their full-detail model at any distance."),
     ("bool", "far_objects", "Draw Distant Objects", None, "Objects no longer fade out and disappear beyond their draw distance. Level scenery itself is not affected."),
     ("bool", "show_fps", "Show FPS", None, "The game's frame rate in the top right corner."),

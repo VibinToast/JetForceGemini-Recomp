@@ -94,6 +94,8 @@ void draw_options() {
             changed |= options_slider("Field of view %", &g.fov, 75, 140);
             options_help("Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, "
                          "menus, the pause screen and zoomed scopes keep the game's own.");
+            changed |= options_slider("Hit flash opacity %", &g.hit_flash, 0, 100);
+            options_help("How strongly the screen turns red when the character is hit. 0: no red flash.");
             changed |= ImGui::Checkbox("Disable LOD (full-detail models at any distance)", &g.no_lod);
             options_help("Characters and objects normally switch to a simpler model once they are a little way off.");
             changed |= ImGui::Checkbox("Draw distant objects (no object draw distance)", &g.far_objects);
