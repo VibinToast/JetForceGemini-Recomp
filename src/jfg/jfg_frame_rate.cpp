@@ -10,6 +10,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "librecomp/overlays.hpp"
+
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -129,6 +131,58 @@ extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
     }
     if (g.frame_rate < 1 || g.skipping) return frames;
     return g_squad_runs ? (int)g_squad_frames : 0;
+}
+
+// The squad cadence without hooks inside the three functions, so mods can hook them (a mod hook regenerates a function
+// without this port's [[patches.hook]] text, and enemies ran twice as fast at 60 fps again). All their callers are in
+// the main segment and reach them through the runtime's function table (main -> overlay calls are JFG_DYN_CALL
+// lookups), so when overlay 3 loads, these wrappers take their place in that table: the same decision the entry hooks
+// made, then a call to the real function (the original, or a mod's regenerated one: mods patch it in place).
+namespace {
+constexpr uint32_t OVERLAY_3_ROM = 0x01ED54E0;                 // jfg.us.syms.toml, .overlay_3
+constexpr uint32_t OFS_SquaddieControl = 0x10600, OFS_SquadronControl = 0x14D4C, OFS_squadsModuleTick = 0x16990;
+recomp_func_t* g_real_SquaddieControl = nullptr;
+recomp_func_t* g_real_SquadronControl = nullptr;
+recomp_func_t* g_real_squadsModuleTick = nullptr;
+
+extern "C" void jfg_wrap_SquaddieControl(uint8_t* rdram, recomp_context* ctx) {
+    const int r = jfg_squad_frames(rdram, (uint32_t)ctx->r4, (int32_t)ctx->r5);
+    if (r == 0) return;
+    ctx->r5 = (gpr)r;
+    g_real_SquaddieControl(rdram, ctx);
+}
+
+extern "C" void jfg_wrap_SquadronControl(uint8_t* rdram, recomp_context* ctx) {
+    const int r = jfg_squad_frames(rdram, 0, (int32_t)ctx->r5);
+    if (r == 0) return;
+    ctx->r5 = (gpr)r;
+    g_real_SquadronControl(rdram, ctx);
+}
+
+extern "C" void jfg_wrap_squadsModuleTick(uint8_t* rdram, recomp_context* ctx) {
+    const int r = jfg_squad_frames(rdram, 0, (int32_t)ctx->r4);
+    if (r == 0) { ctx->r2 = 0; return; }
+    ctx->r4 = (gpr)r;
+    g_real_squadsModuleTick(rdram, ctx);
+}
+} // namespace
+
+// Called from jfg_overlay_loaded after the runtime has entered the overlay's functions at its load address.
+extern "C" void jfg_squad_wrappers_install(uint32_t rom, uint32_t ram) {
+    if (rom != OVERLAY_3_ROM) return;
+    const auto& by_rom = recomp::overlays::get_vrom_to_section_map();
+    auto it = by_rom.find(rom);
+    if (it == by_rom.end()) return;
+    g_real_SquaddieControl = recomp::overlays::get_func_by_section_index_function_offset(it->second, OFS_SquaddieControl);
+    g_real_SquadronControl = recomp::overlays::get_func_by_section_index_function_offset(it->second, OFS_SquadronControl);
+    g_real_squadsModuleTick = recomp::overlays::get_func_by_section_index_function_offset(it->second, OFS_squadsModuleTick);
+    if (!g_real_SquaddieControl || !g_real_SquadronControl || !g_real_squadsModuleTick) {
+        std::fprintf(stderr, "[jfg] squad cadence: overlay 3's functions not found; enemies run at the tick rate\n");
+        return;
+    }
+    recomp::overlays::add_loaded_function((int32_t)(ram + OFS_SquaddieControl), jfg_wrap_SquaddieControl);
+    recomp::overlays::add_loaded_function((int32_t)(ram + OFS_SquadronControl), jfg_wrap_SquadronControl);
+    recomp::overlays::add_loaded_function((int32_t)(ram + OFS_squadsModuleTick), jfg_wrap_squadsModuleTick);
 }
 
 // Steps outside the squad system that the game takes once per call whatever the frame count (found by the decomp,

@@ -27,7 +27,7 @@ uint32_t jfg_frame_sync(uint8_t* rdram, uint32_t frames);              // main l
 int jfg_sched_extra_frame(void);                                       // __scHandleRetrace
 void jfg_sched_retrace(void);                                          // entry of __scHandleRetrace
 int jfg_sched_task_ready(void);                                        // entry of __scTaskReady
-int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames);     // SquaddieControl, SquadronControl, squadsModuleTick, FlowerBoltControl
+int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames);     // FlowerBoltControl; the squad wrappers below
 int jfg_cadence_skip(void);                                            // frontPlayerTarget, the target lock countdown
 void jfg_squad_draw_begin(uint8_t* rdram);                             // func_80045F00, right before trackDraw
 void jfg_dangle(uint8_t* rdram, recomp_context* ctx);                  // replaces dAngle (angle easing)
@@ -96,6 +96,9 @@ void jfg_on_init(uint8_t* rdram, recomp_context* ctx);                 // jfg_gl
 void jfg_register_mod_exports(void);                                   // jfg_mods.cpp: functions mods import ("*")
 // jfg_glue.cpp (jfg_on_init)
 void jfg_mods_alias_overlays(void);                                    // jfg_mods.cpp: overlay funcs at private addresses
+// jfg_glue.cpp (jfg_overlay_loaded)
+void jfg_squad_wrappers_install(uint32_t rom, uint32_t ram);           // jfg_frame_rate.cpp: SquaddieControl,
+                                                                       // SquadronControl, squadsModuleTick cadence
 
 // --- functions mods import ("*"; registered by jfg_register_mod_exports) -------------------------------------------
 void jfg_recomp_printf(uint8_t* rdram, recomp_context* ctx);           // jfg_mods.cpp: recomp_printf

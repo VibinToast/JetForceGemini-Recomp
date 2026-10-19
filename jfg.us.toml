@@ -371,20 +371,11 @@ text = "{ int jfg_sched_task_ready(void); int r = jfg_sched_task_ready(); if (r 
 # jfg_squad_frames). Much of it works per tick whatever the frame count, so at 60 fps squad members moved, animated and
 # attacked about twice as fast. In 60 fps mode SquaddieControl(obj, frames), SquadronControl(obj, frames) and
 # squadsModuleTick(frames) run on every second tick only, with the frames of both ticks.
-[[patches.hook]]
-func = "SquaddieControl"
-before_vram = 0x82030600
-text = "{ int jfg_squad_frames(uint8_t*, uint32_t, int); int r = jfg_squad_frames(rdram, (uint32_t)ctx->r4, (int32_t)ctx->r5); if (r == 0) { recomp_exit_function(); return; } ctx->r5 = (gpr)r; }"
-
-[[patches.hook]]
-func = "SquadronControl"
-before_vram = 0x82034D4C
-text = "{ int jfg_squad_frames(uint8_t*, uint32_t, int); int r = jfg_squad_frames(rdram, 0, (int32_t)ctx->r5); if (r == 0) { recomp_exit_function(); return; } ctx->r5 = (gpr)r; }"
-
-[[patches.hook]]
-func = "squadsModuleTick"
-before_vram = 0x82036990
-text = "{ int jfg_squad_frames(uint8_t*, uint32_t, int); int r = jfg_squad_frames(rdram, 0, (int32_t)ctx->r4); if (r == 0) { ctx->r2 = 0; recomp_exit_function(); return; } ctx->r4 = (gpr)r; }"
+# Not hooks here: mods may hook these three, and a mod hook regenerates the function without this file's hooks. All
+# their callers are in the main segment (func_8000FBF0, squadsInitialiseAfterObjects, func_80045F00) and reach them
+# through the runtime's function table (main -> overlay calls are dynamic sites, JFG_DYN_CALL), so when overlay 3 loads
+# the port puts wrappers in that table that apply the cadence and then call the function, original or regenerated
+# (jfg_squad_wrappers_install, called from jfg_overlay_loaded).
 
 # 60 fps: dAngle(angle, target, t), the game's easing of an angle towards a target, is replaced by the same arithmetic
 # with one change at 60 fps: a step that truncates to 0 short of the target becomes 1 unit. Otherwise eased angles stop
