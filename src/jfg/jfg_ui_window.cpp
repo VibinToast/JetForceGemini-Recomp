@@ -103,8 +103,8 @@ void draw_options() {
             changed |= options_slider("Hit flash opacity %", &g.hit_flash, 0, 100);
             options_help("How strongly the screen turns red when the character is hit. 0: no red flash.");
             changed |= ImGui::Checkbox("Hide Floyd", &g.hide_floyd);
-            options_help("Floyd is not drawn while he follows the character; he still flies along and shoots. Floyd missions "
-                         "and a second player flying him show him as usual.");
+            options_help("Floyd, his shadow and his sounds are gone while he follows the character; he still flies along "
+                         "and shoots. Floyd missions and a second player flying him show him as usual.");
             changed |= ImGui::Checkbox("Disable LOD (full-detail models at any distance)", &g.no_lod);
             options_help("Characters and objects normally switch to a simpler model once they are a little way off.");
             changed |= ImGui::Checkbox("Draw distant objects (no object draw distance)", &g.far_objects);

@@ -83,7 +83,7 @@ VISUALS = [
     ("range", "hit_flash", "Hit Flash Opacity", (0, 100, "%"),
      "How strongly the screen turns red when your character is hit. 100% is the original game; 0% turns the red flash off."),
     ("bool", "hide_floyd", "Hide Floyd", None,
-     "Floyd is not drawn while he follows your character; he still flies along and shoots. Floyd missions and a second player flying him show him as usual."),
+     "Floyd, his shadow and his sounds are gone while he follows your character; he still flies along and shoots. Floyd missions and a second player flying him show him as usual."),
     ("bool", "no_lod", "Disable LOD", None, "Characters and objects keep their full-detail model at any distance."),
     ("bool", "far_objects", "Draw Distant Objects", None, "Objects no longer fade out and disappear beyond their draw distance. Level scenery itself is not affected."),
     ("bool", "show_fps", "Show FPS", None, "The game's frame rate in the top right corner."),
