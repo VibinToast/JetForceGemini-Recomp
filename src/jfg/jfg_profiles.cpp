@@ -27,7 +27,10 @@ constexpr const char* PROFILE_DIR = "profiles";
 constexpr const char* PROFILE_CHOICE_FILE = "jfg_profile.txt";
 
 const BuiltinProfile BUILTIN_PROFILES[] = {
-    { "Default", "The original game, as it played on the N64.", "start_skips_cutscenes=0\n" },
+    // Every profile starts from State's defaults (jfg_options.h): Auto Save on, Keep Area Progress and Permanent Tribal
+    // Saves off, so the other profiles and the player's own (also ones saved before these options existed) auto save.
+    // Default is the original game: no auto save.
+    { "Default", "The original game, as it played on the N64.", "start_skips_cutscenes=0\nauto_save=0\n" },
     { "Modern", "Modern controls and visuals at 60 fps, with the original weapons and gameplay.",
       "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nframe_rate=1\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
       "no_lod=1\nfar_objects=1\nssao=1\nssao_strength=30\nssao_radius=139\nbloom=1\nbloom_intensity=40\nbloom_threshold=19\n"

@@ -60,7 +60,7 @@ struct State {
     int  output_filter = 0;        // picture scaling to the window: 0 anti-aliased pixel scaling, 1 linear, 2 nearest
     bool start_skips_cutscenes = true;
     bool pause_in_menu = true;     // the game stands still while the Select / Esc settings menu is open (jfg_freeze_world)
-    bool auto_save = true;         // save to the file in play on arriving in a level and every few minutes (jfg_auto_save.cpp)
+    bool auto_save = true;         // save to the file in play on arriving in a level and every few minutes (jfg_auto_save.cpp); on in every profile but Default
     int  auto_save_minutes = 5;    // auto save: minutes of play between saves, 0 = only on arriving in a level
     bool save_notification = true; // auto save: "Game saved" in the bottom right corner
     bool keep_area_progress = false; // saves keep an unfinished region's progress and room (jfg_area_progress.cpp)
