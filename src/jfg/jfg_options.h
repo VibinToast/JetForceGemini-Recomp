@@ -84,6 +84,7 @@ struct State {
     bool sniper_fixed_zoom = false; // sniper rifle: the zoom stays at sniper_zoom, the zoom buttons do nothing
     int  sniper_zoom = 250;        // sniper rifle: fixed zoom, percent of the unzoomed view (100..500, the game's range)
     int  damage_taken = 100;       // damage the player takes, percent (apply_damage_taken)
+    bool unlimited_continues = false; // continues never run out (gameplay_tick)
     int  dive_speed = 100;         // Vela underwater: swimming speed, percent (jfg_move_scale)
     int  fly_speed = 100;          // fly camera: movement speed, percent
     bool fly_freeze = true;        // fly camera: the game stands still while flying

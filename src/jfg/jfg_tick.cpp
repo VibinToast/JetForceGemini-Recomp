@@ -51,6 +51,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     apply_weapons();
     debug_profile_tick();
     auto_save_tick(ctx);
+    gameplay_tick();
 
     // Cheats keep applying while the menu is closed.
     apply_flag(g.invulnerable, g.applied_invulnerable, ADDR_invulnerabilityCheat);

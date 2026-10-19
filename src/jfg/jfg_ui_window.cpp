@@ -240,6 +240,8 @@ void draw_options() {
 
             options_section("Player");
             changed |= options_slider("Damage taken %", &g.damage_taken, 0, 400);
+            changed |= ImGui::Checkbox("Unlimited continues", &g.unlimited_continues);
+            options_help("Dying never uses up the last continue, so an area is never restarted from its entrance.");
             changed |= options_slider("Jetpack refuel speed %", &g.refuel_speed, 25, 1000);
             changed |= options_slider("Vela's dive speed %", &g.dive_speed, 50, 400);
 

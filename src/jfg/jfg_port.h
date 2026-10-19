@@ -102,6 +102,7 @@ void jfg_camera_restore();                   // start of the tick: the game gets
 
 // --- jfg_gameplay.cpp --------------------------------------------------------------------------------------------
 void apply_damage_taken(uint32_t obj); // "Damage taken %"
+void gameplay_tick();                  // game thread, start of the tick: "Unlimited continues"
 
 // --- jfg_auto_save.cpp -------------------------------------------------------------------------------------------
 extern std::chrono::steady_clock::time_point g_save_toast; // when the last auto save was made (on-screen note)
