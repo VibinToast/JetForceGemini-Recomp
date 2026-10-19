@@ -36,6 +36,8 @@ namespace {
 constexpr uint32_t ADDR_load_save_flags = 0x800A32A8; // u32: save / load requests, carried out by joyRead
 constexpr uint32_t ADDR_racingInGame = 0x800A4FB4;    // u8
 constexpr uint32_t SAVE_REQUEST = 0x40000000;         // mainSaveGame's request bit
+constexpr uint32_t DELETE_REQUEST = 0x20000000;       // mainDeleteGame (slot in bits 6-8)
+constexpr uint32_t ERASE_REQUESTS = 0x10000000 | 0x01000000; // mainResetSaveGames, mainEraseFlashRom
 constexpr int LEVEL_FRONT_END = 0; // the logo screens and the file-select menus (in front-end game mode)
 constexpr uint32_t GAME_SLOT_OFFSET = 0x03;           // s8 Game.unk3: the save file the game is played from, -1 = none
 constexpr int SAVE_SLOTS = 6;
@@ -66,7 +68,7 @@ int save_slot(recomp_context* ctx) {
 } // namespace
 
 // A port warp into a level from the title or the front end: the Game struct may not be any file's.
-void auto_save_forget_file() { g_file_in_play = false; g_port_warped = true; }
+void auto_save_forget_file() { g_file_in_play = false; g_port_warped = true; area_progress_disarm(); }
 
 // Game thread, at the start of the main loop tick (jfg_debug_frame), before this tick's joyRead.
 void auto_save_tick(recomp_context* ctx) {
@@ -76,14 +78,21 @@ void auto_save_tick(recomp_context* ctx) {
     static bool safe = false;
     const auto now = clock::now();
 
+    area_progress_tick();
     const uint32_t requests = rd32(ADDR_load_save_flags); // made last tick, carried out by this tick's joyRead
     if (requests & SAVE_REQUEST) { // Z on the pause screen, a record, a new file
         last_save = now;
         saved_level = (int16_t)rd16(ADDR_currentLevel);
+        area_progress_on_save((int)((requests >> 3) & 7));
     }
+    if (requests & DELETE_REQUEST) area_progress_forget((int)((requests >> 6) & 7));
+    if (requests & ERASE_REQUESTS) area_progress_forget(-1);
     const int current = (int16_t)rd16(ADDR_currentLevel);
     if (current == LEVEL_FRONT_END && rd32(ADDR_mainGameMode) != 0) { g_file_in_play = false; g_port_warped = false; }
-    if ((current == LEVEL_CHARACTER_SELECT && !g_port_warped) || (requests & SAVE_REQUEST)) g_file_in_play = true;
+    if ((current == LEVEL_CHARACTER_SELECT && !g_port_warped) || (requests & SAVE_REQUEST)) {
+        if (!g_file_in_play) area_progress_arm(); // a file was just chosen: its first region entry may be restored
+        g_file_in_play = true;
+    }
     const int slot = (g.auto_save && g_file_in_play) ? save_slot(ctx) : 0;
     {
         // JFG_DEBUG_AUTOSAVE=1: once a second, why an auto save would or would not be made now (and every request seen).
@@ -107,6 +116,7 @@ void auto_save_tick(recomp_context* ctx) {
     if (!arrived && !timed) return;
 
     call_game(mainSaveGame, ctx, { (uint32_t)slot }); // carried out by joyRead later in this tick
+    area_progress_on_save(slot);
     std::fprintf(stderr, "[jfg] auto save: file %d, level %d (%s)\n", slot + 1, level, arrived ? "arrived" : "timer");
     saved_level = level;
     last_save = now;
