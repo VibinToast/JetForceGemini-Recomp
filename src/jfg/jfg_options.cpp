@@ -76,6 +76,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "start_skips_cutscenes") == 0) g.start_skips_cutscenes = value != 0;
     else if (std::strcmp(key, "auto_save") == 0) g.auto_save = value != 0;
     else if (std::strcmp(key, "auto_save_minutes") == 0) g.auto_save_minutes = std::clamp(value, 0, 30);
+    else if (std::strcmp(key, "save_notification") == 0) g.save_notification = value != 0;
     else if (std::strcmp(key, "dual_stick") == 0) g.dual_stick = value != 0;
     else if (std::strcmp(key, "invert_aim_y") == 0) g.invert_aim_y = value != 0;
     else if (std::strcmp(key, "swap_triggers") == 0) g.swap_triggers = value != 0;
@@ -124,7 +125,7 @@ std::string options_text(const State& s) {
     std::string out;
     char buf[512];
     std::snprintf(buf, sizeof(buf), "no_blood=%d\nstart_skips_cutscenes=%d\n", s.no_blood ? 1 : 0, s.start_skips_cutscenes ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "auto_save=%d\nauto_save_minutes=%d\n", s.auto_save ? 1 : 0, s.auto_save_minutes); out += buf;
+    std::snprintf(buf, sizeof(buf), "auto_save=%d\nauto_save_minutes=%d\nsave_notification=%d\n", s.auto_save ? 1 : 0, s.auto_save_minutes, s.save_notification ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "show_fps=%d\nwidescreen=%d\nframe_rate=%d\n", s.show_fps ? 1 : 0, s.widescreen ? 1 : 0, s.frame_rate); out += buf;
     std::snprintf(buf, sizeof(buf), "fov=%d\n", s.fov); out += buf;
     std::snprintf(buf, sizeof(buf), "vignette=%d\nvignette_strength=%d\nvignette_size=%d\n", s.vignette ? 1 : 0, s.vignette_strength, s.vignette_size); out += buf;
