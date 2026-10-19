@@ -1886,7 +1886,7 @@ index 2d0e062..523604c 100644
      }
  }
 diff --git a/src/main.cpp b/src/main.cpp
-index f93f6d3..4886998 100644
+index f93f6d3..93a74d2 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -3,6 +3,9 @@
@@ -1907,12 +1907,15 @@ index f93f6d3..4886998 100644
  
  #include "runtime/audio.hpp"
  #include "runtime/crash.hpp"
-@@ -48,24 +52,42 @@ static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
+@@ -48,24 +52,47 @@ static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
      recomp_entrypoint(rdram, ctx);
  }
  
 +// JFG port: boot-time globals the runtime's IPL3 emulation leaves unset (src/jfg/jfg_glue.cpp).
 +extern "C" void jfg_on_init(uint8_t* rdram, recomp_context* ctx);
++// JFG port: mod support (src/jfg/jfg_mods.cpp): functions mods import, and the pre-linked ROM hooks regenerate from.
++extern "C" void jfg_register_mod_exports(void);
++std::vector<uint8_t> jfg_prelink_rom(std::span<const uint8_t> rom);
 +
 +// JFG PORT: Jet Force Gemini's modified osCreateThread (libultra/src/os/createthread.c, JFGDIFFS) starts every
 +// thread with SR_FR set, i.e. 64-bit FPU registers where odd-numbered registers are independent, and clears it
@@ -1946,8 +1949,12 @@ index f93f6d3..4886998 100644
 +        .mod_game_id = "jet-force-gemini",
 +        .save_type = recomp::SaveType::Flashram,
          .is_enabled = true,
-         .decompression_routine = nullptr,
-         .has_compressed_code = false,
+-        .decompression_routine = nullptr,
+-        .has_compressed_code = false,
++        // JFG PORT: not compressed, but mods' hooks regenerate functions from this ROM, and the port recompiles
++        // overlays pre-linked at private addresses (tools/prepare_overlays.py): jfg_prelink_rom gives the same copy.
++        .decompression_routine = jfg_prelink_rom,
++        .has_compressed_code = true,
          .entrypoint_address = get_entrypoint_address(),
          .entrypoint = custom_recomp_entrypoint,
          .thread_create_callback = custom_thread_create_callback,
@@ -1955,7 +1962,7 @@ index f93f6d3..4886998 100644
      },
  };
  
-@@ -73,6 +95,7 @@ struct CliArgs {
+@@ -73,6 +100,7 @@ struct CliArgs {
      bool skip_launcher = false;
      bool force_launcher = false;
      bool show_console = false;
@@ -1963,7 +1970,7 @@ index f93f6d3..4886998 100644
      int window_width = 1600;
      int window_height = 960;
  };
-@@ -91,6 +114,16 @@ int main(int argc, char** argv) {
+@@ -91,6 +119,16 @@ int main(int argc, char** argv) {
          char *arg = argv[i];
          if (strcmp(arg, "--skip-launcher") == 0) {
              cli_args.skip_launcher = true;
@@ -1980,7 +1987,7 @@ index f93f6d3..4886998 100644
          } else if (strcmp(arg, "--launcher") == 0) {
              cli_args.force_launcher = true;
          } else if (strcmp(argv[i], "--show-console") == 0) {
-@@ -117,6 +150,15 @@ int main(int argc, char** argv) {
+@@ -117,6 +155,15 @@ int main(int argc, char** argv) {
          }
      }
  
@@ -1996,7 +2003,7 @@ index f93f6d3..4886998 100644
      // Load project version
      recomp::Version project_version{};
      if (!recomp::Version::from_string(version_string, project_version)) {
-@@ -196,6 +238,20 @@ int main(int argc, char** argv) {
+@@ -196,8 +243,23 @@ int main(int argc, char** argv) {
      // The runtime performs this check again during startup; doing it here lets
      // an already configured Mac app launch straight into DKR.
      recomp::check_all_stored_roms();
@@ -2016,8 +2023,11 @@ index f93f6d3..4886998 100644
 +    }
  
      recompui::register_ui_exports();
++    jfg_register_mod_exports(); // JFG PORT: recomp_printf and other functions mods import (src/jfg/jfg_mods.cpp)
      dino::runtime::register_overlays();
-@@ -264,7 +320,14 @@ int main(int argc, char** argv) {
+ 
+     dino::config::load_config();
+@@ -264,7 +326,14 @@ int main(int argc, char** argv) {
          .gfx_callbacks = gfx_callbacks,
          .events_callbacks = events_callbacks,
          .error_handling_callbacks = error_handling_callbacks,

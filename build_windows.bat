@@ -214,6 +214,8 @@ if errorlevel 1 ( popd & echo [jfg] ERROR: RSPRecomp failed & exit /b 1 )
 if errorlevel 1 ( popd & echo [jfg] ERROR: merge_gen_anim_data.py failed & exit /b 1 )
 %PY% tools\fix_dynamic_relocs.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json baserom.us.recomp.z64 jfg.us.syms.toml
 if errorlevel 1 ( popd & echo [jfg] ERROR: fix_dynamic_relocs.py failed & exit /b 1 )
+%PY% tools\refuse_mod_hooks.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json jfg.us.syms.toml
+if errorlevel 1 ( popd & echo [jfg] ERROR: refuse_mod_hooks.py failed & exit /b 1 )
 popd
 goto build
 

@@ -82,6 +82,7 @@ rm -rf RecompiledFuncs && mkdir RecompiledFuncs
 ./build-tools/RSPRecomp rsp-aspMain.jfg.toml       # audio microcode -> rsp/aspMain.cpp
 python3 tools/merge_gen_anim_data.py RecompiledFuncs
 python3 tools/fix_dynamic_relocs.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json baserom.us.recomp.z64 jfg.us.syms.toml
+python3 tools/refuse_mod_hooks.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json jfg.us.syms.toml
 
 # ---- 4. build --------------------------------------------------------------
 say "building (10-40 minutes the first time)"
