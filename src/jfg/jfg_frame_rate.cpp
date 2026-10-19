@@ -131,6 +131,13 @@ extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
     return g_squad_runs ? (int)g_squad_frames : 0;
 }
 
+// Steps outside the squad system that the game takes once per call whatever the frame count (found by the decomp,
+// docs/PORT_FINDINGS.md there): 1 = leave this tick's step out. They are taken on the ticks the squad system runs, so
+// they keep the cadence they have at 30 fps.
+extern "C" int jfg_cadence_skip(void) {
+    return (g.frame_rate >= 1 && !g.skipping && !g_squad_runs) ? 1 : 0;
+}
+
 // --- 60 fps: angles that ease towards a target ---------------------------------------------------------------------
 // Replaces dAngle(angle, target, t) (charControl.c): angle + (shortest signed difference * t), the product truncated.
 // Callers ease an angle with t = 1 - damping^frames (Powerf), so with one frame per tick t is about half what it is at
@@ -181,9 +188,25 @@ struct SquadTrack {
     uint32_t posed_tick = 0;    // g_game_ticks of the last in-between tick on which the game itself re-posed the model
 };
 std::unordered_map<uint32_t, SquadTrack> g_squad_tracks; // by object
-struct SquadDrawn { uint32_t obj; SquadPose real, drawn; };
+// A pose is not read-only: through SquaddieGetTiltList (called by modGenAnimMatrices) it steps the member's head and
+// torso aim angles (control data +0x8C..+0x9A, angle and speed pairs, by iDeltaTime, the frames of the last squad
+// update), counts poses in +0x06, sets flags in +0x07 and clears +0x10 on animation 0x3F (decomp, docs/PORT_FINDINGS.md;
+// a dragonfly's wing tilt steps +0xA8/+0xAA the same way). The pose asked for below comes on top of the game's own one
+// on the tick in between, so those stepped twice as often. They are kept from before that pose and put back after the
+// draw. What the pose computes from the drawn skeleton (head and joint positions +0x68..+0x8B, facing +0x9C) is left as
+// drawn: it is recomputed by the next pose anyway, before the next squad update reads it.
+struct SquadDataField { uint32_t offset, size; };
+constexpr SquadDataField SQUAD_STEPPED[] = { { 0x06, 2 }, { 0x10, 2 }, { 0x8C, 0x10 }, { 0xA8, 4 } };
+constexpr uint32_t SQUAD_STEPPED_BYTES = 2 + 2 + 0x10 + 4;
+struct SquadDrawn {
+    uint32_t obj;
+    SquadPose real, drawn;
+    uint32_t data = 0;                      // control data (object + 0x68) saved before an extra pose, 0 = none
+    uint8_t saved[SQUAD_STEPPED_BYTES] = {};
+};
 std::vector<SquadDrawn> g_squad_drawn;                   // objects that hold drawn values until jfg_squad_draw_end
 uint32_t g_squad_smoothed = 0;                           // members drawn in between, for JFG_DEBUG_STATS
+uint32_t g_squad_data_kept = 0;                          // extra poses that stepped the control data (put back), for JFG_DEBUG_STATS
 
 SquadPose read_pose(uint32_t obj) {
     SquadPose p;
@@ -204,6 +227,16 @@ void squad_draw_restore() {
         if (rdf(o + 0x14) == d.drawn.z) wrf(o + 0x14, d.real.z);
         if (rdf(o + 0x28) == d.drawn.phase) wrf(o + 0x28, d.real.phase);
         for (uint32_t i = 0; i < 3; i++) if (rd16(o + 2 * i) == d.drawn.rot[i]) wr16(o + 2 * i, d.real.rot[i]);
+        if (d.data != 0) {
+            bool changed = false;
+            uint32_t n = 0;
+            for (const SquadDataField& f : SQUAD_STEPPED) {
+                for (uint32_t i = 0; i < f.size; i++, n++) {
+                    if (rd8(d.data + f.offset + i) != d.saved[n]) { wr8(d.data + f.offset + i, d.saved[n]); changed = true; }
+                }
+            }
+            if (changed) g_squad_data_kept++;
+        }
     }
     g_squad_drawn.clear();
 }
@@ -212,8 +245,9 @@ uint16_t half_angle(uint16_t from, uint16_t to) {
     return (uint16_t)(from + (int16_t)(uint16_t)(to - from) / 2);
 }
 
-// The member's model instance (obj->unk6C[obj->unk3A]), the one objPrintModelObject poses, or 0. Its +0x0A asks the
-// draw to pose it again; +0x0B is the index of its double-buffered matrices / vertex colours (0 or 1).
+// The member's model instance (obj->unk6C[obj->unk3A]), the one objPrintModelObject poses, or 0. Its +0x0A is the
+// number of ticks to animate since the last pose: the draw poses the model when it is non-zero and clears it; +0x0B is
+// which of its double-buffered joint matrices (+0x10) and vertices (+0x18, with the vertex colours) is current (0 or 1).
 // Only for animated 3D models: the draw picks the object's kind from its definition (+0x40, then +0x1E: 0 model,
 // 1 sprite, 4 custom; func_8000DDAC), and only for a model is +0x6C a list of model instances. For a sprite it is
 // sprite data, and writing +0x0A there corrupted it (the level flickered and the game froze).
@@ -320,9 +354,22 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
         // Each pose also flips the model's double buffers, so only models the game itself posed on the tick before
         // (animating, set up) and that are fully opaque (+0x39 = 0xFF; a dying member fading out is not) are asked:
         // posing the others made fading bodies blink and could pose a model that is not set up yet.
+        // The value written is also the number of ticks objAnimTextures advances the model's texture animations by
+        // (objResetAnimModels writes the tick's frames there for every model); 1 is this tick's.
         const uint32_t inst = model_instance(obj);
-        if (inst != 0 && t.posed_tick == g_game_ticks - 1 && rd8(obj + 0x39) == 0xFF) wr8(inst + 0x0A, 1);
-        g_squad_drawn.push_back({ obj, now, read_pose(obj) });
+        SquadDrawn d{ obj, now, read_pose(obj) };
+        if (inst != 0 && t.posed_tick == g_game_ticks - 1 && rd8(obj + 0x39) == 0xFF) {
+            wr8(inst + 0x0A, 1);
+            const uint32_t data = rd32(obj + 0x68);
+            if (valid_ptr(data) && valid_ptr(data + 0xAC)) {
+                d.data = data;
+                uint32_t n = 0;
+                for (const SquadDataField& f : SQUAD_STEPPED) {
+                    for (uint32_t i = 0; i < f.size; i++) d.saved[n++] = rd8(data + f.offset + i);
+                }
+            }
+        }
+        g_squad_drawn.push_back(d);
         g_squad_smoothed++;
     }
     // Members not seen for a while (freed, out of play) are forgotten.
@@ -466,8 +513,9 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
                     (int)rd8(ADDR_tuneSeqNo), valid_ptr(rd32(ADDR_tuneSeqPlayer)) ? (int)rd32(rd32(ADDR_tuneSeqPlayer) + 0x2C) : -1);
                 if (g_cam.player != 0) std::fprintf(stderr, "[jfg] player at %.0f %.0f %.0f, speed factor %.2f\n", rdf(g_cam.player + 0x0C), rdf(g_cam.player + 0x10), rdf(g_cam.player + 0x14), g_cam.move_factor);
                 std::fprintf(stderr, "[jfg] robotMission %d, dual stick active %d, game mode %d, vi mode %d, next level %d\n", (int)rd8(ADDR_robotMission), jfg_dual_stick_active(), (int)rd32(ADDR_mainGameMode), (int)rd8(ADDR_sResolutionIndex), (int)(int16_t)rd16(ADDR_nextLevel));
-                std::fprintf(stderr, "[jfg] squad: %d members this tick, %u drawn in between since the last line\n", (int)g_squad_members.size(), g_squad_smoothed);
+                std::fprintf(stderr, "[jfg] squad: %d members this tick, %u drawn in between since the last line, %u extra poses put back\n", (int)g_squad_members.size(), g_squad_smoothed, g_squad_data_kept);
                 g_squad_smoothed = 0;
+                g_squad_data_kept = 0;
                 { load_level_names(); const int lv = (int16_t)rd16(ADDR_currentLevel); if (lv >= 0 && lv < (int)g_level_names.size()) std::fprintf(stderr, "[jfg] level name '%s'\n", g_level_names[lv].c_str()); }
                 n = 0; sum = 0; t0 = std::chrono::steady_clock::now();
             }
