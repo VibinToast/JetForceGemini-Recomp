@@ -190,10 +190,9 @@ extern "C" void jfg_region_reset_begin(uint8_t* rdram_, recomp_context* ctx) {
     if (valid_ptr(game)) read_game_bytes(game, g_snapshot);
 }
 
-// mainResetRegion, before it returns: the region is cleared; put the kept progress back if it is this file's.
-extern "C" void jfg_region_reset_end(uint8_t* rdram_, recomp_context* ctx) {
-    (void)ctx;
-    g_rdram = rdram_;
+namespace {
+// The region is cleared; put the kept progress back if it is this file's.
+void restore_area_progress() {
     const bool armed = g_armed;
     g_armed = false; // only the first region entry after choosing a file (a game over clears the region on purpose)
     if (!armed || !g.keep_area_progress) return;
@@ -217,6 +216,15 @@ extern "C" void jfg_region_reset_end(uint8_t* rdram_, recomp_context* ctx) {
     g_post_slot = slot;
     std::fprintf(stderr, "[jfg] area progress: restored for file %d (region %d, %d rescued, %d killed, %u shots)\n", slot + 1, region,
         (int)rd8(game + 4), (int)rd8(game + 5), shots_fired(game));
+}
+} // namespace
+
+// mainResetRegion, before it returns: the region is cleared. Kept area progress first, then the permanent rescues.
+extern "C" void jfg_region_reset_end(uint8_t* rdram_, recomp_context* ctx) {
+    (void)ctx;
+    g_rdram = rdram_;
+    restore_area_progress();
+    tribal_saves_region_reset();
 }
 
 } // namespace jfg

@@ -108,6 +108,7 @@ void gameplay_tick();                  // game thread, start of the tick: "Unlim
 extern std::chrono::steady_clock::time_point g_save_toast; // when the last auto save was made (on-screen note)
 void auto_save_tick(recomp_context* ctx);                  // game thread, start of the tick (before joyRead)
 void auto_save_forget_file();                              // a warp from outside gameplay: no file is in play
+bool auto_save_file_in_play();                             // a file was chosen or saved (not a port warp from the title)
 
 // --- jfg_area_progress.cpp ---------------------------------------------------------------------------------------
 // "Keep Area Progress": what was done in an unfinished region is kept with each save and restored on loading.
@@ -116,6 +117,14 @@ void area_progress_disarm();          // a port warp from outside gameplay
 void area_progress_forget(int slot);  // the game deletes a file (-1: all files)
 void area_progress_on_save(int slot); // a save to slot is carried out this tick (before joyRead)
 void area_progress_tick();            // start of the tick
+
+// --- jfg_tribal_saves.cpp ----------------------------------------------------------------------------------------
+// "Permanent Tribal Saves": rescued Tribals stay rescued after leaving their area, a game over or loading.
+void tribal_saves_file_chosen();      // a file was chosen: what was saved for it counts
+void tribal_saves_on_save(int slot);  // a save to slot is carried out this tick
+void tribal_saves_forget(int slot);   // the game deletes a file (-1: all files)
+void tribal_saves_tick();             // start of the tick: notices rescues
+void tribal_saves_region_reset();     // end of mainResetRegion: puts the region's rescues back
 
 // --- jfg_visuals.cpp ---------------------------------------------------------------------------------------------
 void apply_no_lod(recomp_context* ctx); // "Disable LOD", "Draw distant objects"
