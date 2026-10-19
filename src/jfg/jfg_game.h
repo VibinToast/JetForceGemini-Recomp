@@ -33,6 +33,7 @@ void mmFlushFreeStack(uint8_t* rdram, recomp_context* ctx);
 void mathBreakPoint(uint8_t* rdram, recomp_context* ctx);
 void mainGetGameFlag(uint8_t* rdram, recomp_context* ctx);
 void mainSetGameFlag(uint8_t* rdram, recomp_context* ctx);
+void mainSaveGame(uint8_t* rdram, recomp_context* ctx);
 void frontGetMode(uint8_t* rdram, recomp_context* ctx);
 void objGetPlayerlist(uint8_t* rdram, recomp_context* ctx);
 void objGetObjList(uint8_t* rdram, recomp_context* ctx);
