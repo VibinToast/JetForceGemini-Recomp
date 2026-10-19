@@ -81,10 +81,18 @@ bool fly_camera_tick(recomp_context* ctx) {
     return true;
 }
 
+// The Select / Esc settings menu is open (set by the UI thread every frame, src/ui/ui_state.cpp).
+std::atomic<bool> g_settings_menu_open{ false };
+extern "C" void jfg_settings_menu_open(int open) { g_settings_menu_open.store(open != 0, std::memory_order_relaxed); }
+
 // Hook in func_80045F00 (0x80046058, where the game decides between running the world and its pause tick): 1 makes
-// this tick a pause tick (objects drawn but not moved) without the pause menu. Used by the fly camera's "freeze".
+// this tick a pause tick (objects drawn but not moved) without the pause menu. Used by the fly camera's "freeze" and
+// by "Pause in the Settings Menu" (gameplay only: not in a cutscene, whose music would run on without it, or a skip).
 extern "C" int jfg_freeze_world(void) {
-    return g_fly.active && g.fly_freeze ? 1 : 0;
+    if (g_fly.active && g.fly_freeze) return 1;
+    if (g.pause_in_menu && g_settings_menu_open.load(std::memory_order_relaxed) && g_rdram != nullptr && !g.skipping &&
+        rd32(ADDR_mainGameMode) == 0 && !in_cutscene()) return 1;
+    return 0;
 }
 
 // Start of the tick: give the game its own camera back.

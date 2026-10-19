@@ -75,6 +75,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "texture_filter") == 0) g.texture_filter = std::clamp(value, 0, 1);
     else if (std::strcmp(key, "output_filter") == 0) g.output_filter = std::clamp(value, 0, 2);
     else if (std::strcmp(key, "start_skips_cutscenes") == 0) g.start_skips_cutscenes = value != 0;
+    else if (std::strcmp(key, "pause_in_menu") == 0) g.pause_in_menu = value != 0;
     else if (std::strcmp(key, "auto_save") == 0) g.auto_save = value != 0;
     else if (std::strcmp(key, "auto_save_minutes") == 0) g.auto_save_minutes = std::clamp(value, 0, 30);
     else if (std::strcmp(key, "save_notification") == 0) g.save_notification = value != 0;
@@ -153,6 +154,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "fly_speed=%d\nfly_freeze=%d\nfly_hide_hud=%d\n", s.fly_speed, s.fly_freeze ? 1 : 0, s.fly_hide_hud ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "unlimited_continues=%d\npermanent_tribals=%d\n", s.unlimited_continues ? 1 : 0, s.permanent_tribals ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "sprint=%d\nsprint_speed=%d\n", s.sprint ? 1 : 0, s.sprint_speed); out += buf;
+    std::snprintf(buf, sizeof(buf), "pause_in_menu=%d\n", s.pause_in_menu ? 1 : 0); out += buf;
     return out;
 }
 

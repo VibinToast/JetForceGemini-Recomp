@@ -11,6 +11,8 @@ GAMEPLAY = [
     ("bool", "no_blood", "No Blood", None, "No blood, as in the Japanese version."),
     ("bool", "start_skips_cutscenes", "START Skips Cutscenes", None,
      "START skips cutscenes, the logo screens at start-up and the story intro after creating a file. A skipped cutscene still runs to its end at full speed, so everything it does (flags, items, the next level) still happens."),
+    ("bool", "pause_in_menu", "Pause in Settings Menu", None,
+     "The game stands still while the settings menu (Select / Esc) is open during play, as on the pause screen. Cutscenes keep playing."),
     ("bool", "auto_save", "Auto Save", None,
      "Saves to the file you are playing a few seconds after arriving in a level, and every few minutes of play, the same save as Z on the pause screen. Not during cutscenes, races, Floyd missions or while paused."),
     ("range", "auto_save_minutes", "Auto Save Interval", (0, 30, " min"), "Minutes of play between auto saves. 0: only on arriving in a level."),
