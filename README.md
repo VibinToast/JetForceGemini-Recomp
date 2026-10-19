@@ -58,6 +58,8 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 
 ## Build and run
 
+(Making a release instead: see [docs/RELEASING.md](docs/RELEASING.md).)
+
 **Windows** (10/11, Direct3D 12 GPU): install Visual Studio 2022 (Desktop development with C++, plus C++ Clang
 tools), Git and Python 3. Run `build_windows.bat` (the first build takes 10-40 minutes, about 15 GB), then
 `run_windows.bat`.

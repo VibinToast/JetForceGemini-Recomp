@@ -6,6 +6,7 @@ generated/
 RecompiledFuncs/
 # Build output and logs
 build/
+build-container/
 bin/
 dist/
 bin*/

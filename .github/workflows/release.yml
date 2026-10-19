@@ -1,73 +1,187 @@
-# Manual releases: you decide when, and you type the version. Nothing happens on a normal push.
+# Releases start by themselves when something is merged into main. The branch it came from picks the version:
 #
-# To release: GitHub -> Actions -> "Release" -> "Run workflow", pick the branch and type the version (for example 1.0.0).
+#   dev                        -> minor   1.1.8 -> 1.2.0
+#   hotfix/<name>              -> patch   1.1.8 -> 1.1.9
+#   rt64-update, milestone/*   -> major   1.1.8 -> 2.0.0
 #
-# - The version must be three numbers, X.Y.Z, and must not have been released before. The tag is vX.Y.Z.
-# - The release notes are the commit messages (first line of each, newest first) between the last release tag and the
-#   branch being released: nothing to write by hand, so write commit messages that read well to players. Commits that
-#   only change the README, .gitignore, .recomp.json, docs and other files players do not see are left out.
-# - It adds them to the top of CHANGELOG.md as the new version (the game shows that file under Changelogs), writes the
-#   version into version.txt (which goes into the game's launcher), commits both, tags vX.Y.Z and publishes the
-#   GitHub release.
+# A label on the pull request wins over the branch: release:major, release:minor, release:patch, or release:none (no
+# release). A push straight to main (no pull request) is released only when its commit message says [major], [minor] or
+# [patch], or when it is a local "Merge branch 'dev'" commit. [no release] in the message skips the release.
+# By hand: GitHub -> Actions -> "Release" -> "Run workflow" on main, with a bump or an exact version.
 #
-# This does not build the game. The game's code is translated from the owner's own ROM, so it cannot be built on
-# GitHub. The portable zip is made on the owner's PC with tools/package_release.bat, which uploads it to this release
-# as JFG-X.Y.Z-windows-x64-portable.zip. GitHub attaches the source zip and tar.gz itself.
+# What it does:
+# - The release notes are the commit messages (first line of each, newest first) since the last release: nothing to write
+#   by hand, so write commit messages that read well to players. Commits that only change the README, .gitignore,
+#   .recomp.json, docs and other files players do not see are left out.
+# - Adds them to the top of CHANGELOG.md (the game shows that file under Changelogs), writes the version into version.txt
+#   (the launcher shows it), commits both to main and makes a DRAFT release vX.Y.Z on that commit. Players do not see a
+#   draft, and the launcher's update check skips it.
+# - Merges main back into dev and rt64-update, so the release commit and any hotfix are there too (BACK_MERGE below).
+#
+# It does not build the game: the game's code is translated from the owner's own ROM, which never goes to GitHub. The
+# builds are made on the owner's PC: tools\package_release.bat (Windows) and tools/package_release.sh (Linux) find the
+# draft by themselves, build its exact commit, upload the files and publish the release once every file is there.
+# See docs/RELEASING.md.
 name: Release
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
+      bump:
+        description: Which number to raise (not used when an exact version is typed below)
+        type: choice
+        options: [minor, patch, major]
+        default: minor
       version:
-        description: Version to release, three numbers (for example 1.0.0)
+        description: Exact version instead, three numbers (for example 2.0.0). Leave empty to use the bump.
         type: string
-        required: true
-        default: 1.0.0
+        required: false
 
 permissions:
   contents: write
+  pull-requests: read
 
 concurrency:
   group: release
   cancel-in-progress: false
 
+env:
+  BACK_MERGE: dev rt64-update   # branches that get main merged back into them after a release (missing ones are skipped)
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    # The workflow's own release commit is never released again.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore: release v') }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Check the version
-        id: version
+      - name: Pick the bump
+        id: bump
         env:
-          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref_name }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+          INPUT_BUMP: ${{ inputs.bump }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          new="${VERSION#v}"
+          if [ "$REF" != main ]; then
+            echo "Releases are made from main only, not from '$REF'." >&2
+            exit 1
+          fi
+          bump="" exact="" why=""
+          if [ "$EVENT" = workflow_dispatch ]; then
+            exact="${INPUT_VERSION#v}"
+            bump="$INPUT_BUMP"
+            why="started by hand"
+          else
+            # The pull request that made this commit: its labels and the branch it came from.
+            pr=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '[.[] | select(.merged_at != null and .base.ref == "main")][0] // {}')
+            head=$(jq -r '.head.ref // ""' <<< "$pr")
+            labels=" $(jq -r '[.labels[]?.name] | join(" ")' <<< "$pr") "
+            number=$(jq -r '.number // ""' <<< "$pr")
+            subject=$(head -n 1 <<< "$MESSAGE")
+            if [ -z "$head" ]; then
+              # A merge made locally and pushed: "Merge branch 'dev'" or "Merge branch 'dev' into main".
+              head=$(sed -n "s/^Merge branch '\([^']*\)'.*/\1/p" <<< "$subject")
+            fi
+            case "$labels" in
+              *" release:none "*)  bump=none;  why="label release:none" ;;
+              *" release:major "*) bump=major; why="label release:major" ;;
+              *" release:minor "*) bump=minor; why="label release:minor" ;;
+              *" release:patch "*) bump=patch; why="label release:patch" ;;
+            esac
+            if [ -z "$bump" ]; then
+              case "$MESSAGE" in
+                *"[no release]"*) bump=none;  why="[no release] in the commit message" ;;
+                *"[major]"*)      bump=major; why="[major] in the commit message" ;;
+                *"[minor]"*)      bump=minor; why="[minor] in the commit message" ;;
+                *"[patch]"*)      bump=patch; why="[patch] in the commit message" ;;
+              esac
+            fi
+            if [ -z "$bump" ]; then
+              case "$head" in
+                dev)                          bump=minor; why="merged from dev" ;;
+                hotfix/*|hotfix-*)            bump=patch; why="merged from $head" ;;
+                rt64-update|milestone/*)      bump=major; why="merged from $head" ;;
+              esac
+            fi
+            [ -n "$number" ] && why="$why (pull request #$number)"
+            if [ -z "$bump" ]; then
+              bump=none
+              why="no pull request from dev, hotfix/* or rt64-update, no release:* label and no [major]/[minor]/[patch] in the commit message"
+            fi
+          fi
+          echo "Bump: ${exact:-$bump} ($why)"
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+          echo "exact=$exact" >> "$GITHUB_OUTPUT"
+          if [ "$bump" = none ] && [ -z "$exact" ]; then
+            echo "### No release" >> "$GITHUB_STEP_SUMMARY"
+            echo "$why." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Work out the version
+        id: version
+        if: ${{ steps.bump.outputs.bump != 'none' || steps.bump.outputs.exact != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMP: ${{ steps.bump.outputs.bump }}
+          EXACT: ${{ steps.bump.outputs.exact }}
+        run: |
+          # One release at a time: a draft still waiting for its builds has to be published (or deleted) first.
+          waiting=$(gh release list --limit 50 --json tagName,isDraft --jq '[.[] | select(.isDraft) | .tagName] | join(" ")')
+          if [ -n "$waiting" ]; then
+            echo "$waiting is still a draft waiting for its builds. Run tools\\package_release.bat and tools/package_release.sh" >&2
+            echo "to build and publish it (or delete the draft), then start this workflow by hand: Actions -> Release -> Run workflow." >&2
+            exit 1
+          fi
+          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
+          if [ -n "$EXACT" ]; then
+            new="$EXACT"
+          else
+            IFS=. read -r major minor patch <<< "${last#v}"
+            major=${major:-0} minor=${minor:-0} patch=${patch:-0}
+            case "$BUMP" in
+              major) new="$((major + 1)).0.0" ;;
+              minor) new="$major.$((minor + 1)).0" ;;
+              patch) new="$major.$minor.$((patch + 1))" ;;
+            esac
+          fi
           if ! [[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "The version must be three numbers like 1.0.0, not '$VERSION'." >&2
+            echo "The version must be three numbers like 1.0.0, not '$new'." >&2
             exit 1
           fi
           if git rev-parse -q --verify "refs/tags/v$new" > /dev/null; then
             echo "Tag v$new already exists." >&2
             exit 1
           fi
-          last=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)
-          if [ -z "$last" ]; then
-            range=HEAD
-          else
+          if [ -n "$last" ]; then
+            if [ "$(printf '%s\n%s\n' "${last#v}" "$new" | sort -V | tail -n 1)" != "$new" ]; then
+              echo "v$new is not newer than the last release, $last." >&2
+              exit 1
+            fi
             if [ "$(git rev-list --count "$last..HEAD")" = 0 ]; then
               echo "Nothing new since $last, so there is nothing to release." >&2
               exit 1
             fi
             range="$last..HEAD"
+          else
+            range=HEAD
           fi
+          echo "Releasing v$new (last release: ${last:-none})"
           echo "version=$new" >> "$GITHUB_OUTPUT"
           echo "last=$last" >> "$GITHUB_OUTPUT"
           echo "range=$range" >> "$GITHUB_OUTPUT"
 
       - name: Write the release notes and update the changelog
+        if: ${{ steps.version.outputs.version != '' }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
           LAST: ${{ steps.version.outputs.last }}
@@ -79,8 +193,9 @@ jobs:
           python3 - <<'PY'
           import os, subprocess
           IGNORED_FILES = {"README.md", "LICENSE", "CHANGELOG.md", "version.txt", ".gitignore", ".gitattributes",
-                           ".recomp.json", "tools/package_release.ps1", "tools/package_release.bat", "tools/set_version.py"}
-          IGNORED_FOLDERS = (".github/", "docs/", "images/")
+                           ".recomp.json", "tools/package_release.ps1", "tools/package_release.bat",
+                           "tools/package_release.sh", "tools/set_version.py"}
+          IGNORED_FOLDERS = (".github/", "docs/", "images/", "tools/linux-build/")
           def ignored(path):
               return path in IGNORED_FILES or path.startswith(IGNORED_FOLDERS)
           log = subprocess.run(["git", "log", "--no-merges", "--format=%H%x09%s", os.environ["RANGE"]],
@@ -123,6 +238,7 @@ jobs:
           echo "${VERSION}" > version.txt
 
       - name: Commit and push
+        if: ${{ steps.version.outputs.version != '' }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -130,12 +246,39 @@ jobs:
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md version.txt
           git commit -m "chore: release v$VERSION [skip ci]"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin HEAD:main
 
-      - name: Publish the GitHub release
+      - name: Make the draft release
+        if: ${{ steps.version.outputs.version != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
-        # The release creates the tag v$VERSION on the release commit through GitHub's API. (Pushing the tag with git was
-        # rejected for the workflow's token: "remote rejected ... (failed)".)
-        run: gh release create "v$VERSION" --title "v$VERSION" --notes-file notes.md --target "$(git rev-parse HEAD)"
+        # A draft gets its tag v$VERSION (on the release commit) when it is published.
+        run: |
+          gh release create "v$VERSION" --draft --title "v$VERSION" --notes-file notes.md --target "$(git rev-parse HEAD)"
+          {
+            echo "### Draft v$VERSION is waiting for its builds"
+            echo
+            echo "On Windows run \`tools\\package_release.bat\`, on Linux \`tools/package_release.sh\`. Each finds this draft,"
+            echo "builds commit \`$(git rev-parse --short HEAD)\`, uploads its files, and publishes the release once every file is there."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Merge main back into dev
+        if: ${{ steps.version.outputs.version != '' }}
+        run: |
+          main=$(git rev-parse HEAD)
+          for branch in $BACK_MERGE; do
+            if ! git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+              echo "No branch $branch, skipped."
+              continue
+            fi
+            git fetch origin "$branch"
+            git checkout -q -B "$branch" "origin/$branch"
+            if git merge --no-edit -m "Merge main (release) into $branch [skip ci]" "$main"; then
+              git push origin "$branch"
+              echo "Merged main into $branch."
+            else
+              git merge --abort
+              echo "::warning::main could not be merged into $branch (conflicts). Merge it by hand: git switch $branch && git merge origin/main"
+            fi
+          done

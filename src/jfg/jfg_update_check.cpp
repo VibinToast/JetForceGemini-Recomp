@@ -213,9 +213,9 @@ bool is_bot_commit(const nlohmann::json& c) {
 bool changelog_ignored_file(const std::string& path) {
     static const char* const files[] = {
         "README.md", "LICENSE", "CHANGELOG.md", "version.txt", ".gitignore", ".gitattributes", ".recomp.json",
-        "tools/package_release.ps1", "tools/package_release.bat", "tools/set_version.py",
+        "tools/package_release.ps1", "tools/package_release.bat", "tools/package_release.sh", "tools/set_version.py",
     };
-    static const char* const folders[] = { ".github/", "docs/", "images/" };
+    static const char* const folders[] = { ".github/", "docs/", "images/", "tools/linux-build/" };
     for (const char* f : files) if (path == f) return true;
     for (const char* f : folders) if (path.rfind(f, 0) == 0) return true;
     return false;
