@@ -19,6 +19,10 @@ ROM="${1:-$HERE/baserom.us.z64}"
 WORK="${JFG_PORT_DIR:-$HERE/build}"
 BASE_URL=https://github.com/cyscott/dkr-recomp.git
 BASE_COMMIT=eb8151c05837359c9eca0ad006077a14f5bf72b8
+# RT64 is upstream rt64/rt64 at this commit, not the base's pin (an older DinosaurPlanetRecomp fork commit). The port
+# carries the base's RT64 and plume patches rebased onto it (patches/rt64-f3ddkr.patch, patches/plume-sdl2-compat.patch).
+RT64_URL=https://github.com/rt64/rt64.git
+RT64_COMMIT=de343a53c703f2fc7fdd64ac6ff9e5a3f41e66f3
 ROM_SHA1=493ced9008dbe932d6e91179b68e8630cf23a023
 
 say() { echo "[jfg] $*"; }
@@ -39,7 +43,17 @@ if [ ! -d "$WORK/.git" ]; then
 fi
 cd "$WORK"
 say "fetching libraries (slow the first time)"
-git submodule update --init --recursive --depth 1
+# Once RT64 is there, the base's submodule update leaves it alone: it would move it back to the base's pin.
+if [ -e lib/rt64/.git ]; then git -c submodule.lib/rt64.update=none submodule update --init --recursive --depth 1
+else git submodule update --init --recursive --depth 1; fi
+if [ "$(git -C lib/rt64 rev-parse HEAD)" != "$RT64_COMMIT" ]; then
+  say "moving RT64 to $RT64_COMMIT"
+  git -C lib/rt64 cat-file -e "$RT64_COMMIT" 2>/dev/null || git -C lib/rt64 fetch --depth 1 "$RT64_URL" "$RT64_COMMIT"
+  git -C lib/rt64 checkout -q -f --detach "$RT64_COMMIT"
+fi
+# RT64's own libraries, as that commit pins them (plume is patched below, so it is put back first).
+if [ -e lib/rt64/src/contrib/plume/.git ]; then git -C lib/rt64/src/contrib/plume checkout -q -- .; fi
+git -C lib/rt64 submodule update --init --recursive --depth 1
 
 # ---- 2. patches ------------------------------------------------------------
 # Put the files the JFG patches touch back to the downloaded state, so a re-run always applies cleanly.
@@ -52,8 +66,9 @@ apply_once() { # <repository> <patch>
 }
 apply_once lib/N64Recomp               "$WORK/submodule-patches/n64recomp-dkr.patch"
 apply_once lib/N64ModernRuntime        "$WORK/submodule-patches/n64modernruntime-dkr.patch"
-apply_once lib/rt64                    "$WORK/submodule-patches/rt64-f3ddkr.patch"
-apply_once lib/rt64/src/contrib/plume  "$WORK/submodule-patches/plume-sdl2-compat.patch"
+# The base's RT64 and plume patches rebased onto RT64_COMMIT: the port's copies, not the base's.
+apply_once lib/rt64                    "$HERE/patches/rt64-f3ddkr.patch"
+apply_once lib/rt64/src/contrib/plume  "$HERE/patches/plume-sdl2-compat.patch"
 apply_once .                           "$HERE/patches/jfg-base.patch"
 apply_once lib/rt64                    "$HERE/patches/rt64-jfg.patch"
 python3 "$HERE/tools/set_version.py" "$HERE/version.txt" .   # version.txt (updated by the release workflow) -> the launcher
