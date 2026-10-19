@@ -93,5 +93,17 @@ int jfg_output_filtering(void);                                        // jfg_vi
 int jfg_skip_render_active(void);                                      // jfg_cutscene_skip.cpp
 // src/main.cpp
 void jfg_on_init(uint8_t* rdram, recomp_context* ctx);                 // jfg_glue.cpp
+void jfg_register_mod_exports(void);                                   // jfg_mods.cpp: functions mods import ("*")
+// jfg_glue.cpp (jfg_on_init)
+void jfg_mods_alias_overlays(void);                                    // jfg_mods.cpp: overlay funcs at private addresses
+
+// --- functions mods import ("*"; registered by jfg_register_mod_exports) -------------------------------------------
+void jfg_recomp_printf(uint8_t* rdram, recomp_context* ctx);           // jfg_mods.cpp: recomp_printf
 
 } // extern "C"
+
+#include <span>
+#include <vector>
+// src/main.cpp, GameEntry::decompression_routine: the ROM the runtime regenerates hooked functions from, with every
+// overlay pre-linked as tools/prepare_overlays.py does for the build (jfg_mods.cpp).
+std::vector<uint8_t> jfg_prelink_rom(std::span<const uint8_t> rom);

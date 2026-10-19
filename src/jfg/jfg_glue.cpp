@@ -191,7 +191,12 @@ extern "C" uint32_t jfg_cart_read32(uint32_t address) {
 // the game checks it for 6105 in two places: controlPlayer (0x80033440; on mismatch it zeroes the current weapon's
 // ammo with probability 1/2500 per tick - the "ammo randomly drops to 000" bug) and the crash handler
 // func_80066EB0_67AB0 (infinite loop on mismatch). Provide the value a real cartridge boot leaves there.
+extern "C" void jfg_mods_alias_overlays(void); // jfg_mods.cpp
+
 extern "C" void jfg_on_init(uint8_t* rdram, recomp_context* ctx) {
     (void)ctx;
     MEM_W(0, (gpr)(int32_t)0x80000310) = 6105;
+    // Mod support: overlay functions are also callable at their private link addresses (see jfg_mods.cpp). The
+    // runtime calls this after building its function table and before loading mods.
+    jfg_mods_alias_overlays();
 }
