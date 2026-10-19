@@ -47,7 +47,8 @@ namespace ui = recompui;
 constexpr ui::Color BAR_BG{ 32, 32, 32, 245 }, PANEL_BG{ 43, 43, 43, 250 }, BORDER{ 75, 75, 75, 255 };
 constexpr ui::Color TEXT{ 240, 240, 240, 255 }, TEXT_DIM{ 160, 160, 160, 255 }, ACCENT{ 96, 205, 255, 255 };
 constexpr ui::Color BUTTON_BG{ 55, 55, 55, 255 }, BUTTON_HOVER{ 75, 75, 75, 255 }, ON_BG{ 40, 120, 70, 255 }, ON_HOVER{ 50, 145, 85, 255 };
-constexpr float FONT = 17.0f, FONT_SMALL = 15.0f;
+constexpr ui::Color DRAWER_BG{ 36, 36, 36, 255 }, LIST_BG{ 30, 30, 30, 255 }, NO_BORDER{ 0, 0, 0, 0 };
+constexpr float FONT = 15.0f, FONT_SMALL = 13.0f;
 
 // --- game thread <-> UI thread ---------------------------------------------------------------------------------------
 std::mutex g_cmd_mutex;
@@ -102,6 +103,7 @@ struct Tools {
     Window warp, items, weapons;
     // Level warp
     ui::Element* level_list = nullptr;
+    std::vector<std::pair<int, ui::Button*>> level_buttons; // level number, its row in the list
     ui::Label* warp_choice = nullptr;
     ui::Button* character_buttons[3] = {};
     std::string level_filter;
@@ -141,7 +143,7 @@ ui::Element* column(ui::Element* parent, float gap = 4.0f) {
 }
 
 void style_button(ui::Button* b, ui::Color bg, ui::Color hover) {
-    b->set_padding_top(5.0f); b->set_padding_bottom(5.0f); b->set_padding_left(12.0f); b->set_padding_right(12.0f);
+    b->set_padding_top(4.0f); b->set_padding_bottom(4.0f); b->set_padding_left(10.0f); b->set_padding_right(10.0f);
     b->set_border_radius(3.0f);
     b->set_border_width(1.0f);
     b->set_border_color(BORDER);
@@ -175,7 +177,7 @@ ui::Button* toggle(ui::Element* parent, const std::string& label, bool on, std::
     ui::Element* r = row(parent);
     ui::Button* b = t.context.create_element<ui::Button>(r, "", ui::ButtonStyle::Secondary);
     style_button(b, BUTTON_BG, BUTTON_HOVER);
-    b->set_min_width(58.0f);
+    b->set_min_width(50.0f);
     b->set_text_align(ui::TextAlign::Center);
     show_toggle_state(b, on);
     text(r, label);
@@ -202,7 +204,7 @@ void add_field(ui::Element* parent, const ToolField& f, int group) {
         ui::Element* r = row(parent);
         bound.toggle = t.context.create_element<ui::Button>(r, "", ui::ButtonStyle::Secondary);
         style_button(bound.toggle, BUTTON_BG, BUTTON_HOVER);
-        bound.toggle->set_min_width(58.0f);
+        bound.toggle->set_min_width(50.0f);
         bound.toggle->set_text_align(ui::TextAlign::Center);
         show_toggle_state(bound.toggle, false);
         bound.label = text(r, f.label);
@@ -232,7 +234,7 @@ void add_field(ui::Element* parent, const ToolField& f, int group) {
         if (f.big_step != f.step) button(r, "-" + std::to_string(f.big_step), step(-f.big_step));
         button(r, "-", step(-f.step));
         bound.value = text(r, "?");
-        bound.value->set_min_width(52.0f);
+        bound.value->set_min_width(44.0f);
         bound.value->set_text_align(ui::TextAlign::Center);
         button(r, "+", step(f.step));
         if (f.big_step != f.step) button(r, "+" + std::to_string(f.big_step), step(f.big_step));
@@ -248,6 +250,38 @@ void add_field(ui::Element* parent, const ToolField& f, int group) {
     }
     }
     g_bound.push_back(std::move(bound));
+}
+
+// A drawer: a heading to click that shows or hides the rows under it, closed at first (like F9's collapsing headers).
+// Returns the element its rows go into.
+ui::Element* add_drawer(ui::Element* parent, const std::string& title) {
+    ui::Button* header = t.context.create_element<ui::Button>(parent, "+   " + title, ui::ButtonStyle::Secondary);
+    style_button(header, DRAWER_BG, BUTTON_HOVER);
+    header->set_text_align(ui::TextAlign::Left);
+    header->set_font_weight(700);
+    header->set_color(ACCENT);
+    ui::Element* content = column(parent, 5.0f);
+    content->set_display(ui::Display::None);
+    content->set_padding_left(10.0f);
+    content->set_padding_top(2.0f);
+    content->set_padding_bottom(6.0f);
+    auto open = std::make_shared<bool>(false);
+    header->add_pressed_callback([header, content, open, title]() {
+        *open = !*open;
+        content->set_display(*open ? ui::Display::Flex : ui::Display::None);
+        header->set_text((*open ? "-   " : "+   ") + title);
+    });
+    return content;
+}
+
+// A window's ToolFields, each Heading starting a drawer that holds the rows after it (rows before the first heading
+// stay above the drawers).
+void add_fields(ui::Element* body, const std::vector<ToolField>& fields, int group) {
+    ui::Element* into = body;
+    for (const ToolField& f : fields) {
+        if (f.kind == ToolField::Heading) into = add_drawer(body, f.label);
+        else add_field(into, f, group);
+    }
 }
 
 void close_menus() {
@@ -312,8 +346,9 @@ void open_window(Window& w, bool open) {
     g_groups = groups;
 }
 
-// A floating window: a title bar to drag it by, a close button, a scrolling body.
-void make_window(Window& w, const std::string& title, float left, float top, float width, int group) {
+// A floating window: a title bar to drag it by, a close button, a scrolling body (scrolls false: a body that fills the
+// window and does not scroll, for a window that scrolls only a part of itself).
+void make_window(Window& w, const std::string& title, float left, float top, float width, int group, bool scrolls = true) {
     w.group = group;
     w.frame = t.context.create_element<ui::Element>(t.context.get_root_element());
     w.frame->set_position(ui::Position::Absolute);
@@ -331,8 +366,8 @@ void make_window(Window& w, const std::string& title, float left, float top, flo
     title_bar->set_flex_direction(ui::FlexDirection::Row);
     title_bar->set_align_items(ui::AlignItems::Center);
     title_bar->set_justify_content(ui::JustifyContent::SpaceBetween);
-    title_bar->set_padding(6.0f);
-    title_bar->set_padding_left(12.0f);
+    title_bar->set_padding(5.0f);
+    title_bar->set_padding_left(10.0f);
     title_bar->set_background_color(BAR_BG);
     text(title_bar, title, FONT, TEXT)->set_font_weight(700);
     Window* wp = &w;
@@ -347,9 +382,17 @@ void make_window(Window& w, const std::string& title, float left, float top, flo
             wp->frame->set_top(std::max(0.0f, wp->start_top + (y - wp->drag_y)), ui::Unit::Px);
         }
     });
-    ui::ScrollContainer* scroll = t.context.create_element<ui::ScrollContainer>(w.frame, ui::ScrollDirection::Vertical);
-    w.body = column(scroll, 6.0f);
-    w.body->set_padding(12.0f);
+    if (scrolls) {
+        ui::ScrollContainer* scroll = t.context.create_element<ui::ScrollContainer>(w.frame, ui::ScrollDirection::Vertical);
+        w.body = column(scroll, 5.0f);
+    }
+    else {
+        w.body = column(w.frame, 5.0f);
+        w.body->set_flex(1.0f, 1.0f, 0.0f);
+        w.body->set_min_height(0.0f);
+        w.body->set_overflow(ui::Overflow::Hidden);
+    }
+    w.body->set_padding(10.0f);
 }
 
 void rebuild_profile_menu() {
@@ -389,22 +432,38 @@ void rebuild_textures_menu() {
     toggle(m, "One folder per level", g.dump_by_level, [](bool on) { run_on_game([on](recomp_context*) { g.dump_by_level = on; save_options(); }); });
 }
 
+// The chosen level's row has an outline; the others none (their border stays, see-through, so rows never shift).
+void outline_chosen_level() {
+    for (auto& [level, b] : t.level_buttons) {
+        const bool chosen = level == t.warp_level;
+        b->set_border_color(chosen ? ACCENT : NO_BORDER);
+        b->get_hover_style()->set_border_color(chosen ? ACCENT : BORDER);
+        b->set_color(chosen ? ACCENT : TEXT);
+    }
+}
+
+void update_warp_choice();
+
 void rebuild_level_list() {
     t.level_list->clear_children();
+    t.level_buttons.clear();
     load_level_names();
-    int shown = 0;
-    for (int i = 0; i < (int)g_level_names.size() && shown < 400; i++) {
+    for (int i = 0; i < (int)g_level_names.size() && t.level_buttons.size() < 400; i++) {
         if (!contains_ci(g_level_names[i], t.level_filter.c_str())) continue;
         char label[96];
-        std::snprintf(label, sizeof(label), "%3d  %s", i, g_level_names[i].c_str());
-        ui::Button* b = button(t.level_list, label, [i]() {
-            t.warp_level = i;
-            t.warp_choice->set_text("Level " + std::to_string(i) + ": " + (i < (int)g_level_names.size() ? g_level_names[i] : std::string()) +
-                                    "   entrance " + std::to_string(t.warp_entrance));
-        });
+        std::snprintf(label, sizeof(label), "%3d   %s", i, g_level_names[i].c_str());
+        ui::Button* b = t.context.create_element<ui::Button>(t.level_list, label, ui::ButtonStyle::Secondary);
+        style_button(b, LIST_BG, BUTTON_HOVER);
+        b->set_font_size(FONT_SMALL);
+        b->set_line_height(FONT_SMALL * 1.25f);
+        b->set_padding_top(2.0f); b->set_padding_bottom(2.0f); b->set_padding_left(6.0f); b->set_padding_right(6.0f);
+        b->set_border_width(1.5f);
+        b->set_border_radius(2.0f);
         b->set_text_align(ui::TextAlign::Left);
-        shown++;
+        b->add_pressed_callback([i]() { t.warp_level = i; update_warp_choice(); });
+        t.level_buttons.emplace_back(i, b);
     }
+    outline_chosen_level();
 }
 
 void update_warp_choice() {
@@ -412,6 +471,7 @@ void update_warp_choice() {
     const int i = t.warp_level;
     t.warp_choice->set_text("Level " + std::to_string(i) + ": " + (i >= 0 && i < (int)g_level_names.size() ? g_level_names[i] : std::string("?")) +
                             "   entrance " + std::to_string(t.warp_entrance));
+    outline_chosen_level();
     for (int c = 0; c < 3; c++) {
         t.character_buttons[c]->set_background_color(c == t.warp_character ? ON_BG : BUTTON_BG);
         t.character_buttons[c]->get_hover_style()->set_background_color(c == t.warp_character ? ON_HOVER : BUTTON_HOVER);
@@ -450,11 +510,21 @@ void build_warp_window() {
             g.warp_level = (int16_t)rd16(ADDR_currentLevel); g.warp_character = character; g.warp_entrance = entrance; g.pending_warp = true;
         });
     });
+    // The levels in a box of their own that scrolls, filling the rest of the window: the controls above stay in view.
+    ui::Element* list_box = column(body, 0.0f);
+    list_box->set_flex(1.0f, 1.0f, 0.0f);
+    list_box->set_min_height(120.0f);
+    list_box->set_margin_top(4.0f);
+    list_box->set_background_color(LIST_BG);
+    list_box->set_border_width(1.0f);
+    list_box->set_border_color(BORDER);
+    ui::ScrollContainer* scroll = t.context.create_element<ui::ScrollContainer>(list_box, ui::ScrollDirection::Vertical);
+    t.level_list = column(scroll, 1.0f);
+    t.level_list->set_padding(4.0f);
     text(body, "Names are the developers' internal ones (Forest = Goldwood, CargoShip = S.S. Anubis, AlphaSewer = Sekhmet, ...). "
                "Entries ending in Seq are cutscenes. Use from inside a game.", FONT_SMALL, TEXT_DIM);
-    t.level_list = column(body, 2.0f);
-    update_warp_choice();
     rebuild_level_list();
+    update_warp_choice();
 }
 
 void build() {
@@ -547,17 +617,17 @@ void build() {
     });
 
     // Windows
-    make_window(t.warp, "Level Warp", 1.0f, 8.0f, 38.0f, -1);
+    make_window(t.warp, "Level Warp", 1.0f, 8.0f, 34.0f, -1, false);
     build_warp_window();
     make_window(t.items, "Items", 3.0f, 10.0f, 44.0f, GROUP_ITEMS);
     {
         ui::Element* chars = row(t.items.body);
         text(chars, "Character");
         for (int c = 0; c < 3; c++) button(chars, character_names[c], [c]() { run_on_game([c](recomp_context*) { g.edit_character = c; }); });
-        for (const ToolField& f : item_fields()) add_field(t.items.body, f, GROUP_ITEMS);
+        add_fields(t.items.body, item_fields(), GROUP_ITEMS);
     }
     make_window(t.weapons, "Weapons", 52.0f, 20.0f, 44.0f, GROUP_WEAPONS); // below the corner notes (FPS, level)
-    for (const ToolField& f : weapon_fields()) add_field(t.weapons.body, f, GROUP_WEAPONS);
+    add_fields(t.weapons.body, weapon_fields(), GROUP_WEAPONS);
 
     set_captures(true);
     t.context.close();
