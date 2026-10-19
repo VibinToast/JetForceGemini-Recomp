@@ -103,6 +103,11 @@ void jfg_camera_restore();                   // start of the tick: the game gets
 // --- jfg_gameplay.cpp --------------------------------------------------------------------------------------------
 void apply_damage_taken(uint32_t obj); // "Damage taken %"
 
+// --- jfg_auto_save.cpp -------------------------------------------------------------------------------------------
+extern std::chrono::steady_clock::time_point g_save_toast; // when the last auto save was made (on-screen note)
+void auto_save_tick(recomp_context* ctx);                  // game thread, start of the tick (before joyRead)
+void auto_save_forget_file();                              // a warp from outside gameplay: no file is in play
+
 // --- jfg_visuals.cpp ---------------------------------------------------------------------------------------------
 void apply_no_lod(recomp_context* ctx); // "Disable LOD", "Draw distant objects"
 void fov_refresh();                     // before the scene is drawn

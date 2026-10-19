@@ -69,6 +69,10 @@ void draw_options() {
                          "still runs to its end at full machine speed, so everything it does (flags, items, the next level) still "
                          "happens.");
             if (g.skipping) ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Skipping...");
+            changed |= ImGui::Checkbox("Auto save", &g.auto_save);
+            options_help("Saves to the file you are playing a few seconds after arriving in a level, and every few minutes of "
+                         "play, as Z on the pause screen does. Not during cutscenes, races, Floyd missions or while paused.");
+            changed |= options_slider("Minutes between auto saves (0: only on arriving)", &g.auto_save_minutes, 0, 30);
             if (ImGui::Button("Back to the title screen (F5)")) g_reset_pending = true;
             ImGui::EndTabItem();
         }
