@@ -483,12 +483,16 @@ void jfg_camera_controls(recomp_context* ctx) {
     g_cam.sprint_factor = 1.0f;
     static const bool sprint_test = std::getenv("JFG_DEBUG_SPRINT") != nullptr; // tests: sprint on and held
     if (((g.sprint && g_sprint_held.load(std::memory_order_relaxed)) || sprint_test) && obj != 0 && !dino::input::game_input_disabled()) {
-        // On foot only: not while swimming (Dive speed has its own option), nor while aiming (the aim walk) unless
-        // "Sprint while aiming" is on.
+        // On foot, and while aiming (the aim walk) only with "Sprint while aiming". Swimming (Vela, state 4: in the
+        // water she is always in it, at the surface and below) has its own option and speed; jfg_move_scale applies
+        // it to the whole 3D step, as it does the Dive speed.
         const uint32_t data = rd32(obj + 0x68);
         constexpr uint8_t STATE_SWIM = 4;
         const int state = valid_ptr(data) ? rd8(data + PD_STATE) : -1;
-        if (state >= 0 && state != STATE_SWIM && (state != PD_STATE_AIMING || g.sprint_aiming)) {
+        if (state == STATE_SWIM) {
+            if (g.sprint_swimming) g_cam.sprint_factor = (float)g.sprint_swim_speed / 100.0f;
+        }
+        else if (state >= 0 && (state != PD_STATE_AIMING || g.sprint_aiming)) {
             g_cam.sprint_factor = (float)g.sprint_speed / 100.0f;
             g_cam.move_factor *= g_cam.sprint_factor;
         }
@@ -652,10 +656,11 @@ extern "C" void jfg_move_scale(uint8_t* rdram_, recomp_context* ctx) {
     if (busy || g_platform_move || g_cam.player == 0 || (uint32_t)ctx->r4 != g_cam.player) return;
     const uint32_t obj = g_cam.player, data = rd32(obj + 0x68);
     if (!valid_ptr(data)) return;
-    // Underwater (character state 4, Vela's swimming) the "Dive speed" option scales the whole 3D step, up and down too.
+    // Underwater (character state 4, Vela's swimming) the "Dive speed" option, and swim sprinting, scale the whole 3D
+    // step, up and down too. (On foot sprint_factor is already part of move_factor.)
     constexpr uint8_t STATE_SWIM = 4;
     const bool swim = rd8(data + PD_STATE) == STATE_SWIM;
-    const float dive = swim ? (float)g.dive_speed / 100.0f : 1.0f;
+    const float dive = swim ? (float)g.dive_speed / 100.0f * g_cam.sprint_factor : 1.0f;
     auto as_float = [](gpr reg) { const uint32_t bits = (uint32_t)reg; float f; std::memcpy(&f, &bits, 4); return f; };
     // "Normalize diagonal speed": running while sidestepping (C-left / C-right, also what the left stick gives while
     // aiming) adds the two speeds together. The step is split into its forward and sideways parts (relative to the way
