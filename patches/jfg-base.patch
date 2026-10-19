@@ -1886,7 +1886,7 @@ index 2d0e062..523604c 100644
      }
  }
 diff --git a/src/main.cpp b/src/main.cpp
-index f93f6d3..93a74d2 100644
+index f93f6d3..6235ca4 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -3,6 +3,9 @@
@@ -1907,7 +1907,20 @@ index f93f6d3..93a74d2 100644
  
  #include "runtime/audio.hpp"
  #include "runtime/crash.hpp"
-@@ -48,24 +52,47 @@ static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
+@@ -38,6 +42,7 @@ const std::string version_string = "0.1.18";
+ 
+ extern "C" void recomp_entrypoint(uint8_t *rdram, recomp_context *ctx);
+ gpr get_entrypoint_address();
++extern "C" void jfg_apply_asset_mods(void); // JFG PORT: src/jfg/jfg_assets.cpp
+ 
+ static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
+     printf("Initialized RDRAM at %p\n", rdram);
+@@ -45,27 +50,52 @@ static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
+     dino::runtime::crash_register_rdram(rdram);
+     dino::runtime::crash_register_thread_context(ctx);
+ 
++    jfg_apply_asset_mods(); // JFG PORT: data replaced by mods (src/jfg/jfg_assets.cpp), once mods are loaded
++
      recomp_entrypoint(rdram, ctx);
  }
  
@@ -1962,7 +1975,7 @@ index f93f6d3..93a74d2 100644
      },
  };
  
-@@ -73,6 +100,7 @@ struct CliArgs {
+@@ -73,6 +103,7 @@ struct CliArgs {
      bool skip_launcher = false;
      bool force_launcher = false;
      bool show_console = false;
@@ -1970,7 +1983,7 @@ index f93f6d3..93a74d2 100644
      int window_width = 1600;
      int window_height = 960;
  };
-@@ -91,6 +119,16 @@ int main(int argc, char** argv) {
+@@ -91,6 +122,16 @@ int main(int argc, char** argv) {
          char *arg = argv[i];
          if (strcmp(arg, "--skip-launcher") == 0) {
              cli_args.skip_launcher = true;
@@ -1987,7 +2000,7 @@ index f93f6d3..93a74d2 100644
          } else if (strcmp(arg, "--launcher") == 0) {
              cli_args.force_launcher = true;
          } else if (strcmp(argv[i], "--show-console") == 0) {
-@@ -117,6 +155,15 @@ int main(int argc, char** argv) {
+@@ -117,6 +158,15 @@ int main(int argc, char** argv) {
          }
      }
  
@@ -2003,7 +2016,7 @@ index f93f6d3..93a74d2 100644
      // Load project version
      recomp::Version project_version{};
      if (!recomp::Version::from_string(version_string, project_version)) {
-@@ -196,8 +243,23 @@ int main(int argc, char** argv) {
+@@ -196,8 +246,23 @@ int main(int argc, char** argv) {
      // The runtime performs this check again during startup; doing it here lets
      // an already configured Mac app launch straight into DKR.
      recomp::check_all_stored_roms();
@@ -2027,7 +2040,7 @@ index f93f6d3..93a74d2 100644
      dino::runtime::register_overlays();
  
      dino::config::load_config();
-@@ -264,7 +326,14 @@ int main(int argc, char** argv) {
+@@ -264,7 +329,14 @@ int main(int argc, char** argv) {
          .gfx_callbacks = gfx_callbacks,
          .events_callbacks = events_callbacks,
          .error_handling_callbacks = error_handling_callbacks,

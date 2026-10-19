@@ -94,6 +94,9 @@ int jfg_skip_render_active(void);                                      // jfg_cu
 // src/main.cpp
 void jfg_on_init(uint8_t* rdram, recomp_context* ctx);                 // jfg_glue.cpp
 void jfg_register_mod_exports(void);                                   // jfg_mods.cpp: functions mods import ("*")
+void jfg_apply_asset_mods(void);                                       // jfg_assets.cpp: data replaced by mods
+// jfg_mods.cpp (jfg_register_mod_exports)
+void jfg_register_asset_mods(void);                                    // jfg_assets.cpp: the jfg_assets.json content type
 // jfg_glue.cpp (jfg_on_init)
 void jfg_mods_alias_overlays(void);                                    // jfg_mods.cpp: overlay funcs at private addresses
 // jfg_glue.cpp (jfg_overlay_loaded)

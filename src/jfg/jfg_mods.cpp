@@ -8,6 +8,7 @@
 //    Functions whose code materialises another overlay's data address can't be regenerated correctly; the build
 //    makes them unhookable (tools/refuse_mod_hooks.py). See Recomp-Docs/MOD_SUPPORT.md.
 // 2. Functions mods can import ("*"): recomp_printf, written to jfg_mods.log and stderr.
+// (Mods that replace game data rather than code: jfg_assets.cpp.)
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -298,9 +299,12 @@ extern "C" void jfg_mods_alias_overlays(void) {
     jfg::jfg_log_line("jfg_mods.log", line);
 }
 
+extern "C" void jfg_register_asset_mods(void); // jfg_assets.cpp
+
 // Called from src/main.cpp before the runtime starts.
 extern "C" void jfg_register_mod_exports(void) {
     recomp::overlays::register_base_export("recomp_printf", jfg_recomp_printf);
+    jfg_register_asset_mods(); // mods that replace game data (jfg_assets.json)
 }
 
 // GameEntry::decompression_routine (src/main.cpp): the ROM the runtime regenerates hooked functions from.
