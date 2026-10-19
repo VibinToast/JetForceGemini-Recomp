@@ -94,6 +94,8 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "sprint") == 0) g.sprint = value != 0;
     else if (std::strcmp(key, "sprint_speed") == 0) g.sprint_speed = std::clamp(value, 100, 300);
     else if (std::strcmp(key, "sprint_aiming") == 0) g.sprint_aiming = value != 0;
+    else if (std::strcmp(key, "sprint_swimming") == 0) g.sprint_swimming = value != 0;
+    else if (std::strcmp(key, "sprint_swim_speed") == 0) g.sprint_swim_speed = std::clamp(value, 100, 300);
     else if (std::strcmp(key, "normalize_diagonal") == 0) g.normalize_diagonal = value != 0;
     else if (std::strcmp(key, "invert_aim_normal") == 0) g.invert_aim_normal = value != 0;
     else if (std::strcmp(key, "invert_camera_y") == 0) g.invert_camera_y = value != 0;
@@ -157,6 +159,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "fly_speed=%d\nfly_freeze=%d\nfly_hide_hud=%d\n", s.fly_speed, s.fly_freeze ? 1 : 0, s.fly_hide_hud ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "unlimited_continues=%d\npermanent_tribals=%d\n", s.unlimited_continues ? 1 : 0, s.permanent_tribals ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "sprint=%d\nsprint_speed=%d\nsprint_aiming=%d\n", s.sprint ? 1 : 0, s.sprint_speed, s.sprint_aiming ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "sprint_swimming=%d\nsprint_swim_speed=%d\n", s.sprint_swimming ? 1 : 0, s.sprint_swim_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "pause_in_menu=%d\n", s.pause_in_menu ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "gore_keep_blood=%d\ngore_keep_limbs=%d\nblood_amount=%d\n", s.gore_keep_blood ? 1 : 0, s.gore_keep_limbs ? 1 : 0, s.blood_amount); out += buf;
     return out;

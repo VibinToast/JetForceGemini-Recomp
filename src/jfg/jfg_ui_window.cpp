@@ -227,11 +227,13 @@ void draw_options() {
             changed |= options_slider("Movement speed %", &g.move_speed, 50, 300);
             changed |= ImGui::Checkbox("Sprint", &g.sprint);
             options_help("Hold the left stick click (controller) or Left Shift (mouse and keyboard) to run faster. In the "
-                         "built-in dual-stick layout the left stick click then sprints instead of crouching (B still crouches). "
-                         "Not while swimming.");
+                         "built-in dual-stick layout the left stick click then sprints instead of crouching (B still crouches).");
             changed |= options_slider("Sprint speed %", &g.sprint_speed, 100, 300);
             changed |= ImGui::Checkbox("Sprint while aiming", &g.sprint_aiming);
             options_help("Sprinting also works while aiming, so the character moves faster with the aim held.");
+            changed |= ImGui::Checkbox("Sprint while swimming", &g.sprint_swimming);
+            options_help("Sprinting also works in the water: Vela swims and dives faster while the sprint button is held.");
+            changed |= options_slider("Swim sprint speed %", &g.sprint_swim_speed, 100, 300);
             changed |= ImGui::Checkbox("Normalize diagonal speed", &g.normalize_diagonal);
             options_help("In the game, running forward while sidestepping adds the two speeds together, so going diagonally "
                          "is about 40% faster. With this on a diagonal is as fast as running straight.");
