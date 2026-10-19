@@ -102,7 +102,24 @@ TEXTURES = [
     ("bool", "dump_by_level", "One Folder per Level", None, "Dumps into bin\\texture_dump\\&lt;level number&gt; &lt;level name&gt; instead."),
 ]
 
+def row_ids(kind, key, extra):
+    """The focusable ids of one option row, left to right."""
+    if kind == "bool": return [f"jfg_{key}_on", f"jfg_{key}_off"]
+    if kind == "choice": return [f"jfg_{key}_{v}" for v, _ in extra]
+    return [f"jfg_{key}_input"]
+
 def option_markup(items, first_nav_up):
+    # Up/Down are given explicitly for every control: automatic navigation skipped the sliders below a row of radio
+    # buttons (and some rows above), and at the last row Down went sideways between its radios. Between two rows of
+    # radios the column is kept (On to On); a slider row has one control. The first row goes up to first_nav_up (the
+    # tab; None leaves it automatic), the last row's Down goes nowhere.
+    rows = [row_ids(kind, key, extra) for kind, key, _, extra, _ in items if kind != "group"]
+    def target(row, column):
+        return "#" + row[min(column, len(row) - 1)]
+    def nav_style(i, column):
+        up = target(rows[i - 1], column) if i > 0 else first_nav_up
+        down = target(rows[i + 1], column) if i + 1 < len(rows) else "none"
+        return (f"nav-up: {up}; " if up else "") + f"nav-down: {down};"
     out, helps, idx = [], [], 0
     for kind, key, title, extra, help_text in items:
         t = html.escape(title)
@@ -110,29 +127,28 @@ def option_markup(items, first_nav_up):
             out.append(f'                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">{t}</label></div>')
             continue
         ev = f'data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index({idx})"'
-        nav = f' style="nav-up: {first_nav_up}"' if idx == 0 and first_nav_up else ""
+        ids = rows[idx]
         out.append(f'                    <div class="config-option" data-event-mouseover="set_cur_config_index({idx})">')
         out.append(f'                        <label class="config-option__title">{t}</label>')
         if kind == "bool":
             out.append('                        <div class="config-option__list">')
-            for v, label in ((1, "On"), (0, "Off")):
-                rid = f"jfg_{key}_{label.lower()}"
-                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}"{nav}/>')
+            for column, (v, label) in enumerate(((1, "On"), (0, "Off"))):
+                rid = ids[column]
+                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"/>')
                 out.append(f'                            <label class="config-option__tab-label" for="{rid}">{label}</label>')
             out.append('                        </div>')
         elif kind == "choice":
             out.append('                        <div class="config-option__list">')
-            for v, label in extra:
-                rid = f"jfg_{key}_{v}"
-                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}"{nav}/>')
+            for column, (v, label) in enumerate(extra):
+                rid = ids[column]
+                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"/>')
                 out.append(f'                            <label class="config-option__tab-label" for="{rid}">{html.escape(label)}</label>')
             out.append('                        </div>')
         elif kind == "range":
             lo, hi, suffix = extra
             out.append('                        <div class="config-option__range-wrapper config-option__list">')
             out.append(f'                            <label class="config-option__range-label">{{{{{key}}}}}{suffix}</label>')
-            style = "flex: 1; margin: 0dp;" + (f" nav-up: {first_nav_up};" if idx == 0 and first_nav_up else "")
-            out.append(f'                            <input class="nav-vert" {ev} id="jfg_{key}_input" type="range" min="{lo}" max="{hi}" style="{style}" data-value="{key}"/>')
+            out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}" data-value="{key}"/>')
             out.append('                        </div>')
         out.append('                    </div>')
         helps.append(f'                    <p data-if="cur_config_index == {idx}">{help_text}</p>')
@@ -141,9 +157,7 @@ def option_markup(items, first_nav_up):
 
 def first_id(items):
     kind, key, _, extra, _ = next(i for i in items if i[0] != "group")
-    if kind == "bool": return f"jfg_{key}_on"
-    if kind == "choice": return f"jfg_{key}_{extra[0][0]}"
-    return f"jfg_{key}_input"
+    return row_ids(kind, key, extra)[0]
 
 def options_tab(name, items, tab_id, extra_markup="", before_markup=""):
     # With markup before the options, that markup's first element goes up to the tab instead.

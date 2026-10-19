@@ -209,7 +209,7 @@ index 5b41993..b9d280f 100644
 -set_property(TARGET DiddyKongRacingRecompiled PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 +set_property(TARGET JetForceGeminiRecompiled PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 diff --git a/assets/config_menu.rml b/assets/config_menu.rml
-index fb807d6..12a7cf9 100644
+index fb807d6..c4a8d26 100644
 --- a/assets/config_menu.rml
 +++ b/assets/config_menu.rml
 @@ -29,6 +29,19 @@
@@ -227,7 +227,7 @@ index fb807d6..12a7cf9 100644
 +		/* JFG PORT: nine tabs do not fit at the base size: they ran under the quit and close buttons (absolutely placed at
 +		   the top right). Slightly smaller tabs, and the tab row keeps clear of the buttons. */
 +		#config_tabset tabs { padding-right: 144dp; }
-+		#config_tabset tab.tab { padding-left: 16dp; padding-right: 16dp; font-size: 32dp; letter-spacing: 2dp; line-height: 32dp; }
++		#config_tabset tab.tab { nav-up: none; padding-left: 16dp; padding-right: 16dp; font-size: 32dp; letter-spacing: 2dp; line-height: 32dp; }
 +	</style>
  </head>
  <body class="window">
@@ -279,15 +279,24 @@ index fb807d6..12a7cf9 100644
  					<div class="config__icon-buttons">
  						<button
 diff --git a/assets/config_menu/general.rml b/assets/config_menu/general.rml
-index 117654e..cfcf462 100644
+index 117654e..c2aa80b 100644
 --- a/assets/config_menu/general.rml
 +++ b/assets/config_menu/general.rml
+@@ -19,7 +19,7 @@
+                                 type="range"
+                                 min="0"
+                                 max="100"
+-                                style="flex: 1; margin: 0dp; nav-down: #joystick_range_input"
++                                style="flex: 1; margin: 0dp; nav-up: #tab_general; nav-down: #joystick_range_input"
+                                 data-value="joystick_deadzone"
+                             />
+                         </div>
 @@ -76,7 +76,7 @@
                                  data-checked="background_input_mode"
                                  value="On"
                                  id="bg_input_enabled"
 -                                style="nav-up: #rumble_strength_input; nav-down: #hud_mode_always"
-+                                style="nav-up: #rumble_strength_input"
++                                style="nav-up: #rumble_strength_input; nav-down: none"
                              />
                              <label class="config-option__tab-label" for="bg_input_enabled">On</label>
  
@@ -296,7 +305,7 @@ index 117654e..cfcf462 100644
                                  value="Off"
                                  id="bg_input_disabled"
 -                                style="nav-up: #rumble_strength_input; nav-down: #hud_mode_default"
-+                                style="nav-up: #rumble_strength_input"
++                                style="nav-up: #rumble_strength_input; nav-down: none"
                              />
                              <label class="config-option__tab-label" for="bg_input_disabled">Off</label>
                          </div>
@@ -422,7 +431,7 @@ index 117654e..cfcf462 100644
              </div>
          </form>
 diff --git a/assets/config_menu/graphics.rml b/assets/config_menu/graphics.rml
-index baff34c..d18ee3b 100644
+index baff34c..c5405f2 100644
 --- a/assets/config_menu/graphics.rml
 +++ b/assets/config_menu/graphics.rml
 @@ -17,7 +17,7 @@
@@ -631,12 +640,12 @@ index baff34c..d18ee3b 100644
                          onclick="apply_options"
                          id="apply_button"
 -                        style="nav-up: #hr_original"
-+                        style="nav-up: #msaa_none"
++                        style="nav-up: #msaa_none; nav-down: none"
                      >
                          <div class="button__label">Apply<span class="prompt-font-sm">{{gfx_help__apply}}</span></div>
                      </button>
 diff --git a/assets/config_menu/sound.rml b/assets/config_menu/sound.rml
-index c5eb334..dc34871 100644
+index c5eb334..74406f5 100644
 --- a/assets/config_menu/sound.rml
 +++ b/assets/config_menu/sound.rml
 @@ -18,110 +18,17 @@
@@ -644,7 +653,7 @@ index c5eb334..dc34871 100644
                                  min="0"
                                  max="100"
 -                                style="flex: 1; margin: 0dp; nav-up: #tab_sound; nav-down: #bgm_volume_input;"
-+                                style="flex: 1; margin: 0dp; nav-up: #tab_sound;"
++                                style="flex: 1; margin: 0dp; nav-up: #tab_sound; nav-down: none;"
                                  data-value="main_volume"
                              />
                          </div>
@@ -753,10 +762,10 @@ index c5eb334..dc34871 100644
              </div>
          </form>
 diff --git a/assets/launcher.rml b/assets/launcher.rml
-index 058aa77..4a00dee 100644
+index 058aa77..aa08687 100644
 --- a/assets/launcher.rml
 +++ b/assets/launcher.rml
-@@ -3,104 +3,413 @@
+@@ -3,104 +3,424 @@
  		<title>Launcher</title>
  		<link type="text/rcss" href="rml.rcss"/>
  		<link type="text/rcss" href="recomp.rcss"/>
@@ -845,8 +854,19 @@ index 058aa77..4a00dee 100644
 +			.rl-modal-box { position: absolute; top: -6dp; right: 6dp; bottom: 6dp; left: -6dp; background-color: #0B1733; border-width: 2dp; border-color: #FFB21A; }
 +			.rl-modal-title { position: absolute; top: 22dp; left: 28dp; right: 28dp; font-family: "Press Start 2P"; font-size: 20dp; line-height: 28dp; color: #FFB21A; text-transform: uppercase; }
 +			.rl-modal-sub { position: absolute; top: 62dp; left: 28dp; right: 28dp; font-size: 18dp; line-height: 26dp; color: #E8F3FF; }
-+			.rl-modal-notes { position: absolute; top: 100dp; left: 28dp; right: 28dp; bottom: 214dp; padding: 12dp 14dp; overflow-y: auto; white-space: pre-wrap;
++			.rl-modal-notes { position: absolute; top: 100dp; left: 28dp; right: 28dp; bottom: 214dp; padding: 12dp 14dp; overflow-y: auto;
 +				font-size: 15dp; line-height: 22dp; color: #C8D8F0; background-color: #050B1C; border-width: 2dp; border-color: #1F3D73; }
++			/* Changelog entries (jfg_changelog_rml in src/jfg/jfg_update_check.cpp) */
++			.rl-cl-version { display: block; margin-top: 26dp; padding-bottom: 8dp; border-bottom-width: 2dp; border-color: #1F3D73; }
++			.rl-cl-version.rl-cl-first { margin-top: 4dp; }
++			.rl-cl-ver { font-family: "Press Start 2P"; font-size: 15dp; line-height: 26dp; color: #FFB21A; }
++			.rl-cl-date { margin-left: 16dp; font-size: 16dp; line-height: 26dp; color: #8199BF; }
++			.rl-cl-tag { display: inline-block; margin-left: 14dp; padding: 0dp 8dp; font-family: "Press Start 2P"; font-size: 10dp; line-height: 20dp; color: #050B1C; background-color: #3CC8FF; text-transform: uppercase; }
++			.rl-cl-tag.rl-cl-new { background-color: #FFB21A; }
++			.rl-cl-sub { display: block; margin-top: 12dp; font-size: 16dp; line-height: 24dp; font-weight: bold; color: #3CC8FF; }
++			.rl-cl-item { display: block; position: relative; margin-top: 8dp; padding-left: 24dp; font-size: 17dp; line-height: 25dp; color: #E0EAF8; }
++			.rl-cl-dot { position: absolute; left: 4dp; top: 0dp; color: #FFB21A; font-weight: bold; }
++			.rl-cl-note { display: block; margin-top: 8dp; font-size: 16dp; line-height: 24dp; color: #8199BF; }
 +			.rl-changelogs { margin-top: 22dp; margin-bottom: 8dp; }
 +			.rl-modal-notes.rl-modal-notes--tall { bottom: 100dp; }
 +			.rl-modal-status { position: absolute; bottom: 150dp; left: 28dp; right: 28dp; font-size: 16dp; line-height: 24dp; color: #3CC8FF; }
@@ -1229,7 +1249,7 @@ index 058aa77..4a00dee 100644
 +				<div class="rl-modal" data-class-rl-on="update_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
 +					<div class="rl-modal-title">Update available</div>
 +					<div class="rl-modal-sub">v{{version_number}} &gt; v{{update_version}}. What is new:</div>
-+					<div class="rl-modal-notes">{{update_changelog}}</div>
++					<div class="rl-modal-notes" id="rl_update_notes" data-rml="update_changelog"></div>
 +					<div class="rl-modal-status" data-if="update_stage != 0" data-class-rl-error="update_stage == 2">{{update_status}}</div>
 +					<div class="rl-progress" data-if="update_stage == 1"><div class="rl-progress-bar" data-style-width="update_percent + '%'"></div></div>
 +					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install">Update to v{{update_version}}? The game restarts when it is done. Your saves and settings are kept.</div>
@@ -1246,8 +1266,8 @@ index 058aa77..4a00dee 100644
 +				</div></div></div>
 +				<div class="rl-modal" data-class-rl-on="changelog_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
 +					<div class="rl-modal-title">Changelogs</div>
-+					<div class="rl-modal-sub">You have v{{version_number}}. Newest changes first.</div>
-+					<div class="rl-modal-notes rl-modal-notes--tall">{{changelog_text}}</div>
++					<div class="rl-modal-sub">You have v{{version_number}}. Newest first. Up/Down or the mouse wheel scrolls.</div>
++					<div class="rl-modal-notes rl-modal-notes--tall" id="rl_changelog_notes" data-rml="changelog_text"></div>
 +					<div class="rl-modal-buttons">
 +						<div class="rl-action-shadow"><button id="rl_changelog_close" class="rl-action" data-event-click="changelog_close()" style="nav-up: none; nav-down: none; nav-left: none; nav-right: none;">Close</button></div>
 +					</div>
@@ -3100,7 +3120,7 @@ index 3da3d55..ffe6015 100644
      if (window == nullptr) {
          exit_error("Failed to create window: %s\n", SDL_GetError());
 diff --git a/src/ui/ui_config.cpp b/src/ui/ui_config.cpp
-index d117b72..76acb9c 100644
+index d117b72..6d0c102 100644
 --- a/src/ui/ui_config.cpp
 +++ b/src/ui/ui_config.cpp
 @@ -12,6 +12,8 @@
@@ -3217,7 +3237,33 @@ index d117b72..76acb9c 100644
                          tabs->GetChild(i)->SetProperty(Rml::PropertyId::NavDown, Rml::Style::Nav::Auto);
                      }
                  }
-@@ -546,6 +601,22 @@ public:
+@@ -532,6 +587,25 @@ class ConfigTabsetListener : public Rml::EventListener {
+     }
+ };
+ 
++// JFG PORT: the controller's triggers switch tabs (LT the one to the left, RT to the right, wrapping round), skipping
++// hidden ones (Debug). The new tab gets the focus, so Down goes into its options.
++void jfg_config_step_tab(int dir) {
++    if (recompui::is_prompt_open()) return;
++    Rml::ElementTabSet* tabset = recompui::get_config_tabset();
++    Rml::Element* tabs = recompui::get_child_by_tag(tabset, "tabs");
++    if (tabs == nullptr) return;
++    const int n = tabs->GetNumChildren();
++    const int cur = tabset->GetActiveTab();
++    for (int k = 1; k < n; k++) {
++        const int i = ((cur + dir * k) % n + n) % n;
++        Rml::Element* tab = tabs->GetChild(i);
++        if (tab == nullptr || tab->GetComputedValues().display() == Rml::Style::Display::None) continue;
++        tabset->SetActiveTab(i);
++        tab->Focus();
++        return;
++    }
++}
++
+ class ConfigMenu : public recompui::MenuController {
+ private:
+     ConfigTabsetListener config_tabset_listener;
+@@ -546,6 +620,22 @@ public:
          config_context = recompui::create_context(dino::runtime::get_asset_path("config_menu.rml"));
          recompui::update_mod_list(false);
          recompui::get_config_tabset()->AddEventListener(Rml::EventId::Tabchange, &config_tabset_listener);
@@ -3240,7 +3286,7 @@ index d117b72..76acb9c 100644
      }
      void register_events(recompui::UiEventListenerInstancer& listener) override {
          recompui::register_event(listener, "apply_options",
-@@ -977,6 +1048,96 @@ public:
+@@ -977,6 +1067,96 @@ public:
  		constructor.RegisterArray<std::vector<std::string>>();
      }
  
@@ -3337,7 +3383,7 @@ index d117b72..76acb9c 100644
      void make_bindings(Rml::Context* context) override {
          // initially set cont state for ui help
          //recomp::config_menu_set_cont_or_kb(recompui::get_cont_active());
-@@ -986,6 +1147,7 @@ public:
+@@ -986,6 +1166,7 @@ public:
          make_graphics_bindings(context);
          make_sound_options_bindings(context);
          make_debug_bindings(context);
@@ -3346,7 +3392,7 @@ index d117b72..76acb9c 100644
  };
  
 diff --git a/src/ui/ui_launcher.cpp b/src/ui/ui_launcher.cpp
-index df580ce..bca394f 100644
+index df580ce..8eab3bd 100644
 --- a/src/ui/ui_launcher.cpp
 +++ b/src/ui/ui_launcher.cpp
 @@ -7,13 +7,194 @@
@@ -3449,7 +3495,7 @@ index df580ce..bca394f 100644
 +
 +static void open_changelog_dialog(Rml::ElementDocument* doc) {
 +    // The commits since the last release (from GitHub, when they have arrived) above the changelog shipped with the game.
-+    changelog_text = jfg_changelog_commits() + jfg_changelog_text();
++    changelog_text = jfg_changelog_rml(jfg_changelog_commits() + jfg_changelog_text(), version_string);
 +    model_handle.DirtyVariable("changelog_text");
 +    remember_focus(doc);
 +    changelog_dialog = true;
@@ -3504,7 +3550,7 @@ index df580ce..bca394f 100644
 +        if (jfg_update_available(info)) {
 +            update_available = true;
 +            update_version = info.version;
-+            update_changelog = info.changelog;
++            update_changelog = jfg_changelog_rml(info.changelog, version_string);
 +            update_can_install = info.can_install;
 +            update_unavailable = info.unavailable;
 +            model_handle.DirtyVariable("update_available");
@@ -3592,7 +3638,7 @@ index df580ce..bca394f 100644
  		launcher_context = recompui::create_context(dino::runtime::get_asset_path("launcher.rml"));
      }
      void register_events(recompui::UiEventListenerInstancer& listener) override {
-@@ -123,9 +310,30 @@ public:
+@@ -123,9 +310,46 @@ public:
          );
          recompui::register_event(listener, "exit_game",
              [](const std::string& param, Rml::Event& event) {
@@ -3605,6 +3651,22 @@ index df580ce..bca394f 100644
 +            [](const std::string& param, Rml::Event& event) {
 +                if (event.GetId() != Rml::EventId::Keydown || recompui::is_prompt_open()) return;
 +                const auto key = event.GetParameter<Rml::Input::KeyIdentifier>("key_identifier", Rml::Input::KeyIdentifier::KI_UNKNOWN);
++                // Up / Down (D-pad, stick, arrows) and Page Up / Page Down scroll the notes of an open dialog: its buttons
++                // don't navigate up or down, so a controller has no other way to read a long changelog.
++                if (changelog_dialog || update_dialog) {
++                    const bool line_up = key == Rml::Input::KeyIdentifier::KI_UP, line_down = key == Rml::Input::KeyIdentifier::KI_DOWN;
++                    const bool page_up = key == Rml::Input::KeyIdentifier::KI_PRIOR, page_down = key == Rml::Input::KeyIdentifier::KI_NEXT;
++                    if (line_up || line_down || page_up || page_down) {
++                        Rml::Element* target = event.GetTargetElement();
++                        Rml::ElementDocument* doc = target ? target->GetOwnerDocument() : nullptr;
++                        Rml::Element* notes = doc ? doc->GetElementById(changelog_dialog ? "rl_changelog_notes" : "rl_update_notes") : nullptr;
++                        if (notes != nullptr) {
++                            const float step = notes->GetClientHeight() * ((page_up || page_down) ? 0.9f : 0.12f);
++                            notes->SetScrollTop(notes->GetScrollTop() + ((line_up || page_up) ? -step : step));
++                        }
++                        return;
++                    }
++                }
 +                if (key != Rml::Input::KeyIdentifier::KI_ESCAPE) return;
 +                if (changelog_dialog) {
 +                    close_changelog_dialog();
@@ -3623,7 +3685,7 @@ index df580ce..bca394f 100644
      }
      void make_bindings(Rml::Context* context) override {
          Rml::DataModelConstructor constructor = context->CreateDataModel("launcher_model");
-@@ -134,6 +342,62 @@ public:
+@@ -134,6 +358,62 @@ public:
  
          version_string = recomp::get_project_version().to_string();
          constructor.Bind("version_number", &version_string);
@@ -3687,19 +3749,20 @@ index df580ce..bca394f 100644
          model_handle = constructor.GetModelHandle();
      }
 diff --git a/src/ui/ui_state.cpp b/src/ui/ui_state.cpp
-index 503692a..07acc5c 100644
+index 503692a..1cf6b87 100644
 --- a/src/ui/ui_state.cpp
 +++ b/src/ui/ui_state.cpp
-@@ -33,6 +33,8 @@
+@@ -33,6 +33,9 @@
  #include "ui_mod_menu.h"
  #include "ui_mod_installer.h"
  #include "ui_renderer.h"
 +void jfg_config_menu_refresh(); // JFG PORT: src/ui/ui_config.cpp
++void jfg_config_step_tab(int dir); // JFG PORT: src/ui/ui_config.cpp
 +void jfg_launcher_ui_tick(); // JFG PORT: src/ui/ui_launcher.cpp
  
  static std::vector<char> read_file(const std::filesystem::path& filepath) {
      std::vector<char> ret{};
-@@ -248,6 +250,10 @@ public:
+@@ -248,6 +251,10 @@ public:
                  {"LatoLatin-BoldItalic.ttf", false},
                  {"NotoEmoji-Regular.ttf", true},
                  {"promptfont/promptfont.ttf", false},
@@ -3710,7 +3773,33 @@ index 503692a..07acc5c 100644
              };
  
              for (const FontFace& face : font_faces) {
-@@ -747,6 +753,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+@@ -679,6 +686,25 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+                 break;
+             case SDL_EventType::SDL_CONTROLLERAXISMOTION:
+                 SDL_ControllerAxisEvent* axis_event = &cur_event.caxis;
++                // JFG PORT: in the config menu the triggers switch tabs, once per pull (src/ui/ui_config.cpp).
++                if (axis_event->axis == SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_TRIGGERLEFT || axis_event->axis == SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_TRIGGERRIGHT) {
++                    static bool trigger_held[2] = {};
++                    const int side = axis_event->axis == SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_TRIGGERRIGHT ? 1 : 0;
++                    const float value = axis_event->value * (1 / 32768.0f);
++                    if (!trigger_held[side] && value > 0.5f) {
++                        trigger_held[side] = true;
++                        if (context_capturing_input && recompui::is_context_shown(recompui::get_config_context_id()) &&
++                            !recompui::is_context_shown(recompui::get_config_sub_menu_context_id())) {
++                            ::jfg_config_step_tab(side ? 1 : -1);
++                        }
++                        non_mouse_interacted = true;
++                        cont_interacted = true;
++                    }
++                    else if (trigger_held[side] && value < 0.2f) {
++                        trigger_held[side] = false;
++                    }
++                    break;
++                }
+                 if (axis_event->axis != SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_LEFTY && axis_event->axis != SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_LEFTX) {
+                     break;
+                 }
+@@ -747,6 +773,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
              }
  
              if (open_config) {
@@ -3718,7 +3807,7 @@ index 503692a..07acc5c 100644
                  recompui::show_context(recompui::get_config_context_id(), "");
              }
          }
-@@ -794,6 +801,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+@@ -794,6 +821,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
          prev_width = width;
          prev_height = height;
  
@@ -3726,7 +3815,7 @@ index 503692a..07acc5c 100644
          ui_state->context->Update();
          ui_state->context->Render();
          ui_state->render_interface.end(command_list, swap_chain_framebuffer);
-@@ -946,7 +954,8 @@ void recompui::drop_files(const std::list<std::filesystem::path> &file_list) {
+@@ -946,7 +974,8 @@ void recompui::drop_files(const std::list<std::filesystem::path> &file_list) {
      // If the config menu isn't open, open it in the mods tab.
      if (!recompui::is_context_shown(recompui::get_config_context_id())) {
          recompui::hide_all_contexts();
