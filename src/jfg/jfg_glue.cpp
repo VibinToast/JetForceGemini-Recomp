@@ -82,6 +82,8 @@ void unload_overlay_safely(uint32_t ram) {
 }
 }
 
+extern "C" void jfg_squad_wrappers_install(uint32_t rom, uint32_t ram); // jfg_frame_rate.cpp
+
 extern "C" void jfg_overlay_loaded(uint8_t* rdram, recomp_context* ctx) {
     gpr header = ctx->r30;
     uint32_t ram = (uint32_t)MEM_W(OVL_VRAM_BASE, header);
@@ -93,6 +95,7 @@ extern "C" void jfg_overlay_loaded(uint8_t* rdram, recomp_context* ctx) {
     unload_overlay_safely(ram);
     jfg_loaded_overlays[ram] = LoadedOverlay{rom, size};
     load_overlays(rom, (int32_t)ram, size);
+    jfg_squad_wrappers_install(rom, ram); // overlay 3: the 60 fps squad cadence (jfg_frame_rate.cpp)
 }
 
 // Called from runlinkFreeCode / runlinkUnloadOverlay right before the overlay's memory is freed. $a0 = its address.
