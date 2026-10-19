@@ -50,6 +50,10 @@ int jfg_refuel_amount(int amount);                                     // refuel
 float jfg_sniper_zoom(float zoom);                                     // controlGetManualAim
 int jfg_sniper_walk(int weapon);                                       // the characters' aim control (overlays 15-17)
 int jfg_flag_override(int flag);                                       // entry of mainGetGameFlag
+// jfg_gore.cpp
+void jfg_blood_more(uint8_t* rdram, recomp_context* ctx);              // entry of bloodSpurtAdd (after jfg_no_blood)
+void jfg_gore_splat(uint8_t* rdram, recomp_context* ctx);              // bloodSpurtUpdateAll, a splat's life countdown
+void jfg_gore_limb(uint8_t* rdram, recomp_context* ctx);               // entry of severedLimbControl
 // jfg_area_progress.cpp
 void jfg_region_reset_begin(uint8_t* rdram, recomp_context* ctx);      // entry of mainResetRegion
 void jfg_region_reset_end(uint8_t* rdram, recomp_context* ctx);        // mainResetRegion, before it returns
