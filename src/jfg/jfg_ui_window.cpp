@@ -69,6 +69,7 @@ void draw_options() {
                          "still runs to its end at full machine speed, so everything it does (flags, items, the next level) still "
                          "happens.");
             if (g.skipping) ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Skipping...");
+            changed |= ImGui::Checkbox("Pause while the settings menu (Select / Esc) is open", &g.pause_in_menu);
             changed |= ImGui::Checkbox("Auto save", &g.auto_save);
             options_help("Saves to the file you are playing a few seconds after arriving in a level, and every few minutes of "
                          "play, as Z on the pause screen does. Not during cutscenes, races, Floyd missions or while paused.");

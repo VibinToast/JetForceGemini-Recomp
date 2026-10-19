@@ -99,5 +99,7 @@ int jfg_output_filtering(void);                                        // jfg_vi
 int jfg_skip_render_active(void);                                      // jfg_cutscene_skip.cpp
 // src/main.cpp
 void jfg_on_init(uint8_t* rdram, recomp_context* ctx);                 // jfg_glue.cpp
+// src/ui/ui_state.cpp
+void jfg_settings_menu_open(int open);                                 // jfg_camera.cpp, every UI frame
 
 } // extern "C"
