@@ -84,6 +84,8 @@ void jfg_mouse_motion(int dx, int dy);
 int jfg_invert_aim_normal(uint16_t buttons);
 void jfg_dual_stick(uint16_t* buttons, float* x, float* y, float right_x, float right_y);
 void jfg_dual_stick_release(void);
+int jfg_sprint_enabled(void);
+void jfg_sprint_input(int held);
 // src/renderer/renderer.cpp
 int jfg_texture_dump_active(void);                                     // jfg_texture_packs.cpp
 void jfg_texture_pack_set_count(int count);                            // jfg_texture_packs.cpp

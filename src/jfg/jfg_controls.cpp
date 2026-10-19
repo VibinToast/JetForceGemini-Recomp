@@ -77,6 +77,12 @@ float g_sign_move = -1.0f, g_sign_cam = -1.0f;
 
 bool control_mods_blocked() { return in_cutscene() || rd8(ADDR_robotMission) != 0; } // see ADDR_robotMission
 
+// Sprint (src/input/controls.cpp): the sprint button as last read by the input thread. With the option off the left
+// stick click keeps its crouch in the dual-stick layout.
+std::atomic<bool> g_sprint_held{ false };
+extern "C" int jfg_sprint_enabled(void) { return g.sprint ? 1 : 0; }
+extern "C" void jfg_sprint_input(int held) { g_sprint_held.store(held != 0, std::memory_order_relaxed); }
+
 // Levels played with the game's own controls even with dual stick / mouse and keyboard on: the Mizar race (the ship
 // steers with the stick, which the dual-stick camera and movement would take over) and the multiplayer races.
 bool level_uses_original_controls(int level) {
@@ -475,6 +481,17 @@ void jfg_camera_controls(recomp_context* ctx) {
     apply_damage_taken(obj);
     debug_player_log(obj);
     g_cam.move_factor = (float)g.move_speed / 100.0f;
+    g_cam.sprint_factor = 1.0f;
+    static const bool sprint_test = std::getenv("JFG_DEBUG_SPRINT") != nullptr; // tests: sprint on and held
+    if (((g.sprint && g_sprint_held.load(std::memory_order_relaxed)) || sprint_test) && obj != 0 && !dino::input::game_input_disabled()) {
+        // On foot only: not while aiming (the aim walk) or swimming (Dive speed has its own option).
+        const uint32_t data = rd32(obj + 0x68);
+        constexpr uint8_t STATE_SWIM = 4;
+        if (valid_ptr(data) && rd8(data + PD_STATE) != PD_STATE_AIMING && rd8(data + PD_STATE) != STATE_SWIM) {
+            g_cam.sprint_factor = (float)g.sprint_speed / 100.0f;
+            g_cam.move_factor *= g_cam.sprint_factor;
+        }
+    }
     {
         // Mouse wheel: each notch is one press of the game's own weapon buttons (N64 A: next, B: previous - what RB /
         // LB give in the dual-stick layout), so the switch has its sound and the weapon list scrolls on screen. The

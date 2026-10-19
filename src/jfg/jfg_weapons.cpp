@@ -261,14 +261,16 @@ void apply_weapons() {
     }
 }
 
-// Hook at the entry of objAnimDframe(object, speed, frames): the player's throw animation runs faster (see above).
+// Hook at the entry of objAnimDframe(object, speed, frames): the player's throw animation runs faster (see above), and
+// the player's animations keep up with the ground while sprinting (jfg_camera_controls).
 // The speed arrives as the bits of a float in a1 (o32: the first argument is not a float).
 extern "C" uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_bits) {
-    if (g_throw_factor <= 1.0f || obj == 0 || obj != g_cam.player) return speed_bits;
+    if ((g_throw_factor <= 1.0f && g_cam.sprint_factor == 1.0f) || obj == 0 || obj != g_cam.player) return speed_bits;
     g_rdram = rdram;
-    if (!is_throw_anim(obj)) return speed_bits;
+    const bool throwing = g_throw_factor > 1.0f && is_throw_anim(obj);
+    if (!throwing && g_cam.sprint_factor == 1.0f) return speed_bits;
     float speed; std::memcpy(&speed, &speed_bits, 4);
-    speed *= g_throw_factor;
+    speed *= throwing ? g_throw_factor : g_cam.sprint_factor;
     std::memcpy(&speed_bits, &speed, 4);
     return speed_bits;
 }

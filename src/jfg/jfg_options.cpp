@@ -87,6 +87,8 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "aim_from_character") == 0) g.aim_from_character = value != 0;
     else if (std::strcmp(key, "camera_collision") == 0) g.camera_collision = value != 0;
     else if (std::strcmp(key, "move_speed") == 0) g.move_speed = std::clamp(value, 25, 400);
+    else if (std::strcmp(key, "sprint") == 0) g.sprint = value != 0;
+    else if (std::strcmp(key, "sprint_speed") == 0) g.sprint_speed = std::clamp(value, 100, 300);
     else if (std::strcmp(key, "diagonal_boost") == 0) g.diagonal_boost = value != 0;
     else if (std::strcmp(key, "strafe_speed") == 0) g.strafe_speed = std::clamp(value, 0, 300);
     else if (std::strcmp(key, "invert_aim_normal") == 0) g.invert_aim_normal = value != 0;
@@ -150,6 +152,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "refuel_speed=%d\nsniper_fixed_zoom=%d\nsniper_zoom=%d\ndamage_taken=%d\ndive_speed=%d\n", s.refuel_speed, s.sniper_fixed_zoom ? 1 : 0, s.sniper_zoom, s.damage_taken, s.dive_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "fly_speed=%d\nfly_freeze=%d\nfly_hide_hud=%d\n", s.fly_speed, s.fly_freeze ? 1 : 0, s.fly_hide_hud ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "unlimited_continues=%d\npermanent_tribals=%d\n", s.unlimited_continues ? 1 : 0, s.permanent_tribals ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "sprint=%d\nsprint_speed=%d\n", s.sprint ? 1 : 0, s.sprint_speed); out += buf;
     return out;
 }
 

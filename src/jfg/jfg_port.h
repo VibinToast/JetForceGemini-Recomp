@@ -50,6 +50,7 @@ struct CameraControl {
     float elevation = 0;        // added to the game's own camera elevation, radians
     uint32_t player = 0;        // the character's object this tick, for jfg_move_scale
     float move_factor = 1.0f;   // ground speed multiplier this tick
+    float sprint_factor = 1.0f; // the part of it that is sprinting (also speeds up the character's animation)
     bool shoulder = false;      // aiming with the over-the-shoulder option this tick
     float shoulder_blend = 0;   // 0..1: how far the view has moved from the game's camera to the shoulder
     bool overridden = false;    // the camera in RDRAM currently holds our values; saved[] holds the game's
