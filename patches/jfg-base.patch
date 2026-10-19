@@ -1632,10 +1632,10 @@ index 6fb7cfd..d4ff74a 100644
  bool want_capture_keyboard();
  
 diff --git a/src/input/controls.cpp b/src/input/controls.cpp
-index 7b53d07..dab51d7 100644
+index 7b53d07..d8743e8 100644
 --- a/src/input/controls.cpp
 +++ b/src/input/controls.cpp
-@@ -1,6 +1,19 @@
+@@ -1,6 +1,21 @@
  #include "controls.hpp"
  
 +#include <algorithm>
@@ -1652,10 +1652,12 @@ index 7b53d07..dab51d7 100644
 +extern "C" int jfg_mouse_keyboard_active(void);
 +extern "C" int jfg_floyd_mouse_active(void);
 +extern "C" void jfg_dual_stick_release(void);
++extern "C" int jfg_sprint_enabled(void);
++extern "C" void jfg_sprint_input(int held);
  
  namespace dino::input {
  
-@@ -85,10 +98,68 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
+@@ -85,10 +100,70 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
      }
  
      if (!game_input_disabled()) {
@@ -1718,7 +1720,9 @@ index 7b53d07..dab51d7 100644
 +                { digital, SDL_CONTROLLER_BUTTON_DPAD_LEFT,      0x0200 },
 +                { digital, SDL_CONTROLLER_BUTTON_DPAD_RIGHT,     0x0100 },
 +            };
++            const bool sprint = jfg_sprint_enabled() != 0;
 +            for (const LayoutEntry& entry : layout) {
++                if (sprint && entry.type == digital && entry.id == SDL_CONTROLLER_BUTTON_LEFTSTICK) continue; // sprints instead (B still crouches)
 +                if (get_input_digital(InputField{ entry.type, entry.id })) {
 +                    cur_buttons |= entry.n64;
 +                }
@@ -1726,7 +1730,7 @@ index 7b53d07..dab51d7 100644
          }
  
          float joystick_x = get_input_analog(controller_input_mappings[(size_t)GameInput::X_AXIS_POS])
-@@ -99,11 +170,79 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
+@@ -99,11 +174,88 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
  
          apply_joystick_deadzone(joystick_x, joystick_y, &joystick_x, &joystick_y);
  
@@ -1778,7 +1782,9 @@ index 7b53d07..dab51d7 100644
 +            const uint32_t mouse_buttons = SDL_GetMouseState(nullptr, nullptr);
 +            if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) cur_buttons |= 0x0010; // aim (R)
 +            if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) cur_buttons |= 0x2000;  // fire (Z)
-+
+ 
+-        cur_y = get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_POS])
+-                - get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_NEG]) + joystick_y;
 +            // WASD as the left stick.
 +            float kx = (key(SDL_SCANCODE_D) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_A) ? 1.0f : 0.0f);
 +            float ky = (key(SDL_SCANCODE_W) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_S) ? 1.0f : 0.0f);
@@ -1786,9 +1792,16 @@ index 7b53d07..dab51d7 100644
 +            joystick_x = std::clamp(joystick_x + kx, -1.0f, 1.0f);
 +            joystick_y = std::clamp(joystick_y + ky, -1.0f, 1.0f);
 +        }
- 
--        cur_y = get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_POS])
--                - get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_NEG]) + joystick_y;
++
++        // Sprint (JFG option): left-stick click on a controller, Left Shift with mouse and keyboard (not in a Floyd
++        // mission, where it brakes).
++        {
++            constexpr uint32_t keyboard = 1, controller_digital = 3; // InputType::Keyboard / ControllerDigital (input.cpp)
++            bool held = get_input_digital(InputField{ controller_digital, SDL_CONTROLLER_BUTTON_LEFTSTICK });
++            if (mouse_keyboard && !floyd) held = held || get_input_digital(InputField{ keyboard, SDL_SCANCODE_LSHIFT });
++            jfg_sprint_input(held ? 1 : 0);
++        }
++
 +        if (dual_stick) {
 +            float right_x = 0.0f, right_y = 0.0f;
 +            get_right_analog(&right_x, &right_y);
@@ -1810,12 +1823,13 @@ index 7b53d07..dab51d7 100644
  
          float joystick_range = get_joystick_range() / 100.0f;
          
-@@ -111,6 +250,10 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
+@@ -111,6 +263,11 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
          cur_y *= joystick_range;
      }
  
 +    else {
 +        jfg_dual_stick_release(); // a menu has the input: let go of the sticks the game logic remembers
++        jfg_sprint_input(0);
 +    }
 +
      *buttons_out = cur_buttons;

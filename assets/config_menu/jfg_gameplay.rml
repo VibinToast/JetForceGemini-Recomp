@@ -74,215 +74,231 @@
                         <label class="config-option__title">Movement Speed</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{move_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" id="jfg_move_speed_input" type="range" min="25" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_permanent_tribals_on; nav-down: #jfg_aim_shoulder_on;" data-value="move_speed"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" id="jfg_move_speed_input" type="range" min="25" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_permanent_tribals_on; nav-down: #jfg_sprint_on;" data-value="move_speed"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(8)">
-                        <label class="config-option__title">Over-the-Shoulder Aiming</label>
+                        <label class="config-option__title">Sprint</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="1" id="jfg_aim_shoulder_on" style="nav-up: #jfg_move_speed_input; nav-down: #jfg_aim_centered_on;"/>
-                            <label class="config-option__tab-label" for="jfg_aim_shoulder_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="0" id="jfg_aim_shoulder_off" style="nav-up: #jfg_move_speed_input; nav-down: #jfg_aim_centered_off;"/>
-                            <label class="config-option__tab-label" for="jfg_aim_shoulder_off">Off</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_sprint" data-checked="sprint" value="1" id="jfg_sprint_on" style="nav-up: #jfg_move_speed_input; nav-down: #jfg_sprint_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_sprint_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_sprint" data-checked="sprint" value="0" id="jfg_sprint_off" style="nav-up: #jfg_move_speed_input; nav-down: #jfg_sprint_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_sprint_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(9)">
-                        <label class="config-option__title">Keep the Reticle Centered</label>
-                        <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" name="jfg_aim_centered" data-checked="aim_centered" value="1" id="jfg_aim_centered_on" style="nav-up: #jfg_aim_shoulder_on; nav-down: #jfg_aim_jump_on;"/>
-                            <label class="config-option__tab-label" for="jfg_aim_centered_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" name="jfg_aim_centered" data-checked="aim_centered" value="0" id="jfg_aim_centered_off" style="nav-up: #jfg_aim_shoulder_off; nav-down: #jfg_aim_jump_off;"/>
-                            <label class="config-option__tab-label" for="jfg_aim_centered_off">Off</label>
+                        <label class="config-option__title">Sprint Speed</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{sprint_speed}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" id="jfg_sprint_speed_input" type="range" min="100" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_sprint_on; nav-down: #jfg_aim_shoulder_on;" data-value="sprint_speed"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(10)">
-                        <label class="config-option__title">Jump While Aiming</label>
+                        <label class="config-option__title">Over-the-Shoulder Aiming</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_aim_jump" data-checked="aim_jump" value="1" id="jfg_aim_jump_on" style="nav-up: #jfg_aim_centered_on; nav-down: #jfg_aim_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_aim_jump_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_aim_jump" data-checked="aim_jump" value="0" id="jfg_aim_jump_off" style="nav-up: #jfg_aim_centered_off; nav-down: #jfg_aim_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_aim_jump_off">Off</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="1" id="jfg_aim_shoulder_on" style="nav-up: #jfg_sprint_speed_input; nav-down: #jfg_aim_centered_on;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_shoulder_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="0" id="jfg_aim_shoulder_off" style="nav-up: #jfg_sprint_speed_input; nav-down: #jfg_aim_centered_off;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_shoulder_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(11)">
-                        <label class="config-option__title">Aim Speed</label>
-                        <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{aim_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(11)" id="jfg_aim_speed_input" type="range" min="10" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_aim_jump_on; nav-down: #jfg_sniper_fixed_zoom_on;" data-value="aim_speed"/>
+                        <label class="config-option__title">Keep the Reticle Centered</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(11)" name="jfg_aim_centered" data-checked="aim_centered" value="1" id="jfg_aim_centered_on" style="nav-up: #jfg_aim_shoulder_on; nav-down: #jfg_aim_jump_on;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_centered_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(11)" name="jfg_aim_centered" data-checked="aim_centered" value="0" id="jfg_aim_centered_off" style="nav-up: #jfg_aim_shoulder_off; nav-down: #jfg_aim_jump_off;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_centered_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(12)">
-                        <label class="config-option__title">Sniper Fixed Zoom</label>
+                        <label class="config-option__title">Jump While Aiming</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" name="jfg_sniper_fixed_zoom" data-checked="sniper_fixed_zoom" value="1" id="jfg_sniper_fixed_zoom_on" style="nav-up: #jfg_aim_speed_input; nav-down: #jfg_sniper_zoom_input;"/>
-                            <label class="config-option__tab-label" for="jfg_sniper_fixed_zoom_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" name="jfg_sniper_fixed_zoom" data-checked="sniper_fixed_zoom" value="0" id="jfg_sniper_fixed_zoom_off" style="nav-up: #jfg_aim_speed_input; nav-down: #jfg_sniper_zoom_input;"/>
-                            <label class="config-option__tab-label" for="jfg_sniper_fixed_zoom_off">Off</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" name="jfg_aim_jump" data-checked="aim_jump" value="1" id="jfg_aim_jump_on" style="nav-up: #jfg_aim_centered_on; nav-down: #jfg_aim_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_jump_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" name="jfg_aim_jump" data-checked="aim_jump" value="0" id="jfg_aim_jump_off" style="nav-up: #jfg_aim_centered_off; nav-down: #jfg_aim_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_jump_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(13)">
-                        <label class="config-option__title">Sniper Zoom</label>
+                        <label class="config-option__title">Aim Speed</label>
                         <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{sniper_zoom}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" id="jfg_sniper_zoom_input" type="range" min="100" max="500" style="flex: 1; margin: 0dp; nav-up: #jfg_sniper_fixed_zoom_on; nav-down: #jfg_damage_taken_input;" data-value="sniper_zoom"/>
+                            <label class="config-option__range-label">{{aim_speed}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" id="jfg_aim_speed_input" type="range" min="10" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_aim_jump_on; nav-down: #jfg_sniper_fixed_zoom_on;" data-value="aim_speed"/>
                         </div>
                     </div>
-                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Player</label></div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(14)">
-                        <label class="config-option__title">Damage Taken</label>
-                        <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{damage_taken}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" id="jfg_damage_taken_input" type="range" min="0" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_sniper_zoom_input; nav-down: #jfg_unlimited_continues_on;" data-value="damage_taken"/>
+                        <label class="config-option__title">Sniper Fixed Zoom</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" name="jfg_sniper_fixed_zoom" data-checked="sniper_fixed_zoom" value="1" id="jfg_sniper_fixed_zoom_on" style="nav-up: #jfg_aim_speed_input; nav-down: #jfg_sniper_zoom_input;"/>
+                            <label class="config-option__tab-label" for="jfg_sniper_fixed_zoom_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" name="jfg_sniper_fixed_zoom" data-checked="sniper_fixed_zoom" value="0" id="jfg_sniper_fixed_zoom_off" style="nav-up: #jfg_aim_speed_input; nav-down: #jfg_sniper_zoom_input;"/>
+                            <label class="config-option__tab-label" for="jfg_sniper_fixed_zoom_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(15)">
-                        <label class="config-option__title">Unlimited Continues</label>
-                        <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(15)" name="jfg_unlimited_continues" data-checked="unlimited_continues" value="1" id="jfg_unlimited_continues_on" style="nav-up: #jfg_damage_taken_input; nav-down: #jfg_refuel_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_unlimited_continues_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(15)" name="jfg_unlimited_continues" data-checked="unlimited_continues" value="0" id="jfg_unlimited_continues_off" style="nav-up: #jfg_damage_taken_input; nav-down: #jfg_refuel_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_unlimited_continues_off">Off</label>
+                        <label class="config-option__title">Sniper Zoom</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{sniper_zoom}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(15)" id="jfg_sniper_zoom_input" type="range" min="100" max="500" style="flex: 1; margin: 0dp; nav-up: #jfg_sniper_fixed_zoom_on; nav-down: #jfg_damage_taken_input;" data-value="sniper_zoom"/>
                         </div>
                     </div>
+                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Player</label></div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(16)">
-                        <label class="config-option__title">Jetpack Refuel Speed</label>
+                        <label class="config-option__title">Damage Taken</label>
                         <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{refuel_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" id="jfg_refuel_speed_input" type="range" min="25" max="1000" style="flex: 1; margin: 0dp; nav-up: #jfg_unlimited_continues_on; nav-down: #jfg_dive_speed_input;" data-value="refuel_speed"/>
+                            <label class="config-option__range-label">{{damage_taken}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" id="jfg_damage_taken_input" type="range" min="0" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_sniper_zoom_input; nav-down: #jfg_unlimited_continues_on;" data-value="damage_taken"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(17)">
-                        <label class="config-option__title">Vela&#x27;s Dive Speed</label>
-                        <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{dive_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" id="jfg_dive_speed_input" type="range" min="50" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_refuel_speed_input; nav-down: #jfg_dual_stick_on;" data-value="dive_speed"/>
+                        <label class="config-option__title">Unlimited Continues</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_unlimited_continues" data-checked="unlimited_continues" value="1" id="jfg_unlimited_continues_on" style="nav-up: #jfg_damage_taken_input; nav-down: #jfg_refuel_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_unlimited_continues_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_unlimited_continues" data-checked="unlimited_continues" value="0" id="jfg_unlimited_continues_off" style="nav-up: #jfg_damage_taken_input; nav-down: #jfg_refuel_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_unlimited_continues_off">Off</label>
                         </div>
                     </div>
-                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Dual Stick</label></div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(18)">
-                        <label class="config-option__title">Dual-Stick Controls</label>
-                        <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_dual_stick" data-checked="dual_stick" value="1" id="jfg_dual_stick_on" style="nav-up: #jfg_dive_speed_input; nav-down: #jfg_dual_layout_on;"/>
-                            <label class="config-option__tab-label" for="jfg_dual_stick_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_dual_stick" data-checked="dual_stick" value="0" id="jfg_dual_stick_off" style="nav-up: #jfg_dive_speed_input; nav-down: #jfg_dual_layout_off;"/>
-                            <label class="config-option__tab-label" for="jfg_dual_stick_off">Off</label>
+                        <label class="config-option__title">Jetpack Refuel Speed</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{refuel_speed}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" id="jfg_refuel_speed_input" type="range" min="25" max="1000" style="flex: 1; margin: 0dp; nav-up: #jfg_unlimited_continues_on; nav-down: #jfg_dive_speed_input;" data-value="refuel_speed"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(19)">
-                        <label class="config-option__title">Built-in Button Layout</label>
-                        <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" name="jfg_dual_layout" data-checked="dual_layout" value="1" id="jfg_dual_layout_on" style="nav-up: #jfg_dual_stick_on; nav-down: #jfg_swap_triggers_on;"/>
-                            <label class="config-option__tab-label" for="jfg_dual_layout_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" name="jfg_dual_layout" data-checked="dual_layout" value="0" id="jfg_dual_layout_off" style="nav-up: #jfg_dual_stick_off; nav-down: #jfg_swap_triggers_off;"/>
-                            <label class="config-option__tab-label" for="jfg_dual_layout_off">Off</label>
+                        <label class="config-option__title">Vela&#x27;s Dive Speed</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{dive_speed}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" id="jfg_dive_speed_input" type="range" min="50" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_refuel_speed_input; nav-down: #jfg_dual_stick_on;" data-value="dive_speed"/>
                         </div>
                     </div>
+                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Dual Stick</label></div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(20)">
-                        <label class="config-option__title">Swap Triggers</label>
+                        <label class="config-option__title">Dual-Stick Controls</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_swap_triggers" data-checked="swap_triggers" value="1" id="jfg_swap_triggers_on" style="nav-up: #jfg_dual_layout_on; nav-down: #jfg_invert_aim_y_on;"/>
-                            <label class="config-option__tab-label" for="jfg_swap_triggers_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_swap_triggers" data-checked="swap_triggers" value="0" id="jfg_swap_triggers_off" style="nav-up: #jfg_dual_layout_off; nav-down: #jfg_invert_aim_y_off;"/>
-                            <label class="config-option__tab-label" for="jfg_swap_triggers_off">Off</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_dual_stick" data-checked="dual_stick" value="1" id="jfg_dual_stick_on" style="nav-up: #jfg_dive_speed_input; nav-down: #jfg_dual_layout_on;"/>
+                            <label class="config-option__tab-label" for="jfg_dual_stick_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_dual_stick" data-checked="dual_stick" value="0" id="jfg_dual_stick_off" style="nav-up: #jfg_dive_speed_input; nav-down: #jfg_dual_layout_off;"/>
+                            <label class="config-option__tab-label" for="jfg_dual_stick_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(21)">
-                        <label class="config-option__title">Invert Aim Up/Down</label>
+                        <label class="config-option__title">Built-in Button Layout</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" name="jfg_invert_aim_y" data-checked="invert_aim_y" value="1" id="jfg_invert_aim_y_on" style="nav-up: #jfg_swap_triggers_on; nav-down: #jfg_invert_camera_y_on;"/>
-                            <label class="config-option__tab-label" for="jfg_invert_aim_y_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" name="jfg_invert_aim_y" data-checked="invert_aim_y" value="0" id="jfg_invert_aim_y_off" style="nav-up: #jfg_swap_triggers_off; nav-down: #jfg_invert_camera_y_off;"/>
-                            <label class="config-option__tab-label" for="jfg_invert_aim_y_off">Off</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" name="jfg_dual_layout" data-checked="dual_layout" value="1" id="jfg_dual_layout_on" style="nav-up: #jfg_dual_stick_on; nav-down: #jfg_swap_triggers_on;"/>
+                            <label class="config-option__tab-label" for="jfg_dual_layout_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" name="jfg_dual_layout" data-checked="dual_layout" value="0" id="jfg_dual_layout_off" style="nav-up: #jfg_dual_stick_off; nav-down: #jfg_swap_triggers_off;"/>
+                            <label class="config-option__tab-label" for="jfg_dual_layout_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(22)">
-                        <label class="config-option__title">Invert Camera Up/Down</label>
+                        <label class="config-option__title">Swap Triggers</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_invert_camera_y" data-checked="invert_camera_y" value="1" id="jfg_invert_camera_y_on" style="nav-up: #jfg_invert_aim_y_on; nav-down: #jfg_aim_from_character_on;"/>
-                            <label class="config-option__tab-label" for="jfg_invert_camera_y_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_invert_camera_y" data-checked="invert_camera_y" value="0" id="jfg_invert_camera_y_off" style="nav-up: #jfg_invert_aim_y_off; nav-down: #jfg_aim_from_character_off;"/>
-                            <label class="config-option__tab-label" for="jfg_invert_camera_y_off">Off</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_swap_triggers" data-checked="swap_triggers" value="1" id="jfg_swap_triggers_on" style="nav-up: #jfg_dual_layout_on; nav-down: #jfg_invert_aim_y_on;"/>
+                            <label class="config-option__tab-label" for="jfg_swap_triggers_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_swap_triggers" data-checked="swap_triggers" value="0" id="jfg_swap_triggers_off" style="nav-up: #jfg_dual_layout_off; nav-down: #jfg_invert_aim_y_off;"/>
+                            <label class="config-option__tab-label" for="jfg_swap_triggers_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(23)">
-                        <label class="config-option__title">Aim Where the Character Faces</label>
+                        <label class="config-option__title">Invert Aim Up/Down</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_aim_from_character" data-checked="aim_from_character" value="1" id="jfg_aim_from_character_on" style="nav-up: #jfg_invert_camera_y_on; nav-down: #jfg_camera_speed_h_input;"/>
-                            <label class="config-option__tab-label" for="jfg_aim_from_character_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_aim_from_character" data-checked="aim_from_character" value="0" id="jfg_aim_from_character_off" style="nav-up: #jfg_invert_camera_y_off; nav-down: #jfg_camera_speed_h_input;"/>
-                            <label class="config-option__tab-label" for="jfg_aim_from_character_off">Off</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_invert_aim_y" data-checked="invert_aim_y" value="1" id="jfg_invert_aim_y_on" style="nav-up: #jfg_swap_triggers_on; nav-down: #jfg_invert_camera_y_on;"/>
+                            <label class="config-option__tab-label" for="jfg_invert_aim_y_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_invert_aim_y" data-checked="invert_aim_y" value="0" id="jfg_invert_aim_y_off" style="nav-up: #jfg_swap_triggers_off; nav-down: #jfg_invert_camera_y_off;"/>
+                            <label class="config-option__tab-label" for="jfg_invert_aim_y_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(24)">
-                        <label class="config-option__title">Camera Left/Right</label>
-                        <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{camera_speed_h}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(24)" id="jfg_camera_speed_h_input" type="range" min="10" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_aim_from_character_on; nav-down: #jfg_camera_speed_v_input;" data-value="camera_speed_h"/>
+                        <label class="config-option__title">Invert Camera Up/Down</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(24)" name="jfg_invert_camera_y" data-checked="invert_camera_y" value="1" id="jfg_invert_camera_y_on" style="nav-up: #jfg_invert_aim_y_on; nav-down: #jfg_aim_from_character_on;"/>
+                            <label class="config-option__tab-label" for="jfg_invert_camera_y_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(24)" name="jfg_invert_camera_y" data-checked="invert_camera_y" value="0" id="jfg_invert_camera_y_off" style="nav-up: #jfg_invert_aim_y_off; nav-down: #jfg_aim_from_character_off;"/>
+                            <label class="config-option__tab-label" for="jfg_invert_camera_y_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(25)">
-                        <label class="config-option__title">Camera Up/Down</label>
-                        <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{camera_speed_v}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(25)" id="jfg_camera_speed_v_input" type="range" min="10" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_camera_speed_h_input; nav-down: #jfg_diagonal_boost_on;" data-value="camera_speed_v"/>
+                        <label class="config-option__title">Aim Where the Character Faces</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(25)" name="jfg_aim_from_character" data-checked="aim_from_character" value="1" id="jfg_aim_from_character_on" style="nav-up: #jfg_invert_camera_y_on; nav-down: #jfg_camera_speed_h_input;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_from_character_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(25)" name="jfg_aim_from_character" data-checked="aim_from_character" value="0" id="jfg_aim_from_character_off" style="nav-up: #jfg_invert_camera_y_off; nav-down: #jfg_camera_speed_h_input;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_from_character_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(26)">
-                        <label class="config-option__title">Diagonal Speed Boost</label>
-                        <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(26)" name="jfg_diagonal_boost" data-checked="diagonal_boost" value="1" id="jfg_diagonal_boost_on" style="nav-up: #jfg_camera_speed_v_input; nav-down: #jfg_strafe_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_diagonal_boost_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(26)" name="jfg_diagonal_boost" data-checked="diagonal_boost" value="0" id="jfg_diagonal_boost_off" style="nav-up: #jfg_camera_speed_v_input; nav-down: #jfg_strafe_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_diagonal_boost_off">Off</label>
+                        <label class="config-option__title">Camera Left/Right</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{camera_speed_h}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(26)" id="jfg_camera_speed_h_input" type="range" min="10" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_aim_from_character_on; nav-down: #jfg_camera_speed_v_input;" data-value="camera_speed_h"/>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(27)">
-                        <label class="config-option__title">Strafe Speed</label>
+                        <label class="config-option__title">Camera Up/Down</label>
                         <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{strafe_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(27)" id="jfg_strafe_speed_input" type="range" min="0" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_diagonal_boost_on; nav-down: #jfg_mouse_keyboard_on;" data-value="strafe_speed"/>
+                            <label class="config-option__range-label">{{camera_speed_v}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(27)" id="jfg_camera_speed_v_input" type="range" min="10" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_camera_speed_h_input; nav-down: #jfg_diagonal_boost_on;" data-value="camera_speed_v"/>
                         </div>
                     </div>
-                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Mouse &amp; Keyboard</label></div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(28)">
-                        <label class="config-option__title">Mouse and Keyboard Controls</label>
+                        <label class="config-option__title">Diagonal Speed Boost</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(28)" name="jfg_mouse_keyboard" data-checked="mouse_keyboard" value="1" id="jfg_mouse_keyboard_on" style="nav-up: #jfg_strafe_speed_input; nav-down: #jfg_mouse_camera_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_mouse_keyboard_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(28)" name="jfg_mouse_keyboard" data-checked="mouse_keyboard" value="0" id="jfg_mouse_keyboard_off" style="nav-up: #jfg_strafe_speed_input; nav-down: #jfg_mouse_camera_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_mouse_keyboard_off">Off</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(28)" name="jfg_diagonal_boost" data-checked="diagonal_boost" value="1" id="jfg_diagonal_boost_on" style="nav-up: #jfg_camera_speed_v_input; nav-down: #jfg_strafe_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_diagonal_boost_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(28)" name="jfg_diagonal_boost" data-checked="diagonal_boost" value="0" id="jfg_diagonal_boost_off" style="nav-up: #jfg_camera_speed_v_input; nav-down: #jfg_strafe_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_diagonal_boost_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(29)">
-                        <label class="config-option__title">Mouse Camera Speed</label>
+                        <label class="config-option__title">Strafe Speed</label>
                         <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{mouse_camera_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(29)" id="jfg_mouse_camera_speed_input" type="range" min="10" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_mouse_keyboard_on; nav-down: #jfg_mouse_aim_speed_input;" data-value="mouse_camera_speed"/>
+                            <label class="config-option__range-label">{{strafe_speed}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(29)" id="jfg_strafe_speed_input" type="range" min="0" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_diagonal_boost_on; nav-down: #jfg_mouse_keyboard_on;" data-value="strafe_speed"/>
                         </div>
                     </div>
+                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Mouse &amp; Keyboard</label></div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(30)">
-                        <label class="config-option__title">Mouse Aim Speed</label>
-                        <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{mouse_aim_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(30)" id="jfg_mouse_aim_speed_input" type="range" min="10" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_mouse_camera_speed_input; nav-down: #jfg_invert_mouse_y_on;" data-value="mouse_aim_speed"/>
+                        <label class="config-option__title">Mouse and Keyboard Controls</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(30)" name="jfg_mouse_keyboard" data-checked="mouse_keyboard" value="1" id="jfg_mouse_keyboard_on" style="nav-up: #jfg_strafe_speed_input; nav-down: #jfg_mouse_camera_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_mouse_keyboard_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(30)" name="jfg_mouse_keyboard" data-checked="mouse_keyboard" value="0" id="jfg_mouse_keyboard_off" style="nav-up: #jfg_strafe_speed_input; nav-down: #jfg_mouse_camera_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_mouse_keyboard_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" data-event-mouseover="set_cur_config_index(31)">
+                        <label class="config-option__title">Mouse Camera Speed</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{mouse_camera_speed}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(31)" id="jfg_mouse_camera_speed_input" type="range" min="10" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_mouse_keyboard_on; nav-down: #jfg_mouse_aim_speed_input;" data-value="mouse_camera_speed"/>
+                        </div>
+                    </div>
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(32)">
+                        <label class="config-option__title">Mouse Aim Speed</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{mouse_aim_speed}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(32)" id="jfg_mouse_aim_speed_input" type="range" min="10" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_mouse_camera_speed_input; nav-down: #jfg_invert_mouse_y_on;" data-value="mouse_aim_speed"/>
+                        </div>
+                    </div>
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(33)">
                         <label class="config-option__title">Invert Mouse Up/Down</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(31)" name="jfg_invert_mouse_y" data-checked="invert_mouse_y" value="1" id="jfg_invert_mouse_y_on" style="nav-up: #jfg_mouse_aim_speed_input; nav-down: #jfg_invert_aim_normal_on;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(33)" name="jfg_invert_mouse_y" data-checked="invert_mouse_y" value="1" id="jfg_invert_mouse_y_on" style="nav-up: #jfg_mouse_aim_speed_input; nav-down: #jfg_invert_aim_normal_on;"/>
                             <label class="config-option__tab-label" for="jfg_invert_mouse_y_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(31)" name="jfg_invert_mouse_y" data-checked="invert_mouse_y" value="0" id="jfg_invert_mouse_y_off" style="nav-up: #jfg_mouse_aim_speed_input; nav-down: #jfg_invert_aim_normal_off;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(33)" name="jfg_invert_mouse_y" data-checked="invert_mouse_y" value="0" id="jfg_invert_mouse_y_off" style="nav-up: #jfg_mouse_aim_speed_input; nav-down: #jfg_invert_aim_normal_off;"/>
                             <label class="config-option__tab-label" for="jfg_invert_mouse_y_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Original Controls</label></div>
-                    <div class="config-option" data-event-mouseover="set_cur_config_index(32)">
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(34)">
                         <label class="config-option__title">Invert Aim Up/Down</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(32)" name="jfg_invert_aim_normal" data-checked="invert_aim_normal" value="1" id="jfg_invert_aim_normal_on" style="nav-up: #jfg_invert_mouse_y_on; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(34)" name="jfg_invert_aim_normal" data-checked="invert_aim_normal" value="1" id="jfg_invert_aim_normal_on" style="nav-up: #jfg_invert_mouse_y_on; nav-down: none;"/>
                             <label class="config-option__tab-label" for="jfg_invert_aim_normal_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(32)" name="jfg_invert_aim_normal" data-checked="invert_aim_normal" value="0" id="jfg_invert_aim_normal_off" style="nav-up: #jfg_invert_mouse_y_off; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(34)" name="jfg_invert_aim_normal" data-checked="invert_aim_normal" value="0" id="jfg_invert_aim_normal_off" style="nav-up: #jfg_invert_mouse_y_off; nav-down: none;"/>
                             <label class="config-option__tab-label" for="jfg_invert_aim_normal_off">Off</label>
                         </div>
                     </div>
@@ -298,31 +314,33 @@
                     <p data-if="cur_config_index == 5">Saving in the middle of an area (auto save or Z on the pause screen) also keeps what was done there: Tribals rescued or lost, cleared rooms, continues, and the room you were in. Loading the file puts it all back. Off: the game's own behaviour, where an area starts over from its entrance after loading.</p>
                     <p data-if="cur_config_index == 6">A Tribal you rescued stays rescued: going back into its area, a game over or loading your file no longer brings it back to be rescued again, so the Tribals of an area can be rescued over several visits. Rescues are kept each time the game saves (including auto saves).</p>
                     <p data-if="cur_config_index == 7">How fast the character moves over the ground. The extra distance is collision-checked like normal movement.</p>
-                    <p data-if="cur_config_index == 8">While aiming, the view is from over the character's right shoulder.</p>
-                    <p data-if="cur_config_index == 9">While aiming, the view turns as soon as the stick moves and the reticle stays in the middle (instead of the reticle first travelling to the edge of a box and drifting back).</p>
-                    <p data-if="cur_config_index == 10">The jump button jumps while aiming, also while walking or strafing: the character leaves the aim for the jump and aims again on landing if the aim button is still held. The sniper scope then zooms with the D-pad (dual stick) or 1 / 3 (mouse and keyboard).</p>
-                    <p data-if="cur_config_index == 11">How fast the stick turns the view / moves the reticle while aiming.</p>
-                    <p data-if="cur_config_index == 12">The Sniper Rifle's scope stays at the zoom set below; the zoom buttons do nothing.</p>
-                    <p data-if="cur_config_index == 13">The fixed zoom of the Sniper Rifle: 100% is no zoom, 500% the game's closest.</p>
-                    <p data-if="cur_config_index == 14">How much damage the character takes from enemies, falls and explosions. 0% takes none; the Invulnerable cheat overrides it.</p>
-                    <p data-if="cur_config_index == 15">Dying never uses up your continues, so you always come back where you died instead of the game over that restarts the area from its entrance.</p>
-                    <p data-if="cur_config_index == 16">How fast a fuel pad fills the jetpack.</p>
-                    <p data-if="cur_config_index == 17">How fast Vela swims underwater, in every direction.</p>
-                    <p data-if="cur_config_index == 18">Right stick: moves the camera around the character. Left stick: runs in the pushed direction as seen from the camera. While the aim button is held the right stick aims and the left stick moves, as in a first-person game. Menus, cutscenes, Floyd missions and the races keep the normal layout.</p>
-                    <p data-if="cur_config_index == 19">LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. D-pad: weapon select; up/down zoom while aiming. View / right-stick click: N64 L. Off: your own controller bindings.</p>
-                    <p data-if="cur_config_index == 20">RT aims and LT fires.</p>
-                    <p data-if="cur_config_index == 21">Dual stick: right stick up aims down (the game's original flight-stick style).</p>
-                    <p data-if="cur_config_index == 22">Dual stick: right stick up lowers the camera instead of raising the view.</p>
-                    <p data-if="cur_config_index == 23">On aiming, the view turns to the character instead of the character to the view.</p>
-                    <p data-if="cur_config_index == 24">Dual stick: how fast the right stick turns the camera sideways.</p>
-                    <p data-if="cur_config_index == 25">Dual stick: how fast the right stick moves the camera up and down.</p>
-                    <p data-if="cur_config_index == 26">With the original controls, running forward while sidestepping adds the two speeds together, so going diagonally is about 40% faster. This gives the left stick the same boost when it is pushed diagonally.</p>
-                    <p data-if="cur_config_index == 27">How much the sideways part counts in the diagonal speed boost.</p>
-                    <p data-if="cur_config_index == 28">Plays like the dual-stick controls: WASD run, the mouse turns the camera, hold the right button to aim and click the left to fire, the wheel changes weapon. Space jumps, Left Ctrl or C crouches, Enter is START, Tab is N64 L, 1-4 are the D-pad. The cursor is captured during gameplay only.</p>
-                    <p data-if="cur_config_index == 29">How fast the mouse turns the camera.</p>
-                    <p data-if="cur_config_index == 30">How fast the mouse aims.</p>
-                    <p data-if="cur_config_index == 31">Mouse forward looks down.</p>
-                    <p data-if="cur_config_index == 32">Original controls only: flip the stick's up/down while aiming (R held).</p>
+                    <p data-if="cur_config_index == 8">Hold the left stick click (controller) or Left Shift (mouse and keyboard) to run faster. In the built-in dual-stick layout the left stick click then sprints instead of crouching; B still crouches. Not while aiming or swimming.</p>
+                    <p data-if="cur_config_index == 9">How fast the character runs while sprinting, on top of the Movement Speed.</p>
+                    <p data-if="cur_config_index == 10">While aiming, the view is from over the character's right shoulder.</p>
+                    <p data-if="cur_config_index == 11">While aiming, the view turns as soon as the stick moves and the reticle stays in the middle (instead of the reticle first travelling to the edge of a box and drifting back).</p>
+                    <p data-if="cur_config_index == 12">The jump button jumps while aiming, also while walking or strafing: the character leaves the aim for the jump and aims again on landing if the aim button is still held. The sniper scope then zooms with the D-pad (dual stick) or 1 / 3 (mouse and keyboard).</p>
+                    <p data-if="cur_config_index == 13">How fast the stick turns the view / moves the reticle while aiming.</p>
+                    <p data-if="cur_config_index == 14">The Sniper Rifle's scope stays at the zoom set below; the zoom buttons do nothing.</p>
+                    <p data-if="cur_config_index == 15">The fixed zoom of the Sniper Rifle: 100% is no zoom, 500% the game's closest.</p>
+                    <p data-if="cur_config_index == 16">How much damage the character takes from enemies, falls and explosions. 0% takes none; the Invulnerable cheat overrides it.</p>
+                    <p data-if="cur_config_index == 17">Dying never uses up your continues, so you always come back where you died instead of the game over that restarts the area from its entrance.</p>
+                    <p data-if="cur_config_index == 18">How fast a fuel pad fills the jetpack.</p>
+                    <p data-if="cur_config_index == 19">How fast Vela swims underwater, in every direction.</p>
+                    <p data-if="cur_config_index == 20">Right stick: moves the camera around the character. Left stick: runs in the pushed direction as seen from the camera. While the aim button is held the right stick aims and the left stick moves, as in a first-person game. Menus, cutscenes, Floyd missions and the races keep the normal layout.</p>
+                    <p data-if="cur_config_index == 21">LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. D-pad: weapon select; up/down zoom while aiming. View / right-stick click: N64 L. Off: your own controller bindings.</p>
+                    <p data-if="cur_config_index == 22">RT aims and LT fires.</p>
+                    <p data-if="cur_config_index == 23">Dual stick: right stick up aims down (the game's original flight-stick style).</p>
+                    <p data-if="cur_config_index == 24">Dual stick: right stick up lowers the camera instead of raising the view.</p>
+                    <p data-if="cur_config_index == 25">On aiming, the view turns to the character instead of the character to the view.</p>
+                    <p data-if="cur_config_index == 26">Dual stick: how fast the right stick turns the camera sideways.</p>
+                    <p data-if="cur_config_index == 27">Dual stick: how fast the right stick moves the camera up and down.</p>
+                    <p data-if="cur_config_index == 28">With the original controls, running forward while sidestepping adds the two speeds together, so going diagonally is about 40% faster. This gives the left stick the same boost when it is pushed diagonally.</p>
+                    <p data-if="cur_config_index == 29">How much the sideways part counts in the diagonal speed boost.</p>
+                    <p data-if="cur_config_index == 30">Plays like the dual-stick controls: WASD run, the mouse turns the camera, hold the right button to aim and click the left to fire, the wheel changes weapon. Space jumps, Left Ctrl or C crouches, Enter is START, Tab is N64 L, 1-4 are the D-pad. The cursor is captured during gameplay only.</p>
+                    <p data-if="cur_config_index == 31">How fast the mouse turns the camera.</p>
+                    <p data-if="cur_config_index == 32">How fast the mouse aims.</p>
+                    <p data-if="cur_config_index == 33">Mouse forward looks down.</p>
+                    <p data-if="cur_config_index == 34">Original controls only: flip the stick's up/down while aiming (R held).</p>
                 </div>
             </div>
         </form>

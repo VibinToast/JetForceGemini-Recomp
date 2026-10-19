@@ -64,7 +64,9 @@ struct State {
     bool dual_stick = false;       // modern twin-stick layout, see jfg_dual_stick()
     bool invert_aim_y = false;     // dual stick: right stick up aims down (the game's original behaviour)
     int  move_speed = 100;         // how fast the character moves over the ground, percent (any layout)
-    bool diagonal_boost = false;   // dual stick: faster when the left stick is pushed diagonally, as running + sidestepping was
+    bool sprint = false;           // hold left-stick click / Left Shift to run faster (jfg_camera_controls)
+    int  sprint_speed = 160;       // sprint: ground speed while it is held, percent
+    bool diagonal_boost = false;  // dual stick: faster when the left stick is pushed diagonally, as running + sidestepping was
     int  strafe_speed = 100;       // dual stick: weight of the sideways part in that boost, percent
     bool camera_collision = true;  // dual stick: the camera stays inside the level (the game's own wall check)
     bool aim_from_character = false; // dual stick: on aiming, the view turns to the character instead of the character to the view

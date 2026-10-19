@@ -227,6 +227,10 @@ void draw_options() {
         if (ImGui::BeginTabItem("Move & Aim")) {
             options_section("Movement (any control layout)");
             changed |= options_slider("Movement speed %", &g.move_speed, 50, 300);
+            changed |= ImGui::Checkbox("Sprint", &g.sprint);
+            options_help("Hold the left stick click (controller) or Left Shift (mouse and keyboard) to run faster. In the "
+                         "built-in dual-stick layout the left stick click then sprints instead of crouching (B still crouches).");
+            changed |= options_slider("Sprint speed %", &g.sprint_speed, 100, 300);
 
             options_section("Aiming (any control layout)");
             changed |= ImGui::Checkbox("Over-the-shoulder view while aiming", &g.aim_shoulder);
