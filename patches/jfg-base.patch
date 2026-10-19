@@ -2742,10 +2742,10 @@ index e6d7716..0960cf4 100644
  }
  
 diff --git a/src/renderer/renderer.cpp b/src/renderer/renderer.cpp
-index 4572744..5eea843 100644
+index 4572744..5a36174 100644
 --- a/src/renderer/renderer.cpp
 +++ b/src/renderer/renderer.cpp
-@@ -1,8 +1,20 @@
+@@ -1,13 +1,31 @@
 +extern "C" int jfg_skip_render_active(void); // src/jfg/jfg_cutscene_skip.cpp
 +extern "C" int jfg_widescreen_active(void);  // src/jfg/jfg_visuals.cpp: the "Widescreen" option of the F9 menu
 +extern "C" int jfg_texture_dump_active(void);
@@ -2765,8 +2765,19 @@ index 4572744..5eea843 100644
 +#include <fstream>
  #include <chrono>
  #include <cstdint>
++#include <iterator>
  #include <memory>
-@@ -168,7 +180,11 @@ RT64::UserConfiguration::AspectRatio to_rt64(ultramodern::renderer::AspectRatio
+ #include <mutex>
++#include <unordered_map>
++#include <unordered_set>
+ #include <variant>
++#include <vector>
++
++#include <json/json.hpp>
+ 
+ #include "ultramodern/config.hpp"
+ 
+@@ -168,7 +186,11 @@ RT64::UserConfiguration::AspectRatio to_rt64(ultramodern::renderer::AspectRatio
          case ultramodern::renderer::AspectRatio::Original:
              return RT64::UserConfiguration::AspectRatio::Original;
          case ultramodern::renderer::AspectRatio::Expand:
@@ -2779,7 +2790,7 @@ index 4572744..5eea843 100644
          case ultramodern::renderer::AspectRatio::Manual:
              return RT64::UserConfiguration::AspectRatio::Manual;
          case ultramodern::renderer::AspectRatio::OptionCount:
-@@ -217,6 +233,14 @@ RT64::UserConfiguration::InternalColorFormat to_rt64(ultramodern::renderer::High
+@@ -217,6 +239,14 @@ RT64::UserConfiguration::InternalColorFormat to_rt64(ultramodern::renderer::High
      }
  }
  
@@ -2794,7 +2805,7 @@ index 4572744..5eea843 100644
  void set_application_user_config(RT64::Application* application, const ultramodern::renderer::GraphicsConfig& config) {
      switch (config.res_option) {
          default:
-@@ -250,13 +274,21 @@ void set_application_user_config(RT64::Application* application, const ultramode
+@@ -250,13 +280,21 @@ void set_application_user_config(RT64::Application* application, const ultramode
              break;
      }
  
@@ -2818,7 +2829,7 @@ index 4572744..5eea843 100644
  }
  
  ultramodern::renderer::SetupResult map_setup_result(RT64::Application::SetupResult rt64_result) {
-@@ -296,7 +328,7 @@ ultramodern::renderer::GraphicsApi map_graphics_api(RT64::UserConfiguration::Gra
+@@ -296,7 +334,7 @@ ultramodern::renderer::GraphicsApi map_graphics_api(RT64::UserConfiguration::Gra
  }
  
  RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool debug) {
@@ -2827,7 +2838,7 @@ index 4572744..5eea843 100644
      static unsigned char dummy_rom_header[0x40];
      recompui::set_render_hooks();
  #if !defined(__APPLE__)
-@@ -392,7 +424,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
+@@ -392,7 +430,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
      thread_id = window_handle.thread_id;
  #endif
      const auto rt64_setup_result = app->setup(thread_id);
@@ -2836,7 +2847,7 @@ index 4572744..5eea843 100644
          static_cast<int>(rt64_setup_result), static_cast<int>(app->chosenGraphicsAPI));
      setup_result = map_setup_result(rt64_setup_result);
      // Get the API that RT64 chose.
-@@ -412,7 +444,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
+@@ -412,7 +450,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
      if (dino::config::running_on_steam_deck()) {
          app->rasterShaderCache->setCompilationEnabled(false);
          app->workloadQueue->ubershadersOnly.store(true, std::memory_order_relaxed);
@@ -2845,7 +2856,7 @@ index 4572744..5eea843 100644
      }
  
      // Set the application's fullscreen state.
-@@ -447,6 +479,9 @@ RT64Context::~RT64Context() {
+@@ -447,6 +485,9 @@ RT64Context::~RT64Context() {
  }
  
  void RT64Context::send_dl(const OSTask* task) {
@@ -2855,7 +2866,7 @@ index 4572744..5eea843 100644
      check_texture_pack_actions();
      app->state->rsp->reset();
      constexpr uint32_t DkrRdramMask = 0x007FFFFFU;
-@@ -458,12 +493,12 @@ void RT64Context::preload_common_shaders() {
+@@ -458,12 +499,12 @@ void RT64Context::preload_common_shaders() {
      if ((app != nullptr) && (app->rasterShaderCache != nullptr) &&
          (app->rasterShaderCache->shaderUber != nullptr)) {
          const auto start = std::chrono::steady_clock::now();
@@ -2870,7 +2881,7 @@ index 4572744..5eea843 100644
                  deck_attract_shader_preload.size());
  
              app->rasterShaderCache->setCompilationEnabled(true);
-@@ -476,18 +511,65 @@ void RT64Context::preload_common_shaders() {
+@@ -476,18 +517,65 @@ void RT64Context::preload_common_shaders() {
              const uint32_t shader_count_after = app->rasterShaderCache->shaderCount();
              app->workloadQueue->ubershadersOnly.store(false, std::memory_order_relaxed);
              fprintf(stderr,
@@ -2938,7 +2949,7 @@ index 4572744..5eea843 100644
      // The track-select backdrop is an authored 320-pixel-wide scrolling page.
      // The post-race and results layouts likewise draw only a 4:3 page while the
      // race scene remains visible behind it. Expanding any of those projections
-@@ -507,7 +589,7 @@ void RT64Context::update_game_aspect_override() {
+@@ -507,7 +595,7 @@ void RT64Context::update_game_aspect_override() {
      const bool postrace_active = rdram[DkrPostRaceViewportOffset ^ 3U] != 0;
      const int32_t game_mode = *reinterpret_cast<const int32_t *>(rdram + DkrGameModeOffset);
      const int32_t current_menu_id = *reinterpret_cast<const int32_t *>(rdram + DkrCurrentMenuIdOffset);
@@ -2947,7 +2958,7 @@ index 4572744..5eea843 100644
          static int32_t previous_game_mode = INT32_MIN;
          static int32_t previous_menu_id = INT32_MIN;
          if ((game_mode != previous_game_mode) || (current_menu_id != previous_menu_id)) {
-@@ -534,7 +616,7 @@ void RT64Context::update_game_aspect_override() {
+@@ -534,7 +622,7 @@ void RT64Context::update_game_aspect_override() {
      }
  
      app->updateUserConfig(false);
@@ -2956,7 +2967,7 @@ index 4572744..5eea843 100644
          game_aspect_override ? "enabled" : "disabled");
  }
  
-@@ -574,7 +656,14 @@ bool RT64Context::update_config(const ultramodern::renderer::GraphicsConfig& old
+@@ -574,7 +662,14 @@ bool RT64Context::update_config(const ultramodern::renderer::GraphicsConfig& old
  
  void RT64Context::enable_instant_present() {
      // Enable the present early presentation mode for minimal latency.
@@ -2972,18 +2983,21 @@ index 4572744..5eea843 100644
  
      app->updateEnhancementConfig();
  }
-@@ -601,8 +690,85 @@ float RT64Context::get_resolution_scale() const {
+@@ -601,8 +696,147 @@ float RT64Context::get_resolution_scale() const {
      }
  }
  
 +extern "C" void jfg_texture_pack_set_count(int count); // src/jfg/jfg_texture_packs.cpp: shown in Options -> Textures
 +// JFG PORT: writes texture_pack/rt64.json listing every image whose name starts with a 16-digit RT64 texture hash
 +// (as written by "Dump textures"), so a folder of upscaled dumps is a texture pack without any other tool.
-+// Returns the number of textures listed.
++// An rt64.json already there is updated, not replaced: its "configuration" (a tool's "defaultShift": Toasty writes
++// "none", and without it RT64 samples every texture half a texel off) and each entry's own fields ("shift") stay.
++// Entries of textures added to the folder are added, entries whose file is gone are dropped; the file is only written
++// when that changes something. Returns the number of textures listed.
 +static std::string jfg_pack_folder; // the folder pack in use, relative to the app folder ("" = none)
 +static size_t jfg_write_pack_database(const std::filesystem::path& dir) {
-+    std::string entries;
-+    size_t count = 0;
++    std::vector<std::pair<std::string, std::string>> files; // (hash, path relative to dir), in folder order
++    std::unordered_map<std::string, std::string> file_of;   // hash -> the first file found for it
 +    std::error_code ec;
 +    for (std::filesystem::recursive_directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
 +        if (!it->is_regular_file()) continue;
@@ -3000,13 +3014,72 @@ index 4572744..5eea843 100644
 +        const std::string rel(rel_u8.begin(), rel_u8.end());
 +        std::string hash = name.substr(0, 16);
 +        for (char& c : hash) c = (char)std::tolower((unsigned char)c);
-+        entries += std::string(count ? ",\n" : "") + "    { \"path\": \"" + rel + "\", \"hashes\": { \"rt64\": \"" + hash + "\" } }";
-+        count++;
++        if (file_of.emplace(hash, rel).second) files.emplace_back(hash, rel);
 +    }
-+    std::ofstream out(dir / "rt64.json", std::ios::binary);
-+    out << "{\n  \"configuration\": { \"autoPath\": \"rt64\", \"configurationVersion\": 3, \"hashVersion\": 5 },\n"
-+        << "  \"textures\": [\n" << entries << "\n  ]\n}\n";
-+    return count;
++
++    const std::filesystem::path db_path = dir / "rt64.json";
++    std::string old_text;
++    {
++        std::ifstream in(db_path, std::ios::binary);
++        if (in) old_text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
++    }
++    nlohmann::json config = { { "autoPath", "rt64" }, { "configurationVersion", 3 }, { "hashVersion", 5 } };
++    std::vector<nlohmann::json> entries;
++    std::unordered_set<std::string> listed; // hashes with an entry
++    if (!old_text.empty()) {
++        const nlohmann::json old = nlohmann::json::parse(old_text, nullptr, false);
++        if (old.is_discarded() || !old.is_object()) {
++            fprintf(stderr, "[JFG] %s could not be read, so a new one is written\n", db_path.string().c_str());
++        }
++        else {
++            const auto old_config = old.find("configuration");
++            if (old_config != old.end() && old_config->is_object()) config = *old_config;
++            const auto old_textures = old.find("textures");
++            if (old_textures != old.end() && old_textures->is_array()) {
++                for (const nlohmann::json& entry : *old_textures) {
++                    if (!entry.is_object()) continue;
++                    std::string hash;
++                    const auto hashes = entry.find("hashes");
++                    if (hashes != entry.end() && hashes->is_object()) {
++                        const auto rt64 = hashes->find("rt64");
++                        if (rt64 != hashes->end() && rt64->is_string()) hash = rt64->get<std::string>();
++                    }
++                    for (char& c : hash) c = (char)std::tolower((unsigned char)c);
++                    const auto path_it = entry.find("path");
++                    const std::string path = path_it != entry.end() && path_it->is_string() ? path_it->get<std::string>() : "";
++                    const auto file = file_of.find(hash);
++                    if (path.empty() || std::filesystem::is_regular_file(dir / std::filesystem::u8path(path), ec)) {
++                        entries.push_back(entry); // its file is there (or RT64 finds it by its hash): kept as it is
++                    }
++                    else if (file != file_of.end()) {
++                        nlohmann::json moved = entry; // the file has another name now (.png -> .dds)
++                        moved["path"] = file->second;
++                        entries.push_back(std::move(moved));
++                    }
++                    else {
++                        continue; // its file is gone
++                    }
++                    if (!hash.empty()) listed.insert(hash);
++                }
++            }
++        }
++    }
++    for (const auto& [hash, rel] : files) {
++        if (listed.insert(hash).second) {
++            entries.push_back({ { "path", rel }, { "hashes", { { "rt64", hash } } } });
++        }
++    }
++
++    std::string text = "{\n  \"configuration\": " + config.dump() + ",\n  \"textures\": [\n";
++    for (size_t i = 0; i < entries.size(); i++) {
++        text += "    " + entries[i].dump() + (i + 1 < entries.size() ? ",\n" : "\n");
++    }
++    text += "  ]\n}\n";
++    if (text != old_text) {
++        std::ofstream out(db_path, std::ios::binary);
++        out << text;
++    }
++    return files.size();
 +}
 +
  void RT64Context::check_texture_pack_actions() {
@@ -3058,7 +3131,7 @@ index 4572744..5eea843 100644
      TexturePackAction cur_action;
      while (texture_pack_action_queue.try_dequeue(cur_action)) {
          std::visit(overloaded{
-@@ -647,11 +813,46 @@ void RT64Context::check_texture_pack_actions() {
+@@ -647,11 +881,46 @@ void RT64Context::check_texture_pack_actions() {
  
          // Build the path list from the sorted mod list.
          std::vector<RT64::ReplacementDirectory> replacement_directories;
