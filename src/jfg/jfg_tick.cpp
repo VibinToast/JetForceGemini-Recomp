@@ -2,7 +2,8 @@
 //
 // jfg_debug_frame() is called once per game tick on the game's main thread, from a hook at the entry of the main
 // loop tick func_80044FAC_45BAC (see [[patches.hook]] in jfg.us.toml). It keeps the options and cheats applied, runs
-// the scripted test switches (JFG_DEBUG_*), draws the on-screen notes and the debug UI (F9 window, F10 toolbar), and
+// the scripted test switches (JFG_DEBUG_*), draws the on-screen notes and the F9 debug window, runs what F10's tools
+// asked for, and
 // carries out what was asked for: F5 (back to the title screen), level warps, the story intro skip.
 #include <algorithm>
 #include <cfloat>
@@ -37,7 +38,7 @@ void apply_flag(bool want, bool& applied, uint32_t addr) {
 }
 
 static float toolbar_offset() {
-    return (dino::debug_ui::is_open() && dino::debug_ui::backend::toolbar_mode()) ? g_toolbar_height : 0.0f;
+    return g_toolbar_height.load(std::memory_order_relaxed);
 }
 } // namespace
 
@@ -53,6 +54,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     auto_save_tick(ctx);
     gameplay_tick();
     tribal_saves_tick();
+    tools_game_tick(ctx); // F10's requests and the values it shows
 
     // Cheats keep applying while the menu is closed.
     apply_flag(g.invulnerable, g.applied_invulnerable, ADDR_invulnerabilityCheat);
@@ -248,11 +250,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
             y += extent.y + pad * 1.4f;
         }
     }
-    if (dino::debug_ui::is_open() && dino::debug_ui::backend::in_ui_frame() && dino::debug_ui::backend::toolbar_mode()) {
-        load_level_names();
-        draw_toolbar(ctx);
-    }
-    else if (dino::debug_ui::is_open() && dino::debug_ui::backend::in_ui_frame()) {
+    if (dino::debug_ui::is_open() && dino::debug_ui::backend::in_ui_frame()) {
         load_level_names();
         draw_debug_window(ctx);
     }

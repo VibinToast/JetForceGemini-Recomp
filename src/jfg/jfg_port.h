@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -140,7 +141,9 @@ void reset_weapons();                      // every weapon back to its original 
 std::string weapons_text(const char* prefix);
 void save_weapons();
 void apply_weapons();                      // game thread, every tick
-void draw_weapons();                       // the Weapons tab / window
+void draw_weapons();                       // the Weapons tab (F9)
+struct ToolField;
+std::vector<ToolField> weapon_fields();    // the Weapons window (F10)
 
 // --- jfg_profiles.cpp --------------------------------------------------------------------------------------------
 struct BuiltinProfile { const char* name; const char* description; const char* text; };
@@ -165,14 +168,29 @@ void debug_profile_tick();                 // JFG_DEBUG_PROFILE
 // --- jfg_ui_window.cpp -------------------------------------------------------------------------------------------
 void draw_cheats();
 void draw_warp();
-void draw_debug_window(recomp_context* ctx); // F9
+void draw_debug_window(recomp_context* ctx); // F9 (Dear ImGui)
+
+// --- what F10's windows show and edit (jfg_ui_tools.cpp draws them) ----------------------------------------------
+// One row of a window. get / set / text run on the game thread (jfg_debug_frame), so they may read and write the game
+// and call its functions. Toggle: get returns 0 / 1. Number: lo..hi, changed by step / big_step. Action: a button,
+// set(ctx, 1). Heading and Note: text only (text, when given, replaces the label with what it returns each refresh).
+struct ToolField {
+    enum Kind { Heading, Note, Toggle, Number, Action } kind = Note;
+    std::string label;
+    int lo = 0, hi = 1, step = 1, big_step = 10;
+    std::function<int(recomp_context*)> get;
+    std::function<void(recomp_context*, int)> set;
+    std::function<std::string(recomp_context*)> text;
+};
 
 // --- jfg_ui_items.cpp --------------------------------------------------------------------------------------------
-void draw_inventory(recomp_context* ctx);  // the Items tab / window
+void draw_inventory(recomp_context* ctx);  // the Items tab (F9)
+std::vector<ToolField> item_fields();      // the Items window (F10), for the character in g.edit_character
 
-// --- jfg_ui_toolbar.cpp ------------------------------------------------------------------------------------------
-// Height of F10's toolbar while it is open (0 otherwise), measured when drawn: the corner overlays start below it.
-extern float g_toolbar_height;
-void draw_toolbar(recomp_context* ctx);    // F10
+// --- jfg_ui_tools.cpp --------------------------------------------------------------------------------------------
+// F10: the tools bar and its windows (RmlUi). Height of the bar in pixels while it is shown (0 otherwise): the corner
+// overlays start below it.
+extern std::atomic<float> g_toolbar_height;
+void tools_game_tick(recomp_context* ctx); // game thread, every tick: carries out what the bar asked for, refreshes values
 
 } // namespace jfg
