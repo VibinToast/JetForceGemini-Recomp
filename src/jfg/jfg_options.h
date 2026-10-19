@@ -42,7 +42,8 @@ struct State {
     int  frame_rate = 0;           // 0: the game's own pacing (30, dropping to 20), 1: 60 (runInOneFrame), 2: 60 + interpolated up to the monitor's rate
     bool widescreen = false;       // render the 3D view to the full window width, see jfg_widescreen_active()
     int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
-    bool vignette = false;         // darker screen edges in RT64 (src/shaders/VignettePS.hlsl), see push_render_options()
+    int  hit_flash = 100;          // red screen when the character is hit: strength, percent (jfg_hit_flash)
+    bool vignette = false;        // darker screen edges in RT64 (src/shaders/VignettePS.hlsl), see push_render_options()
     int  vignette_strength = 40;   // vignette: how dark the corners get, percent
     int  vignette_size = 45;       // vignette: how far from the centre the darkening starts, percent of the way to the corners
     int  level_fog_distance = 100; // the game's own fog: how far away it is, percent (jfg_game_fog)
