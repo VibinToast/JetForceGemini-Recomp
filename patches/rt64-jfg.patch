@@ -1,7 +1,7 @@
 diff -ruN a/CMakeLists.txt b/CMakeLists.txt
---- a/CMakeLists.txt	2026-10-16 15:14:11.688566000 -0500
-+++ b/CMakeLists.txt	2026-10-16 15:14:11.712666300 -0500
-@@ -523,6 +523,15 @@
+--- a/CMakeLists.txt	2026-10-19 16:01:08.356843800 -0500
++++ b/CMakeLists.txt	2026-10-19 16:01:08.356843800 -0500
+@@ -523,6 +523,16 @@
  build_compute_shader(rt64 "src/shaders/IdleCS.hlsl")
  build_compute_shader(rt64 "src/shaders/LuminanceHistogramCS.hlsl")
  build_pixel_shader(  rt64 "src/shaders/PostBlendDitherNoisePS.hlsl" "src/shaders/PostBlendDitherNoiseAddPS.hlsl" "-D ADD_MODE")
@@ -14,6 +14,7 @@ diff -ruN a/CMakeLists.txt b/CMakeLists.txt
 +build_pixel_shader(  rt64 "src/shaders/BloomPS.hlsl" "src/shaders/BloomExtractPSMS.hlsl" "-D BLOOM_EXTRACT" "-D MULTISAMPLING")
 +build_pixel_shader(  rt64 "src/shaders/BloomPS.hlsl" "src/shaders/BloomBlurPS.hlsl" "-D BLOOM_BLUR")
 +build_pixel_shader(  rt64 "src/shaders/BloomPS.hlsl" "src/shaders/BloomCompositePS.hlsl" "-D BLOOM_COMPOSITE")
++build_pixel_shader(  rt64 "src/shaders/BloomPS.hlsl" "src/shaders/SsaoBlurPS.hlsl" "-D SSAO_BLUR")
  build_pixel_shader(  rt64 "src/shaders/PostBlendDitherNoisePS.hlsl" "src/shaders/PostBlendDitherNoiseSubPS.hlsl" "-D SUB_MODE")
  build_pixel_shader(  rt64 "src/shaders/PostBlendDitherNoisePS.hlsl" "src/shaders/PostBlendDitherNoiseSubNegativePS.hlsl" "-D SUB_MODE" "-D NEGATIVE_MODE")
  build_compute_shader(rt64 "src/shaders/RSPModifyCS.hlsl")
@@ -1383,8 +1384,8 @@ diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
      }
  
 diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-19 03:12:17.594596800 -0500
-+++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-19 03:12:17.595596500 -0500
+--- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-19 16:01:08.474357800 -0500
++++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-19 16:01:08.475357800 -0500
 @@ -4,7 +4,11 @@
  
  #include "rt64_framebuffer_renderer.h"
@@ -1453,7 +1454,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
              }
          }
      }
-@@ -511,8 +543,444 @@
+@@ -511,8 +543,485 @@
          if (fbStorage->colorTarget != nullptr) {
              switchToGraphicsPipeline();
          }
@@ -1467,7 +1468,8 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +        // the depth test still hides them behind anything in front, so only their blending over later opaque draws
 +        // behind them changes. Nothing is moved across a fill (clear) or a draw without depth test.
 +        const bool targetsPresent = (fbStorage->colorTarget != nullptr) && (fbStorage->depthTarget != nullptr);
-+        const bool ssaoOn = (rt64_jfg_ssao.load(std::memory_order_relaxed) != 0) && (ssaoPipeline != nullptr) && targetsPresent;
++        const bool ssaoOn = (rt64_jfg_ssao.load(std::memory_order_relaxed) != 0) && (ssaoPipeline != nullptr) && (ssaoBlurPipeline != nullptr) &&
++            targetsPresent && (fbStorage->colorWriteDepthRead != nullptr);
 +        const bool bloomOn = (rt64_jfg_bloom.load(std::memory_order_relaxed) != 0) && (bloomCompositePipeline != nullptr) &&
 +            targetsPresent && (fbStorage->colorWriteDepthRead != nullptr);
 +        // JFG PORT: fog and vignette only on the game's own picture during play: not on the pause screen (its backdrop is drawn
@@ -1499,6 +1501,8 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +        bool worldScene = false;
 +        const bool jfgPaused = sidesWide && (rt64_jfg_paused.load(std::memory_order_relaxed) != 0);
 +        int32_t sceneTop = INT32_MAX, sceneBottom = INT32_MIN; // vertical extent of the scene's depth-writing draws
++        // The projection of the last perspective draw that wrote depth (the ambient occlusion pass rebuilds positions with it).
++        float ssaoTanHalfFovY = 0.0f, ssaoNear = 0.0f, ssaoFar = 0.0f;
 +        if (ssaoOn || bloomOn || sidesWide || fogWanted || vignetteWanted) {
 +            uint32_t depthWrites = 0;
 +            uint32_t fogBlendWrites = 0; // depth-writing draws whose blender mixes in the fog colour (the game's own fog)
@@ -1524,6 +1528,11 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +                    sceneTop = std::min(sceneTop, drawCall.triangles.scissor.top);
 +                    sceneBottom = std::max(sceneBottom, drawCall.triangles.scissor.bottom);
 +                    lastWritePosition = pos;
++                    if (drawCall.triangles.jfgNear > 0.0f) {
++                        ssaoTanHalfFovY = drawCall.triangles.jfgTanHalfFovY;
++                        ssaoNear = drawCall.triangles.jfgNear;
++                        ssaoFar = drawCall.triangles.jfgFar;
++                    }
 +                }
 +                else if (!otherMode.zCmp() && (depthWrites >= SsaoMinDepthWrites)) {
 +                    hudPosition = pos;
@@ -1743,22 +1752,55 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +            // Restore everything the scene's draws expect.
 +            switchToGraphicsPipeline();
 +        };
++        // JFG PORT: ambient occlusion in two passes (see SsaoPS.hlsl): from the depth into the occlusion buffer, then blurred
++        // (keeping edges) and multiplied into the scene.
 +        auto submitSsao = [&]() {
++            RenderTarget *colorTarget = fbStorage->colorTarget;
++            const uint32_t width = colorTarget->width;
++            const uint32_t height = colorTarget->height;
++            BloomBuffers *buffers = getBloomBuffers(worker, width, height, true);
++            if (buffers == nullptr) {
++                return;
++            }
++
 +            switchToDepthRead();
++            const RenderViewport fullViewport(0.0f, 0.0f, float(width), float(height));
++            const RenderRect fullRect(0, 0, int32_t(width), int32_t(height));
++            worker->commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(buffers->texture[0].get(), RenderTextureLayout::COLOR_WRITE));
++            worker->commandList->setFramebuffer(buffers->framebuffer[0].get());
 +            worker->commandList->setPipeline(ssaoPipeline);
-+            worker->commandList->setScissors(RenderRect(0, 0, int32_t(fbStorage->colorTarget->width), int32_t(fbStorage->colorTarget->height)));
++            worker->commandList->setViewports(fullViewport);
++            worker->commandList->setScissors(fullRect);
 +            interop::RasterParams ssaoParams = {};
 +            const float strength = rt64_jfg_ssao_strength.load(std::memory_order_relaxed);
 +            const float radius = rt64_jfg_ssao_radius.load(std::memory_order_relaxed);
 +            memcpy(&ssaoParams.padding.x, &strength, sizeof(float));
 +            memcpy(&ssaoParams.padding.y, &radius, sizeof(float));
-+            const float fovTan = rt64_jfg_fov_tan.load(std::memory_order_relaxed);
++            // The scene's own projection; without one, the field of view the game last set (camSetFOV) and its usual planes.
++            const float fovTan = (ssaoNear > 0.0f) ? ssaoTanHalfFovY : rt64_jfg_fov_tan.load(std::memory_order_relaxed);
 +            memcpy(&ssaoParams.padding.z, &fovTan, sizeof(float));
++            ssaoParams.screenScale.x = ssaoNear;
++            ssaoParams.screenScale.y = ssaoFar;
 +            worker->commandList->setGraphicsPushConstants(0, &ssaoParams);
 +            worker->commandList->drawInstanced(3, 1, 0, 0);
-+            previousPipeline = nullptr;
-+            previousScissor = RenderRect();
-+            previousCallType = InstanceDrawCall::Type::Unknown;
++
++            // Back to the scene target (depth stays read-only), blur the occlusion onto it.
++            worker->commandList->barriers(RenderBarrierStage::GRAPHICS, {
++                RenderTextureBarrier(buffers->texture[0].get(), RenderTextureLayout::SHADER_READ),
++                RenderTextureBarrier(colorTarget->texture.get(), RenderTextureLayout::COLOR_WRITE)
++            });
++            worker->commandList->setFramebuffer(fbStorage->colorWriteDepthRead.get());
++            worker->commandList->setPipeline(ssaoBlurPipeline);
++            worker->commandList->setGraphicsPipelineLayout(bloomPipelineLayout);
++            worker->commandList->setGraphicsDescriptorSet(makeBloomDescriptorSet(worker, buffers->texture[0].get(), buffers->textureView[0].get()), 0);
++            worker->commandList->setViewports(fullViewport);
++            worker->commandList->setScissors(fullRect);
++            interop::BloomCB blurParams = {};
++            worker->commandList->setGraphicsPushConstants(0, &blurParams);
++            worker->commandList->drawInstanced(3, 1, 0, 0);
++
++            // Restore everything the scene's draws expect.
++            switchToGraphicsPipeline();
 +        };
 +        // JFG PORT: full-screen passes in the scene's own pipeline layout (see FogPS.hlsl / VignettePS.hlsl).
 +        auto submitFullScreen = [&](RenderPipeline *pipeline, const interop::RasterParams &params) {
@@ -1899,7 +1941,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
              const InstanceDrawCall &drawCall = instanceDrawCallVector[i];
              switch (drawCall.type) {
              case InstanceDrawCall::Type::IndexedTriangles: 
-@@ -561,9 +1029,22 @@
+@@ -561,9 +1070,22 @@
                      switchToDepthWrite();
                  }
  
@@ -1925,7 +1967,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                  }
  
                  if (previousPipeline != triangles.pipeline) {
-@@ -638,6 +1119,7 @@
+@@ -638,6 +1160,7 @@
              }
          }
  
@@ -1933,12 +1975,13 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
          // Mark targets for resolve.
          if (fbStorage->colorTarget != nullptr) {
              fbStorage->colorTarget->markForResolve();
-@@ -648,6 +1130,51 @@
+@@ -648,6 +1171,52 @@
          }
      }
  
-+    // JFG PORT: bloom buffers for one size (see submitRasterScene).
-+    FramebufferRenderer::BloomBuffers *FramebufferRenderer::getBloomBuffers(RenderWorker *worker, uint32_t width, uint32_t height) {
++    // JFG PORT: bloom buffers for one size (see submitRasterScene); with ssao, the ambient occlusion buffer (one texture).
++    FramebufferRenderer::BloomBuffers *FramebufferRenderer::getBloomBuffers(RenderWorker *worker, uint32_t width, uint32_t height, bool ssao) {
++        std::vector<std::unique_ptr<BloomBuffers>> &bloomBuffers = ssao ? this->ssaoBuffers : this->bloomBuffers;
 +        for (const std::unique_ptr<BloomBuffers> &buffers : bloomBuffers) {
 +            if ((buffers->width == width) && (buffers->height == height)) {
 +                return buffers.get();
@@ -1959,13 +2002,13 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +        buffers->height = height;
 +        const RenderFormat format = RasterShaderUber::BloomBufferFormat;
 +        RenderClearValue clearValue = RenderClearValue::Color(RenderColor(), format);
-+        for (uint32_t i = 0; i < 2; i++) {
++        for (uint32_t i = 0; i < (ssao ? 1U : 2U); i++) {
 +            buffers->texture[i] = worker->device->createTexture(RenderTextureDesc::ColorTarget(width, height, format, RenderMultisampling(), &clearValue));
 +            if (buffers->texture[i] == nullptr) {
 +                return nullptr;
 +            }
 +
-+            buffers->texture[i]->setName("JFG Bloom #" + std::to_string(i));
++            buffers->texture[i]->setName(ssao ? std::string("JFG Ambient Occlusion") : ("JFG Bloom #" + std::to_string(i)));
 +            buffers->textureView[i] = buffers->texture[i]->createTextureView(RenderTextureViewDesc::Texture2D(format));
 +            const RenderTexture *colorTexture = buffers->texture[i].get();
 +            buffers->framebuffer[i] = worker->device->createFramebuffer(RenderFramebufferDesc(&colorTexture, 1));
@@ -1985,7 +2028,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
      void FramebufferRenderer::updateMultisampling() {
          dummyColorTargetView.reset();
          dummyDepthTargetView.reset();
-@@ -1354,6 +1881,13 @@
+@@ -1354,6 +1923,14 @@
          postBlendDitherNoiseAddPipeline = rasterShaderUber->postBlendDitherNoiseAddPipeline.get();
          postBlendDitherNoiseSubPipeline = rasterShaderUber->postBlendDitherNoiseSubPipeline.get();
          postBlendDitherNoiseSubNegativePipeline = rasterShaderUber->postBlendDitherNoiseSubNegativePipeline.get();
@@ -1996,10 +2039,36 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +        bloomExtractPipeline = rasterShaderUber->bloomExtractPipeline.get();
 +        bloomBlurPipeline = rasterShaderUber->bloomBlurPipeline.get();
 +        bloomCompositePipeline = rasterShaderUber->bloomCompositePipeline.get();
++        ssaoBlurPipeline = rasterShaderUber->ssaoBlurPipeline.get();
  
          // Make a new render target draw call.
          RenderTargetDrawCall &targetDrawCall = framebuffer.renderTargetDrawCall;
-@@ -1488,13 +2022,16 @@
+@@ -1481,6 +2058,24 @@
+             triangles.screenScale = { 1.0f, 1.0f };
+             triangles.screenOffset = halfPixelOffset;
+ 
++            // JFG PORT: field of view and depth range of this projection, for the ambient occlusion pass. From a guPerspective
++            // matrix (all elements times its scale): m[1][1] = s / tan(fovy / 2), m[2][3] = -s, m[2][2] = s (n + f) / (n - f),
++            // m[3][2] = s 2nf / (n - f).
++            float projTanHalfFovY = 0.0f, projNear = 0.0f, projFar = 0.0f;
++            if ((proj.type == Projection::Type::Perspective) && (proj.transformsIndex < drawData.projTransforms.size())) {
++                const interop::float4x4 &m = drawData.projTransforms[proj.transformsIndex];
++                const float s = -m[2][3];
++                if ((s > 1e-6f) && (fabsf(m[1][1]) > 1e-6f)) {
++                    const float m22 = m[2][2] / s, m32 = m[3][2] / s;
++                    const float n = m32 / (m22 - 1.0f), f = m32 / (m22 + 1.0f);
++                    if ((n > 0.0f) && (f > n) && std::isfinite(f)) {
++                        projTanHalfFovY = s / fabsf(m[1][1]);
++                        projNear = n;
++                        projFar = f;
++                    }
++                }
++            }
++
+             float projInvRatioScale = 1.0f / aspectRatioScale;
+             const int16_t *viewportClipRatios = &drawData.viewportClipRatios[proj.transformsIndex * 4];
+             const uint16_t viewportOrigin = drawData.viewportOrigins[proj.transformsIndex];
+@@ -1488,13 +2083,16 @@
                  // The call's scissor spans the whole width of the framebuffer pair scissor. Custom origin must not be in use to be able to use the stretched viewport.
                  const auto &viewport = drawData.rspViewports[proj.transformsIndex];
                  FixedRect intersectionRect = proj.scissorRect.intersection(viewport.rect(viewportClipRatios));
@@ -2018,7 +2087,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                      triangles.screenScale.x = originalWidth / wideWidth;
  
                      if (viewportOrigin < G_EX_ORIGIN_NONE) {
-@@ -1539,7 +2076,9 @@
+@@ -1539,7 +2137,9 @@
                      int32_t horizontalMisalignment = 0;
  
                      // A rect that spans the whole width of the scissor.
@@ -2029,14 +2098,25 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                          invRatioScale = 1.0f;
                      }
                      // A regular rectangle that should correct its misalignment.
+@@ -1622,6 +2222,9 @@
+                         triangles.faceCount = call.callDesc.triangleCount;
+                         triangles.vertexTestZ = (vertexTestZCallIndex >= 0);
+                         triangles.postBlendDitherNoise = false;
++                        triangles.jfgTanHalfFovY = projTanHalfFovY;
++                        triangles.jfgNear = projNear;
++                        triangles.jfgFar = projFar;
+ 
+                         float invRatioScale = 1.0f / aspectRatioScale;
+                         float horizontalMisalignment = 0.0f;
 diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer_renderer.h
---- a/src/render/rt64_framebuffer_renderer.h	2026-10-16 15:14:11.702126100 -0500
-+++ b/src/render/rt64_framebuffer_renderer.h	2026-10-16 15:14:11.789315800 -0500
-@@ -87,6 +87,48 @@
+--- a/src/render/rt64_framebuffer_renderer.h	2026-10-19 16:01:08.512357800 -0500
++++ b/src/render/rt64_framebuffer_renderer.h	2026-10-19 16:01:08.512357800 -0500
+@@ -87,6 +87,50 @@
          RenderPipeline *postBlendDitherNoiseAddPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubNegativePipeline = nullptr;
 +        RenderPipeline *ssaoPipeline = nullptr; // JFG PORT
++        RenderPipeline *ssaoBlurPipeline = nullptr; // JFG PORT: bloom layout
 +        RenderPipeline *fogPipeline = nullptr; // JFG PORT
 +        RenderPipeline *vignettePipeline = nullptr; // JFG PORT
 +        // JFG PORT: bloom. Two small buffers per bloom-buffer size (kept: sizes rarely change, and a buffer may still
@@ -2050,6 +2130,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer
 +        };
 +        std::vector<std::unique_ptr<BloomBuffers>> bloomBuffers;
 +        std::vector<std::unique_ptr<BloomBuffers>> bloomBuffersRetired;
++        std::vector<std::unique_ptr<BloomBuffers>> ssaoBuffers; // JFG PORT: ambient occlusion buffer (texture[0] only), full size
 +        std::vector<std::unique_ptr<RenderTargetCopyDescriptorSet>> bloomDescriptorSets;
 +        // JFG PORT: the scene as it was just before the glow was added, kept so that the next frame can start from it. Without
 +        // this, the parts of the screen the game does not draw again (the sides in widescreen, what the camera sees beyond the
@@ -2076,7 +2157,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer
 +        RenderPipeline *bloomExtractPipeline = nullptr;
 +        RenderPipeline *bloomBlurPipeline = nullptr;
 +        RenderPipeline *bloomCompositePipeline = nullptr;
-+        BloomBuffers *getBloomBuffers(RenderWorker *worker, uint32_t width, uint32_t height);
++        BloomBuffers *getBloomBuffers(RenderWorker *worker, uint32_t width, uint32_t height, bool ssao = false);
 +        RenderDescriptorSet *makeBloomDescriptorSet(RenderWorker *worker, RenderTexture *texture, RenderTextureView *textureView);
          std::unique_ptr<FramebufferRendererDescriptorCommonSet> descCommonSet;
          std::unique_ptr<FramebufferRendererDescriptorTextureSet> descTextureSet;
@@ -2119,9 +2200,9 @@ diff -ruN a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projectio
              interop::float4x4 &viewMatrix = drawData.modViewTransforms[proj.transformsIndex];
              interop::float4x4 &projMatrix = drawData.modProjTransforms[proj.transformsIndex];
 diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cpp
---- a/src/render/rt64_raster_shader.cpp	2026-10-16 15:14:11.708153300 -0500
-+++ b/src/render/rt64_raster_shader.cpp	2026-10-16 15:14:11.821897200 -0500
-@@ -19,6 +19,16 @@
+--- a/src/render/rt64_raster_shader.cpp	2026-10-19 16:01:08.581510400 -0500
++++ b/src/render/rt64_raster_shader.cpp	2026-10-19 16:01:08.582509900 -0500
+@@ -19,6 +19,17 @@
  #include "shaders/PostBlendDitherNoiseAddPS.hlsl.spirv.h"
  #include "shaders/PostBlendDitherNoiseSubPS.hlsl.spirv.h"
  #include "shaders/PostBlendDitherNoiseSubNegativePS.hlsl.spirv.h"
@@ -2135,10 +2216,11 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
 +#include "shaders/BloomExtractPSMS.hlsl.spirv.h"
 +#include "shaders/BloomBlurPS.hlsl.spirv.h"
 +#include "shaders/BloomCompositePS.hlsl.spirv.h"
++#include "shaders/SsaoBlurPS.hlsl.spirv.h"
  #ifdef _WIN32
  #   include "shaders/RasterPSLibrary.hlsl.dxil.h"
  #   include "shaders/RasterPSLibraryMS.hlsl.dxil.h"
-@@ -29,6 +39,16 @@
+@@ -29,6 +40,17 @@
  #   include "shaders/PostBlendDitherNoiseAddPS.hlsl.dxil.h"
  #   include "shaders/PostBlendDitherNoiseSubPS.hlsl.dxil.h"
  #   include "shaders/PostBlendDitherNoiseSubNegativePS.hlsl.dxil.h"
@@ -2152,10 +2234,11 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
 +#   include "shaders/BloomExtractPSMS.hlsl.dxil.h"
 +#   include "shaders/BloomBlurPS.hlsl.dxil.h"
 +#   include "shaders/BloomCompositePS.hlsl.dxil.h"
++#   include "shaders/SsaoBlurPS.hlsl.dxil.h"
  #elif defined(__APPLE__)
  #   include "shaders/RasterPSDynamic.hlsl.metal.h"
  #   include "shaders/RasterPSDynamicMS.hlsl.metal.h"
-@@ -42,8 +62,19 @@
+@@ -42,8 +64,20 @@
  #   include "shaders/PostBlendDitherNoiseAddPS.hlsl.metal.h"
  #   include "shaders/PostBlendDitherNoiseSubPS.hlsl.metal.h"
  #   include "shaders/PostBlendDitherNoiseSubNegativePS.hlsl.metal.h"
@@ -2169,19 +2252,20 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
 +#   include "shaders/BloomExtractPSMS.hlsl.metal.h"
 +#   include "shaders/BloomBlurPS.hlsl.metal.h"
 +#   include "shaders/BloomCompositePS.hlsl.metal.h"
++#   include "shaders/SsaoBlurPS.hlsl.metal.h"
  #endif
  #include "shared/rt64_raster_params.h"
 +#include "shared/rt64_jfg_bloom.h"
  
  #include "rt64_descriptor_sets.h"
  #include "rt64_render_target.h"
-@@ -552,6 +583,184 @@
+@@ -552,6 +586,186 @@
  
          postBlendDesc.pixelShader = postBlendSubNegativePixelShader.get();
          postBlendDitherNoiseSubNegativePipeline = device->createGraphicsPipeline(postBlendDesc);
 +
-+        // JFG PORT: screen-space ambient occlusion pass. A full-screen triangle that reads the scene depth and
-+        // multiplies the colour target by the occlusion factor (see SsaoPS.hlsl and submitRasterScene).
++        // JFG PORT: screen-space ambient occlusion pass. A full-screen triangle that reads the scene depth and writes the
++        // occlusion into its own buffer, blurred onto the colour target by ssaoBlurPipeline (see SsaoPS.hlsl and submitRasterScene).
 +        std::unique_ptr<RenderShader> ssaoVertexShader;
 +        std::unique_ptr<RenderShader> ssaoPixelShader;
 +        switch (shaderFormat) {
@@ -2206,28 +2290,18 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
 +        }
 +
 +        if ((ssaoVertexShader != nullptr) && (ssaoPixelShader != nullptr)) {
++            // Written into the occlusion buffer (BloomBufferFormat, one sample per pixel); ssaoBlurPipeline puts it on the scene.
 +            RenderGraphicsPipelineDesc ssaoDesc;
 +            ssaoDesc.renderTargetBlend[0] = RenderBlendDesc::Copy();
-+            ssaoDesc.renderTargetFormat[0] = RenderTarget::colorBufferFormat(shaderLibrary->usesHDR);
++            ssaoDesc.renderTargetFormat[0] = BloomBufferFormat;
 +            ssaoDesc.renderTargetCount = 1;
 +            ssaoDesc.cullMode = RenderCullMode::NONE;
 +            ssaoDesc.depthEnabled = false;
 +            ssaoDesc.depthWriteEnabled = false;
-+            ssaoDesc.depthTargetFormat = RenderFormat::D32_FLOAT;
-+            ssaoDesc.multisampling = multisampling;
 +            ssaoDesc.pipelineLayout = pipelineLayout.get();
 +            ssaoDesc.primitiveTopology = RenderPrimitiveTopology::TRIANGLE_LIST;
 +            ssaoDesc.vertexShader = ssaoVertexShader.get();
 +            ssaoDesc.pixelShader = ssaoPixelShader.get();
-+
-+            RenderBlendDesc &ssaoBlend = ssaoDesc.renderTargetBlend[0];
-+            ssaoBlend.blendEnabled = true;
-+            ssaoBlend.srcBlend = RenderBlend::ZERO;
-+            ssaoBlend.dstBlend = RenderBlend::SRC_COLOR;
-+            ssaoBlend.blendOp = RenderBlendOperation::ADD;
-+            ssaoBlend.srcBlendAlpha = RenderBlend::ZERO;
-+            ssaoBlend.dstBlendAlpha = RenderBlend::ONE;
-+            ssaoBlend.blendOpAlpha = RenderBlendOperation::ADD;
 +            ssaoPipeline = device->createGraphicsPipeline(ssaoDesc);
 +        }
 +
@@ -2295,24 +2369,28 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
 +        std::unique_ptr<RenderShader> bloomExtractShader;
 +        std::unique_ptr<RenderShader> bloomBlurShader;
 +        std::unique_ptr<RenderShader> bloomCompositeShader;
++        std::unique_ptr<RenderShader> ssaoBlurShader;
 +        switch (shaderFormat) {
 +#   ifdef _WIN32
 +        case RenderShaderFormat::DXIL:
 +            bloomExtractShader = useMSAA ? device->createShader(BloomExtractPSMSBlobDXIL, std::size(BloomExtractPSMSBlobDXIL), "PSMain", shaderFormat) : device->createShader(BloomExtractPSBlobDXIL, std::size(BloomExtractPSBlobDXIL), "PSMain", shaderFormat);
 +            bloomBlurShader = device->createShader(BloomBlurPSBlobDXIL, std::size(BloomBlurPSBlobDXIL), "PSMain", shaderFormat);
 +            bloomCompositeShader = device->createShader(BloomCompositePSBlobDXIL, std::size(BloomCompositePSBlobDXIL), "PSMain", shaderFormat);
++            ssaoBlurShader = device->createShader(SsaoBlurPSBlobDXIL, std::size(SsaoBlurPSBlobDXIL), "PSMain", shaderFormat);
 +            break;
 +#   endif
 +        case RenderShaderFormat::SPIRV:
 +            bloomExtractShader = useMSAA ? device->createShader(BloomExtractPSMSBlobSPIRV, std::size(BloomExtractPSMSBlobSPIRV), "PSMain", shaderFormat) : device->createShader(BloomExtractPSBlobSPIRV, std::size(BloomExtractPSBlobSPIRV), "PSMain", shaderFormat);
 +            bloomBlurShader = device->createShader(BloomBlurPSBlobSPIRV, std::size(BloomBlurPSBlobSPIRV), "PSMain", shaderFormat);
 +            bloomCompositeShader = device->createShader(BloomCompositePSBlobSPIRV, std::size(BloomCompositePSBlobSPIRV), "PSMain", shaderFormat);
++            ssaoBlurShader = device->createShader(SsaoBlurPSBlobSPIRV, std::size(SsaoBlurPSBlobSPIRV), "PSMain", shaderFormat);
 +            break;
 +#   ifdef __APPLE__
 +        case RenderShaderFormat::METAL:
 +            bloomExtractShader = useMSAA ? device->createShader(BloomExtractPSMSBlobMSL, std::size(BloomExtractPSMSBlobMSL), "PSMain", shaderFormat) : device->createShader(BloomExtractPSBlobMSL, std::size(BloomExtractPSBlobMSL), "PSMain", shaderFormat);
 +            bloomBlurShader = device->createShader(BloomBlurPSBlobMSL, std::size(BloomBlurPSBlobMSL), "PSMain", shaderFormat);
 +            bloomCompositeShader = device->createShader(BloomCompositePSBlobMSL, std::size(BloomCompositePSBlobMSL), "PSMain", shaderFormat);
++            ssaoBlurShader = device->createShader(SsaoBlurPSBlobMSL, std::size(SsaoBlurPSBlobMSL), "PSMain", shaderFormat);
 +            break;
 +#   endif
 +        default:
@@ -2356,18 +2434,27 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
 +            bloomBlend.dstBlendAlpha = RenderBlend::ONE;
 +            bloomBlend.blendOpAlpha = RenderBlendOperation::ADD;
 +            bloomCompositePipeline = device->createGraphicsPipeline(bloomDesc);
++
++            // Ambient occlusion blur: the occlusion buffer, blurred, multiplies the scene's colour target.
++            if (ssaoBlurShader != nullptr) {
++                bloomDesc.pixelShader = ssaoBlurShader.get();
++                bloomBlend.srcBlend = RenderBlend::ZERO;
++                bloomBlend.dstBlend = RenderBlend::SRC_COLOR;
++                ssaoBlurPipeline = device->createGraphicsPipeline(bloomDesc);
++            }
 +        }
      }
  
      RasterShaderUber::~RasterShaderUber() {
 diff -ruN a/src/render/rt64_raster_shader.h b/src/render/rt64_raster_shader.h
---- a/src/render/rt64_raster_shader.h	2026-10-16 15:14:11.709153700 -0500
-+++ b/src/render/rt64_raster_shader.h	2026-10-16 15:14:11.852028600 -0500
-@@ -82,6 +82,14 @@
+--- a/src/render/rt64_raster_shader.h	2026-10-19 16:01:08.619018600 -0500
++++ b/src/render/rt64_raster_shader.h	2026-10-19 16:01:08.620018100 -0500
+@@ -82,6 +82,15 @@
          std::unique_ptr<RenderPipeline> postBlendDitherNoiseAddPipeline;
          std::unique_ptr<RenderPipeline> postBlendDitherNoiseSubPipeline;
          std::unique_ptr<RenderPipeline> postBlendDitherNoiseSubNegativePipeline;
 +        std::unique_ptr<RenderPipeline> ssaoPipeline; // JFG PORT
++        std::unique_ptr<RenderPipeline> ssaoBlurPipeline; // JFG PORT: bloom layout
 +        std::unique_ptr<RenderPipeline> fogPipeline; // JFG PORT
 +        std::unique_ptr<RenderPipeline> vignettePipeline; // JFG PORT
 +        std::unique_ptr<RenderPipelineLayout> bloomPipelineLayout; // JFG PORT
@@ -2379,9 +2466,9 @@ diff -ruN a/src/render/rt64_raster_shader.h b/src/render/rt64_raster_shader.h
          std::condition_variable firstPipelineCondition;
          bool pipelinesCreated = false;
 diff -ruN a/src/shaders/BloomPS.hlsl b/src/shaders/BloomPS.hlsl
---- a/src/shaders/BloomPS.hlsl	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/shaders/BloomPS.hlsl	2026-10-08 17:44:28.592568035 -0500
-@@ -0,0 +1,82 @@
+--- a/src/shaders/BloomPS.hlsl	2026-10-19 16:01:08.441358000 -0500
++++ b/src/shaders/BloomPS.hlsl	2026-10-19 16:01:08.442357500 -0500
+@@ -0,0 +1,110 @@
 +//
 +// RT64 - JFG PORT: bloom for Jet Force Gemini.
 +//
@@ -2391,6 +2478,7 @@ diff -ruN a/src/shaders/BloomPS.hlsl b/src/shaders/BloomPS.hlsl
 +//                    brighter than the threshold (soft knee).
 +//   BLOOM_BLUR       bloom buffer -> bloom buffer: one direction of a separable gaussian.
 +//   BLOOM_COMPOSITE  bloom buffer -> scene colour: bilinear upscale, added with an additive blend.
++// SSAO_BLUR is the second pass of the ambient occlusion (see SsaoPS.hlsl), here for the bloom passes' layout.
 +//
 +
 +#include "shared/rt64_jfg_bloom.h"
@@ -2448,6 +2536,33 @@ diff -ruN a/src/shaders/BloomPS.hlsl b/src/shaders/BloomPS.hlsl
 +    }
 +
 +    return float4(sum / weightSum, 1.0f);
++#elif defined(SSAO_BLUR)
++    // Ambient occlusion buffer (SsaoPS.hlsl: r occlusion, g distance, 0 for nothing drawn) -> multiplied into the scene.
++    // A 7x7 gaussian that leaves out neighbours more than a few percent nearer or farther, so the occlusion of one
++    // surface does not bleed onto another across an edge.
++    const float2 centre = gInput.Load(int3(p, 0)).rg;
++    if (centre.y <= 0.0f) {
++        return float4(1.0f, 1.0f, 1.0f, 1.0f);
++    }
++
++    const float tolerance = 0.04f * centre.y;
++    float sum = 0.0f;
++    float weightSum = 0.0f;
++    [unroll]
++    for (int y = -3; y <= 3; y++) {
++        [unroll]
++        for (int x = -3; x <= 3; x++) {
++            const float2 s = gInput.Load(int3(clamp(p + int2(x, y), int2(0, 0), maxP), 0)).rg;
++            const float spatial = exp(-float(x * x + y * y) / 8.0f);
++            const float dz = abs(s.y - centre.y);
++            const float w = spatial * saturate(1.0f - dz / tolerance) * ((s.y > 0.0f) ? 1.0f : 0.0f);
++            sum += s.x * w;
++            weightSum += w;
++        }
++    }
++
++    const float ao = (weightSum > 1e-4f) ? (sum / weightSum) : centre.x;
++    return float4(ao, ao, ao, 1.0f);
 +#elif defined(BLOOM_COMPOSITE)
 +    // Bilinear sample of the bloom buffer at this full-resolution pixel.
 +    const float scale = float(max(gConstants.scale, 1u));
@@ -2465,17 +2580,24 @@ diff -ruN a/src/shaders/BloomPS.hlsl b/src/shaders/BloomPS.hlsl
 +#endif
 +}
 diff -ruN a/src/shaders/SsaoPS.hlsl b/src/shaders/SsaoPS.hlsl
---- a/src/shaders/SsaoPS.hlsl	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/shaders/SsaoPS.hlsl	1969-12-31 18:00:00.000000000 -0600
-@@ -0,0 +1,125 @@
+--- a/src/shaders/SsaoPS.hlsl	2026-10-19 16:01:08.406358000 -0500
++++ b/src/shaders/SsaoPS.hlsl	2026-10-19 16:01:08.406358000 -0500
+@@ -0,0 +1,149 @@
 +//
 +// RT64 - JFG PORT: screen-space ambient occlusion for Jet Force Gemini.
 +//
-+// Drawn as a full-screen triangle (FullScreenVS) into the colour target with a multiplying blend, at the point of a
-+// frame where the game has finished its 3D scene and starts drawing 2D (see FramebufferRenderer::submitRasterScene),
-+// so the HUD is drawn afterwards and stays untouched. Only the depth buffer is used: view-space positions are rebuilt
-+// from depth with the game's own projection (its current vertical field of view, near 10, far 15000), the surface normal
-+// from neighbouring depths, and occlusion is the share of nearby points that lie above the surface (Alchemy-style AO).
++// Two full-screen passes (FullScreenVS) at the point of a frame where the game has finished its 3D scene and starts
++// drawing 2D (see FramebufferRenderer::submitRasterScene), so the HUD is drawn afterwards and stays untouched:
++//   this pass        scene depth -> occlusion buffer (r: how much light reaches the pixel, g: its distance from the
++//                    camera). View-space positions are rebuilt from depth with the scene's own projection, the surface
++//                    normal from neighbouring depths, and occlusion is the share of nearby points that lie above the
++//                    surface (Alchemy-style AO).
++//   SSAO_BLUR (BloomPS.hlsl)   occlusion buffer -> scene colour: a blur that leaves out neighbours at another distance
++//                    (so edges stay sharp) to smooth out the per-pixel sample rotation, multiplied into the picture.
++//
++// Parameters (RasterParams): padding.x = strength, padding.y = radius (game units), padding.z = tan(half the vertical
++// field of view), screenScale.x / screenScale.y = near / far plane. All as floats; a 0 field of view or near plane
++// means the scene's projection was not found and the game's usual ones are used.
 +//
 +
 +#include "shared/rt64_raster_params.h"
@@ -2503,27 +2625,31 @@ diff -ruN a/src/shaders/SsaoPS.hlsl b/src/shaders/SsaoPS.hlsl
 +}
 +#endif
 +
-+static const float NearZ = 10.0f;
-+static const float FarZ = 15000.0f;
-+// tan(half the vertical field of view) the game's projection was built with (padding.z, from camSetFOV on the game
-+// side: the "Field of view" option and the scope zoom change it); tan(30 degrees), the game's default, when not set.
++// The game's usual projection: near 10, far 15000, tan(30 degrees).
++float nearZ() {
++    const float n = gConstants.screenScale.x;
++    return (n > 0.0f) ? n : 10.0f;
++}
++float farZ() {
++    const float f = gConstants.screenScale.y;
++    return (f > nearZ()) ? f : 15000.0f;
++}
 +float tanHalfFovY() {
 +    const float t = asfloat(gConstants.padding.z);
 +    return (t > 0.0f) ? t : 0.57735f;
 +}
-+#define TanHalfFovY tanHalfFovY()
 +static const int SampleCount = 16;
 +
 +// Distance from the camera along the view direction.
-+float linearDepth(float d) {
++float linearDepth(float d, float n, float f) {
 +    const float ndcZ = d * 2.0f - 1.0f;
-+    return (2.0f * NearZ * FarZ) / ((FarZ + NearZ) - ndcZ * (FarZ - NearZ));
++    return (2.0f * n * f) / ((f + n) - ndcZ * (f - n));
 +}
 +
-+float3 viewPosition(int2 p, float2 size, float aspect) {
-+    const float z = linearDepth(loadDepth(p));
++float3 viewPosition(int2 p, float2 size, float aspect, float n, float f, float tanHalf) {
++    const float z = linearDepth(loadDepth(p), n, f);
 +    const float2 ndc = float2(((float(p.x) + 0.5f) / size.x) * 2.0f - 1.0f, 1.0f - ((float(p.y) + 0.5f) / size.y) * 2.0f);
-+    return float3(ndc.x * z * aspect * TanHalfFovY, ndc.y * z * TanHalfFovY, z);
++    return float3(ndc.x * z * aspect * tanHalf, ndc.y * z * tanHalf, z);
 +}
 +
 +void PSMain(
@@ -2532,9 +2658,11 @@ diff -ruN a/src/shaders/SsaoPS.hlsl b/src/shaders/SsaoPS.hlsl
 +    , [[vk::location(0)]] [[vk::index(0)]] out float4 resultColor : SV_TARGET0
 +)
 +{
-+    // Parameters: strength and radius (world units) in the padding words.
 +    const float strength = asfloat(gConstants.padding.x);
 +    const float radius = asfloat(gConstants.padding.y);
++    const float n = nearZ();
++    const float f = farZ();
++    const float tanHalf = tanHalfFovY();
 +
 +    uint width, height;
 +    depthSize(width, height);
@@ -2542,20 +2670,22 @@ diff -ruN a/src/shaders/SsaoPS.hlsl b/src/shaders/SsaoPS.hlsl
 +    const float aspect = size.x / size.y;
 +    const int2 p = int2(vertexPosition.xy);
 +    const int2 maxP = int2(width - 1, height - 1);
-+    resultColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
++    resultColor = float4(1.0f, 0.0f, 0.0f, 1.0f);
 +
 +    const float d = loadDepth(p);
 +    if (d >= 0.99999f) {
-+        return; // nothing drawn here (sky, background)
++        return; // nothing drawn here (sky, background): no occlusion, and distance 0 tells the blur to leave it out
 +    }
 +
-+    const float3 P = viewPosition(p, size, aspect);
++#define VIEW_POSITION(q) viewPosition(q, size, aspect, n, f, tanHalf)
++    const float3 P = VIEW_POSITION(p);
++    resultColor.g = P.z;
 +
 +    // Surface normal from the neighbours closest in depth on each axis (avoids smearing across silhouettes).
-+    const float3 Pr = viewPosition(min(p + int2(1, 0), maxP), size, aspect);
-+    const float3 Pl = viewPosition(max(p - int2(1, 0), int2(0, 0)), size, aspect);
-+    const float3 Pd = viewPosition(min(p + int2(0, 1), maxP), size, aspect);
-+    const float3 Pu = viewPosition(max(p - int2(0, 1), int2(0, 0)), size, aspect);
++    const float3 Pr = VIEW_POSITION(min(p + int2(1, 0), maxP));
++    const float3 Pl = VIEW_POSITION(max(p - int2(1, 0), int2(0, 0)));
++    const float3 Pd = VIEW_POSITION(min(p + int2(0, 1), maxP));
++    const float3 Pu = VIEW_POSITION(max(p - int2(0, 1), int2(0, 0)));
 +    const float3 dx = (abs(Pr.z - P.z) < abs(P.z - Pl.z)) ? (Pr - P) : (P - Pl);
 +    const float3 dy = (abs(Pd.z - P.z) < abs(P.z - Pu.z)) ? (Pd - P) : (P - Pu);
 +    float3 N = normalize(cross(dy, dx));
@@ -2564,13 +2694,19 @@ diff -ruN a/src/shaders/SsaoPS.hlsl b/src/shaders/SsaoPS.hlsl
 +    }
 +
 +    // Sample disc: radius in pixels from the world radius at this distance.
-+    const float pixelsPerUnit = (size.y * 0.5f) / (P.z * TanHalfFovY);
++    const float pixelsPerUnit = (size.y * 0.5f) / (P.z * tanHalf);
 +    const float discRadius = clamp(radius * pixelsPerUnit, 2.0f, size.y * 0.08f);
 +
-+    // Per-pixel rotation (interleaved gradient noise) so a small sample count does not show a pattern.
++    // Per-pixel rotation (interleaved gradient noise); the blur pass smooths out the pattern it leaves.
 +    const float noise = frac(52.9829189f * frac(dot(float2(p), float2(0.06711056f, 0.00583715f))));
 +    const float rotation = noise * 6.2831853f;
 +    const float radius2 = radius * radius;
++
++    // A sample has to lie clearly above the surface's plane to count: by a share of the distance (depth precision and
++    // the steps between the flat polygons of low-poly models grow with it) and at a steeper angle than grazing, so
++    // flat and gently curved surfaces (faces, walls seen at an angle) do not darken themselves.
++    const float planeBias = 0.002f * P.z;
++    const float angleBias = 0.2f;
 +
 +    float occlusion = 0.0f;
 +    [unroll]
@@ -2580,18 +2716,21 @@ diff -ruN a/src/shaders/SsaoPS.hlsl b/src/shaders/SsaoPS.hlsl
 +        const float angle = t * 7.0f * 6.2831853f + rotation;
 +        const float2 offset = float2(cos(angle), sin(angle)) * (t * discRadius);
 +        const int2 q = clamp(p + int2(round(offset)), int2(0, 0), maxP);
-+        const float3 S = viewPosition(q, size, aspect);
++        const float3 S = VIEW_POSITION(q);
 +        const float3 v = S - P;
 +        const float vv = dot(v, v);
 +        if (vv < radius2 && vv > 1e-4f) {
 +            const float vlen = sqrt(vv);
-+            const float cosine = dot(v, N) / vlen;
-+            occlusion += max(0.0f, cosine - 0.1f) * (1.0f - vlen / radius);
++            const float cosine = (dot(v, N) - planeBias) / vlen;
++            occlusion += max(0.0f, cosine - angleBias) * (1.0f - vlen / radius);
 +        }
 +    }
++#undef VIEW_POSITION
 +
-+    const float ao = saturate(1.0f - strength * 4.0f * occlusion / float(SampleCount));
-+    resultColor = float4(ao, ao, ao, 1.0f);
++    // Fades out for surfaces very close to the camera (within about two radii), where the samples spread over a few
++    // large polygons and the result is mostly noise.
++    const float closeFade = saturate((P.z - 0.5f * radius) / (1.5f * radius));
++    resultColor.r = saturate(1.0f - strength * 4.0f * closeFade * occlusion / float(SampleCount));
 +}
 diff -ruN a/src/shared/rt64_jfg_bloom.h b/src/shared/rt64_jfg_bloom.h
 --- a/src/shared/rt64_jfg_bloom.h	1969-12-31 18:00:00.000000000 -0600
@@ -3010,3 +3149,18 @@ diff -ruN a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
          void setup(const External &ext);
          void updateMultisampling();
          void threadConfigurationUpdate(hlslpp::uint2 viFbSize, WorkloadConfiguration &workloadConfig);
+diff -ruN a/src/render/rt64_framebuffer_renderer_call.h b/src/render/rt64_framebuffer_renderer_call.h
+--- a/src/render/rt64_framebuffer_renderer_call.h	2026-10-19 16:01:08.550375700 -0500
++++ b/src/render/rt64_framebuffer_renderer_call.h	2026-10-19 16:01:08.550375700 -0500
+@@ -41,6 +41,11 @@
+                 bool vertexTestZ : 1;
+                 bool postBlendDitherNoise : 1;
+                 bool postBlendDitherNoiseNegative : 1;
++                // JFG PORT: the draw's perspective projection, for the ambient occlusion pass (SsaoPS.hlsl): tan(half the vertical
++                // field of view), near and far plane. All 0 for orthographic and rectangle draws.
++                float jfgTanHalfFovY;
++                float jfgNear;
++                float jfgFar;
+             } triangles;
+ 
+             struct {
