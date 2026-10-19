@@ -1,5 +1,5 @@
 // Jet Force Gemini port: gameplay options for the game hooks - no blood, damage taken, jetpack refuelling, the sniper
-// rifle and the Tribal check.
+// rifle, unlimited continues and the Tribal check.
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -35,6 +35,15 @@ void apply_damage_taken(uint32_t obj) {
     }
     last_obj = obj;
     last_health = health;
+}
+
+// --- unlimited continues --------------------------------------------------------------------------------------------
+// `continues` is set to 2 on entering a region and mainRestartAfterDeath takes one for each death there; with none left
+// a death restarts the whole region from its entrance. With the option it is topped back up every tick, so the region
+// title card after a death still shows 2.
+void gameplay_tick() {
+    if (!g.unlimited_continues || !valid_ptr(rd32(ADDR_gameplay)) || rd32(ADDR_mainGameMode) != 0) return;
+    if ((int16_t)rd16(ADDR_continues) < 2) wr16(ADDR_continues, 2);
 }
 
 // --- jetpack refuelling ----------------------------------------------------------------------------------------------

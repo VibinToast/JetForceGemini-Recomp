@@ -31,6 +31,8 @@ GAMEPLAY = [
     ("group", None, "Player", None, None),
     ("range", "damage_taken", "Damage Taken", (0, 400, "%"),
      "How much damage the character takes from enemies, falls and explosions. 0% takes none; the Invulnerable cheat overrides it."),
+    ("bool", "unlimited_continues", "Unlimited Continues", None,
+     "Dying never uses up your continues, so you always come back where you died instead of the game over that restarts the area from its entrance."),
     ("range", "refuel_speed", "Jetpack Refuel Speed", (25, 1000, "%"), "How fast a fuel pad fills the jetpack."),
     ("range", "dive_speed", "Vela's Dive Speed", (50, 400, "%"), "How fast Vela swims underwater, in every direction."),
     ("group", None, "Dual Stick", None, None),
