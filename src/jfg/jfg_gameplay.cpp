@@ -69,7 +69,8 @@ extern "C" int jfg_sniper_walk(int weapon) {
 // --- skip the Tribal check -------------------------------------------------------------------------------------------
 // Hook at the entry of mainGetGameFlag: 1 = report the flag as set.
 extern "C" int jfg_flag_override(int flag) {
-    return g.skip_tribal_check && flag == 88 ? 1 : 0;
+    static const bool floyd = std::getenv("JFG_DEBUG_FLOYD") != nullptr; // tests: Floyd (game flag 3) has joined
+    return (g.skip_tribal_check && flag == 88) || (floyd && flag == 3) ? 1 : 0;
 }
 
 } // namespace jfg

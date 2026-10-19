@@ -82,6 +82,8 @@ VISUALS = [
      "<b>Original</b>: 30, dropping to 20 like the N64. <b>60</b>: the game updates every video frame; game speed stays the same. <b>60 + Interpolated</b>: the renderer also adds in-between frames up to your monitor's refresh rate; some moving objects may look off."),
     ("range", "hit_flash", "Hit Flash Opacity", (0, 100, "%"),
      "How strongly the screen turns red when your character is hit. 100% is the original game; 0% turns the red flash off."),
+    ("bool", "hide_floyd", "Hide Floyd", None,
+     "Floyd is not drawn while he follows your character; he still flies along and shoots. Floyd missions and a second player flying him show him as usual."),
     ("bool", "no_lod", "Disable LOD", None, "Characters and objects keep their full-detail model at any distance."),
     ("bool", "far_objects", "Draw Distant Objects", None, "Objects no longer fade out and disappear beyond their draw distance. Level scenery itself is not affected."),
     ("bool", "show_fps", "Show FPS", None, "The game's frame rate in the top right corner."),
