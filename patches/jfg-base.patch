@@ -1398,18 +1398,20 @@ index 52113db..686e335 100644
      enum class AutosaveMode {
          On,
 diff --git a/src/debug_ui/backend.cpp b/src/debug_ui/backend.cpp
-index a12f9f1..40c0625 100644
+index a12f9f1..30ee419 100644
 --- a/src/debug_ui/backend.cpp
 +++ b/src/debug_ui/backend.cpp
-@@ -1,5 +1,7 @@
+@@ -1,5 +1,9 @@
  #include "backend.hpp"
  
 +#include <atomic>
 +
++extern "C" void jfg_tools_key(int scancode, int down, int repeat); // JFG PORT: src/jfg/jfg_ui_tools.cpp
++
  #ifdef _WIN32
  #include <SDL_video.h>
  #else
-@@ -53,6 +55,14 @@ struct VulkanContext {
+@@ -53,6 +57,14 @@ struct VulkanContext {
  ImGuiContext *dino_imgui_ctx;
  bool b_is_open = false;
  bool b_in_ui_frame = false;
@@ -1424,7 +1426,7 @@ index a12f9f1..40c0625 100644
  
  static ImGuiContext *prev_ctx;
  static std::unique_ptr<plume::RenderDescriptorSet> descriptor_set;
-@@ -88,6 +98,55 @@ static RT64::UserConfiguration::GraphicsAPI get_graphics_api() {
+@@ -88,6 +100,17 @@ static RT64::UserConfiguration::GraphicsAPI get_graphics_api() {
  
  bool is_open() { return b_is_open; }
  bool in_ui_frame() { return b_in_ui_frame; }
@@ -1433,54 +1435,16 @@ index a12f9f1..40c0625 100644
 +bool take_next_pack_request() { return b_next_pack_requested.exchange(false); }
 +bool take_fly_request() { return b_fly_requested.exchange(false); }
 +
-+// JFG PORT: F9 (or `) opens / closes the original debug window, F10 the toolbar; each switches over from the other.
-+static bool b_toolbar_mode = false;
-+bool toolbar_mode() { return b_toolbar_mode; }
-+// JFG PORT: with the toolbar open, either the toolbar or the game has the mouse and keyboard. Alt (pressed and released
-+// on its own, like a Windows menu bar) switches between them, and a click outside the toolbar and its windows hands
-+// them to the game. The toolbar starts with them when F10 opens it.
-+static std::atomic<bool> b_toolbar_game_input{ false };
-+static bool b_release_ui = false;      // the game just took over: close the toolbar's menus and drop its focus
-+static bool b_alt_alone = false;       // Alt is down and no other key was pressed since
-+static bool b_click_outside = false;   // a mouse button went down outside the toolbar's menus and windows
-+bool toolbar_game_input() { return b_is_open && b_toolbar_mode && b_toolbar_game_input.load(); }
-+static void set_toolbar_game_input(bool game) {
-+    if (game && !b_toolbar_game_input.load()) b_release_ui = true;
-+    b_toolbar_game_input = game;
-+}
++// JFG PORT: F9 (or `) opens / closes the debug window. F10's tools are RmlUi (src/jfg/jfg_ui_tools.cpp, jfg_tools_key).
 +static void handle_toggle_key(const SDL_Event& event) {
-+    if (event.type == SDL_KEYDOWN && !event.key.repeat) {
-+        const SDL_Scancode code = event.key.keysym.scancode;
-+        b_alt_alone = code == SDL_SCANCODE_LALT || code == SDL_SCANCODE_RALT;
-+    }
-+    else if (event.type == SDL_KEYUP && (event.key.keysym.scancode == SDL_SCANCODE_LALT || event.key.keysym.scancode == SDL_SCANCODE_RALT)) {
-+        if (b_alt_alone && b_is_open && b_toolbar_mode) set_toolbar_game_input(!b_toolbar_game_input.load());
-+        b_alt_alone = false;
-+    }
 +    if (event.type != SDL_KEYDOWN || event.key.repeat) return;
 +    const SDL_Scancode code = event.key.keysym.scancode;
-+    if (code == SDL_Scancode::SDL_SCANCODE_GRAVE || code == SDL_Scancode::SDL_SCANCODE_F9 || code == SDL_Scancode::SDL_SCANCODE_F10) {
-+        const bool toolbar = code == SDL_Scancode::SDL_SCANCODE_F10;
-+        if (b_is_open && b_toolbar_mode == toolbar) b_is_open = false;
-+        else { b_is_open = true; b_toolbar_mode = toolbar; }
-+        b_toolbar_game_input = false;
-+        b_click_outside = false;
-+    }
-+}
-+// JFG PORT: input events ImGui must not see while the game has the mouse and keyboard.
-+static bool is_input_event(const SDL_Event& event) {
-+    switch (event.type) {
-+    case SDL_KEYDOWN: case SDL_KEYUP: case SDL_TEXTINPUT: case SDL_TEXTEDITING:
-+    case SDL_MOUSEMOTION: case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: case SDL_MOUSEWHEEL:
-+        return true;
-+    default:
-+        return false;
-+    }
++    if (code == SDL_Scancode::SDL_SCANCODE_GRAVE || code == SDL_Scancode::SDL_SCANCODE_F9) b_is_open = !b_is_open;
 +}
  
  void begin() {
      if (!dino_imgui_ctx->Initialized) return;
-@@ -96,16 +155,11 @@ void begin() {
+@@ -96,16 +119,11 @@ void begin() {
          // Still process the event queue but don't send any to ImGui
          SDL_Event event{};
          while (event_queue.try_dequeue(event)) {
@@ -1499,7 +1463,7 @@ index a12f9f1..40c0625 100644
          // Still not open even after handling key events
          return;
      }
-@@ -120,17 +174,32 @@ void begin() {
+@@ -120,17 +138,15 @@ void begin() {
  
      SDL_Event event{};
      while (event_queue.try_dequeue(event)) {
@@ -1508,51 +1472,22 @@ index a12f9f1..40c0625 100644
 -                    event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F9) &&
 -                !event.key.repeat) {
 -            b_is_open = !b_is_open;
+-        }
+-
 +        handle_toggle_key(event);
-+
-+        // JFG PORT: toolbar open - the game or the toolbar has the mouse and keyboard (see toolbar_game_input()).
-+        if (b_is_open && b_toolbar_mode) {
-+            if (b_toolbar_game_input.load() && is_input_event(event)) continue;
-+            if (event.type == SDL_MOUSEBUTTONDOWN) b_click_outside = !dino_imgui_ctx->IO.WantCaptureMouse;
-+            else if (event.type == SDL_MOUSEBUTTONUP && b_click_outside) {
-+                // Taken over on release, so the click itself does not fire.
-+                b_click_outside = false;
-+                set_toolbar_game_input(true);
-+                continue;
-+            }
-         }
- 
          ImGui_ImplSDL2_ProcessEvent(&event);
      }
-+    if (b_release_ui) {
-+        ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
-+        ImGui::GetIO().ClearInputKeys();
-+    }
  
 -    if (!b_is_open) {
-+    // JFG PORT: an overlay-only frame, or the game having the mouse, must not take over the mouse cursor.
-+    if (b_is_open && !toolbar_game_input()) ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
++    // JFG PORT: an overlay-only frame must not take over the mouse cursor.
++    if (b_is_open) ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
 +    else ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
 +
 +    if (!b_is_open && !b_overlay) {
          // Closed after handling key events
          b_in_ui_frame = false;
          ImGui::SetCurrentContext(prev_ctx);
-@@ -160,6 +229,13 @@ void begin() {
-     }
- 
-     ImGui::NewFrame();
-+
-+    // JFG PORT: the game took the mouse and keyboard from the toolbar: close its menus and drop its keyboard focus.
-+    if (b_release_ui) {
-+        b_release_ui = false;
-+        ImGui::ClosePopupsExceptModals();
-+        ImGui::FocusWindow(nullptr);
-+    }
- }
- 
- void end() {
-@@ -176,6 +252,15 @@ void end() {
+@@ -176,6 +192,19 @@ void end() {
  }
  
  static int sdl_event_filter(void *userdata, SDL_Event *event) {
@@ -1565,10 +1500,14 @@ index a12f9f1..40c0625 100644
 +    if (event->type == SDL_KEYDOWN && event->key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F7 && !event->key.repeat) {
 +        b_fly_requested = true;
 +    }
++    // JFG PORT: F10 (show / hide) and Alt (mouse and keyboard to the game and back) for F10's tools.
++    if (event->type == SDL_KEYDOWN || event->type == SDL_KEYUP) {
++        jfg_tools_key((int)event->key.keysym.scancode, event->type == SDL_KEYDOWN ? 1 : 0, event->key.repeat ? 1 : 0);
++    }
      event_queue.enqueue(*event);
  
      return 1;
-@@ -283,7 +368,7 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
+@@ -283,7 +312,7 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
  }
  
  static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
@@ -1578,15 +1517,12 @@ index a12f9f1..40c0625 100644
      const std::lock_guard<std::mutex> frame_lock(frame_mutex);
  
 diff --git a/src/debug_ui/backend.hpp b/src/debug_ui/backend.hpp
-index 6c13bfc..8879255 100644
+index 6c13bfc..54a1ab5 100644
 --- a/src/debug_ui/backend.hpp
 +++ b/src/debug_ui/backend.hpp
-@@ -6,7 +6,13 @@ namespace dino::debug_ui::backend {
- 
+@@ -7,6 +7,10 @@ namespace dino::debug_ui::backend {
  extern ImGuiContext *dino_imgui_ctx;
  bool is_open();
-+bool toolbar_mode(); // JFG PORT: true while F10's toolbar (not F9's window) is the open debug UI
-+bool toolbar_game_input(); // JFG PORT: the toolbar is open but the game has the mouse and keyboard (Alt switches)
  bool in_ui_frame();
 +void set_overlay(bool enabled);
 +bool take_reset_request(); // JFG PORT: F5 was pressed since the last call
@@ -1596,37 +1532,29 @@ index 6c13bfc..8879255 100644
  void begin();
  void end();
 diff --git a/src/debug_ui/debug_ui.cpp b/src/debug_ui/debug_ui.cpp
-index a49e8be..e1dd767 100644
+index a49e8be..5b70715 100644
 --- a/src/debug_ui/debug_ui.cpp
 +++ b/src/debug_ui/debug_ui.cpp
-@@ -11,13 +11,17 @@ bool is_open() {
+@@ -11,6 +11,10 @@ bool is_open() {
      return backend::is_open() && backend::dino_imgui_ctx->Initialized;
  }
  
 +bool game_has_input() {
-+    return !is_open() || backend::toolbar_game_input();
++    return !is_open();
 +}
 +
  bool want_capture_keyboard() {
      // Go directly through our context pointer so we don't have to worry about it being current
      if (backend::dino_imgui_ctx == nullptr) {
-         return false;
-     }
- 
--    return backend::is_open() && backend::dino_imgui_ctx->IO.WantCaptureKeyboard;
-+    return backend::is_open() && !backend::toolbar_game_input() && backend::dino_imgui_ctx->IO.WantCaptureKeyboard;
- }
- 
- void ui_frame_begin() {
 diff --git a/src/debug_ui/debug_ui.hpp b/src/debug_ui/debug_ui.hpp
-index 6fb7cfd..d4ff74a 100644
+index 6fb7cfd..4925446 100644
 --- a/src/debug_ui/debug_ui.hpp
 +++ b/src/debug_ui/debug_ui.hpp
 @@ -5,6 +5,8 @@
  namespace dino::debug_ui {
  
  bool is_open();
-+// JFG PORT: the game gets the mouse and keyboard: the debug UI is closed, or F10's toolbar is open but handed them to the game.
++// JFG PORT: the game gets the mouse and keyboard: the debug window (F9) is closed.
 +bool game_has_input();
  
  bool want_capture_keyboard();
@@ -1836,7 +1764,7 @@ index 7b53d07..d8743e8 100644
      *x_out = std::clamp(cur_x, -1.0f, 1.0f);
      *y_out = std::clamp(cur_y, -1.0f, 1.0f);
 diff --git a/src/input/input.cpp b/src/input/input.cpp
-index 2d0e062..523604c 100644
+index 2d0e062..853c93d 100644
 --- a/src/input/input.cpp
 +++ b/src/input/input.cpp
 @@ -14,6 +14,11 @@
@@ -1883,7 +1811,7 @@ index 2d0e062..523604c 100644
  
          // If the debug UI is open, let ImGui have control over the cursor.
 -        if (!dino::debug_ui::is_open()) {
-+        if (dino::debug_ui::game_has_input()) { // JFG PORT: also while F10's toolbar has handed the mouse to the game
++        if (dino::debug_ui::game_has_input()) { // JFG PORT
              SDL_ShowCursor(cursor_visible ? SDL_ENABLE : SDL_DISABLE);
          }
          SDL_SetRelativeMouseMode(cursor_locked ? SDL_TRUE : SDL_FALSE);
@@ -3836,10 +3764,10 @@ index df580ce..8eab3bd 100644
          model_handle = constructor.GetModelHandle();
      }
 diff --git a/src/ui/ui_state.cpp b/src/ui/ui_state.cpp
-index 503692a..b01b091 100644
+index 503692a..e194921 100644
 --- a/src/ui/ui_state.cpp
 +++ b/src/ui/ui_state.cpp
-@@ -33,6 +33,10 @@
+@@ -33,6 +33,11 @@
  #include "ui_mod_menu.h"
  #include "ui_mod_installer.h"
  #include "ui_renderer.h"
@@ -3847,10 +3775,11 @@ index 503692a..b01b091 100644
 +void jfg_config_step_tab(int dir); // JFG PORT: src/ui/ui_config.cpp
 +void jfg_launcher_ui_tick(); // JFG PORT: src/ui/ui_launcher.cpp
 +extern "C" void jfg_settings_menu_open(int open); // JFG PORT: src/jfg/jfg_camera.cpp (pauses the game)
++extern "C" void jfg_tools_ui_frame(void); // JFG PORT: src/jfg/jfg_ui_tools.cpp
  
  static std::vector<char> read_file(const std::filesystem::path& filepath) {
      std::vector<char> ret{};
-@@ -248,6 +252,10 @@ public:
+@@ -248,6 +253,10 @@ public:
                  {"LatoLatin-BoldItalic.ttf", false},
                  {"NotoEmoji-Regular.ttf", true},
                  {"promptfont/promptfont.ttf", false},
@@ -3861,15 +3790,16 @@ index 503692a..b01b091 100644
              };
  
              for (const FontFace& face : font_faces) {
-@@ -594,6 +602,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+@@ -594,6 +603,8 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
      bool kb_interacted = false;
  
      bool config_was_open = recompui::is_context_shown(recompui::get_config_context_id()) || recompui::is_context_shown(recompui::get_config_sub_menu_context_id());
 +    jfg_settings_menu_open(config_was_open ? 1 : 0); // JFG PORT
++    jfg_tools_ui_frame(); // JFG PORT: F10's tools (src/jfg/jfg_ui_tools.cpp)
  
      using clock = std::chrono::system_clock;
  
-@@ -650,6 +659,15 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+@@ -650,6 +661,15 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                  break;
  
              case SDL_EventType::SDL_CONTROLLERBUTTONDOWN: {
@@ -3885,7 +3815,7 @@ index 503692a..b01b091 100644
                  int sdl_key = cont_button_to_key(cur_event.cbutton);
                  if (context_capturing_input && sdl_key) {
                      ui_state->context->ProcessKeyDown(RmlSDL::ConvertKey(sdl_key), 0);
-@@ -747,6 +765,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+@@ -747,6 +767,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
              }
  
              if (open_config) {
@@ -3893,7 +3823,7 @@ index 503692a..b01b091 100644
                  recompui::show_context(recompui::get_config_context_id(), "");
              }
          }
-@@ -794,6 +813,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+@@ -794,6 +815,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
          prev_width = width;
          prev_height = height;
  
@@ -3901,7 +3831,7 @@ index 503692a..b01b091 100644
          ui_state->context->Update();
          ui_state->context->Render();
          ui_state->render_interface.end(command_list, swap_chain_framebuffer);
-@@ -946,7 +966,8 @@ void recompui::drop_files(const std::list<std::filesystem::path> &file_list) {
+@@ -946,7 +968,8 @@ void recompui::drop_files(const std::list<std::filesystem::path> &file_list) {
      // If the config menu isn't open, open it in the mods tab.
      if (!recompui::is_context_shown(recompui::get_config_context_id())) {
          recompui::hide_all_contexts();

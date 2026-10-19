@@ -3,8 +3,8 @@
 // Opened and closed with F9 or the ` (grave) key. Drawn through the base project's debug UI backend
 // (src/debug_ui), which already owns an ImGui context and renders it on top of the game.
 //
-// This file: the F9 window and the tabs it shares with F10's toolbar (Cheats, Level warp). The other tabs are in
-// jfg_profiles.cpp, jfg_weapons.cpp and jfg_ui_items.cpp.
+// This file: the F9 window and its Cheats and Level warp tabs. The other tabs are in jfg_profiles.cpp, jfg_weapons.cpp
+// and jfg_ui_items.cpp. F10's tools are RmlUi, in jfg_ui_tools.cpp.
 #include <algorithm>
 #include <cfloat>
 #include <cstdio>
