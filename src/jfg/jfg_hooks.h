@@ -49,6 +49,9 @@ int jfg_refuel_amount(int amount);                                     // refuel
 float jfg_sniper_zoom(float zoom);                                     // controlGetManualAim
 int jfg_sniper_walk(int weapon);                                       // the characters' aim control (overlays 15-17)
 int jfg_flag_override(int flag);                                       // entry of mainGetGameFlag
+// jfg_area_progress.cpp
+void jfg_region_reset_begin(uint8_t* rdram, recomp_context* ctx);      // entry of mainResetRegion
+void jfg_region_reset_end(uint8_t* rdram, recomp_context* ctx);        // mainResetRegion, before it returns
 // jfg_weapons.cpp
 uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_bits); // entry of objAnimDframe
 void jfg_mine_init(uint8_t* rdram, recomp_context* ctx);               // end of mineInit

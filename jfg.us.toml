@@ -334,6 +334,19 @@ func = "objSetupObject"
 before_vram = 0x80006E04
 text = "{ void jfg_objsetup_exit(uint8_t*, recomp_context*); jfg_objsetup_exit(rdram, ctx); }"
 
+# Keep Area Progress (src/jfg/jfg_area_progress.cpp): mainResetRegion clears an area's progress when it is entered.
+# At its entry the progress loaded with the file is noted; before it returns (the jr $ra, reached on both paths) it
+# is put back when the option is on and it matches what was kept with that save.
+[[patches.hook]]
+func = "mainResetRegion"
+before_vram = 0x80048630
+text = "{ void jfg_region_reset_begin(uint8_t*, recomp_context*); jfg_region_reset_begin(rdram, ctx); }"
+
+[[patches.hook]]
+func = "mainResetRegion"
+before_vram = 0x800487B0
+text = "{ void jfg_region_reset_end(uint8_t*, recomp_context*); jfg_region_reset_end(rdram, ctx); }"
+
 # mathBreakPoint, the game's assertion ("break"): logged to bin/jfg_error.log and reported in a message box before the
 # process ends (jfg_game_break). Without this the runtime's exit() could crash in its shutdown and leave nothing behind.
 [[patches.hook]]

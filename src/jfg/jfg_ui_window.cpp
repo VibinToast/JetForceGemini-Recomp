@@ -74,6 +74,10 @@ void draw_options() {
                          "play, as Z on the pause screen does. Not during cutscenes, races, Floyd missions or while paused.");
             changed |= options_slider("Minutes between auto saves (0: only on arriving)", &g.auto_save_minutes, 0, 30);
             changed |= ImGui::Checkbox("Show save notification (\"Game saved\" in the corner)", &g.save_notification);
+            changed |= ImGui::Checkbox("Keep area progress", &g.keep_area_progress);
+            options_help("Saving in the middle of an area also keeps what was done there (Tribals rescued, cleared rooms, "
+                         "continues) and the room you were in; loading the file puts it all back. Off: the game's own "
+                         "behaviour, where an area starts over from its entrance after loading.");
             if (ImGui::Button("Back to the title screen (F5)")) g_reset_pending = true;
             ImGui::EndTabItem();
         }

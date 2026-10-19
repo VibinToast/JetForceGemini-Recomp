@@ -58,6 +58,7 @@ struct State {
     bool auto_save = true;         // save to the file in play on arriving in a level and every few minutes (jfg_auto_save.cpp)
     int  auto_save_minutes = 5;    // auto save: minutes of play between saves, 0 = only on arriving in a level
     bool save_notification = true; // auto save: "Game saved" in the bottom right corner
+    bool keep_area_progress = false; // saves keep an unfinished region's progress and room (jfg_area_progress.cpp)
     bool dual_stick = false;       // modern twin-stick layout, see jfg_dual_stick()
     bool invert_aim_y = false;     // dual stick: right stick up aims down (the game's original behaviour)
     int  move_speed = 100;         // how fast the character moves over the ground, percent (any layout)

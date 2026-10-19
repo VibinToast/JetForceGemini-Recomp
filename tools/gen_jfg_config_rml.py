@@ -15,6 +15,8 @@ GAMEPLAY = [
      "Saves to the file you are playing a few seconds after arriving in a level, and every few minutes of play, the same save as Z on the pause screen. Not during cutscenes, races, Floyd missions or while paused."),
     ("range", "auto_save_minutes", "Auto Save Interval", (0, 30, " min"), "Minutes of play between auto saves. 0: only on arriving in a level."),
     ("bool", "save_notification", "Show Save Notification", None, "\"Game saved\" shows briefly in the bottom right corner after an auto save."),
+    ("bool", "keep_area_progress", "Keep Area Progress", None,
+     "Saving in the middle of an area (auto save or Z on the pause screen) also keeps what was done there: Tribals rescued or lost, cleared rooms, continues, and the room you were in. Loading the file puts it all back. Off: the game's own behaviour, where an area starts over from its entrance after loading."),
     ("group", None, "Movement & Aiming (any control layout)", None, None),
     ("range", "move_speed", "Movement Speed", (25, 400, "%"), "How fast the character moves over the ground. The extra distance is collision-checked like normal movement."),
     ("bool", "aim_shoulder", "Over-the-Shoulder Aiming", None, "While aiming, the view is from over the character's right shoulder."),
