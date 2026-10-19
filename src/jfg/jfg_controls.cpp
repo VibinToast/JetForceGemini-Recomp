@@ -203,7 +203,6 @@ static bool aim_state(uint32_t obj) {
 
 static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
     constexpr uint16_t BTN_R = 0x0010, C_UP = 0x0008;
-    constexpr int STATE_JUMP = 3;
     static int phase = 0, ticks = 0;
     static bool jump_was_held = false;
     const bool jump_held = g_jump_button.load(std::memory_order_relaxed);
@@ -235,7 +234,7 @@ static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
     const uint32_t data = rd32(obj + 0x68);
     const int state = valid_ptr(data) ? rd8(data + PD_STATE) : -1;
     ticks++;
-    if ((state != STATE_JUMP && ticks > 2) || ticks > 300) { finish(); return; }
+    if ((state != PD_STATE_JUMP && ticks > 2) || ticks > 300) { finish(); return; }
     wr16(pad, (uint16_t)(cur & ~BTN_R));
     wr16(pressed, (uint16_t)(down & ~BTN_R));
 }
@@ -484,10 +483,12 @@ void jfg_camera_controls(recomp_context* ctx) {
     g_cam.sprint_factor = 1.0f;
     static const bool sprint_test = std::getenv("JFG_DEBUG_SPRINT") != nullptr; // tests: sprint on and held
     if (((g.sprint && g_sprint_held.load(std::memory_order_relaxed)) || sprint_test) && obj != 0 && !dino::input::game_input_disabled()) {
-        // On foot only: not while aiming (the aim walk) or swimming (Dive speed has its own option).
+        // On foot only: not while swimming (Dive speed has its own option), nor while aiming (the aim walk) unless
+        // "Sprint while aiming" is on.
         const uint32_t data = rd32(obj + 0x68);
         constexpr uint8_t STATE_SWIM = 4;
-        if (valid_ptr(data) && rd8(data + PD_STATE) != PD_STATE_AIMING && rd8(data + PD_STATE) != STATE_SWIM) {
+        const int state = valid_ptr(data) ? rd8(data + PD_STATE) : -1;
+        if (state >= 0 && state != STATE_SWIM && (state != PD_STATE_AIMING || g.sprint_aiming)) {
             g_cam.sprint_factor = (float)g.sprint_speed / 100.0f;
             g_cam.move_factor *= g_cam.sprint_factor;
         }
@@ -629,13 +630,6 @@ void jfg_camera_controls(recomp_context* ctx) {
     const float deflection = std::min(1.0f, std::sqrt(lx * lx + ly * ly));
     int stick_x = 0, stick_y = 0;
     if (deflection > 0.12f) {
-        if (g.diagonal_boost) {
-            // Forward and sideways parts as the original's "stick forward + C button" would give them: the larger one
-            // counts in full, so straight is 1, a full diagonal is the square root of 2 at 100%.
-            const float larger = std::max(std::fabs(lx), std::fabs(ly));
-            const float forward = ly / larger, sideways = lx / larger * (float)g.strafe_speed / 100.0f;
-            g_cam.move_factor *= std::sqrt(forward * forward + sideways * sideways);
-        }
         const float wanted = g_cam.heading + g_sign_move * std::atan2(lx, ly); // world heading to run along
         const float relative = wrap_angle(wanted - game_heading);
         stick_x = (int)std::lround(std::sin(relative) * deflection * 78.0f * g_sign_move);
@@ -662,9 +656,24 @@ extern "C" void jfg_move_scale(uint8_t* rdram_, recomp_context* ctx) {
     constexpr uint8_t STATE_SWIM = 4;
     const bool swim = rd8(data + PD_STATE) == STATE_SWIM;
     const float dive = swim ? (float)g.dive_speed / 100.0f : 1.0f;
-    const float factor_xz = g_cam.move_factor * dive, factor_y = dive;
-    if (factor_xz == 1.0f && factor_y == 1.0f) return;
     auto as_float = [](gpr reg) { const uint32_t bits = (uint32_t)reg; float f; std::memcpy(&f, &bits, 4); return f; };
+    // "Normalize diagonal speed": running while sidestepping (C-left / C-right, also what the left stick gives while
+    // aiming) adds the two speeds together. The step is split into its forward and sideways parts (relative to the way
+    // the character faces) and shortened to the larger part alone, so a diagonal is as fast as either direction.
+    float normalize = 1.0f;
+    if (g.normalize_diagonal && !swim) {
+        constexpr uint16_t C_LEFT = 0x0002, C_RIGHT = 0x0001;
+        const uint32_t pad = ADDR_sControllerCurrData + 6u * (rd8(ADDR_sPlayerID) & 3u);
+        if ((rd16(pad) & (C_LEFT | C_RIGHT)) != 0) {
+            const float heading = angle_from_s16(rd16(obj)) + PI_F; // the way the character runs
+            const float sx = as_float(ctx->r5), sz = as_float(ctx->r7);
+            const float forward = sx * std::sin(heading) + sz * std::cos(heading), sideways = sx * std::cos(heading) - sz * std::sin(heading);
+            const float length = std::sqrt(forward * forward + sideways * sideways);
+            if (length > 0.0f) normalize = std::max(std::fabs(forward), std::fabs(sideways)) / length;
+        }
+    }
+    const float factor_xz = g_cam.move_factor * dive * normalize, factor_y = dive;
+    if (factor_xz == 1.0f && factor_y == 1.0f) return;
     auto as_bits = [](float f) { uint32_t bits; std::memcpy(&bits, &f, 4); return bits; };
     const float dx = as_float(ctx->r5) * (factor_xz - 1.0f), dz = as_float(ctx->r7) * (factor_xz - 1.0f);
     const float dy = swim ? as_float(ctx->r6) * (factor_y - 1.0f) : 0.0f;

@@ -200,14 +200,6 @@ void draw_options() {
                 changed |= options_slider("Camera left/right %", &g.camera_speed_h, 25, 300);
                 changed |= options_slider("Camera up/down %", &g.camera_speed_v, 25, 300);
                 ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
-                changed |= ImGui::Checkbox("Diagonal speed boost", &g.diagonal_boost);
-                options_help("With the original controls, running forward while sidestepping adds the two speeds together, so "
-                             "going diagonally is about 40% faster. This gives the left stick the same boost when it is pushed "
-                             "diagonally; the slider sets how much the sideways part counts.");
-                ImGui::BeginDisabled(!g.diagonal_boost);
-                changed |= options_slider("Strafe speed %", &g.strafe_speed, 0, 200);
-                ImGui::EndDisabled();
-                ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
                 changed |= ImGui::Checkbox("Built-in button layout", &g.dual_layout);
                 options_help("LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. "
                              "D-pad: weapon select; up/down zoom while aiming. View / right-stick click: N64 L. Untick to use your "
@@ -235,8 +227,14 @@ void draw_options() {
             changed |= options_slider("Movement speed %", &g.move_speed, 50, 300);
             changed |= ImGui::Checkbox("Sprint", &g.sprint);
             options_help("Hold the left stick click (controller) or Left Shift (mouse and keyboard) to run faster. In the "
-                         "built-in dual-stick layout the left stick click then sprints instead of crouching (B still crouches).");
+                         "built-in dual-stick layout the left stick click then sprints instead of crouching (B still crouches). "
+                         "Not while swimming.");
             changed |= options_slider("Sprint speed %", &g.sprint_speed, 100, 300);
+            changed |= ImGui::Checkbox("Sprint while aiming", &g.sprint_aiming);
+            options_help("Sprinting also works while aiming, so the character moves faster with the aim held.");
+            changed |= ImGui::Checkbox("Normalize diagonal speed", &g.normalize_diagonal);
+            options_help("In the game, running forward while sidestepping adds the two speeds together, so going diagonally "
+                         "is about 40% faster. With this on a diagonal is as fast as running straight.");
 
             options_section("Aiming (any control layout)");
             changed |= ImGui::Checkbox("Over-the-shoulder view while aiming", &g.aim_shoulder);
