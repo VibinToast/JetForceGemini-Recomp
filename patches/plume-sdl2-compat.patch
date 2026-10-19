@@ -1,0 +1,17 @@
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+index f1dd503..480a1d7 100644
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -2464,7 +2464,11 @@ namespace plume {
+         dstWidth = rect.right - rect.left;
+         dstHeight = rect.bottom - rect.top;
+ #   elif defined(PLUME_SDL_VULKAN_ENABLED)
+-        SDL_GetWindowSizeInPixels(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
++        // SDL_GetWindowSizeInPixels was added in SDL 2.26, while Steam's
++        // Linux runtime and older long-term-support distributions may expose
++        // an earlier SDL2. SDL_Vulkan_GetDrawableSize has provided the same
++        // pixel-sized Vulkan drawable dimensions since SDL 2.0.6.
++        SDL_Vulkan_GetDrawableSize(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
+ #   elif defined(__ANDROID__)
+         dstWidth = ANativeWindow_getWidth(desc.renderWindow);
+         dstHeight = ANativeWindow_getHeight(desc.renderWindow);

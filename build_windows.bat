@@ -78,6 +78,10 @@ set "WORK=%DRV%\%WORK_NAME%"
 :work_ready
 set "BASE_URL=https://github.com/cyscott/dkr-recomp.git"
 set "BASE_COMMIT=eb8151c05837359c9eca0ad006077a14f5bf72b8"
+rem RT64 is upstream rt64/rt64 at this commit, not the base's pin (an older DinosaurPlanetRecomp fork commit). The port
+rem carries the base's RT64 and plume patches rebased onto it (patches\rt64-f3ddkr.patch, patches\plume-sdl2-compat.patch).
+set "RT64_URL=https://github.com/rt64/rt64.git"
+set "RT64_COMMIT=de343a53c703f2fc7fdd64ac6ff9e5a3f41e66f3"
 
 if not defined JFG_ROM set "JFG_ROM=%PORT_DIR%baserom.us.z64"
 set "ROM_SHA1=493ced9008dbe932d6e91179b68e8630cf23a023"
@@ -146,8 +150,25 @@ if not exist "%WORK%\.git" (
     echo [jfg] port base already present
 )
 echo [jfg] fetching libraries ^(this is the slow part the first time^)...
-git -C "%WORK%" submodule update --init --recursive --depth 1
+rem Once RT64 is there, the base's submodule update leaves it alone: it would move it back to the base's pin.
+if exist "%WORK%\lib\rt64\.git" (
+    git -C "%WORK%" -c submodule.lib/rt64.update=none submodule update --init --recursive --depth 1
+) else (
+    git -C "%WORK%" submodule update --init --recursive --depth 1
+)
 if errorlevel 1 ( echo [jfg] ERROR: submodule download failed & exit /b 1 )
+set "RT64_HEAD="
+for /f "usebackq tokens=*" %%c in (`git -C "%WORK%\lib\rt64" rev-parse HEAD`) do set "RT64_HEAD=%%c"
+if /i not "%RT64_HEAD%"=="%RT64_COMMIT%" (
+    echo [jfg] moving RT64 to %RT64_COMMIT%
+    git -C "%WORK%\lib\rt64" cat-file -e %RT64_COMMIT% >nul 2>&1 || git -C "%WORK%\lib\rt64" fetch --depth 1 "%RT64_URL%" %RT64_COMMIT%
+    git -C "%WORK%\lib\rt64" checkout -q -f --detach %RT64_COMMIT%
+    if errorlevel 1 ( echo [jfg] ERROR: could not check out RT64 %RT64_COMMIT% & exit /b 1 )
+)
+rem RT64's own libraries, as that commit pins them (plume is patched below, so it is put back first).
+if exist "%WORK%\lib\rt64\src\contrib\plume\.git" git -C "%WORK%\lib\rt64\src\contrib\plume" checkout -q -- .
+git -C "%WORK%\lib\rt64" submodule update --init --recursive --depth 1
+if errorlevel 1 ( echo [jfg] ERROR: RT64 submodule download failed & exit /b 1 )
 
 rem ---- 3. patches ------------------------------------------------------------
 rem The JFG patches change between revisions of this folder, so first put the files they touch back to the
@@ -159,8 +180,9 @@ if errorlevel 1 ( echo [jfg] ERROR: could not restore rt64 files & exit /b 1 )
 git -C "%WORK%\lib\rt64" clean -fdq -- src/gbi src/hle src/shaders src/shared
 call :apply_once "%WORK%\lib\N64Recomp"                 "%WORK%\submodule-patches\n64recomp-dkr.patch"          || exit /b 1
 call :apply_once "%WORK%\lib\N64ModernRuntime"          "%WORK%\submodule-patches\n64modernruntime-dkr.patch"   || exit /b 1
-call :apply_once "%WORK%\lib\rt64"                      "%WORK%\submodule-patches\rt64-f3ddkr.patch"            || exit /b 1
-call :apply_once "%WORK%\lib\rt64\src\contrib\plume"    "%WORK%\submodule-patches\plume-sdl2-compat.patch"      || exit /b 1
+rem The base's RT64 and plume patches rebased onto RT64_COMMIT: the port's copies, not the base's.
+call :apply_once "%WORK%\lib\rt64"                      "%PORT_DIR%patches\rt64-f3ddkr.patch"                   || exit /b 1
+call :apply_once "%WORK%\lib\rt64\src\contrib\plume"    "%PORT_DIR%patches\plume-sdl2-compat.patch"             || exit /b 1
 call :apply_once "%WORK%"                               "%PORT_DIR%patches\jfg-base.patch"             || exit /b 1
 call :apply_once "%WORK%\lib\rt64"                      "%PORT_DIR%patches\rt64-jfg.patch"                      || exit /b 1
 rem The version in version.txt (the release workflow updates it) goes into the build: the launcher shows it.

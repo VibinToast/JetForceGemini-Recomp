@@ -1,7 +1,7 @@
 diff -ruN a/CMakeLists.txt b/CMakeLists.txt
---- a/CMakeLists.txt	2026-10-19 16:01:08.356843800 -0500
-+++ b/CMakeLists.txt	2026-10-19 16:01:08.356843800 -0500
-@@ -523,6 +523,16 @@
+--- a/CMakeLists.txt	2026-10-19 17:26:51.631542800 -0500
++++ b/CMakeLists.txt	2026-10-19 17:26:51.632042100 -0500
+@@ -529,6 +529,16 @@
  build_compute_shader(rt64 "src/shaders/IdleCS.hlsl")
  build_compute_shader(rt64 "src/shaders/LuminanceHistogramCS.hlsl")
  build_pixel_shader(  rt64 "src/shaders/PostBlendDitherNoisePS.hlsl" "src/shaders/PostBlendDitherNoiseAddPS.hlsl" "-D ADD_MODE")
@@ -19,8 +19,8 @@ diff -ruN a/CMakeLists.txt b/CMakeLists.txt
  build_pixel_shader(  rt64 "src/shaders/PostBlendDitherNoisePS.hlsl" "src/shaders/PostBlendDitherNoiseSubNegativePS.hlsl" "-D SUB_MODE" "-D NEGATIVE_MODE")
  build_compute_shader(rt64 "src/shaders/RSPModifyCS.hlsl")
 diff -ruN a/src/gbi/rt64_gbi.cpp b/src/gbi/rt64_gbi.cpp
---- a/src/gbi/rt64_gbi.cpp	2026-10-08 23:27:53.995389425 -0500
-+++ b/src/gbi/rt64_gbi.cpp	2026-10-07 00:37:48.609165023 -0500
+--- a/src/gbi/rt64_gbi.cpp	2026-10-19 17:26:51.903821300 -0500
++++ b/src/gbi/rt64_gbi.cpp	2026-10-19 17:26:51.904321000 -0500
 @@ -65,6 +65,8 @@
      const GBIInstance   F3DDKR_XBUS               = { "F3DDKR.xbus (Diddy Kong Racing)",           GBIUCode::F3DDKR,       { false,  true,   false,  false,  false } };
      const GBIInstance   F3DDKR_FIFO               = { "F3DDKR.fifo (Diddy Kong Racing)",           GBIUCode::F3DDKR,       { false,  true,   false,  false,  false } };
@@ -67,8 +67,8 @@ diff -ruN a/src/gbi/rt64_gbi.cpp b/src/gbi/rt64_gbi.cpp
                  assert(false && "Unknown UCode.");
                  break;
 diff -ruN a/src/gbi/rt64_gbi.h b/src/gbi/rt64_gbi.h
---- a/src/gbi/rt64_gbi.h	2026-10-08 23:27:53.995423003 -0500
-+++ b/src/gbi/rt64_gbi.h	2026-10-06 20:51:59.155335654 -0500
+--- a/src/gbi/rt64_gbi.h	2026-10-19 17:26:52.079375000 -0500
++++ b/src/gbi/rt64_gbi.h	2026-10-19 17:26:52.080374900 -0500
 @@ -29,6 +29,7 @@
          S2DEX2,
          L3DEX2,
@@ -78,8 +78,8 @@ diff -ruN a/src/gbi/rt64_gbi.h b/src/gbi/rt64_gbi.h
      };
  
 diff -ruN a/src/gbi/rt64_gbi_f3ddkr.cpp b/src/gbi/rt64_gbi_f3ddkr.cpp
---- a/src/gbi/rt64_gbi_f3ddkr.cpp	2026-10-08 23:27:53.995430801 -0500
-+++ b/src/gbi/rt64_gbi_f3ddkr.cpp	2026-10-07 19:55:22.647236074 -0500
+--- a/src/gbi/rt64_gbi_f3ddkr.cpp	2026-10-19 17:26:52.242942300 -0500
++++ b/src/gbi/rt64_gbi_f3ddkr.cpp	2026-10-19 17:26:52.243442200 -0500
 @@ -4,6 +4,9 @@
  
  #include "rt64_gbi_f3ddkr.h"
@@ -293,8 +293,8 @@ diff -ruN a/src/gbi/rt64_gbi_f3ddkr.cpp b/src/gbi/rt64_gbi_f3ddkr.cpp
              GBI_F3D::setup(gbi);
  
 diff -ruN a/src/gbi/rt64_gbi_f3ddkr.h b/src/gbi/rt64_gbi_f3ddkr.h
---- a/src/gbi/rt64_gbi_f3ddkr.h	2026-10-08 23:27:53.995441620 -0500
-+++ b/src/gbi/rt64_gbi_f3ddkr.h	2026-10-06 20:51:59.155355756 -0500
+--- a/src/gbi/rt64_gbi_f3ddkr.h	2026-10-19 17:26:52.417245800 -0500
++++ b/src/gbi/rt64_gbi_f3ddkr.h	2026-10-19 17:26:52.417750500 -0500
 @@ -18,5 +18,6 @@
  namespace RT64 {
      namespace GBI_F3DDKR {
@@ -303,8 +303,8 @@ diff -ruN a/src/gbi/rt64_gbi_f3ddkr.h b/src/gbi/rt64_gbi_f3ddkr.h
      };
  };
 diff -ruN a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
---- a/src/hle/rt64_application.cpp	2026-10-08 23:27:53.978597574 -0500
-+++ b/src/hle/rt64_application.cpp	2026-10-06 23:21:22.766165995 -0500
+--- a/src/hle/rt64_application.cpp	2026-10-19 17:26:52.512367900 -0500
++++ b/src/hle/rt64_application.cpp	2026-10-19 17:26:52.512867700 -0500
 @@ -58,6 +58,19 @@
          vi.vBurst.word = *VI_V_BURST_REG;
          vi.xTransform.word = *VI_X_SCALE_REG;
@@ -326,8 +326,8 @@ diff -ruN a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
      }
  
 diff -ruN a/src/hle/rt64_interpreter.cpp b/src/hle/rt64_interpreter.cpp
---- a/src/hle/rt64_interpreter.cpp	2026-10-08 23:27:53.995487496 -0500
-+++ b/src/hle/rt64_interpreter.cpp	2026-10-07 01:33:55.933177086 -0500
+--- a/src/hle/rt64_interpreter.cpp	2026-10-19 17:26:53.060061200 -0500
++++ b/src/hle/rt64_interpreter.cpp	2026-10-19 17:26:53.060562400 -0500
 @@ -113,6 +113,24 @@
              return false;
          }
@@ -363,8 +363,8 @@ diff -ruN a/src/hle/rt64_interpreter.cpp b/src/hle/rt64_interpreter.cpp
          // Every RSP task starts with an empty display-list stack on hardware.
          // A malformed or torn display list that aborted mid-run can leave
 diff -ruN a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
---- a/src/hle/rt64_present_queue.cpp	2026-10-19 14:13:05.585067200 -0500
-+++ b/src/hle/rt64_present_queue.cpp	2026-10-19 14:13:05.586067700 -0500
+--- a/src/hle/rt64_present_queue.cpp	2026-10-19 17:26:53.162173900 -0500
++++ b/src/hle/rt64_present_queue.cpp	2026-10-19 17:26:53.162674700 -0500
 @@ -2,6 +2,7 @@
  // RT64
  //
@@ -383,7 +383,7 @@ diff -ruN a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
  namespace RT64 {
      // PresentQueue
  
-@@ -401,6 +405,7 @@
+@@ -402,6 +406,7 @@
                  RenderCommandSemaphore *waitSemaphore = drawSemaphores[swapChainIndex].get();
                  presentTimestamp = Timer::current();
                  swapChainValid = ext.swapChain->present(swapChainIndex, &waitSemaphore, 1);
@@ -391,7 +391,7 @@ diff -ruN a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
                  presentProfiler.logAndRestart();
              }
          }
-@@ -504,7 +509,7 @@
+@@ -505,7 +510,7 @@
                  skipPresent = skipPresent || ext.swapChain->isEmpty();
  
                  Present &present = presents[processCursor];
@@ -401,8 +401,8 @@ diff -ruN a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
                  if (!presentThreadRunning) {
                      continue;
 diff -ruN a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
---- a/src/hle/rt64_rdp.cpp	2026-10-18 03:12:37.491643100 -0500
-+++ b/src/hle/rt64_rdp.cpp	2026-10-18 03:12:37.491665300 -0500
+--- a/src/hle/rt64_rdp.cpp	2026-10-19 17:26:53.334805300 -0500
++++ b/src/hle/rt64_rdp.cpp	2026-10-19 17:26:53.335305300 -0500
 @@ -274,6 +274,7 @@
      }
  
@@ -411,7 +411,7 @@ diff -ruN a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
          // Make sure the new color image is actually different. Some games will set the color image
          // multiple times despite setting the exact same parameters.
          const uint32_t newAddress = maskAddress(address);
-@@ -1279,6 +1280,8 @@
+@@ -1289,6 +1290,8 @@
          drawCall.rect = drawRect;
          drawCall.rectDsdx = dsdx;
          drawCall.rectDtdy = dtdy;
@@ -419,28 +419,20 @@ diff -ruN a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
 +        drawCall.rectT = ult;
          drawCall.rectLeftOrigin = extAlignment.leftOrigin;
          drawCall.rectRightOrigin = extAlignment.rightOrigin;
- 
+         drawCall.rectAspect = extended.global.rectAspect;
 diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
---- a/src/hle/rt64_rdp_tmem.cpp	2026-10-17 20:18:19.985232600 -0500
-+++ b/src/hle/rt64_rdp_tmem.cpp	2026-10-17 20:18:19.986237300 -0500
-@@ -2,10 +2,16 @@
- // RT64
- //
- 
-+#define STB_IMAGE_WRITE_IMPLEMENTATION
-+#define STB_IMAGE_WRITE_STATIC
-+#include "stb/stb_image_write.h"
-+
- #include "rt64_rdp_tmem.h"
+--- a/src/hle/rt64_rdp_tmem.cpp	2026-10-19 17:26:53.442206200 -0500
++++ b/src/hle/rt64_rdp_tmem.cpp	2026-10-19 17:26:53.442706300 -0500
+@@ -6,6 +6,8 @@
  
  #include <cassert>
  #include <cinttypes>
 +#include <cstdio>
 +#include <cstdlib>
  
- #include "xxHash/xxh3.h"
+ #define STB_IMAGE_WRITE_IMPLEMENTATION
  
-@@ -36,13 +42,14 @@
+@@ -44,13 +46,14 @@
              textureCache->queueGPUUploadTMEM(hash, creationFrame, TMEM, RDP_TMEM_BYTES, width, height, 0, LoadTile(), false);
          }
          
@@ -453,23 +445,23 @@ diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
              const bool validTextureCheck = (width > 0x0) && (height > 0x0);
              const bool bigTextureCheck = (width > 0x1000) || (height > 0x1000);
              if (validTextureCheck && !bigTextureCheck) {
--                dumpTexture(hash, state, loadTile, width, height, tlut);
-+                dumpTexture(hash, state, loadTile, width, height, tlut, creationFrame);
+-                dumpTexture(hash, state, loadTile, width, height, tlut, false);
++                dumpTexture(hash, state, loadTile, width, height, tlut, creationFrame, false);
              }
          }
  
-@@ -59,19 +66,271 @@
+@@ -67,19 +70,271 @@
  
          // Dump memory contents into a file if the process is active.
          if (!state->dumpingTexturesDirectory.empty()) {
--            dumpTexture(hash, state, loadTile, width, height, tlut);
-+            dumpTexture(hash, state, loadTile, width, height, tlut, creationFrame);
+-            dumpTexture(hash, state, loadTile, width, height, tlut, true);
++            dumpTexture(hash, state, loadTile, width, height, tlut, creationFrame, true);
          }
  
          return hash;
      }
  
--    void TextureManager::dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut) {
+-    void TextureManager::dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, bool savePNG) {
 +    // JFG PORT: CPU version of sampleTMEM() in shaders/TextureDecoder.hlsli, so a dumped texture looks exactly the
 +    // way RT64 decodes it for drawing.
 +    namespace {
@@ -705,7 +697,7 @@ diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
 +        }
 +    }
 +
-+    void TextureManager::dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, uint64_t creationFrame) {
++    void TextureManager::dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, uint64_t creationFrame, bool savePNG) {
 +        // JFG PORT: textures the game redraws on most frames are not dumped (see dumpSourceIsDynamic). Only for PNG dumps.
 +        DumpSource *source = nullptr;
 +        if (state->dumpingTexturesPng && state->dumpingTexturesSkipDynamic && dumpSourceIsDynamic(hash, state, loadTile, width, height, tlut, creationFrame, source)) {
@@ -733,8 +725,8 @@ diff -ruN a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
          // Dump the entirety of TMEM.
          char baseName[64];
 diff -ruN a/src/hle/rt64_rdp_tmem.h b/src/hle/rt64_rdp_tmem.h
---- a/src/hle/rt64_rdp_tmem.h	2026-10-17 20:18:20.028812500 -0500
-+++ b/src/hle/rt64_rdp_tmem.h	2026-10-17 20:18:20.028812500 -0500
+--- a/src/hle/rt64_rdp_tmem.h	2026-10-19 17:26:53.552924300 -0500
++++ b/src/hle/rt64_rdp_tmem.h	2026-10-19 17:26:53.553424700 -0500
 @@ -4,7 +4,11 @@
  
  #pragma once
@@ -747,7 +739,7 @@ diff -ruN a/src/hle/rt64_rdp_tmem.h b/src/hle/rt64_rdp_tmem.h
  
  #include "hle/rt64_draw_call.h"
  #include "render/rt64_texture_cache.h"
-@@ -13,13 +17,30 @@
+@@ -13,14 +17,31 @@
      struct State;
  
      struct TextureManager {
@@ -766,13 +758,14 @@ diff -ruN a/src/hle/rt64_rdp_tmem.h b/src/hle/rt64_rdp_tmem.h
 +
          std::set<uint64_t> hashSet;
          std::set<uint64_t> dumpedSet;
+         std::vector<uint32_t> dumpRGBAPixels;
 +        std::map<DumpSourceKey, DumpSource> dumpSources; // JFG PORT
  
          void uploadEmpty(State *state, TextureCache *textureCache, uint64_t creationFrame, uint16_t width, uint16_t height, uint64_t replacementHash);
          uint64_t uploadTMEM(State *state, const LoadTile &loadTile, TextureCache *textureCache, uint64_t creationFrame, uint16_t byteOffset, uint16_t byteCount, uint16_t width, uint16_t height, uint32_t tlut);
          uint64_t uploadTexture(State *state, const LoadTile &loadTile, TextureCache *textureCache, uint64_t creationFrame, uint16_t width, uint16_t height, uint32_t tlut);
--        void dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut);
-+        void dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, uint64_t creationFrame);
+-        void dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, bool savePNG);
++        void dumpTexture(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, uint64_t creationFrame, bool savePNG);
 +        bool dumpSourceIsDynamic(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, uint64_t creationFrame, DumpSource *&source); // JFG PORT
 +        bool dumpTexturePng(uint64_t hash, State *state, const LoadTile &loadTile, uint16_t width, uint16_t height, uint32_t tlut, std::filesystem::path &path); // JFG PORT
 +        void resetDump(const std::filesystem::path &directory); // JFG PORT
@@ -781,8 +774,8 @@ diff -ruN a/src/hle/rt64_rdp_tmem.h b/src/hle/rt64_rdp_tmem.h
  };
 \ No newline at end of file
 diff -ruN a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
---- a/src/hle/rt64_rsp.cpp	2026-10-08 23:27:53.995557667 -0500
-+++ b/src/hle/rt64_rsp.cpp	2026-10-08 14:50:40.611494726 -0500
+--- a/src/hle/rt64_rsp.cpp	2026-10-19 17:26:53.710592300 -0500
++++ b/src/hle/rt64_rsp.cpp	2026-10-19 17:26:53.711088200 -0500
 @@ -104,6 +104,7 @@
          DKR.vertexCursor = 0;
          DKR.billboard = false;
@@ -847,7 +840,7 @@ diff -ruN a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
              return;
          }
  
-@@ -514,7 +548,7 @@
+@@ -517,7 +551,7 @@
          setVertexCommon<true, sizeof(Vertex)>(rdramAddress, dstIndex, dstIndex + vtxCount);
      }
  
@@ -856,7 +849,7 @@ diff -ruN a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
          // Microcode-verified placement rule (DMEM 0x14C cursor): a non-append
          // load always writes to slot 0 and sets the cursor to its count; an
          // append load writes to the cursor and leaves it unchanged. This is
-@@ -522,7 +556,14 @@
+@@ -525,7 +559,14 @@
          // vertices contiguously, and how sprites reuse slots 1..n across
          // triangle batches while slot 0 keeps the anchor vertex.
          uint32_t dstIndex;
@@ -872,7 +865,7 @@ diff -ruN a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
              dstIndex = 0;
              DKR.vertexCursor = uint8_t(vtxCount);
          }
-@@ -1163,6 +1204,15 @@
+@@ -1170,6 +1211,15 @@
          viewport.translate.y = float(vp->vtrans[0] + offy) / 4.0f;
          viewport.translate.z = float(vp->vtrans[3]) / DepthRange;
          extended.viewportOriginStack[viewportStackSize - 1] = ori;
@@ -888,8 +881,8 @@ diff -ruN a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
          viewportChanged = true;
      }
  
-@@ -1406,7 +1456,12 @@
-             drawRect = scissorRect.intersection(drawRect);
+@@ -1415,7 +1465,12 @@
+             drawRect = viewportClipRect.intersection(scissorRect.intersection(drawRect));
              if (!drawRect.isNull()) {
                  fbPair.drawColorRect.merge(drawRect);
 -                if (otherModeStack[otherModeStackSize - 1].zUpd()) {
@@ -903,8 +896,8 @@ diff -ruN a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
                  }
              }
 diff -ruN a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
---- a/src/hle/rt64_rsp.h	2026-10-08 23:27:53.995579958 -0500
-+++ b/src/hle/rt64_rsp.h	2026-10-07 19:14:57.261109452 -0500
+--- a/src/hle/rt64_rsp.h	2026-10-19 17:26:53.877707600 -0500
++++ b/src/hle/rt64_rsp.h	2026-10-19 17:26:53.878707900 -0500
 @@ -188,9 +188,10 @@
          std::array<uint32_t, RSP_MAX_SEGMENTS> segments;
  
@@ -928,7 +921,7 @@ diff -ruN a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
          } DKR;
  
          struct {
-@@ -257,6 +260,7 @@
+@@ -258,6 +261,7 @@
          void matrix(uint32_t address, uint8_t params);
          void matrixFloat(uint32_t address, uint8_t params);
          void matrixDKR(uint32_t address, uint8_t index);
@@ -936,7 +929,7 @@ diff -ruN a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
          void selectMatrixDKR(uint8_t index);
          void setBillboardDKR(bool enabled);
          void setDMAOffsetsDKR(uint32_t matrixOffset, uint32_t vertexOffset);
-@@ -274,7 +278,7 @@
+@@ -275,7 +279,7 @@
          void specialComputeModelViewProj();
          void setModelViewProjChanged(bool changed);
          void setVertex(uint32_t address, uint32_t vtxCount, uint32_t dstIndex);
@@ -946,8 +939,8 @@ diff -ruN a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
          void setVertexEXV1(uint32_t address, uint32_t vtxCount, uint32_t dstIndex);
          void setVertexColorPD(uint32_t address);
 diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
---- a/src/hle/rt64_state.cpp	2026-10-18 04:25:08.192236500 -0500
-+++ b/src/hle/rt64_state.cpp	2026-10-18 04:25:08.193238200 -0500
+--- a/src/hle/rt64_state.cpp	2026-10-19 17:26:54.045822900 -0500
++++ b/src/hle/rt64_state.cpp	2026-10-19 17:26:54.046322400 -0500
 @@ -6,6 +6,10 @@
  
  #include <cassert>
@@ -1103,7 +1096,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
      // State
  
      State::State(uint8_t *RDRAM, uint32_t *MI_INTR_REG, void (*checkInterrupts)()) {
-@@ -104,6 +238,8 @@
+@@ -105,6 +239,8 @@
          drawCall.rect.reset();
          drawCall.rectDsdx = 0;
          drawCall.rectDtdy = 0;
@@ -1111,8 +1104,8 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 +        drawCall.rectT = 0;
          drawCall.rectLeftOrigin = G_EX_ORIGIN_NONE;
          drawCall.rectRightOrigin = G_EX_ORIGIN_NONE;
-         drawCall.scissorRect.reset();
-@@ -220,7 +356,7 @@
+         drawCall.rectAspect = G_EX_ASPECT_AUTO;
+@@ -223,7 +359,7 @@
              // Detect the tile count based on the LOD setting.
              const bool usesLOD = (drawCall.otherMode.textLOD() == G_TL_LOD);
              if (usesLOD) {
@@ -1121,7 +1114,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
              }
              // Detect the tile count based on what texels it uses.
              else {
-@@ -496,6 +632,8 @@
+@@ -522,6 +658,8 @@
          // Reset attributes for the next draw call to be recorded.
          drawCall.rectDsdx = 0;
          drawCall.rectDtdy = 0;
@@ -1130,7 +1123,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          drawCall.loadIndex = 0;
          drawCall.loadCount = 0;
          drawCall.minWorldMatrix = USHRT_MAX;
-@@ -770,6 +908,179 @@
+@@ -800,6 +938,179 @@
                      const uint32_t rdpTileLimit = gameCall.callDesc.tileIndex + gameCall.callDesc.tileCount;
                      while (rdpTileCursor < rdpTileLimit) {
                          uploadTile(rdpTileCursor, fbPair, gameCall.callDesc);
@@ -1310,7 +1303,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
                          rdpTileCursor++;
                      }
                  }
-@@ -1875,6 +2186,13 @@
+@@ -1905,6 +2216,13 @@
  
          const bool presentEarly = !ext.presentQueue->viewRDRAM && (ext.enhancementConfig->presentation.mode == EnhancementConfiguration::Presentation::Mode::PresentEarly);
          const uint32_t screenFbAddress = newVI.fbAddress();
@@ -1324,18 +1317,18 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          const hlslpp::uint2 screenFbSize = newVI.fbSize();
          const uint8_t screenFbSiz = newVI.fbSiz();
          const bool viVisible = newVI.visible();
-@@ -2298,7 +2616,7 @@
-                     else if (dumpTextures) {
-                         if (dumpingTexturesDirectory.empty()) {
-                             dumpingTexturesDirectory = FileDialog::getDirectoryPath();
--                            textureManager.dumpedSet.clear();
-+                            textureManager.resetDump(dumpingTexturesDirectory); // JFG PORT
-                         }
-                         else {
-                             dumpingTexturesDirectory.clear();
+@@ -2349,7 +2667,7 @@
+                     else if (!dialogResults->nextDumpingTexturesDirectory.empty()) {
+                         dumpingTexturesDirectory = dialogResults->nextDumpingTexturesDirectory;
+                         dialogResults->nextDumpingTexturesDirectory.clear();
+-                        textureManager.dumpedSet.clear();
++                        textureManager.resetDump(dumpingTexturesDirectory); // JFG PORT
+                     }
+ 
+                     if (ext.textureCache->textureMap.replacementMap.fileSystemIsDirectory) {
 diff -ruN a/src/hle/rt64_state.h b/src/hle/rt64_state.h
---- a/src/hle/rt64_state.h	2026-10-17 20:18:20.144440500 -0500
-+++ b/src/hle/rt64_state.h	2026-10-17 20:18:20.144440500 -0500
+--- a/src/hle/rt64_state.h	2026-10-19 17:26:54.147932900 -0500
++++ b/src/hle/rt64_state.h	2026-10-19 17:26:54.148433700 -0500
 @@ -115,6 +115,9 @@
          ProfilingTimer screenCpuProfiler = ProfilingTimer(120);
          ProfilingTimer viChangedProfiler = ProfilingTimer(120);
@@ -1347,8 +1340,8 @@ diff -ruN a/src/hle/rt64_state.h b/src/hle/rt64_state.h
          uint64_t workloadId = 0;
          uint64_t presentId = 0;
 diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
---- a/src/hle/rt64_vi.cpp	2026-10-08 23:27:53.979226572 -0500
-+++ b/src/hle/rt64_vi.cpp	2026-10-07 00:42:57.832447000 -0500
+--- a/src/hle/rt64_vi.cpp	2026-10-19 17:26:54.238212800 -0500
++++ b/src/hle/rt64_vi.cpp	2026-10-19 17:26:54.238713600 -0500
 @@ -16,10 +16,33 @@
      // VI
      
@@ -1383,9 +1376,21 @@ diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
          return { 0.0f, 0.0f, 1.0f, 1.0f };
      }
  
+@@ -114,9 +137,9 @@
+             // at the origin and an extra row is left at the end to account for filtering.
+             // We add two extra rows to whatever result we get and try to get the closest clean
+             // multiplier of the specified Division factor.
+-            const uint32_t ExtraRows = 2;
++            uint32_t extraRows = width > 320 ? 4 : 2;
+             const uint32_t Divisor = 4;
+-            size.y += ExtraRows;
++            size.y += extraRows;
+             size.y = lround(float(size.y) / Divisor) * Divisor;
+             return size;
+         } else {
 diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-19 16:01:08.474357800 -0500
-+++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-19 16:01:08.475357800 -0500
+--- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-19 17:26:54.809095700 -0500
++++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-19 17:26:54.809595300 -0500
 @@ -4,7 +4,11 @@
  
  #include "rt64_framebuffer_renderer.h"
@@ -2109,8 +2114,8 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
                          float invRatioScale = 1.0f / aspectRatioScale;
                          float horizontalMisalignment = 0.0f;
 diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer_renderer.h
---- a/src/render/rt64_framebuffer_renderer.h	2026-10-19 16:01:08.512357800 -0500
-+++ b/src/render/rt64_framebuffer_renderer.h	2026-10-19 16:01:08.512357800 -0500
+--- a/src/render/rt64_framebuffer_renderer.h	2026-10-19 17:26:54.919469900 -0500
++++ b/src/render/rt64_framebuffer_renderer.h	2026-10-19 17:26:54.919968100 -0500
 @@ -87,6 +87,50 @@
          RenderPipeline *postBlendDitherNoiseAddPipeline = nullptr;
          RenderPipeline *postBlendDitherNoiseSubPipeline = nullptr;
@@ -2163,8 +2168,8 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer
          std::unique_ptr<FramebufferRendererDescriptorTextureSet> descTextureSet;
          std::unique_ptr<RenderTexture> dummyColorTarget;
 diff -ruN a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projection_processor.cpp
---- a/src/render/rt64_projection_processor.cpp	2026-10-19 03:12:17.640009300 -0500
-+++ b/src/render/rt64_projection_processor.cpp	2026-10-19 03:12:17.640009300 -0500
+--- a/src/render/rt64_projection_processor.cpp	2026-10-19 17:26:55.147543400 -0500
++++ b/src/render/rt64_projection_processor.cpp	2026-10-19 17:26:55.148043200 -0500
 @@ -39,6 +39,7 @@
              drawData.prevViewTransforms = drawData.viewTransforms;
              drawData.prevProjTransforms = drawData.projTransforms;
@@ -2200,8 +2205,8 @@ diff -ruN a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projectio
              interop::float4x4 &viewMatrix = drawData.modViewTransforms[proj.transformsIndex];
              interop::float4x4 &projMatrix = drawData.modProjTransforms[proj.transformsIndex];
 diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cpp
---- a/src/render/rt64_raster_shader.cpp	2026-10-19 16:01:08.581510400 -0500
-+++ b/src/render/rt64_raster_shader.cpp	2026-10-19 16:01:08.582509900 -0500
+--- a/src/render/rt64_raster_shader.cpp	2026-10-19 17:26:55.251492100 -0500
++++ b/src/render/rt64_raster_shader.cpp	2026-10-19 17:26:55.251992600 -0500
 @@ -19,6 +19,17 @@
  #include "shaders/PostBlendDitherNoiseAddPS.hlsl.spirv.h"
  #include "shaders/PostBlendDitherNoiseSubPS.hlsl.spirv.h"
@@ -2447,8 +2452,8 @@ diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cp
  
      RasterShaderUber::~RasterShaderUber() {
 diff -ruN a/src/render/rt64_raster_shader.h b/src/render/rt64_raster_shader.h
---- a/src/render/rt64_raster_shader.h	2026-10-19 16:01:08.619018600 -0500
-+++ b/src/render/rt64_raster_shader.h	2026-10-19 16:01:08.620018100 -0500
+--- a/src/render/rt64_raster_shader.h	2026-10-19 17:26:55.361658100 -0500
++++ b/src/render/rt64_raster_shader.h	2026-10-19 17:26:55.362162000 -0500
 @@ -82,6 +82,15 @@
          std::unique_ptr<RenderPipeline> postBlendDitherNoiseAddPipeline;
          std::unique_ptr<RenderPipeline> postBlendDitherNoiseSubPipeline;
@@ -2466,8 +2471,8 @@ diff -ruN a/src/render/rt64_raster_shader.h b/src/render/rt64_raster_shader.h
          std::condition_variable firstPipelineCondition;
          bool pipelinesCreated = false;
 diff -ruN a/src/shaders/BloomPS.hlsl b/src/shaders/BloomPS.hlsl
---- a/src/shaders/BloomPS.hlsl	2026-10-19 16:01:08.441358000 -0500
-+++ b/src/shaders/BloomPS.hlsl	2026-10-19 16:01:08.442357500 -0500
+--- a/src/shaders/BloomPS.hlsl	2026-10-19 17:26:55.455330700 -0500
++++ b/src/shaders/BloomPS.hlsl	2026-10-19 17:26:55.456330600 -0500
 @@ -0,0 +1,110 @@
 +//
 +// RT64 - JFG PORT: bloom for Jet Force Gemini.
@@ -2580,8 +2585,8 @@ diff -ruN a/src/shaders/BloomPS.hlsl b/src/shaders/BloomPS.hlsl
 +#endif
 +}
 diff -ruN a/src/shaders/SsaoPS.hlsl b/src/shaders/SsaoPS.hlsl
---- a/src/shaders/SsaoPS.hlsl	2026-10-19 16:01:08.406358000 -0500
-+++ b/src/shaders/SsaoPS.hlsl	2026-10-19 16:01:08.406358000 -0500
+--- a/src/shaders/SsaoPS.hlsl	2026-10-19 17:26:55.636494500 -0500
++++ b/src/shaders/SsaoPS.hlsl	2026-10-19 17:26:55.636994600 -0500
 @@ -0,0 +1,149 @@
 +//
 +// RT64 - JFG PORT: screen-space ambient occlusion for Jet Force Gemini.
@@ -2733,8 +2738,8 @@ diff -ruN a/src/shaders/SsaoPS.hlsl b/src/shaders/SsaoPS.hlsl
 +    resultColor.r = saturate(1.0f - strength * 4.0f * closeFade * occlusion / float(SampleCount));
 +}
 diff -ruN a/src/shared/rt64_jfg_bloom.h b/src/shared/rt64_jfg_bloom.h
---- a/src/shared/rt64_jfg_bloom.h	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/shared/rt64_jfg_bloom.h	2026-10-08 17:44:28.588685794 -0500
+--- a/src/shared/rt64_jfg_bloom.h	2026-10-19 17:26:56.001499100 -0500
++++ b/src/shared/rt64_jfg_bloom.h	2026-10-19 17:26:56.002000000 -0500
 @@ -0,0 +1,24 @@
 +//
 +// RT64 - JFG PORT: parameters of the bloom passes (BloomPS.hlsl, FramebufferRenderer::submitRasterScene).
@@ -2761,8 +2766,8 @@ diff -ruN a/src/shared/rt64_jfg_bloom.h b/src/shared/rt64_jfg_bloom.h
 +};
 +#endif
 diff -ruN a/src/shaders/FogPS.hlsl b/src/shaders/FogPS.hlsl
---- a/src/shaders/FogPS.hlsl	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/shaders/FogPS.hlsl	1969-12-31 18:00:00.000000000 -0600
+--- a/src/shaders/FogPS.hlsl	2026-10-19 17:26:55.547910900 -0500
++++ b/src/shaders/FogPS.hlsl	2026-10-19 17:26:55.548410900 -0500
 @@ -0,0 +1,59 @@
 +//
 +// RT64 - JFG PORT: depth-based distance fog for Jet Force Gemini (experimental).
@@ -2824,8 +2829,8 @@ diff -ruN a/src/shaders/FogPS.hlsl b/src/shaders/FogPS.hlsl
 +    resultColor = float4(color, density * t * t * (3.0f - 2.0f * t));
 +}
 diff -ruN a/src/shaders/VignettePS.hlsl b/src/shaders/VignettePS.hlsl
---- a/src/shaders/VignettePS.hlsl	1969-12-31 18:00:00.000000000 -0600
-+++ b/src/shaders/VignettePS.hlsl	1969-12-31 18:00:00.000000000 -0600
+--- a/src/shaders/VignettePS.hlsl	2026-10-19 17:26:55.825552500 -0500
++++ b/src/shaders/VignettePS.hlsl	2026-10-19 17:26:55.826050100 -0500
 @@ -0,0 +1,32 @@
 +//
 +// RT64 - JFG PORT: vignette for Jet Force Gemini.
@@ -2860,8 +2865,8 @@ diff -ruN a/src/shaders/VignettePS.hlsl b/src/shaders/VignettePS.hlsl
 +    resultColor = float4(v, v, v, 1.0f);
 +}
 diff -ruN a/src/hle/rt64_draw_call.h b/src/hle/rt64_draw_call.h
---- a/src/hle/rt64_draw_call.h	2026-10-18 03:12:28.350093200 -0500
-+++ b/src/hle/rt64_draw_call.h	2026-10-18 03:12:28.351093800 -0500
+--- a/src/hle/rt64_draw_call.h	2026-10-19 17:26:52.623014200 -0500
++++ b/src/hle/rt64_draw_call.h	2026-10-19 17:26:52.623014200 -0500
 @@ -77,6 +77,8 @@
          FixedRect rect;
          int16_t rectDsdx;
@@ -2872,8 +2877,8 @@ diff -ruN a/src/hle/rt64_draw_call.h b/src/hle/rt64_draw_call.h
          uint16_t rectRightOrigin;
          FixedRect scissorRect;
 diff -ruN a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_manager.cpp
---- a/src/hle/rt64_framebuffer_manager.cpp	2026-10-18 13:17:09.453934000 -0500
-+++ b/src/hle/rt64_framebuffer_manager.cpp	2026-10-18 13:17:09.454931600 -0500
+--- a/src/hle/rt64_framebuffer_manager.cpp	2026-10-19 17:26:52.788902000 -0500
++++ b/src/hle/rt64_framebuffer_manager.cpp	2026-10-19 17:26:52.789401700 -0500
 @@ -6,6 +6,8 @@
  
  #include <cassert>
@@ -2899,7 +2904,7 @@ diff -ruN a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_mana
          dstTile.ulScaleS = op.reinterpretTile.ulScaleS;
          dstTile.ulScaleS = op.reinterpretTile.ulScaleS;
          dstTile.texelShift = op.reinterpretTile.texelShift;
-@@ -811,15 +815,33 @@
+@@ -843,15 +847,33 @@
          }
      }
  
@@ -2933,7 +2938,7 @@ diff -ruN a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_mana
                  differentFbs.push_back(&it->second);
  
                  if (updateHashes) {
-@@ -855,6 +877,12 @@
+@@ -887,6 +909,12 @@
              const bool discardFb = canDiscard && (fb->modifiedBytes >= differentBytesLimit);
              if (discardFb) {
                  fbDiscards.emplace_back(fb->addressStart);
@@ -2947,8 +2952,8 @@ diff -ruN a/src/hle/rt64_framebuffer_manager.cpp b/src/hle/rt64_framebuffer_mana
              else {
                  FramebufferOperation changesOp;
 diff -ruN a/src/hle/rt64_framebuffer_manager.h b/src/hle/rt64_framebuffer_manager.h
---- a/src/hle/rt64_framebuffer_manager.h	2026-10-18 03:16:41.075195600 -0500
-+++ b/src/hle/rt64_framebuffer_manager.h	2026-10-18 03:16:41.075195600 -0500
+--- a/src/hle/rt64_framebuffer_manager.h	2026-10-19 17:26:52.891246800 -0500
++++ b/src/hle/rt64_framebuffer_manager.h	2026-10-19 17:26:52.891746500 -0500
 @@ -96,6 +96,7 @@
              bool readDepthFromStorage = false;
              bool needsDiscard = false;
@@ -2958,8 +2963,8 @@ diff -ruN a/src/hle/rt64_framebuffer_manager.h b/src/hle/rt64_framebuffer_manage
          };
  
 diff -ruN a/src/shared/rt64_gpu_tile.h b/src/shared/rt64_gpu_tile.h
---- a/src/shared/rt64_gpu_tile.h	2026-10-18 03:16:41.236169400 -0500
-+++ b/src/shared/rt64_gpu_tile.h	2026-10-18 03:16:41.236169400 -0500
+--- a/src/shared/rt64_gpu_tile.h	2026-10-19 17:26:55.913165100 -0500
++++ b/src/shared/rt64_gpu_tile.h	2026-10-19 17:26:55.913165100 -0500
 @@ -18,6 +18,7 @@
              uint rawTMEM : 1;
              uint hasMipmaps : 1;
@@ -2980,9 +2985,9 @@ diff -ruN a/src/shared/rt64_gpu_tile.h b/src/shared/rt64_gpu_tile.h
      struct GPUTile {
          float2 ulScale;
 diff -ruN a/src/shaders/TextureSampler.hlsli b/src/shaders/TextureSampler.hlsli
---- a/src/shaders/TextureSampler.hlsli	2026-10-18 03:16:41.329792600 -0500
-+++ b/src/shaders/TextureSampler.hlsli	2026-10-18 03:16:41.329792600 -0500
-@@ -335,6 +335,23 @@
+--- a/src/shaders/TextureSampler.hlsli	2026-10-19 17:26:55.729549800 -0500
++++ b/src/shaders/TextureSampler.hlsli	2026-10-19 17:26:55.730050700 -0500
+@@ -336,6 +336,23 @@
      }
  #endif
  
@@ -3007,8 +3012,8 @@ diff -ruN a/src/shaders/TextureSampler.hlsli b/src/shaders/TextureSampler.hlsli
      float4 textureColor;
      if (!flagHasMipmaps) {
 diff -ruN a/src/contrib/miniz/miniz.c b/src/contrib/miniz/miniz.c
---- a/src/contrib/miniz/miniz.c	2026-10-18 12:36:30.443703500 -0500
-+++ b/src/contrib/miniz/miniz.c	2026-10-18 12:36:30.443703500 -0500
+--- a/src/contrib/miniz/miniz.c	2026-10-19 17:26:51.735850100 -0500
++++ b/src/contrib/miniz/miniz.c	2026-10-19 17:26:51.736352600 -0500
 @@ -3871,7 +3871,9 @@
              if ((disk_index == MZ_UINT16_MAX) || ((disk_index != num_this_disk) && (disk_index != 1)))
                  return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_MULTIDISK);
@@ -3021,8 +3026,8 @@ diff -ruN a/src/contrib/miniz/miniz.c b/src/contrib/miniz/miniz.c
                  if (((mz_uint64)MZ_READ_LE32(p + MZ_ZIP_CDH_LOCAL_HEADER_OFS) + MZ_ZIP_LOCAL_DIR_HEADER_SIZE + comp_size) > pZip->m_archive_size)
                      return mz_zip_set_error(pZip, MZ_ZIP_INVALID_HEADER_OR_CORRUPTED);
 diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
---- a/src/hle/rt64_workload_queue.cpp	2026-10-19 14:13:05.484056800 -0500
-+++ b/src/hle/rt64_workload_queue.cpp	2026-10-19 14:13:05.485058300 -0500
+--- a/src/hle/rt64_workload_queue.cpp	2026-10-19 17:26:54.609683000 -0500
++++ b/src/hle/rt64_workload_queue.cpp	2026-10-19 17:26:54.610183000 -0500
 @@ -93,11 +93,29 @@
          std::unique_lock<std::mutex> threadLock(threadMutex);
      }
@@ -3106,8 +3111,8 @@ diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
                          if (colorSet.find(colorImg.address) != colorSet.end()) {
                              continue;
 diff -ruN a/src/hle/rt64_workload.h b/src/hle/rt64_workload.h
---- a/src/hle/rt64_workload.h	2026-10-19 03:12:17.680009800 -0500
-+++ b/src/hle/rt64_workload.h	2026-10-19 03:12:17.683009300 -0500
+--- a/src/hle/rt64_workload.h	2026-10-19 17:26:54.440934300 -0500
++++ b/src/hle/rt64_workload.h	2026-10-19 17:26:54.441434400 -0500
 @@ -48,6 +48,7 @@
          std::vector<interop::float4x4> modViewTransforms;
          std::vector<interop::float4x4> modProjTransforms;
@@ -3117,8 +3122,8 @@ diff -ruN a/src/hle/rt64_workload.h b/src/hle/rt64_workload.h
          std::vector<interop::float4x4> prevProjTransforms;
          std::vector<interop::float4x4> prevViewProjTransforms;
 diff -ruN a/src/hle/rt64_workload.cpp b/src/hle/rt64_workload.cpp
---- a/src/hle/rt64_workload.cpp	2026-10-19 03:12:17.720517300 -0500
-+++ b/src/hle/rt64_workload.cpp	2026-10-19 03:12:17.721515300 -0500
+--- a/src/hle/rt64_workload.cpp	2026-10-19 17:26:54.334981900 -0500
++++ b/src/hle/rt64_workload.cpp	2026-10-19 17:26:54.335481300 -0500
 @@ -80,6 +80,7 @@
          drawData.modViewTransforms.clear();
          drawData.modProjTransforms.clear();
@@ -3128,8 +3133,8 @@ diff -ruN a/src/hle/rt64_workload.cpp b/src/hle/rt64_workload.cpp
          drawData.prevProjTransforms.clear();
          drawData.prevViewProjTransforms.clear();
 diff -ruN a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
---- a/src/hle/rt64_workload_queue.h	2026-10-19 14:13:05.548056000 -0500
-+++ b/src/hle/rt64_workload_queue.h	2026-10-19 14:13:05.548056000 -0500
+--- a/src/hle/rt64_workload_queue.h	2026-10-19 17:26:54.709993100 -0500
++++ b/src/hle/rt64_workload_queue.h	2026-10-19 17:26:54.717506300 -0500
 @@ -79,6 +79,9 @@
          std::mutex workerMutex;
          std::mutex threadMutex;
@@ -3150,8 +3155,8 @@ diff -ruN a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
          void updateMultisampling();
          void threadConfigurationUpdate(hlslpp::uint2 viFbSize, WorkloadConfiguration &workloadConfig);
 diff -ruN a/src/render/rt64_framebuffer_renderer_call.h b/src/render/rt64_framebuffer_renderer_call.h
---- a/src/render/rt64_framebuffer_renderer_call.h	2026-10-19 16:01:08.550375700 -0500
-+++ b/src/render/rt64_framebuffer_renderer_call.h	2026-10-19 16:01:08.550375700 -0500
+--- a/src/render/rt64_framebuffer_renderer_call.h	2026-10-19 17:26:55.035904300 -0500
++++ b/src/render/rt64_framebuffer_renderer_call.h	2026-10-19 17:26:55.036404200 -0500
 @@ -41,6 +41,11 @@
                  bool vertexTestZ : 1;
                  bool postBlendDitherNoise : 1;
