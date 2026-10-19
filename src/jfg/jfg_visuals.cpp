@@ -40,6 +40,30 @@ extern "C" uint32_t jfg_hit_flash(uint32_t color) {
     return 0xFF0000FFu | (gb << 16) | (gb << 8);
 }
 
+// "Hide Floyd". sidekickControl(obj, ...) updates Floyd; its entry notes his object kind (behaviorId, +0x48), and
+// objPrintObject(dList, mtx, vtx, obj) draws nothing for an object of that kind while the option is on. The kind is
+// kept rather than the object, so he stays hidden while paused and a reused object address hides nothing else.
+// Not in a Floyd mission or a co-op game, where a player flies him.
+static int g_floyd_kind = -1;
+constexpr uint32_t ADDR_cooperativeGame = 0x800A4FC8; // u8
+
+extern "C" void jfg_floyd_seen(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    if (!valid_ptr(obj)) return;
+    const int kind = (int16_t)rd16(obj + 0x48);
+    if (kind != g_floyd_kind && std::getenv("JFG_DEBUG_FLOYD")) std::fprintf(stderr, "[jfg] Floyd: behaviorId %d\n", kind);
+    g_floyd_kind = kind;
+}
+
+extern "C" int jfg_hide_object(uint8_t* rdram_, recomp_context* ctx) {
+    if (!g.hide_floyd || g_floyd_kind < 0) return 0;
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r7;
+    if (!valid_ptr(obj) || (int16_t)rd16(obj + 0x48) != g_floyd_kind) return 0;
+    return rd8(ADDR_robotMission) == 0 && rd8(ADDR_cooperativeGame) == 0 ? 1 : 0;
+}
+
 // "Disable LOD". objPrintModelObject draws an object with its next, simpler model (model index + 1) when the object
 // is further from the camera than the distance in its object definition (float at header + 0xCC; 0 = no LOD). With the
 // option, that distance is set to 0 in the definition of every object in play; the old values are kept and put back

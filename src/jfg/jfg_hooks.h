@@ -44,6 +44,8 @@ int jfg_freeze_world(void);                                            // func_8
 float jfg_fov(uint8_t* rdram, float fov, uint32_t zoomed);             // camSetFOV
 void jfg_game_fog(uint8_t* rdram, uint32_t sp);                        // func_8001BF9C, right after trackGetFog
 uint32_t jfg_hit_flash(uint32_t color);                                // entry of frontFlashScreen
+void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // entry of sidekickControl
+int jfg_hide_object(uint8_t* rdram, recomp_context* ctx);              // entry of objPrintObject
 // jfg_gameplay.cpp
 int jfg_no_blood(void);                                                // entry of bloodSpurtAdd, bloodHitSpriteAdd
 int jfg_refuel_amount(int amount);                                     // refuelControl
