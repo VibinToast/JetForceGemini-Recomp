@@ -1374,8 +1374,8 @@ diff -ruN a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
      }
  
 diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-18 04:01:33.673145600 -0500
-+++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-18 04:01:33.673145600 -0500
+--- a/src/render/rt64_framebuffer_renderer.cpp	2026-10-19 03:12:17.594596800 -0500
++++ b/src/render/rt64_framebuffer_renderer.cpp	2026-10-19 03:12:17.595596500 -0500
 @@ -4,7 +4,11 @@
  
  #include "rt64_framebuffer_renderer.h"
@@ -1990,7 +1990,7 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
  
          // Make a new render target draw call.
          RenderTargetDrawCall &targetDrawCall = framebuffer.renderTargetDrawCall;
-@@ -1488,7 +2022,7 @@
+@@ -1488,13 +2022,16 @@
                  // The call's scissor spans the whole width of the framebuffer pair scissor. Custom origin must not be in use to be able to use the stretched viewport.
                  const auto &viewport = drawData.rspViewports[proj.transformsIndex];
                  FixedRect intersectionRect = proj.scissorRect.intersection(viewport.rect(viewportClipRatios));
@@ -1998,8 +1998,18 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuff
 +                bool coversWholeWidth = !intersectionRect.isEmpty() && (intersectionRect.ulx <= fbPair.scissorRect.ulx) && (intersectionRect.lrx + 4 >= fbPair.scissorRect.lrx); // JFG PORT: see rt64_projection_processor.cpp
                  bool horizontalRatio = !intersectionRect.isEmpty() && (intersectionRect.width(true, true) > intersectionRect.height(true, true));
                  bool useWideViewport = (viewportOrigin == G_EX_ORIGIN_NONE) && coversWholeWidth && horizontalRatio;
++                // JFG PORT: a narrow projection whose shared matrix the projection processor already widened would be
++                // squeezed twice (the Tribal counter's heads landed on their numbers). Its matrix already keeps 4:3.
++                const bool sharedWideMatrix = (proj.transformsIndex < drawData.jfgProjAdjusted.size()) && (drawData.jfgProjAdjusted[proj.transformsIndex] != 0);
                  if (useWideViewport) {
-@@ -1539,7 +2073,9 @@
+                     projInvRatioScale = 1.0f;
+                 }
+-                else {
++                else if (!sharedWideMatrix) {
+                     triangles.screenScale.x = originalWidth / wideWidth;
+ 
+                     if (viewportOrigin < G_EX_ORIGIN_NONE) {
+@@ -1539,7 +2076,9 @@
                      int32_t horizontalMisalignment = 0;
  
                      // A rect that spans the whole width of the scissor.
@@ -2063,9 +2073,17 @@ diff -ruN a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer
          std::unique_ptr<FramebufferRendererDescriptorTextureSet> descTextureSet;
          std::unique_ptr<RenderTexture> dummyColorTarget;
 diff -ruN a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projection_processor.cpp
---- a/src/render/rt64_projection_processor.cpp	2026-10-18 04:01:33.726057300 -0500
-+++ b/src/render/rt64_projection_processor.cpp	2026-10-18 04:01:33.726057300 -0500
-@@ -92,7 +92,7 @@
+--- a/src/render/rt64_projection_processor.cpp	2026-10-19 03:12:17.640009300 -0500
++++ b/src/render/rt64_projection_processor.cpp	2026-10-19 03:12:17.640009300 -0500
+@@ -39,6 +39,7 @@
+             drawData.prevViewTransforms = drawData.viewTransforms;
+             drawData.prevProjTransforms = drawData.projTransforms;
+             drawData.prevViewProjTransforms = drawData.viewProjTransforms;
++            drawData.jfgProjAdjusted.assign(drawData.projTransforms.size(), 0); // JFG PORT
+         }
+ 
+         for (size_t s = 0; s < p.curFrame->perspectiveScenes.size(); s++) {
+@@ -92,12 +93,23 @@
                  }
  
                  if (!intersectionRect.isEmpty()) {
@@ -2074,6 +2092,23 @@ diff -ruN a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projectio
                      bool horizontalRatio = (intersectionRect.width(true, true) > intersectionRect.height(true, true));
                      adjustAspectRatio = (viewportOrigin == G_EX_ORIGIN_NONE) && coversWholeWidth && horizontalRatio;
                  }
+             }
+- 
++
++            // JFG PORT: projections that differ only in scissor share their transforms (the Tribal counter's heads are
++            // drawn under a narrow scissor with the HUD's full-width ortho). The matrix is shared, so the last one
++            // processed used to decide for all of them; now it stays widened once any of them is. The renderer reads
++            // jfgProjAdjusted to place a narrow one sharing a widened matrix (see FramebufferRenderer).
++            if (proj.transformsIndex < drawData.jfgProjAdjusted.size()) {
++                adjustAspectRatio = adjustAspectRatio || (drawData.jfgProjAdjusted[proj.transformsIndex] != 0);
++                if (adjustAspectRatio) {
++                    drawData.jfgProjAdjusted[proj.transformsIndex] = 1;
++                }
++            }
++
+             float projRatioScale = adjustAspectRatio ? (1.0f / p.aspectRatioScale) : 1.0f;
+             interop::float4x4 &viewMatrix = drawData.modViewTransforms[proj.transformsIndex];
+             interop::float4x4 &projMatrix = drawData.modProjTransforms[proj.transformsIndex];
 diff -ruN a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cpp
 --- a/src/render/rt64_raster_shader.cpp	2026-10-16 15:14:11.708153300 -0500
 +++ b/src/render/rt64_raster_shader.cpp	2026-10-16 15:14:11.821897200 -0500
@@ -2863,3 +2898,25 @@ diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
                          const auto &colorImg = fbPair.colorImage;
                          if (colorSet.find(colorImg.address) != colorSet.end()) {
                              continue;
+diff -ruN a/src/hle/rt64_workload.h b/src/hle/rt64_workload.h
+--- a/src/hle/rt64_workload.h	2026-10-19 03:12:17.680009800 -0500
++++ b/src/hle/rt64_workload.h	2026-10-19 03:12:17.683009300 -0500
+@@ -48,6 +48,7 @@
+         std::vector<interop::float4x4> modViewTransforms;
+         std::vector<interop::float4x4> modProjTransforms;
+         std::vector<interop::float4x4> modViewProjTransforms;
++        std::vector<uint8_t> jfgProjAdjusted; // JFG PORT: 1 = the projection processor widened this transform (see rt64_projection_processor.cpp)
+         std::vector<interop::float4x4> prevViewTransforms;
+         std::vector<interop::float4x4> prevProjTransforms;
+         std::vector<interop::float4x4> prevViewProjTransforms;
+diff -ruN a/src/hle/rt64_workload.cpp b/src/hle/rt64_workload.cpp
+--- a/src/hle/rt64_workload.cpp	2026-10-19 03:12:17.720517300 -0500
++++ b/src/hle/rt64_workload.cpp	2026-10-19 03:12:17.721515300 -0500
+@@ -80,6 +80,7 @@
+         drawData.modViewTransforms.clear();
+         drawData.modProjTransforms.clear();
+         drawData.modViewProjTransforms.clear();
++        drawData.jfgProjAdjusted.clear(); // JFG PORT
+         drawData.prevViewTransforms.clear();
+         drawData.prevProjTransforms.clear();
+         drawData.prevViewProjTransforms.clear();
