@@ -166,7 +166,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         if (t < 0.5f) alpha = t / 0.5f;
         else if (t > HINT_HOLD) alpha = std::max(0.0f, 1.0f - (t - HINT_HOLD) / HINT_FADE);
         const ImVec2 size = ImGui::GetIO().DisplaySize;
-        const char* text = "Settings: Select / Esc  -  Tools: F10  -  Debug window: F9";
+        const char* text = "Settings: Select / Esc  -  Tools: F10"; // F9 (debug window) is named in the settings menu instead
         ImFont* font = ImGui::GetFont();
         const float font_size = std::max(18.0f, size.y / 32.0f);
         const ImVec2 extent = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, text);
