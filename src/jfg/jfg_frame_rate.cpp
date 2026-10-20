@@ -16,6 +16,8 @@
 #include "jfg_port.h"
 #include "jfg_rt64.h"
 
+extern std::atomic_bool exited; // N64ModernRuntime (librecomp/src/recomp.cpp): the game is closing
+
 namespace jfg {
 
 std::atomic<float> g_fps{ 0.0f }; // game frames per second, for the "Show FPS" option
@@ -186,6 +188,8 @@ struct SquadTrack {
     SquadPose last;             // as after the member's last update
     uint32_t updated_tick = 0;  // g_game_ticks at that update, 0 = none
     uint32_t posed_tick = 0;    // g_game_ticks of the last in-between tick on which the game itself re-posed the model
+    uint32_t drawn_tick = 0;    // g_game_ticks of the last draw, and the model instance's +0x0B (current buffer) after it
+    uint8_t drawn_buffer = 0;
 };
 std::unordered_map<uint32_t, SquadTrack> g_squad_tracks; // by object
 // A pose is not read-only: through SquaddieGetTiltList (called by modGenAnimMatrices) it steps the member's head and
@@ -207,6 +211,25 @@ struct SquadDrawn {
 std::vector<SquadDrawn> g_squad_drawn;                   // objects that hold drawn values until jfg_squad_draw_end
 uint32_t g_squad_smoothed = 0;                           // members drawn in between, for JFG_DEBUG_STATS
 uint32_t g_squad_data_kept = 0;                          // extra poses that stepped the control data (put back), for JFG_DEBUG_STATS
+bool g_squad_reposed = false;                            // an extra pose this tick went into the buffer the update posed
+
+// camConvertMatrixList queues each posed matrix buffer (pointer, count; ConvListEntry, 8 bytes) for camTick, which
+// multiplies every entry by the camera and converts it from float to fixed point in place. A buffer queued twice is
+// converted twice and its matrices are garbage, so repeats are taken out of the queue (keeping the first entry).
+void squad_unqueue_repeats() {
+    constexpr uint32_t ADDR_convListCount = 0x800A2ED0, ADDR_convList = 0x800FA658; // D_800A2ED0, D_800FA658
+    const int count = (int)rd32(ADDR_convListCount);
+    if (count <= 1 || count > 4096) return;
+    std::unordered_set<uint32_t> seen;
+    int kept = 0;
+    for (int i = 0; i < count; i++) {
+        const uint32_t mtx = rd32(ADDR_convList + 8u * (uint32_t)i), n = rd32(ADDR_convList + 8u * (uint32_t)i + 4);
+        if (!seen.insert(mtx).second) continue;
+        if (kept != i) { wr32(ADDR_convList + 8u * (uint32_t)kept, mtx); wr32(ADDR_convList + 8u * (uint32_t)kept + 4, n); }
+        kept++;
+    }
+    if (kept != count) wr32(ADDR_convListCount, (uint32_t)kept);
+}
 
 SquadPose read_pose(uint32_t obj) {
     SquadPose p;
@@ -359,6 +382,18 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
         const uint32_t inst = model_instance(obj);
         SquadDrawn d{ obj, now, read_pose(obj) };
         if (inst != 0 && t.posed_tick == g_game_ticks - 1 && rd8(obj + 0x39) == 0xFF) {
+            // The squad update has usually posed the model already this tick (a flip after the last draw), into the
+            // buffer the last frame's display list does not use. A second flip here would pose into the one it does
+            // use, and RT64 reads a frame's display list only after the next frame is drawn: the frame before then
+            // showed this tick's pose too, so pairs of frames looked the same and squad members moved 30 times a
+            // second (found with a trace of the matrices RT64 loads, 2026-10-19). So the index goes back to the
+            // buffer of the last draw, and this pose replaces the update's in the buffer the update just wrote.
+            // Both poses queue the buffer for camTick's float-to-fixed conversion (camConvertMatrixList); the second
+            // entry is dropped after the draw (squad_unqueue_repeats), or the buffer is converted twice and garbled.
+            if (t.drawn_tick == g_game_ticks - 1 && rd8(inst + 0x0B) != t.drawn_buffer) {
+                wr8(inst + 0x0B, t.drawn_buffer);
+                g_squad_reposed = true;
+            }
             wr8(inst + 0x0A, 1);
             const uint32_t data = rd32(obj + 0x68);
             if (valid_ptr(data) && valid_ptr(data + 0xAC)) {
@@ -384,6 +419,99 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
 extern "C" void jfg_squad_draw_end(uint8_t* rdram) {
     g_rdram = rdram;
     squad_draw_restore();
+    if (g_squad_reposed) {
+        squad_unqueue_repeats();
+        g_squad_reposed = false;
+    }
+    // Which buffer each animated member's display list now uses (see the extra pose in jfg_squad_draw_begin).
+    if (g.frame_rate >= 1 && !g.skipping) {
+        for (const SquadMember& m : g_squad_members) {
+            const auto it = g_squad_tracks.find(m.obj);
+            if (it == g_squad_tracks.end() || !live_object(m.obj)) continue;
+            if (const uint32_t inst = model_instance(m.obj)) {
+                it->second.drawn_tick = g_game_ticks;
+                it->second.drawn_buffer = rd8(inst + 0x0B);
+            }
+        }
+    }
+}
+
+// --- Frame step and slow motion (testing) ---------------------------------------------------------------------------
+// For looking at motion one frame at a time. The game thread is held at the entry of viFrameSync, after a tick has
+// built its frame and before it is swapped in, so every tick runs exactly as it would (the 60 fps squad cadence
+// included) and only the time between ticks changes. End freezes and unfreezes, F8 runs one more tick while
+// frozen (held down: steps at the key repeat rate). The picture on screen is the frame before the one held, so each
+// step shows the next frame in order.
+// Tests (no key presses): JFG_DEBUG_STEP=<file> freezes once the file holds a number and runs as many ticks as that
+// number, counted from when it first appeared (write 0, capture, write 1, capture, ...); -1 runs freely again. JFG_DEBUG_SLOWMO=<factor>
+// makes each tick last <factor> times as long.
+// After a hold, the retraces counted meanwhile are dropped, so the game does not take the hold for a slow frame
+// (it would fall to 20 fps at the original rate) and the next tick simulates its usual time.
+namespace {
+std::atomic<bool> g_step_frozen{ false };
+std::atomic<int> g_step_requests{ 0 };
+}
+
+// From the SDL event filter (jfg_tools_key, any thread): End pressed (step = false), or F8 (step = true).
+void frame_step_key(bool step) {
+    if (!step) {
+        const bool frozen = !g_step_frozen.load();
+        g_step_requests.store(0);
+        g_step_frozen.store(frozen);
+        std::fprintf(stderr, "[jfg] frame step %s (F8: one frame)\n", frozen ? "on" : "off");
+    }
+    else if (g_step_frozen.load()) {
+        if (g_step_requests.load() < 2) g_step_requests.fetch_add(1);
+    }
+}
+
+namespace {
+// The number in the JFG_DEBUG_STEP file: -2 while there has been none, -1 = run freely. While the file is being
+// written (empty, or locked by the writer) the last number read stands.
+int step_file_target() {
+    static const char* const path = std::getenv("JFG_DEBUG_STEP");
+    static int last = -2;
+    if (path == nullptr) return -2;
+    FILE* f = std::fopen(path, "r");
+    if (f == nullptr) return last;
+    int n = 0;
+    if (std::fscanf(f, "%d", &n) == 1) last = n;
+    std::fclose(f);
+    return last;
+}
+
+void frame_step_hold(recomp_context* ctx) {
+    static const double slowmo = std::getenv("JFG_DEBUG_SLOWMO") ? std::atof(std::getenv("JFG_DEBUG_SLOWMO")) : 1.0;
+    static const bool scripted = std::getenv("JFG_DEBUG_STEP") != nullptr;
+    static int file_steps = 0;     // ticks run since the step file appeared
+    static auto last_tick = std::chrono::steady_clock::now();
+    bool held = false;
+    if (slowmo > 1.0) {
+        // A tick normally lasts its video frames at 60 a second.
+        const uint32_t frames = g.frame_rate >= 1 ? 1u : std::max<uint32_t>(rd8(0x800FECAC /* gVideoDeltaTime */), 1u);
+        const auto until = last_tick + std::chrono::microseconds((long long)(slowmo * frames * 1000000.0 / 60.0));
+        while (std::chrono::steady_clock::now() < until && !exited.load()) { std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
+        held = true;
+    }
+    for (int polls = 0; !exited.load(); polls++) {
+        if (scripted && polls % 4 == 0) {
+            const int target = step_file_target();
+            if (target == -2 || target == -1) break;
+            if (file_steps < target) { file_steps++; std::fprintf(stderr, "[jfg] frame step %d: tick %u\n", file_steps, g_game_ticks); break; }
+        }
+        else if (!scripted) {
+            if (!g_step_frozen.load()) break;
+            if (g_step_requests.load() > 0) { g_step_requests.fetch_sub(1); std::fprintf(stderr, "[jfg] frame step: tick %u\n", g_game_ticks); break; }
+        }
+        held = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    if (held) {
+        constexpr uint32_t ADDR_gVideoMesgQueue = 0x800FEB80;
+        while ((int32_t)call_game(osRecvMesg_recomp, ctx, { ADDR_gVideoMesgQueue, 0, 0 /* NOBLOCK */ }) != -1) {}
+    }
+    last_tick = std::chrono::steady_clock::now();
+}
 }
 
 // Entry of viFrameSync(mesg). Returns 1 when the call has been handled here (skip in progress).
@@ -391,6 +519,7 @@ extern "C" void jfg_squad_draw_end(uint8_t* rdram) {
 std::chrono::steady_clock::time_point g_pace_tick_start, g_pace_sync_start;
 extern "C" int jfg_vi_skip(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
+    if (!g.skipping) frame_step_hold(ctx);
     g_pace_sync_start = std::chrono::steady_clock::now(); { static const bool pl = std::getenv("JFG_DEBUG_PACING") != nullptr; if (pl) std::fprintf(stderr, "[pace] vi queue at entry: %d\n", (int)rd32(0x800FEB80 + 8)); }
     if (g.frame_rate >= 1 && !g.skipping) {
         // 60 fps. viFrameSync waits until gVideoDeltaTime retraces have been counted (runInOneFrame makes that 1) and

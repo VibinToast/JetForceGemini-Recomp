@@ -35,7 +35,6 @@ namespace jfg {
 
 namespace {
 constexpr uint32_t ADDR_currentRegion = 0x800FD7A4;   // s16 D_800FD7A4: the region being played (0 / 0xFF: none)
-constexpr uint32_t ADDR_currentEntrance = 0x800A3244; // s16: the entrance the current level was entered by
 constexpr uint32_t ADDR_continuePoint = 0x800A3270;   // s16 x4: level, arg, entrance, region a continue restarts at
 constexpr uint32_t ADDR_racingInGame = 0x800A4FB4;    // u8
 constexpr uint32_t ADDR_roomFlags = 0x800FB1E0;       // 32 x 17 bytes
