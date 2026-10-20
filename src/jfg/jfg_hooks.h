@@ -49,6 +49,11 @@ int jfg_hide_object(uint8_t* rdram, recomp_context* ctx);              // entry 
 void jfg_hide_shadow(uint8_t* rdram, recomp_context* ctx);             // shadowGenerate, per object
 void jfg_floyd_done(void);                                             // return of sidekickControl
 int jfg_floyd_mute(uint32_t id);                                       // entry of amSndPlay
+// jfg_interpolation.cpp
+void jfg_interp_object(uint8_t* rdram, recomp_context* ctx);            // entry of objPrintObject
+void jfg_interp_object_done(uint8_t* rdram, recomp_context* ctx);       // return of objPrintObject
+void jfg_interp_push(uint8_t* rdram, recomp_context* ctx);              // entry of the four matrix push functions
+void jfg_interp_pushed(uint8_t* rdram, recomp_context* ctx);            // ... after they note the matrix written
 // jfg_gameplay.cpp
 int jfg_no_blood(void);                                                // entry of bloodSpurtAdd, bloodHitSpriteAdd
 int jfg_refuel_amount(int amount);                                     // refuelControl
@@ -102,6 +107,7 @@ void jfg_texture_dump_folder(char* buf, int size);                     // jfg_te
 void jfg_texture_dump_scene(char* buf, int size);                      // jfg_texture_packs.cpp
 int jfg_texture_pack_current(char* buf, int size);                     // jfg_texture_packs.cpp
 int jfg_refresh_override(void);                                        // jfg_frame_rate.cpp
+int jfg_interp_limit(void);                                            // jfg_frame_rate.cpp
 int jfg_widescreen_active(void);                                       // jfg_visuals.cpp
 int jfg_texture_three_point(void);                                     // jfg_visuals.cpp
 int jfg_output_filtering(void);                                        // jfg_visuals.cpp

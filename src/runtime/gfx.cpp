@@ -1,5 +1,9 @@
 #include "gfx.hpp"
 
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+
 #include "nfd.h"
 #include "ultramodern/ultramodern.hpp"
 
@@ -140,6 +144,17 @@ SDL_Window *get_window() {
 }
 
 void update_gfx(void*) {
+    // JFG PORT: debug aid. JFG_DEBUG_MOUSE=1 also logs every gap of more than 6 ms between two event pumps (mouse
+    // movement waits for the pump, so a late pump delivers it in a burst).
+    static const bool log_pumps = std::getenv("JFG_DEBUG_MOUSE") != nullptr;
+    if (log_pumps) {
+        static auto last = std::chrono::steady_clock::now();
+        const auto now = std::chrono::steady_clock::now();
+        const double gap = std::chrono::duration<double, std::milli>(now - last).count();
+        if (gap > 6.0) fprintf(stderr, "[pump] %.1f ms since the last event pump\n", gap);
+        last = now;
+    }
+
     dino::input::handle_events();
 }
 

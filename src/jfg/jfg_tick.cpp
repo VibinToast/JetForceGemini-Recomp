@@ -292,7 +292,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
 
     // 60 fps: viFrameSync paces the game by gVideoDeltaTime (2 video frames, 3 when it falls behind); the game's own
     // runInOneFrame flag makes it 1. viFrameRateReset() clears the flag again (level changes), so set it every tick.
-    if (g.frame_rate >= 1) wr32(ADDR_runInOneFrame, 1);
+    if (game_frame_rate() >= 1) wr32(ADDR_runInOneFrame, 1);
 
     // F5: back to the title screen (F1-F4 belong to RT64's developer tools), the way the game itself gets there (mainTitlePageInit: game mode 1, then
     // mainChangeLevel(title level, 0, 0, 3, 1, 0)). Not while a skip runs. From the pause screen the title level

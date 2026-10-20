@@ -22,13 +22,39 @@ extern std::atomic_bool exited; // N64ModernRuntime (librecomp/src/recomp.cpp): 
 
 namespace jfg {
 
+// The "Frame rate" option applies from the next start: the game's own code (the scheduler, the squad cadence, the
+// main loop) and the renderer's interpolation are set up for one frame rate, and switching while the game runs left
+// them out of step. The value is taken the first time the game asks for it; until then (the launcher) it follows the
+// option. Changing the option later only saves it; the menus offer a restart (frame_rate_needs_restart).
+static std::atomic<int> g_running_frame_rate{ -1 };
+
+int game_frame_rate() {
+    int rate = g_running_frame_rate.load(std::memory_order_acquire);
+    if (rate < 0) {
+        int expected = -1;
+        rate = g.frame_rate;
+        if (!g_running_frame_rate.compare_exchange_strong(expected, rate, std::memory_order_acq_rel)) rate = expected;
+    }
+    return rate;
+}
+
+int running_frame_rate() {
+    const int rate = g_running_frame_rate.load(std::memory_order_acquire);
+    return rate >= 0 ? rate : g.frame_rate;
+}
+
+bool frame_rate_needs_restart() {
+    const int rate = g_running_frame_rate.load(std::memory_order_acquire);
+    return rate >= 0 && rate != g.frame_rate;
+}
+
 std::atomic<float> g_fps{ 0.0f }; // game frames per second, for the "Show FPS" option
 std::atomic<float> g_screen_fps{ 0.0f };
 
 // Scheduler thread, every video retrace (hook in __scHandleRetrace, see jfg.us.toml): 1 = count the retrace twice, so
 // the scheduler hands each finished frame back after one retrace instead of two (60 fps instead of 30).
 extern "C" int jfg_sched_extra_frame(void) {
-    return g.frame_rate >= 1 ? 1 : 0;
+    return game_frame_rate() >= 1 ? 1 : 0;
 }
 
 // 60 fps: the next frame's graphics task waits for the buffer swap. The game double-buffers: after asking the VI for the
@@ -60,7 +86,7 @@ extern "C" void jfg_sched_retrace(void) {
 
 // Entry of __scTaskReady: 1 = the task may start, 0 = not yet (a swap is still pending), -1 = the game's own check.
 extern "C" int jfg_sched_task_ready(void) {
-    if (g.frame_rate < 1) { g_swap_pending.store(false, std::memory_order_release); return -1; }
+    if (game_frame_rate() < 1) { g_swap_pending.store(false, std::memory_order_release); return -1; }
     if (!g_swap_pending.load(std::memory_order_acquire)) return 1;
     if (g_retraces.load(std::memory_order_acquire) == g_swap_retrace.load(std::memory_order_acquire)) return 0;
     // The applying retrace has come. Its screen update was queued just before the scheduler was told; wait (briefly, it
@@ -79,7 +105,13 @@ extern "C" int jfg_sched_task_ready(void) {
 // game draws), 1 = Display (RT64 adds in-between frames up to the monitor's refresh rate). It is the only frame rate
 // setting in the menus: the recomp's own Framerate (rr_option, -1 here) is no longer shown.
 extern "C" int jfg_refresh_override(void) {
-    return g.frame_rate == 2 ? 1 : 0;
+    return running_frame_rate() == 2 ? 1 : 0;
+}
+
+// Read with it for "60 + Interpolated": the "Interpolation Limit" option, the most frames a second RT64 makes
+// (0 = up to the monitor's refresh rate). RT64 never goes above the monitor's rate either way.
+extern "C" int jfg_interp_limit(void) {
+    return running_frame_rate() == 2 ? g.interp_limit : 0;
 }
 
 // --- 60 fps: the squad system at the game's own 30 fps cadence --------------------------------------------------------
@@ -116,7 +148,7 @@ void squad_cadence_next_tick(uint32_t frames) {
     g_squad_frames += g_tick_frames;
     // Only 60 fps ticks are paired up; at the original rate (2 or 3 frames a tick) and while a cutscene is skipped
     // (6 frames a tick) every tick runs as in the game.
-    g_squad_runs = g.frame_rate < 1 || g.skipping || g_squad_frames >= 2;
+    g_squad_runs = game_frame_rate() < 1 || g.skipping || g_squad_frames >= 2;
 }
 
 // Hooks at the entry of SquaddieControl(obj, frames), SquadronControl(obj, frames) and squadsModuleTick(frames): the frame
@@ -127,7 +159,7 @@ extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
         g_squad_members.push_back({ member, rd32(member + 0x40) });
         g_squad_members_level = (int16_t)rd16(ADDR_currentLevel);
     }
-    if (g.frame_rate < 1 || g.skipping) return frames;
+    if (game_frame_rate() < 1 || g.skipping) return frames;
     return g_squad_runs ? (int)g_squad_frames : 0;
 }
 
@@ -187,7 +219,7 @@ extern "C" void jfg_squad_wrappers_install(uint32_t rom, uint32_t ram) {
 // docs/PORT_FINDINGS.md there): 1 = leave this tick's step out. They are taken on the ticks the squad system runs, so
 // they keep the cadence they have at 30 fps.
 extern "C" int jfg_cadence_skip(void) {
-    return (g.frame_rate >= 1 && !g.skipping && !g_squad_runs) ? 1 : 0;
+    return (game_frame_rate() >= 1 && !g.skipping && !g_squad_runs) ? 1 : 0;
 }
 
 // --- 60 fps: angles that ease towards a target ---------------------------------------------------------------------
@@ -209,7 +241,7 @@ extern "C" void jfg_dangle(uint8_t* rdram, recomp_context* ctx) {
     if (back < diff) diff = -back;
     const float product = (float)diff * t;
     int32_t step = (product > -2147483648.0f && product < 2147483648.0f) ? (int32_t)product : 0x7FFFFFFF; // cvt.w.s, toward 0
-    if (step == 0 && diff != 0 && t > 0.0f && g.frame_rate >= 1 && !g.skipping) step = diff > 0 ? 1 : -1;
+    if (step == 0 && diff != 0 && t > 0.0f && game_frame_rate() >= 1 && !g.skipping) step = diff > 0 ? 1 : -1;
     ctx->r2 = (gpr)(int32_t)(int16_t)(angle + step);
 }
 
@@ -363,7 +395,7 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
     g_rdram = rdram;
     squad_draw_restore();
     static const bool off = std::getenv("JFG_NO_SQUAD_SMOOTH") != nullptr;
-    if (off || g.frame_rate < 1 || g.skipping) { g_squad_tracks.clear(); return; }
+    if (off || game_frame_rate() < 1 || g.skipping) { g_squad_tracks.clear(); return; }
     // Around a level change nothing is smoothed and everything is forgotten: the next level's objects are set up in the
     // memory the last level's used, so a member noted this tick may be gone and its address hold a new object (a
     // crash going through a loading zone, 2026-10-18).
@@ -474,7 +506,7 @@ extern "C" void jfg_squad_draw_end(uint8_t* rdram) {
         g_squad_reposed = false;
     }
     // Which buffer each animated member's display list now uses (see the extra pose in jfg_squad_draw_begin).
-    if (g.frame_rate >= 1 && !g.skipping) {
+    if (game_frame_rate() >= 1 && !g.skipping) {
         for (const SquadMember& m : g_squad_members) {
             const auto it = g_squad_tracks.find(m.obj);
             if (it == g_squad_tracks.end() || !live_object(m.obj)) continue;
@@ -538,7 +570,7 @@ void frame_step_hold(recomp_context* ctx) {
     bool held = false;
     if (slowmo > 1.0) {
         // A tick normally lasts its video frames at 60 a second.
-        const uint32_t frames = g.frame_rate >= 1 ? 1u : std::max<uint32_t>(rd8(0x800FECAC /* gVideoDeltaTime */), 1u);
+        const uint32_t frames = game_frame_rate() >= 1 ? 1u : std::max<uint32_t>(rd8(0x800FECAC /* gVideoDeltaTime */), 1u);
         const auto until = last_tick + std::chrono::microseconds((long long)(slowmo * frames * 1000000.0 / 60.0));
         while (std::chrono::steady_clock::now() < until && !exited.load()) { std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
         held = true;
@@ -571,7 +603,7 @@ extern "C" int jfg_vi_skip(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     if (!g.skipping) frame_step_hold(ctx);
     g_pace_sync_start = std::chrono::steady_clock::now(); { static const bool pl = std::getenv("JFG_DEBUG_PACING") != nullptr; if (pl) std::fprintf(stderr, "[pace] vi queue at entry: %d\n", (int)rd32(0x800FEB80 + 8)); }
-    if (g.frame_rate >= 1 && !g.skipping) {
+    if (game_frame_rate() >= 1 && !g.skipping) {
         // 60 fps. viFrameSync waits until gVideoDeltaTime retraces have been counted (runInOneFrame makes that 1) and
         // then always waits for one more retrace after the buffer swap. The scheduler only starts a graphics task at a
         // retrace, so a tick has always seen one retrace by the time it gets here; that extra wait made every tick two
