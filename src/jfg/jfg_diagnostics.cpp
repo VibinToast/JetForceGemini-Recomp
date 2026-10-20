@@ -196,7 +196,8 @@ extern "C" void jfg_game_break(uint8_t* rdram_, recomp_context* ctx) {
     std::_Exit(1);
 }
 
-// Entry of mainChangeLevel (hook in jfg.us.toml): logs the arguments with JFG_DEBUG_STATS.
+// An internal handler of jfg_on_level_change (mainChangeLevel's wrapper, jfg_api.cpp): logs the arguments with
+// JFG_DEBUG_STATS.
 extern "C" void jfg_change_level_log(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     static const bool log = std::getenv("JFG_DEBUG_STATS") != nullptr;

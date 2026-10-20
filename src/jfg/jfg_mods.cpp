@@ -21,6 +21,7 @@
 #include "librecomp/game.hpp"
 #include "librecomp/overlays.hpp"
 #include "recomp.h"
+#include "jfg_api.h"
 
 namespace jfg {
 void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
@@ -308,6 +309,7 @@ extern "C" void jfg_register_wrapped(void (*reg)(recomp_func_t* wrapped, recomp_
 extern "C" void jfg_register_mod_exports(void) {
     recomp::overlays::register_base_export("recomp_printf", jfg_recomp_printf);
     jfg_register_wrapped(recomp::overlays::register_base_wrapper); // mods patch and hook the originals, not the wrappers
+    jfg::api::register_api(); // the JFG mod API's events and helpers (jfg_api.cpp)
     jfg_register_asset_mods(); // mods that replace game data (jfg_assets.json)
 }
 

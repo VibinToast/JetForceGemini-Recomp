@@ -80,7 +80,7 @@ void jfg_objsetup_step(uint8_t* rdram, recomp_context* ctx, int step); // objSet
 void jfg_objsetup_exit(uint8_t* rdram, recomp_context* ctx);           // objSetupObject, its exit (0x80006E04)
 void jfg_squads_check_enemy(uint8_t* rdram, recomp_context* ctx);      // replaces squadsCheckEnemyPointers
 void jfg_game_break(uint8_t* rdram, recomp_context* ctx);              // mathBreakPoint
-void jfg_change_level_log(uint8_t* rdram, recomp_context* ctx);        // entry of mainChangeLevel
+void jfg_change_level_log(uint8_t* rdram, recomp_context* ctx);        // jfg_on_level_change handler (jfg_api.cpp)
 void jfg_sync_printf(uint8_t* rdram, recomp_context* ctx);             // replaces osSyncPrintf
 // jfg_glue.cpp
 void jfg_overlay_loaded(uint8_t* rdram, recomp_context* ctx);          // runlinkDownloadCode, runlinkResumeCode
