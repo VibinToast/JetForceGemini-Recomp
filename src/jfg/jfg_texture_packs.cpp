@@ -6,9 +6,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <functional>
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
+
+#include "json/json.hpp"
+#include <miniz/miniz.h>
 
 #include "jfg_game.h"
 #include "jfg_hooks.h"
@@ -47,11 +52,153 @@ std::vector<std::string> list_texture_packs() {
     return packs;
 }
 
-std::string pack_display_name(const std::string& folder) {
-    if (folder.empty()) return "Off (original textures)";
+// The folder or file name, without texture_packs/ and .rtz.
+static std::string pack_file_name(const std::string& folder) {
     std::string name = folder.rfind("texture_packs/", 0) == 0 ? folder.substr(14) : folder;
     if (name.size() > 4 && name.compare(name.size() - 4, 4, ".rtz") == 0) name.resize(name.size() - 4);
     return name;
+}
+
+// A pack's details: credits.json at its top level (name, version, author, website, description, image), and the image it
+// names (pack_image.png by default). Read once per pack and kept until the file changes (checked by the list, not by
+// pack_display_name, which runs every frame for the on-screen pack name).
+struct PackMeta {
+    std::filesystem::file_time_type stamp{};
+    uintmax_t size = 0;
+    PackInfo info;
+};
+static std::mutex g_pack_meta_mutex;
+static std::map<std::string, PackMeta> g_pack_meta;
+
+static std::string json_string(const nlohmann::json& j, const char* key) {
+    auto it = j.find(key);
+    return it != j.end() && it->is_string() ? it->get<std::string>() : std::string();
+}
+
+static bool is_rtz(const std::filesystem::path& p) {
+    std::string ext = p.extension().string();
+    for (char& c : ext) c = (char)std::tolower((unsigned char)c);
+    return ext == ".rtz";
+}
+
+// Fills info from credits.json's text (and the image, through read). read(name) returns a file at the pack's top
+// level, or nothing.
+static void parse_pack_json(PackInfo& info, const std::vector<char>& text,
+                            const std::function<std::vector<char>(const std::string&)>& read) {
+    nlohmann::json j = nlohmann::json::parse(text.begin(), text.end(), nullptr, false);
+    if (!j.is_object()) return;
+    info.has_json = true;
+    info.name = json_string(j, "name");
+    info.version = json_string(j, "version");
+    info.author = json_string(j, "author");
+    info.website = json_string(j, "website");
+    info.description = json_string(j, "description");
+    std::string image = json_string(j, "image");
+    if (image.empty()) image = "pack_image.png";
+    info.image = read(image);
+}
+
+static constexpr size_t PACK_FILE_MAX = 32u << 20; // credits.json / the image: anything larger is ignored
+
+static PackInfo read_pack_info(const std::string& folder) {
+    PackInfo info;
+    std::error_code ec;
+    const std::filesystem::path path = std::filesystem::u8path(folder);
+    if (is_rtz(path)) {
+#ifdef _WIN32
+        std::FILE* f = _wfopen(path.c_str(), L"rb");
+#else
+        std::FILE* f = std::fopen(path.c_str(), "rb");
+#endif
+        if (f == nullptr) return info;
+        mz_zip_archive zip = {};
+        if (mz_zip_reader_init_cfile(&zip, f, 0, 0)) {
+            auto read = [&zip](const std::string& name) {
+                std::vector<char> out;
+                const int index = mz_zip_reader_locate_file(&zip, name.c_str(), nullptr, 0);
+                mz_zip_archive_file_stat stat = {};
+                if (index < 0 || !mz_zip_reader_file_stat(&zip, (mz_uint)index, &stat) || stat.m_uncomp_size > PACK_FILE_MAX) return out;
+                out.resize((size_t)stat.m_uncomp_size);
+                if (!mz_zip_reader_extract_to_mem(&zip, (mz_uint)index, out.data(), out.size(), 0)) out.clear();
+                return out;
+            };
+            const std::vector<char> text = read("credits.json");
+            if (!text.empty()) parse_pack_json(info, text, read);
+            mz_zip_reader_end(&zip);
+        }
+        std::fclose(f);
+    }
+    else {
+        auto read = [&path](const std::string& name) {
+            std::vector<char> out;
+            const std::filesystem::path file = path / std::filesystem::u8path(name);
+            std::error_code e;
+            const uintmax_t size = std::filesystem::file_size(file, e);
+            if (e || size > PACK_FILE_MAX) return out;
+#ifdef _WIN32
+            std::FILE* f = _wfopen(file.c_str(), L"rb");
+#else
+            std::FILE* f = std::fopen(file.c_str(), "rb");
+#endif
+            if (f == nullptr) return out;
+            out.resize((size_t)size);
+            if (std::fread(out.data(), 1, out.size(), f) != out.size()) out.clear();
+            std::fclose(f);
+            return out;
+        };
+        const std::vector<char> text = read("credits.json");
+        if (!text.empty()) parse_pack_json(info, text, read);
+    }
+    return info;
+}
+
+// What a pack's details are stamped with: an .rtz file's time and size, a folder's credits.json and image.
+static void pack_stamp(const std::string& folder, std::filesystem::file_time_type& stamp, uintmax_t& size) {
+    std::error_code ec;
+    const std::filesystem::path path = std::filesystem::u8path(folder);
+    if (is_rtz(path)) {
+        stamp = std::filesystem::last_write_time(path, ec);
+        size = std::filesystem::file_size(path, ec);
+        return;
+    }
+    stamp = std::filesystem::last_write_time(path / "credits.json", ec);
+    size = 0;
+    for (const char* f : { "credits.json", "pack_image.png" }) {
+        std::error_code e;
+        const auto t = std::filesystem::last_write_time(path / f, e);
+        if (!e && t > stamp) stamp = t;
+        const uintmax_t s = std::filesystem::file_size(path / f, e);
+        if (!e) size += s;
+    }
+}
+
+PackInfo texture_pack_info(const std::string& folder) {
+    if (folder.empty()) return {};
+    std::filesystem::file_time_type stamp;
+    uintmax_t size = 0;
+    pack_stamp(folder, stamp, size);
+    {
+        std::lock_guard lock(g_pack_meta_mutex);
+        auto it = g_pack_meta.find(folder);
+        if (it != g_pack_meta.end() && it->second.stamp == stamp && it->second.size == size) return it->second.info;
+    }
+    PackInfo info = read_pack_info(folder);
+    static int serial = 0;
+    std::lock_guard lock(g_pack_meta_mutex);
+    info.serial = ++serial;
+    g_pack_meta[folder] = { stamp, size, info };
+    return info;
+}
+
+std::string pack_display_name(const std::string& folder) {
+    if (folder.empty()) return "Off (original textures)";
+    {
+        std::lock_guard lock(g_pack_meta_mutex);
+        auto it = g_pack_meta.find(folder);
+        if (it != g_pack_meta.end()) return it->second.info.name.empty() ? pack_file_name(folder) : it->second.info.name;
+    }
+    const PackInfo info = texture_pack_info(folder);
+    return info.name.empty() ? pack_file_name(folder) : info.name;
 }
 
 // Chooses a pack (or "" for none), saves the choice and makes the renderer (re)load it.
@@ -64,10 +211,14 @@ void set_texture_pack(const std::string& folder) {
     if (std::FILE* f = std::fopen(PACK_CHOICE_FILE, "w")) { std::fprintf(f, "%s\n", folder.c_str()); std::fclose(f); }
 }
 
+static void load_texture_pack_choice_now();
+
+// Once, from the game's first tick or the menus (the launcher shows the saved pack before the game runs).
 void load_texture_pack_choice() {
-    static bool loaded = false;
-    if (loaded) return;
-    loaded = true;
+    static std::once_flag once;
+    std::call_once(once, load_texture_pack_choice_now);
+}
+static void load_texture_pack_choice_now() {
     std::string folder;
     if (std::FILE* f = std::fopen(PACK_CHOICE_FILE, "r")) {
         char line[512] = {};

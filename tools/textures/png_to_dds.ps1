@@ -84,6 +84,22 @@ if (Test-Path -LiteralPath $json) {
     Write-Host 'No rt64.json in the source folder. Copy or generate one before packing (the game writes it for folder packs).'
 }
 
+# The pack's details: credits.json and the image it names (pack_image.png unless it says otherwise), copied as they are.
+$creditsJson = Join-Path $src 'credits.json'
+if (Test-Path -LiteralPath $creditsJson) {
+    Copy-Item -LiteralPath $creditsJson -Destination $out -Force
+    $image = 'pack_image.png'
+    try { $info = Get-Content -LiteralPath $creditsJson -Raw | ConvertFrom-Json; if ($info.image) { $image = $info.image } } catch { }
+    $imagePath = Join-Path $src $image
+    if (Test-Path -LiteralPath $imagePath) {
+        Copy-Item -LiteralPath $imagePath -Destination (Join-Path $out $image) -Force
+        $converted = Join-Path $out ([System.IO.Path]::ChangeExtension($image, '.dds'))
+        if (Test-Path -LiteralPath $converted) { Remove-Item -LiteralPath $converted -Force }
+        $pngCount--
+    }
+    Write-Host 'Copied credits.json and the pack image.'
+}
+
 $ddsCount = @(Get-ChildItem -LiteralPath $out -Filter '*.dds' -File).Count
 Write-Host ''
 Write-Host ($ddsCount.ToString() + ' of ' + $pngCount + ' textures converted.')

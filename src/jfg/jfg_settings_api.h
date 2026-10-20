@@ -34,6 +34,14 @@ namespace jfg::settings {
     // Texture packs: "" = off. Folder ids as stored, with display names.
     std::vector<std::string> texture_packs();
     std::string texture_pack_name(const std::string& folder);
+    // A pack's credits.json (name, version, author, website, description) and the image it names; empty if it has none.
+    struct TexturePackDetails {
+        bool has_json = false;
+        int serial = 0;          // changes when the pack's files change
+        std::string name, version, author, website, description;
+        std::vector<char> image; // the image file's bytes
+    };
+    TexturePackDetails texture_pack_details(const std::string& folder);
     std::string texture_pack();
     void set_texture_pack(const std::string& folder);
     int texture_pack_count();              // textures loaded from the current pack, -1 if none

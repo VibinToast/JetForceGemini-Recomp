@@ -145,6 +145,7 @@ namespace recompui {
     void queue_image_from_bytes_file(const std::string &src, const std::vector<char> &bytes);
     void queue_image_from_file(const std::filesystem::path& path);
     void release_image(const std::string &src);
+    bool can_queue_images(); // JFG PORT: false while the UI is still being made (the menus' first refresh)
 
     void drop_files(const std::list<std::filesystem::path> &file_list);
 }
