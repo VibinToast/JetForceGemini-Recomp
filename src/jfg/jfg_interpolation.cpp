@@ -3,10 +3,10 @@
 // The game writes its matrices into a heap that is reused every other frame, so a matrix's address says nothing about
 // which object it belongs to. Every model matrix the game writes (camPushModelMtx, camPushFloatModelMtx,
 // camPushMuzzleMtx, camScaleModelMtx) is tagged for RT64 (lib/rt64 src/hle/rt64_rsp.cpp, jfgMatrixId) with:
-// - an ID, while objPrintObject is drawing an object: the object and the place the matrix was pushed from (so its body,
-//   weapon and muzzle flash differ, and a muzzle flash that comes and goes does not shift the others). RT64 gives the
-//   object's bones IDs of their own from it. Matrices pushed outside an object's drawing (particles, sprites) get none
-//   and are not interpolated, as before;
+// - an ID, while objPrintObject is drawing an object: the object, the place the matrix was pushed from and what it
+//   draws (so its body, weapon parts and muzzle flash differ, and one that comes and goes does not shift the others).
+//   RT64 gives the object's bones IDs of their own from it. Matrices pushed outside an object's drawing (particles,
+//   sprites) get none and are not interpolated, as before;
 // - the float model matrix the game multiplied with the camera. RT64 needs the model matrix without the camera, and
 //   working it out from the fixed-point result gives one that differs a little every frame (objects shake).
 #include <cstdint>
@@ -25,6 +25,7 @@ namespace {
 uint32_t drawn_objects[16];
 int drawn_count = 0;
 uint32_t push_caller = 0; // return address of the push function running now
+uint32_t push_source = 0; // its third argument: what it draws (transform, source matrix, position; the scale's bits)
 
 constexpr uint32_t OBJ_DEFINITION = 0x40;     // Object: pointer to its definition (objects.h)
 constexpr uint32_t ADDR_modelMtx = 0x800FAAB0; // D_800FAAB0: the float model matrix the push functions multiply with the camera
@@ -44,10 +45,13 @@ extern "C" void jfg_interp_object_done(uint8_t* rdram_, recomp_context* ctx) {
     if (drawn_count > 0) drawn_count--;
 }
 
-// Entry of each push function: where it was called from.
+// Entry of each push function: where it was called from, and its third argument ($a2), which tells apart several
+// matrices pushed from the same place (a character's weapon parts): camPushModelMtx's transform, camPushFloatModelMtx's
+// source matrix, camPushMuzzleMtx's position, camScaleModelMtx's scale.
 extern "C" void jfg_interp_push(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     push_caller = (uint32_t)ctx->r31;
+    push_source = (uint32_t)ctx->r6;
 }
 
 // Each push function right after it noted the matrix it wrote (D_800FAB30). A matrix pushed outside an object's
@@ -61,9 +65,9 @@ extern "C" void jfg_interp_pushed(uint8_t* rdram_, recomp_context* ctx) {
     uint32_t id = 0;
     const uint32_t object = (drawn_count > 0 && drawn_count <= 16) ? drawn_objects[drawn_count - 1] : 0;
     if (valid_ptr(object)) {
-        // The object's address with its definition (an object created where another one was freed differs) and the
-        // place the matrix was pushed from.
-        id = (object * 2654435761u) ^ rd32(object + OBJ_DEFINITION) ^ (push_caller * 40503u);
+        // The object's address with its definition (an object created where another one was freed differs), the
+        // place the matrix was pushed from and what it draws.
+        id = (object * 2654435761u) ^ rd32(object + OBJ_DEFINITION) ^ (push_caller * 40503u) ^ (push_source * 2246822519u);
         if (id == 0 || id == 0xFFFFFFFFu) id = 1; // RT64's "not interpolated" and "match automatically" values
     }
 
