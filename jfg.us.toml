@@ -192,7 +192,55 @@ text = "{ void jfg_floyd_seen(uint8_t*, recomp_context*); jfg_floyd_seen(rdram, 
 [[patches.hook]]
 func = "objPrintObject"
 before_vram = 0x8000DB94
-text = "{ int jfg_hide_object(uint8_t*, recomp_context*); if (jfg_hide_object(rdram, ctx)) { recomp_exit_function(); return; } }"
+text = "{ int jfg_hide_object(uint8_t*, recomp_context*); void jfg_interp_object(uint8_t*, recomp_context*); if (jfg_hide_object(rdram, ctx)) { recomp_exit_function(); return; } jfg_interp_object(rdram, ctx); }"
+
+# Frame interpolation (src/jfg/jfg_interpolation.cpp): the entry of objPrintObject above and its return (below) keep
+# track of the object being drawn. Each of the four functions that write a model matrix notes where it was called
+# from at its entry, and right after it stores the matrix it wrote in D_800FAB30 the matrix is tagged for RT64.
+[[patches.hook]]
+func = "objPrintObject"
+before_vram = 0x8000DC20
+text = "{ void jfg_interp_object_done(uint8_t*, recomp_context*); jfg_interp_object_done(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushModelMtx"
+before_vram = 0x80041CA0
+text = "{ void jfg_interp_push(uint8_t*, recomp_context*); jfg_interp_push(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushModelMtx"
+before_vram = 0x80041D58
+text = "{ void jfg_interp_pushed(uint8_t*, recomp_context*); jfg_interp_pushed(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushFloatModelMtx"
+before_vram = 0x800419AC
+text = "{ void jfg_interp_push(uint8_t*, recomp_context*); jfg_interp_push(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushFloatModelMtx"
+before_vram = 0x80041A48
+text = "{ void jfg_interp_pushed(uint8_t*, recomp_context*); jfg_interp_pushed(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushMuzzleMtx"
+before_vram = 0x80041A90
+text = "{ void jfg_interp_push(uint8_t*, recomp_context*); jfg_interp_push(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushMuzzleMtx"
+before_vram = 0x80041B90
+text = "{ void jfg_interp_pushed(uint8_t*, recomp_context*); jfg_interp_pushed(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camScaleModelMtx"
+before_vram = 0x80041BE0
+text = "{ void jfg_interp_push(uint8_t*, recomp_context*); jfg_interp_push(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camScaleModelMtx"
+before_vram = 0x80041C58
+text = "{ void jfg_interp_pushed(uint8_t*, recomp_context*); jfg_interp_pushed(rdram, ctx); }"
 
 # His shadow: shadowGenerate's object loop, after `lw $s6, 0x50($s7)` (the object's shadow data) and before the
 # `beq $s6, $zero` that skips an object without any.

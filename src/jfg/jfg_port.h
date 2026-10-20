@@ -38,6 +38,9 @@ void update_dump_folder();                        // texture dumping, "One folde
 extern std::atomic<float> g_fps;        // game frames per second, for the "Show FPS" option
 extern std::atomic<float> g_screen_fps; // frames the renderer presented per second
 void frame_step_key(bool step);         // End (freeze, unfreeze) or F8 (one frame) for frame step
+int game_frame_rate();                  // the "Frame rate" this run uses (taken at the game's first ask; game side)
+int running_frame_rate();               // the same, or the option while the game has not asked yet (any thread)
+bool frame_rate_needs_restart();        // the option was changed while the game runs: it applies after a restart
 
 // --- jfg_cutscene_skip.cpp ---------------------------------------------------------------------------------------
 bool in_cutscene();
