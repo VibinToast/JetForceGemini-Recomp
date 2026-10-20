@@ -21,8 +21,8 @@
 			#window { width: 100%; height: 100%; }
 			.rl { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background-color: #050B1C; }
 			.rl-scanlines { position: absolute; top: 0; right: 0; bottom: 0; left: 0; decorator: image(/jfg_scanlines repeat); pointer-events: none; z-index: 10; }
-			/* JFG Bold: the Jet Force Gemini pixel font (jfg_launcher/JFG-Bold.ttf; JFG-Regular.ttf is the regular weight). */
-			.rl-pixel { font-family: "JFG"; font-weight: bold; letter-spacing: 0dp; }
+			/* JFG Black: the heaviest weight of the Jet Force Gemini pixel font (jfg_launcher/JFG-Black.ttf, its own family; JFG-Regular.ttf and JFG-Bold.ttf are the family "JFG"). */
+			.rl-pixel { font-family: "JFG Black"; font-weight: normal; letter-spacing: 0dp; }
 
 			/* Hard offset shadows: the shadow is the outer box, the panel inside is shifted up-left onto it. */
 			.rl-shadow { position: absolute; background-color: #0A2660; }
@@ -42,7 +42,7 @@
 			.rl-btn-shadow { display: block; position: relative; height: 50dp; margin: 0dp 0dp 13dp 4dp; background-color: #0A2660; }
 			.rl-btn { display: block; position: relative; top: -4dp; left: -4dp; width: 100%; height: 50dp; box-sizing: border-box;
 				border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF;
-				font-family: "JFG"; font-weight: bold; font-size: 20dp; line-height: 46dp; text-align: center; text-transform: uppercase;
+				font-family: "JFG Black"; font-weight: normal; font-size: 20dp; line-height: 46dp; text-align: center; text-transform: uppercase;
 				nav-up: auto; nav-down: auto; nav-left: none; nav-right: none; focus: auto; tab-index: auto; cursor: pointer;
 				transition: top left background-color color border-color 0.08s linear-in-out; }
 			/* The lift on hover is driven by the (stationary) shadow box, not the button itself: a button that moves out from under the
@@ -68,7 +68,7 @@
 			.rl-update.rl-on { display: inline-block; }
 			.rl-update-tri { position: absolute; top: 0dp; left: 0dp; width: 0dp; height: 0dp; border-left: 11dp #00000000; border-right: 11dp #00000000; border-bottom: 19dp #FFB21A; }
 			.rl-update:hover .rl-update-tri { border-bottom-color: #FFD36B; }
-			.rl-update-mark { position: absolute; top: 6dp; left: 0dp; width: 22dp; text-align: center; font-family: "JFG"; font-weight: bold; font-size: 15dp; line-height: 17dp; color: #050B1C; }
+			.rl-update-mark { position: absolute; top: 6dp; left: 0dp; width: 22dp; text-align: center; font-family: "JFG Black"; font-weight: normal; font-size: 15dp; line-height: 17dp; color: #050B1C; }
 			.rl-update-tip { display: none; position: absolute; bottom: 28dp; left: -120dp; width: 270dp; padding: 8dp 10dp; z-index: 20; text-align: left;
 				font-size: 13dp; line-height: 19dp; color: #E8F3FF; background-color: #0B1733; border-width: 2dp; border-color: #FFB21A; }
 			.rl-update:hover .rl-update-tip { display: block; }
@@ -78,16 +78,16 @@
 			.rl-modal.rl-on { display: block; }
 			.rl-modal-shadow { position: absolute; top: 56dp; right: 150dp; bottom: 56dp; left: 150dp; background-color: #0A2660; }
 			.rl-modal-box { position: absolute; top: -6dp; right: 6dp; bottom: 6dp; left: -6dp; background-color: #0B1733; border-width: 2dp; border-color: #FFB21A; }
-			.rl-modal-title { position: absolute; top: 22dp; left: 28dp; right: 28dp; font-family: "JFG"; font-weight: bold; font-size: 27dp; line-height: 31dp; color: #FFB21A; text-transform: uppercase; }
+			.rl-modal-title { position: absolute; top: 22dp; left: 28dp; right: 28dp; font-family: "JFG Black"; font-weight: normal; font-size: 27dp; line-height: 31dp; color: #FFB21A; text-transform: uppercase; }
 			.rl-modal-sub { position: absolute; top: 62dp; left: 28dp; right: 28dp; font-size: 18dp; line-height: 26dp; color: #E8F3FF; }
 			.rl-modal-notes { position: absolute; top: 100dp; left: 28dp; right: 28dp; bottom: 214dp; padding: 12dp 14dp; overflow-y: auto;
 				font-size: 15dp; line-height: 22dp; color: #C8D8F0; background-color: #050B1C; border-width: 2dp; border-color: #1F3D73; }
 			/* Changelog entries (jfg_changelog_rml in src/jfg/jfg_update_check.cpp) */
 			.rl-cl-version { display: block; margin-top: 26dp; padding-bottom: 8dp; border-bottom-width: 2dp; border-color: #1F3D73; }
 			.rl-cl-version.rl-cl-first { margin-top: 4dp; }
-			.rl-cl-ver { font-family: "JFG"; font-weight: bold; font-size: 20dp; line-height: 26dp; color: #FFB21A; }
+			.rl-cl-ver { font-family: "JFG Black"; font-weight: normal; font-size: 20dp; line-height: 26dp; color: #FFB21A; }
 			.rl-cl-date { margin-left: 16dp; font-size: 16dp; line-height: 26dp; color: #8199BF; }
-			.rl-cl-tag { display: inline-block; margin-left: 14dp; padding: 0dp 8dp; font-family: "JFG"; font-weight: bold; font-size: 14dp; line-height: 20dp; color: #050B1C; background-color: #3CC8FF; text-transform: uppercase; }
+			.rl-cl-tag { display: inline-block; margin-left: 14dp; padding: 0dp 8dp; font-family: "JFG Black"; font-weight: normal; font-size: 14dp; line-height: 20dp; color: #050B1C; background-color: #3CC8FF; text-transform: uppercase; }
 			.rl-cl-tag.rl-cl-new { background-color: #FFB21A; }
 			.rl-cl-sub { display: block; margin-top: 12dp; font-size: 16dp; line-height: 24dp; font-weight: bold; color: #3CC8FF; }
 			.rl-cl-item { display: block; position: relative; margin-top: 8dp; padding-left: 24dp; font-size: 17dp; line-height: 25dp; color: #E0EAF8; }
@@ -129,7 +129,7 @@
 			.rl-muted { color: #8199BF; }
 			.rl-action-shadow { display: inline-block; position: relative; margin: 20dp 18dp 4dp 4dp; background-color: #0A2660; }
 			.rl-action { display: inline-block; position: relative; top: -4dp; left: -4dp; padding: 14dp 22dp; border-width: 2dp; border-color: #3CC8FF;
-				background-color: #3CC8FF; color: #050B1C; font-family: "JFG"; font-weight: bold; font-size: 20dp; line-height: 23dp; text-transform: uppercase;
+				background-color: #3CC8FF; color: #050B1C; font-family: "JFG Black"; font-weight: normal; font-size: 20dp; line-height: 23dp; text-transform: uppercase;
 				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; focus: auto; tab-index: auto; cursor: pointer; }
 			.rl-action:hover { background-color: #1E90E8; border-color: #1E90E8; }
 			.rl-action-shadow:hover .rl-action { top: -6dp; left: -6dp; }
@@ -138,7 +138,7 @@
 			.rl-action--outline:hover { background-color: #0A2660; color: #3CC8FF; }
 			.rl-start-shadow { display: block; position: relative; margin: 30dp 0dp 0dp 6dp; background-color: #0A2660; }
 			.rl-start { display: block; position: relative; top: -6dp; left: -6dp; height: 96dp; border-width: 2dp; border-color: #1F3D73; background-color: #0B1733;
-				color: #2A4776; font-family: "JFG"; font-weight: bold; font-size: 32dp; line-height: 92dp; text-align: center; text-transform: uppercase;
+				color: #2A4776; font-family: "JFG Black"; font-weight: normal; font-size: 32dp; line-height: 92dp; text-align: center; text-transform: uppercase;
 				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: none; focus: auto; tab-index: auto; }
 			.rl-start.rl-ready { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; cursor: pointer; }
 			.rl-start.rl-ready:hover { background-color: #1E90E8; border-color: #1E90E8; }
@@ -156,12 +156,12 @@
 			.rl-banner:hover { background-color: #3A2400; }
 			.rl-banner-shadow:hover .rl-banner { top: -8dp; left: -8dp; }
 			#window:not([mouse-active]) .rl-banner:focus { top: -8dp; left: -8dp; border-color: #E8F3FF; background-color: #3A2400; }
-			.rl-banner-title { display: block; font-family: "JFG"; font-weight: bold; font-size: 23dp; line-height: 26dp; color: #FFB21A; text-transform: uppercase; }
+			.rl-banner-title { display: block; font-family: "JFG Black"; font-weight: normal; font-size: 23dp; line-height: 26dp; color: #FFB21A; text-transform: uppercase; }
 			.rl-banner-text { display: block; margin-top: 6dp; font-size: 17dp; line-height: 24dp; color: #E8F3FF; }
 			.rl-keys { display: block; margin-top: 30dp; }
 			.rl-key-row { display: flex; flex-direction: row; font-size: 17dp; line-height: 30dp; }
 			.rl-key { display: block; flex: 0 0 auto; width: 210dp; color: #FFB21A; font-weight: bold; }
-			.rl-heading { display: block; font-family: "JFG"; font-weight: bold; font-size: 20dp; line-height: 23dp; color: #FFB21A; margin-bottom: 12dp; }
+			.rl-heading { display: block; font-family: "JFG Black"; font-weight: normal; font-size: 20dp; line-height: 23dp; color: #FFB21A; margin-bottom: 12dp; }
 
 			/* About page */
 			.rl-about { display: flex; flex-direction: row; align-items: flex-start; }
@@ -169,7 +169,7 @@
 			.rl-about-right { display: block; flex: 1 1 auto; }
 			.rl-about-card { text-align: center; padding: 26dp 20dp 24dp; }
 			.rl-toast { display: block; width: 256dp; height: 256dp; margin: 0dp auto 16dp; }
-			.rl-about-name { display: block; font-family: "JFG"; font-weight: bold; font-size: 32dp; line-height: 37dp; color: #3CC8FF; }
+			.rl-about-name { display: block; font-family: "JFG Black"; font-weight: normal; font-size: 32dp; line-height: 37dp; color: #3CC8FF; }
 			.rl-about-tag { display: block; margin-top: 10dp; font-size: 16dp; color: #8199BF; text-transform: uppercase; }
 			.rl-about-links { display: block; margin-top: 18dp; }
 			.rl-link { display: block; margin: 8dp auto 0dp; padding: 6dp 10dp; font-size: 17dp; line-height: 24dp; color: #FFB21A; background-color: transparent; border-width: 2dp; border-color: #1F3D73; border-radius: 0dp; font-family: "JetBrains Mono"; font-weight: bold; width: 100%;
@@ -187,7 +187,7 @@
 			.rl-page .config__wrapper { background-color: rgba(3, 8, 22, 0.78); border-radius: 0dp; border-width: 2dp; border-color: #1F3D73; }
 			.rl-page .config__hz-wrapper .config__wrapper + .config__wrapper { margin-left: 18dp; }
 			.rl-page .config-option__title { font-family: "JetBrains Mono"; font-weight: bold; font-size: 21dp; letter-spacing: 0.5dp; line-height: 26dp; color: #E8F3FF; }
-			.rl-page .config-group__title { font-family: "JFG"; font-weight: bold; font-size: 20dp; letter-spacing: 0dp; line-height: 23dp; color: #FFB21A; }
+			.rl-page .config-group__title { font-family: "JFG Black"; font-weight: normal; font-size: 20dp; letter-spacing: 0dp; line-height: 23dp; color: #FFB21A; }
 			.rl-page .config-option__list .config-option__tab-label { font-family: "JetBrains Mono"; font-weight: bold; font-size: 17dp; letter-spacing: 1dp; color: #8199BF; }
 			.rl-page .config-option__list .config-option__tab-label:hover { color: #E8F3FF; }
 			.rl-page .config-option__list input.radio:not(:disabled):checked+.config-option__tab-label { border-bottom: 2dp; border-color: #3CC8FF; color: #3CC8FF; }
@@ -400,7 +400,7 @@
 													<div class="rl-list-item">&gt; dkr-recomp: the app this port is built on</div>
 													<div class="rl-list-item">&gt; The Jet Force Gemini decompilation project</div>
 													<div class="rl-list-item">&gt; RmlUi, SDL2, Dear ImGui</div>
-													<div class="rl-list-item">&gt; The JFG font; JetBrains Mono font (SIL Open Font License)</div>
+													<div class="rl-list-item">&gt; The JFG font (Regular, Bold, Black); JetBrains Mono font (SIL Open Font License)</div>
 												</div>
 											</div></div>
 											<div class="rl-gap"></div>
