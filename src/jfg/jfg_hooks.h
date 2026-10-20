@@ -125,14 +125,19 @@ void jfg_tools_key(int scancode, int down, int repeat);                // jfg_ui
 void jfg_register_asset_mods(void);                                    // jfg_assets.cpp: the jfg_assets.json content type
 // jfg_glue.cpp (jfg_on_init)
 void jfg_mods_alias_overlays(void);                                    // jfg_mods.cpp: overlay funcs at private addresses
-// jfg_glue.cpp (jfg_overlay_loaded)
-void jfg_squad_wrappers_install(uint32_t rom, uint32_t ram);           // jfg_frame_rate.cpp: SquaddieControl,
-                                                                       // SquadronControl, squadsModuleTick cadence
 
 // --- functions mods import ("*"; registered by jfg_register_mod_exports) -------------------------------------------
 void jfg_recomp_printf(uint8_t* rdram, recomp_context* ctx);           // jfg_mods.cpp: recomp_printf
 
 } // extern "C"
+
+// --- game functions the port wraps (tools/wrapped_funcs.txt) -------------------------------------------------------
+// The port never changes a game function itself: tools/wrap_functions.py renames the recompiled <name> to <name>_orig
+// and makes every call to <name> run jfg_wrap_<name>, defined with this macro. The wrapper runs the port's code and
+// calls <name>_orig; mods' patches and hooks apply to <name>_orig, so the wrapper keeps running around them.
+#define JFG_WRAP(name)                                                     \
+    extern "C" void name##_orig(uint8_t* rdram, recomp_context* ctx);     \
+    extern "C" void jfg_wrap_##name(uint8_t* rdram, recomp_context* ctx)
 
 #include <span>
 #include <vector>

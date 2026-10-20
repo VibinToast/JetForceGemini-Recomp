@@ -485,11 +485,8 @@ text = "{ int jfg_sched_task_ready(void); int r = jfg_sched_task_ready(); if (r 
 # jfg_squad_frames). Much of it works per tick whatever the frame count, so at 60 fps squad members moved, animated and
 # attacked about twice as fast. In 60 fps mode SquaddieControl(obj, frames), SquadronControl(obj, frames) and
 # squadsModuleTick(frames) run on every second tick only, with the frames of both ticks.
-# Not hooks here: mods may hook these three, and a mod hook regenerates the function without this file's hooks. All
-# their callers are in the main segment (func_8000FBF0, squadsInitialiseAfterObjects, func_80045F00) and reach them
-# through the runtime's function table (main -> overlay calls are dynamic sites, JFG_DYN_CALL), so when overlay 3 loads
-# the port puts wrappers in that table that apply the cadence and then call the function, original or regenerated
-# (jfg_squad_wrappers_install, called from jfg_overlay_loaded).
+# Not hooks here: the three are wrapped (tools/wrapped_funcs.txt, jfg_frame_rate.cpp), so mods can hook or replace
+# them and the cadence still applies around the game's code or the mod's.
 
 # 60 fps: dAngle(angle, target, t), the game's easing of an angle towards a target, is replaced by the same arithmetic
 # with one change at 60 fps: a step that truncates to 0 short of the target becomes 1 unit. Otherwise eased angles stop
