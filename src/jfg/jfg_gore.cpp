@@ -122,6 +122,11 @@ extern "C" void jfg_gore_on_blood_spurt(uint8_t* rdram_, recomp_context* ctx) {
     wr32(blood + api::blood_spurt::AMOUNT, (uint32_t)(amount * g.blood_amount / 100));
 }
 
+extern "C" void jfg_gore_on_blood_hit(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    if (jfg_no_blood()) wr32((uint32_t)ctx->r4 + api::blood_hit::CANCEL, 1);
+}
+
 // bloodSpurtAdd's wrapper (jfg_api.cpp), before the game's own drop: (amount - 100) percent extra drops with the same
 // arguments (x, y in $f12/$f14, z and vx in $a2/$a3, vy and vz at $sp + 0x10 / 0x14) and a little spread.
 extern "C" void jfg_blood_extra_drops(uint8_t* rdram_, recomp_context* ctx, int amount) {

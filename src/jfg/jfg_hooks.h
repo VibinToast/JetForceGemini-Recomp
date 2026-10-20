@@ -55,7 +55,6 @@ void jfg_interp_object_done(uint8_t* rdram, recomp_context* ctx);       // retur
 void jfg_interp_push(uint8_t* rdram, recomp_context* ctx);              // entry of the four matrix push functions
 void jfg_interp_pushed(uint8_t* rdram, recomp_context* ctx);            // ... after they note the matrix written
 // jfg_gameplay.cpp
-int jfg_no_blood(void);                                                // entry of bloodSpurtAdd, bloodHitSpriteAdd
 int jfg_no_blood(void);                                                // the blood event handlers (jfg_gore.cpp)
 int jfg_refuel_amount(int amount);                                     // refuelControl
 float jfg_sniper_zoom(float zoom);                                     // controlGetManualAim

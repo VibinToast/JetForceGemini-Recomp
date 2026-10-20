@@ -137,3 +137,23 @@ JFG_WRAP(bloodSpurtAdd) {
     jfg_blood_extra_drops(rdram, ctx, amount);
     bloodSpurtAdd_orig(rdram, ctx);
 }
+
+// bloodHitSpriteAdd(x, y, z, ...): jfg_on_blood_hit; callbacks may cancel it.
+JFG_WRAP(bloodHitSpriteAdd) {
+    using namespace jfg;
+    namespace b = jfg::api::blood_hit;
+    g_rdram = rdram;
+    int32_t cancel;
+    {
+        api::Payload p(ctx, b::SIZE);
+        wr32(p.addr + b::X, ctx->f12.u32l);
+        wr32(p.addr + b::Y, ctx->f14.u32l);
+        wr32(p.addr + b::Z, (uint32_t)ctx->r6);
+        wr32(p.addr + b::CANCEL, 0);
+        api::fire(rdram, ctx, api::Event::BloodHit, (int32_t)p.addr);
+        g_rdram = rdram;
+        cancel = (int32_t)rd32(p.addr + b::CANCEL);
+    }
+    if (cancel) return;
+    bloodHitSpriteAdd_orig(rdram, ctx);
+}
