@@ -946,8 +946,8 @@ diff -ruN a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
          void setVertexEXV1(uint32_t address, uint32_t vtxCount, uint32_t dstIndex);
          void setVertexColorPD(uint32_t address);
 diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
---- a/src/hle/rt64_state.cpp	2026-10-18 04:25:08.192236500 -0500
-+++ b/src/hle/rt64_state.cpp	2026-10-18 04:25:08.193238200 -0500
+--- a/src/hle/rt64_state.cpp	2026-10-19 19:42:12.322424400 -0500
++++ b/src/hle/rt64_state.cpp	2026-10-19 19:42:12.323425100 -0500
 @@ -6,6 +6,10 @@
  
  #include <cassert>
@@ -1130,7 +1130,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          drawCall.loadIndex = 0;
          drawCall.loadCount = 0;
          drawCall.minWorldMatrix = USHRT_MAX;
-@@ -770,6 +908,179 @@
+@@ -770,6 +908,269 @@
                      const uint32_t rdpTileLimit = gameCall.callDesc.tileIndex + gameCall.callDesc.tileCount;
                      while (rdpTileCursor < rdpTileLimit) {
                          uploadTile(rdpTileCursor, fbPair, gameCall.callDesc);
@@ -1197,7 +1197,87 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 +                                }
 +
 +                                const DrawCall &td = gameCall.callDesc;
-+                                const bool isRect = (proj.type == Projection::Type::Rectangle);
++                                bool isRect = (proj.type == Projection::Type::Rectangle);
++
++                                // A flat 2D quad: two orthographic triangles whose corners make a screen-aligned box, with S
++                                // changing only along X and T only along Y (the title logo is 16 such strips). Logged as a
++                                // rectangle with " prim tris", every frame like one, so Toasty_Upscaler can stitch and treat
++                                // it as 2D. Its st is the texel the first pixel samples, as a texrect's would be.
++                                struct {
++                                    bool valid = false;
++                                    int32_t ulx, uly, lrx, lry;
++                                    int dsdx, dtdy;
++                                    double s, t;
++                                } quad;
++
++                                if (!isRect && (proj.type == Projection::Type::Orthographic) && (td.triangleCount == 2)) {
++                                    const std::vector<uint32_t> &faces = workload.drawData.faceIndices;
++                                    const std::vector<hlslpp::float3> &screen = workload.drawData.posScreen;
++                                    const std::vector<float> &tcs = workload.drawData.tcFloats;
++                                    const uint32_t start = gameCall.meshDesc.faceIndicesStart;
++                                    bool inRange = (start + 6) <= faces.size();
++                                    float px[6], py[6], pu[6], pv[6];
++                                    for (uint32_t i = 0; inRange && (i < 6); i++) {
++                                        const uint32_t v = faces[start + i];
++                                        inRange = (v < screen.size()) && ((v * 2 + 1) < tcs.size());
++                                        if (inRange) {
++                                            px[i] = screen[v].x;
++                                            py[i] = screen[v].y;
++                                            pu[i] = tcs[v * 2 + 0];
++                                            pv[i] = tcs[v * 2 + 1];
++                                        }
++                                    }
++
++                                    if (inRange) {
++                                        const float x0 = *std::min_element(px, px + 6), x1 = *std::max_element(px, px + 6);
++                                        const float y0 = *std::min_element(py, py + 6), y1 = *std::max_element(py, py + 6);
++                                        const float Eps = 0.01f;
++                                        bool flat = ((x1 - x0) >= 1.0f) && ((y1 - y0) >= 1.0f);
++                                        float sAt[2] = { 0.0f, 0.0f }, tAt[2] = { 0.0f, 0.0f };
++                                        bool sSet[2] = { false, false }, tSet[2] = { false, false };
++                                        for (uint32_t i = 0; flat && (i < 6); i++) {
++                                            const bool left = std::abs(px[i] - x0) < Eps, right = std::abs(px[i] - x1) < Eps;
++                                            const bool top = std::abs(py[i] - y0) < Eps, bottom = std::abs(py[i] - y1) < Eps;
++                                            flat = (left || right) && (top || bottom);
++                                            const int sx = right ? 1 : 0, ty = bottom ? 1 : 0;
++                                            if (flat) {
++                                                flat = (!sSet[sx] || (std::abs(sAt[sx] - pu[i]) < Eps)) && (!tSet[ty] || (std::abs(tAt[ty] - pv[i]) < Eps));
++                                                sAt[sx] = pu[i];
++                                                tAt[ty] = pv[i];
++                                                sSet[sx] = tSet[ty] = true;
++                                            }
++                                        }
++
++                                        // Both triangles together cover the box (not two halves of the same corner).
++                                        float area = 0.0f;
++                                        for (uint32_t t = 0; flat && (t < 2); t++) {
++                                            const uint32_t a = t * 3;
++                                            area += std::abs((px[a + 1] - px[a]) * (py[a + 2] - py[a]) - (px[a + 2] - px[a]) * (py[a + 1] - py[a])) * 0.5f;
++                                        }
++
++                                        flat = flat && sSet[0] && sSet[1] && tSet[0] && tSet[1] && (std::abs(area - (x1 - x0) * (y1 - y0)) < 0.01f * (x1 - x0) * (y1 - y0));
++                                        if (flat) {
++                                            const LoadTile &tile = traceTile.loadTile;
++                                            const double xScale = ShiftScaleMap[tile.shifts];
++                                            const double yScale = ShiftScaleMap[tile.shiftt];
++                                            const double stepS = (sAt[1] - sAt[0]) * xScale / (x1 - x0);
++                                            const double stepT = (tAt[1] - tAt[0]) * yScale / (y1 - y0);
++                                            quad.valid = true;
++                                            quad.ulx = int32_t(std::lround(x0 * 4.0f));
++                                            quad.uly = int32_t(std::lround(y0 * 4.0f));
++                                            quad.lrx = int32_t(std::lround(x1 * 4.0f));
++                                            quad.lry = int32_t(std::lround(y1 * 4.0f));
++                                            quad.dsdx = int(std::lround(stepS * 1024.0));
++                                            quad.dtdy = int(std::lround(stepT * 1024.0));
++
++                                            // The first pixel's centre samples edge + step / 2; a texrect's st is the texel it
++                                            // starts on: 0 for a quad from 0 forwards, 4 for 5 rows drawn flipped.
++                                            quad.s = sAt[0] * xScale - tile.uls / 4.0 + stepS * 0.5 - 0.5;
++                                            quad.t = tAt[0] * yScale - tile.ult / 4.0 + stepT * 0.5 - 0.5;
++                                            isRect = true;
++                                        }
++                                    }
++                                }
 +
 +                                // Wrap mode per axis: W repeat, M mirror, C clamp (clamp flag set, or no wrap mask).
 +                                auto axisMode = [](uint8_t cm, uint8_t mask) -> char {
@@ -1270,7 +1350,10 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 +                                        }
 +                                    };
 +
-+                                    if (isRect) {
++                                    if (quad.valid) {
++                                        put(" rect x %d..%d y %d..%d dsdx %d dtdy %d", quad.ulx, quad.lrx, quad.uly, quad.lry, quad.dsdx, quad.dtdy);
++                                    }
++                                    else if (isRect) {
 +                                        put(" rect x %d..%d y %d..%d dsdx %d dtdy %d", td.rect.ulx, td.rect.lrx, td.rect.uly, td.rect.lry, int(td.rectDsdx), int(td.rectDtdy));
 +                                    }
 +                                    else {
@@ -1278,7 +1361,10 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 +                                    }
 +
 +                                    put(" tex %016" PRIx64 " size %ux%u ws %c wt %c filt %s", uint64_t(traceTile.tmemHashOrID), uint32_t(traceTile.sampleWidth), uint32_t(traceTile.sampleHeight), wrapS, wrapT, filt);
-+                                    if (isRect) {
++                                    if (quad.valid) {
++                                        put(" st %s %s", texels(quad.s).c_str(), texels(quad.t).c_str());
++                                    }
++                                    else if (isRect) {
 +                                        // Where the rectangle's top-left samples: the texrect's S and T (s10.5) minus the tile's
 +                                        // upper-left corner (10.2), in texels.
 +                                        put(" st %s %s", texels(td.rectS / 32.0 - tile.uls / 4.0).c_str(), texels(td.rectT / 32.0 - tile.ult / 4.0).c_str());
@@ -1295,8 +1381,12 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 +                                    }
 +
 +                                    put(" src %08x om %08x:%08x cc %08x:%08x", src, uint32_t(td.otherMode.H), uint32_t(td.otherMode.L), uint32_t(td.colorCombiner.H), uint32_t(td.colorCombiner.L));
-+                                    if (!isRect) {
++                                    if (!isRect || quad.valid) {
 +                                        put(" gm %08x", td.geometryMode);
++                                    }
++
++                                    if (quad.valid) {
++                                        put(" prim %s", "tris");
 +                                    }
 +
 +                                    put(" scene %s\n", traceSceneCurrent.c_str());
@@ -1310,7 +1400,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
                          rdpTileCursor++;
                      }
                  }
-@@ -1875,6 +2186,13 @@
+@@ -1875,6 +2276,13 @@
  
          const bool presentEarly = !ext.presentQueue->viewRDRAM && (ext.enhancementConfig->presentation.mode == EnhancementConfiguration::Presentation::Mode::PresentEarly);
          const uint32_t screenFbAddress = newVI.fbAddress();
@@ -1324,7 +1414,7 @@ diff -ruN a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
          const hlslpp::uint2 screenFbSize = newVI.fbSize();
          const uint8_t screenFbSiz = newVI.fbSiz();
          const bool viVisible = newVI.visible();
-@@ -2298,7 +2616,7 @@
+@@ -2298,7 +2706,7 @@
                      else if (dumpTextures) {
                          if (dumpingTexturesDirectory.empty()) {
                              dumpingTexturesDirectory = FileDialog::getDirectoryPath();
