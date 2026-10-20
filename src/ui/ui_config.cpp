@@ -22,9 +22,11 @@ Rml::DataModelHandle controls_model_handle;
 Rml::DataModelHandle graphics_model_handle;
 Rml::DataModelHandle sound_options_model_handle;
 
-// JFG PORT: the port's tabs (Gameplay, Visuals, Textures, Profiles); see jfg_settings_api.h.
+// JFG PORT: the port's tabs (Profiles, General, Gameplay, Controls, Graphics, Textures); see jfg_settings_api.h.
+Rml::DataModelHandle jfg_general_model_handle;
 Rml::DataModelHandle jfg_gameplay_model_handle;
-Rml::DataModelHandle jfg_visuals_model_handle;
+Rml::DataModelHandle jfg_controls_model_handle;
+Rml::DataModelHandle jfg_graphics_model_handle;
 Rml::DataModelHandle jfg_textures_model_handle;
 Rml::DataModelHandle jfg_profiles_model_handle;
 struct JfgProfileEntry { Rml::String name; bool selected = false; };
@@ -46,9 +48,10 @@ void jfg_config_menu_refresh() {
     jfg_pack_status = "In use: " + jfg::settings::texture_pack_name(pack) + (pack.empty() || count < 0 ? std::string() : " (" + std::to_string(count) + " textures)");
     const int dumped = jfg::settings::dumped_texture_files();
     jfg_dump_status = dumped >= 0 ? "bin\\texture_dump: " + std::to_string(dumped) + " files." : std::string();
-    if (jfg_gameplay_model_handle) jfg_gameplay_model_handle.DirtyAllVariables();
-    if (jfg_visuals_model_handle) jfg_visuals_model_handle.DirtyAllVariables();
-    if (jfg_textures_model_handle) jfg_textures_model_handle.DirtyAllVariables();
+    for (Rml::DataModelHandle* handle : { &jfg_general_model_handle, &jfg_gameplay_model_handle, &jfg_controls_model_handle,
+                                          &jfg_graphics_model_handle, &jfg_textures_model_handle }) {
+        if (*handle) handle->DirtyAllVariables();
+    }
     if (jfg_profiles_model_handle) jfg_profiles_model_handle.DirtyAllVariables();
 }
 
@@ -57,19 +60,18 @@ bool configuring_controller = false;
 
 int recompui::config_tab_to_index(recompui::ConfigTab tab) {
     switch (tab) {
-    // JFG PORT: the port's Profiles tab is first (index 0), so the original tabs moved up by one.
+    // JFG PORT: the tabs are Profiles, General, Gameplay, Controls, Bindings, Graphics, Textures and Mods
+    // (assets/config_menu.rml). The recomp's General options (stick, rumble) are on the port's Controls tab, its Sound
+    // option on General, its Controls tab is Bindings and its Graphics options are on the port's Graphics tab.
     case recompui::ConfigTab::General:
+    case recompui::ConfigTab::Sound:
         return 1;
     case recompui::ConfigTab::Controls:
-        return 2;
-    case recompui::ConfigTab::Graphics:
-        return 3;
-    case recompui::ConfigTab::Sound:
         return 4;
-    case recompui::ConfigTab::Mods:
+    case recompui::ConfigTab::Graphics:
         return 5;
-    case recompui::ConfigTab::Debug:
-        return 6;
+    case recompui::ConfigTab::Mods:
+        return 7;
     default:
         assert(false && "Unknown config tab.");
         return 0;
@@ -567,14 +569,14 @@ class ConfigTabsetListener : public Rml::EventListener {
                 Rml::Element* tabs = recompui::get_child_by_tag(tabset, "tabs");
                 if (tabs != nullptr) {
                     size_t num_children = tabs->GetNumChildren();
-                    // JFG PORT: the options of the Gameplay and Visuals tabs are in a scrolling box, which automatic
-                    // navigation does not look into from outside, so Down on the tabs goes to their first option.
+                    // JFG PORT: the options of the port's tabs are in a scrolling box, which automatic navigation does
+                    // not look into from outside, so Down on the tabs goes to their first option.
                     std::string jfg_first;
                     if (tab_index >= 0 && (size_t)tab_index < num_children) {
                         const std::string& tab_id = tabs->GetChild(tab_index)->GetId();
-                        if (tab_id == "tab_jfg_gameplay") jfg_first = std::string("#") + jfg_gameplay_first_id;
-                        else if (tab_id == "tab_jfg_visuals") jfg_first = std::string("#") + jfg_visuals_first_id;
-                        else if (tab_id == "tab_jfg_textures") jfg_first = std::string("#") + jfg_textures_first_id;
+                        for (const JfgTabFirst& t : jfg_tab_first_ids) {
+                            if (tab_id == t.tab) jfg_first = std::string("#") + t.first;
+                        }
                     }
                     for (size_t i = 0; i < num_children; i++) {
                         if (!jfg_first.empty()) tabs->GetChild(i)->SetProperty(Rml::PropertyId::NavDown, Rml::Property{ jfg_first, Rml::Unit::STRING });
@@ -588,7 +590,7 @@ class ConfigTabsetListener : public Rml::EventListener {
 };
 
 // JFG PORT: the controller's bumpers switch tabs (LB the one to the left, RB to the right, wrapping round), skipping
-// hidden ones (Debug). The new tab gets the focus, so Down goes into its options.
+// hidden ones. The new tab gets the focus, so Down goes into its options.
 void jfg_config_step_tab(int dir) {
     if (recompui::is_prompt_open()) return;
     Rml::ElementTabSet* tabset = recompui::get_config_tabset();
@@ -606,6 +608,48 @@ void jfg_config_step_tab(int dir) {
     }
 }
 
+// JFG PORT: the recomp's own options that the port's tabs show (volume, stick and rumble, window and resolution),
+// as ints like the port's options. The graphics ones apply at once (there is no Apply button on the port's tabs).
+struct UpstreamOption { const char* key; int (*get)(); void (*set)(int); };
+static void set_graphics_now() {
+    apply_graphics_config();
+    graphics_model_handle.DirtyAllVariables();
+}
+static const UpstreamOption upstream_options[] = {
+    { "main_volume", [] { return dino::config::get_main_volume(); }, [](int v) { dino::config::set_main_volume(v); } },
+    { "joystick_deadzone", [] { return dino::input::get_joystick_deadzone(); }, [](int v) { dino::input::set_joystick_deadzone(v); } },
+    { "joystick_range", [] { return dino::input::get_joystick_range(); }, [](int v) { dino::input::set_joystick_range(v); } },
+    { "rumble_strength", [] { return dino::input::get_rumble_strength(); }, [](int v) { dino::input::set_rumble_strength(v); } },
+    { "background_input",
+        [] { return dino::input::get_background_input_mode() == dino::input::BackgroundInputMode::On ? 1 : 0; },
+        [](int v) { dino::input::set_background_input_mode(v ? dino::input::BackgroundInputMode::On : dino::input::BackgroundInputMode::Off); } },
+    { "wm_option", [] { return (int)new_options.wm_option; },
+        [](int v) { new_options.wm_option = v ? ultramodern::renderer::WindowMode::Fullscreen : ultramodern::renderer::WindowMode::Windowed; set_graphics_now(); } },
+    { "res_option", [] { return (int)new_options.res_option; },
+        [](int v) {
+            if (v < 0 || v >= (int)ultramodern::renderer::Resolution::OptionCount) return;
+            new_options.res_option = (ultramodern::renderer::Resolution)v;
+            set_graphics_now();
+        } },
+    // Downsampling only goes with the Original and Original 2x resolutions; at Auto it shows as Off.
+    { "ds_option", [] { return new_options.res_option == ultramodern::renderer::Resolution::Auto ? 1 : new_options.ds_option; },
+        [](int v) {
+            if (new_options.res_option == ultramodern::renderer::Resolution::Auto || (v != 1 && v != 2 && v != 4)) return;
+            new_options.ds_option = v;
+            set_graphics_now();
+        } },
+    // A level the graphics card cannot do falls back to the next one down.
+    { "msaa_option", [] { return (int)new_options.msaa_option; },
+        [](int v) {
+            using ultramodern::renderer::Antialiasing;
+            Antialiasing want = v >= 2 ? Antialiasing::MSAA4X : v == 1 ? Antialiasing::MSAA2X : Antialiasing::None;
+            if (want == Antialiasing::MSAA4X && !msaa4x_supported) want = Antialiasing::MSAA2X;
+            if (want == Antialiasing::MSAA2X && !msaa2x_supported) want = Antialiasing::None;
+            new_options.msaa_option = want;
+            set_graphics_now();
+        } },
+};
+
 class ConfigMenu : public recompui::MenuController {
 private:
     ConfigTabsetListener config_tabset_listener;
@@ -620,22 +664,6 @@ public:
         config_context = recompui::create_context(dino::runtime::get_asset_path("config_menu.rml"));
         recompui::update_mod_list(false);
         recompui::get_config_tabset()->AddEventListener(Rml::EventId::Tabchange, &config_tabset_listener);
-        // JFG PORT: the Debug tab has nothing that works with this game. It stays in the document (code
-        // elsewhere looks it up by id and by index) but is not shown; the Mods tab is shown. The tabset gives every tab an
-        // inline display property when it adopts it, so this has to be set afterwards, here.
-        {
-            recompui::ContextId old_context = recompui::try_close_current_context();
-            if (Rml::ElementDocument* doc = config_context.get_document()) {
-                for (const char* id : { "tab_debug" }) {
-                    if (Rml::Element* tab = doc->GetElementById(id)) {
-                        tab->SetProperty(Rml::PropertyId::Display, Rml::Style::Display::None);
-                    }
-                }
-            }
-            if (old_context != recompui::ContextId::null()) {
-                old_context.open();
-            }
-        }
     }
     void register_events(recompui::UiEventListenerInstancer& listener) override {
         recompui::register_event(listener, "apply_options",
@@ -1067,32 +1095,39 @@ public:
 		constructor.RegisterArray<std::vector<std::string>>();
     }
 
-    // JFG PORT: one binding per option key, read and written through jfg::settings.
+    // JFG PORT: one binding per option key, read and written through jfg::settings (or upstream_options).
     template <size_t N>
     void bind_jfg_keys(Rml::DataModelConstructor& constructor, const char* const (&keys)[N]) {
         for (const char* key : keys) {
             const std::string k = key;
+            const UpstreamOption* upstream = nullptr;
+            for (const UpstreamOption& o : upstream_options) if (k == o.key) upstream = &o;
+            if (upstream != nullptr) {
+                constructor.BindFunc(k,
+                    [upstream](Rml::Variant& out) { out = upstream->get(); },
+                    [upstream](const Rml::Variant& in) { upstream->set(in.Get<int>()); jfg_config_menu_refresh(); });
+                continue;
+            }
             constructor.BindFunc(k,
                 [k](Rml::Variant& out) { out = jfg::settings::get(k); },
                 [k](const Rml::Variant& in) { jfg::settings::set(k, in.Get<int>()); jfg_config_menu_refresh(); });
         }
     }
 
+    template <size_t N>
+    Rml::DataModelHandle make_jfg_options_model(Rml::Context* context, const char* name, const char* const (&keys)[N]) {
+        Rml::DataModelConstructor constructor = context->CreateDataModel(name);
+        if (!constructor) throw std::runtime_error(std::string("Failed to make RmlUi data model ") + name);
+        bind_config_list_events(constructor);
+        bind_jfg_keys(constructor, keys);
+        return constructor.GetModelHandle();
+    }
+
     void make_jfg_bindings(Rml::Context* context) {
-        {
-            Rml::DataModelConstructor constructor = context->CreateDataModel("jfg_gameplay_model");
-            if (!constructor) throw std::runtime_error("Failed to make RmlUi data model for the Gameplay tab");
-            bind_config_list_events(constructor);
-            bind_jfg_keys(constructor, jfg_gameplay_keys);
-            jfg_gameplay_model_handle = constructor.GetModelHandle();
-        }
-        {
-            Rml::DataModelConstructor constructor = context->CreateDataModel("jfg_visuals_model");
-            if (!constructor) throw std::runtime_error("Failed to make RmlUi data model for the Visuals tab");
-            bind_config_list_events(constructor);
-            bind_jfg_keys(constructor, jfg_visuals_keys);
-            jfg_visuals_model_handle = constructor.GetModelHandle();
-        }
+        jfg_general_model_handle = make_jfg_options_model(context, "jfg_general_model", jfg_general_keys);
+        jfg_gameplay_model_handle = make_jfg_options_model(context, "jfg_gameplay_model", jfg_gameplay_keys);
+        jfg_controls_model_handle = make_jfg_options_model(context, "jfg_controls_model", jfg_controls_keys);
+        jfg_graphics_model_handle = make_jfg_options_model(context, "jfg_graphics_model", jfg_graphics_keys);
         {
             Rml::DataModelConstructor constructor = context->CreateDataModel("jfg_textures_model");
             if (!constructor) throw std::runtime_error("Failed to make RmlUi data model for the Textures tab");
@@ -1233,6 +1268,7 @@ void recompui::toggle_fullscreen() {
     new_options.wm_option = (new_options.wm_option == ultramodern::renderer::WindowMode::Windowed) ? ultramodern::renderer::WindowMode::Fullscreen : ultramodern::renderer::WindowMode::Windowed;
     apply_graphics_config();
     graphics_model_handle.DirtyVariable("wm_option");
+    if (jfg_graphics_model_handle) jfg_graphics_model_handle.DirtyVariable("wm_option"); // JFG PORT: Graphics tab
 
     if (!recompui::is_any_context_shown()) {
         dino::config::save_config();

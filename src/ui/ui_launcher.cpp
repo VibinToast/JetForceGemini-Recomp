@@ -42,12 +42,11 @@ struct LauncherPageInfo { const char* id; const char* title; const char* subtitl
 static const LauncherPageInfo LAUNCHER_PAGES[] = {
     { "play", "Play", "Load your ROM, then jump in.", "nav_play" },
     { "profiles", "Profiles", "Whole sets of settings: the original game, Modern, Modern and Balanced, Extreme or your own.", "tab_jfg_profiles" },
-    { "gameplay", "Gameplay", "Movement, aiming, dual-stick and mouse and keyboard controls.", "tab_jfg_gameplay" },
-    { "visuals", "Visuals", "Widescreen, frame rate, ambient occlusion and bloom.", "tab_jfg_visuals" },
-    { "graphics", "Graphics", "Resolution, window mode and anti-aliasing. Apply to use the changes.", "tab_graphics" },
-    { "sound", "Sound", "Volume.", "tab_sound" },
-    { "controls", "Controls", "Button bindings for the controller and the keyboard.", "tab_controls" },
-    { "general", "Stick & Rumble", "Joystick deadzone and range, rumble and background input.", "tab_general" },
+    { "general", "General", "Volume, the settings menu, what is shown on screen and the fly camera.", "tab_jfg_general" },
+    { "gameplay", "Gameplay", "Saving, gore, player tweaks and movement.", "tab_jfg_gameplay" },
+    { "controls", "Controls", "Dual-stick, mouse and keyboard, aiming, and the controller's stick and rumble.", "tab_jfg_controls" },
+    { "bindings", "Bindings", "Button bindings for the controller and the keyboard.", "tab_controls" },
+    { "graphics", "Graphics", "Window, resolution, frame rate, widescreen and effects.", "tab_jfg_graphics" },
     { "textures", "Texture Packs", "Pick a texture pack from bin\\texture_packs, and dump the game's textures to make your own.", "tab_jfg_textures" },
     { "about", "About", "Jet Force Gemini: Recompiled.", "nav_about" },
 };
