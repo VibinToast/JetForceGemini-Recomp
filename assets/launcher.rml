@@ -231,6 +231,8 @@
 			.rl-page .jfg-pack__meta { display: block; margin-top: 8dp; font-size: 16dp; line-height: 20dp; letter-spacing: 0.5dp; font-weight: normal; color: #8199BF; }
 			.rl-page .jfg-pack:hover .jfg-pack__meta, .rl-page .jfg-pack:focus .jfg-pack__meta { color: #E8F3FF; }
 			.rl-page .jfg-pack.jfg-selected .jfg-pack__meta { color: #050B1C; }
+			.rl-page .jfg-pack__kind { flex: 0 0 auto; margin-left: 12dp; padding: 2dp 8dp; border-width: 2dp; border-color: #FFB21A; color: #FFB21A; font-size: 14dp; line-height: 18dp; text-transform: uppercase; }
+			.rl-page .jfg-pack.jfg-selected .jfg-pack__kind { border-color: #050B1C; color: #050B1C; }
 			.rl-page .jfg-pack-detail__image { display: block; width: 128dp; height: 128dp; margin-bottom: 22dp; }
 			.rl-page .jfg-pack-detail__meta { display: block; margin: -4dp 0dp 14dp; font-family: "JetBrains Mono"; font-size: 18dp; line-height: 24dp; color: #3CC8FF; }
 			.rl-page .jfg-pack-detail__site { display: inline-block; margin-top: 18dp; padding: 10dp 14dp; font-size: 16dp; letter-spacing: 0.5dp; }

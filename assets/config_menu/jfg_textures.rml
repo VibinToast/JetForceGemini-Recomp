@@ -16,6 +16,7 @@
                                     <div class="jfg-pack__name">{{p.label}}</div>
                                     <div class="jfg-pack__meta">{{p.version}} {{p.author}}</div>
                                 </div>
+                                <div class="jfg-pack__kind" data-if="p.kind != ''">{{p.kind}}</div>
                             </button>
                         </div>
                         <div style="display: block; width: 100%;">

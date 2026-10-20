@@ -73,6 +73,8 @@
 		.jfg-pack__name { display: block; }
 		.jfg-pack__meta { display: block; margin-top: 10dp; font-size: 20dp; line-height: 24dp; letter-spacing: 1dp; font-weight: normal; color: #8199bf; }
 		.jfg-pack.jfg-selected .jfg-pack__meta { color: #e8f3ff; }
+		.jfg-pack__kind { flex: 0 0 auto; margin-left: 16dp; padding: 4dp 10dp; border-width: 2dp; border-color: #ffb21a; color: #ffb21a;
+			font-size: 18dp; line-height: 20dp; letter-spacing: 1dp; text-transform: uppercase; }
 		.jfg-pack-detail__image { display: block; width: 160dp; height: 160dp; margin-bottom: 28dp; }
 		.jfg-pack-detail__meta { display: block; margin: -6dp 0dp 18dp; font-size: 22dp; line-height: 28dp; color: #3cc8ff; }
 		.jfg-pack-detail__site { display: inline-block; margin-top: 24dp; padding: 14dp 18dp; font-size: 20dp; line-height: 22dp; letter-spacing: 1dp; text-transform: none; }
