@@ -7,6 +7,10 @@
 #include <SDL_video.h>
 #endif
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <vector>
 #include <filesystem>
 #include <fstream>
 
@@ -36,6 +40,9 @@
 void jfg_config_menu_refresh(); // JFG PORT: src/ui/ui_config.cpp
 void jfg_config_step_tab(int dir); // JFG PORT: src/ui/ui_config.cpp
 void jfg_launcher_ui_tick(); // JFG PORT: src/ui/ui_launcher.cpp
+void jfg_launcher_step_page(int dir); // JFG PORT: src/ui/ui_launcher.cpp (controller: LB / RB)
+void jfg_launcher_start_pressed(); // JFG PORT: src/ui/ui_launcher.cpp (controller: Start)
+void jfg_launcher_scroll(float pixels); // JFG PORT: src/ui/ui_launcher.cpp (controller: right stick)
 extern "C" void jfg_settings_menu_open(int open); // JFG PORT: src/jfg/jfg_camera.cpp (pauses the game)
 extern "C" void jfg_tools_ui_frame(void); // JFG PORT: src/jfg/jfg_ui_tools.cpp
 
@@ -253,7 +260,12 @@ public:
                 {"LatoLatin-BoldItalic.ttf", false},
                 {"NotoEmoji-Regular.ttf", true},
                 {"promptfont/promptfont.ttf", false},
-                // JFG PORT: the launcher's fonts (assets/jfg_launcher, SIL Open Font License).
+                // JFG PORT: the launcher's fonts (assets/jfg_launcher): JFG (family "JFG", regular and bold) and JFG Black
+                // (its own family "JFG Black", the heaviest: the titles and buttons use it), and under the SIL Open Font
+                // License Press Start 2P and JetBrains Mono.
+                {"jfg_launcher/JFG-Regular.ttf", false},
+                {"jfg_launcher/JFG-Bold.ttf", false},
+                {"jfg_launcher/JFG-Black.ttf", false},
                 {"jfg_launcher/PressStart2P-Regular.ttf", false},
                 {"jfg_launcher/JetBrainsMono-Regular.ttf", false},
                 {"jfg_launcher/JetBrainsMono-Bold.ttf", false},
@@ -401,8 +413,10 @@ public:
     void hide_context(recompui::ContextId context) {
         auto remove_it = std::remove_if(shown_contexts.begin(), shown_contexts.end(), [context](auto& c) { return c.context == context; });
         if (remove_it == shown_contexts.end()) {
-            recompui::message_box("Attemped to hide a context that isn't shown");
-            assert(false);
+            // JFG PORT: hiding something already hidden (a menu closed twice before it went) is harmless; it was a fatal
+            // error box that froze the game. Logged, so a real double close can still be traced.
+            fprintf(stderr, "[ui] Attempted to hide a context that isn't shown (ignored)\n");
+            return;
         }
         shown_contexts.erase(remove_it, shown_contexts.end());
 
@@ -613,10 +627,98 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
     constexpr clock::duration repeat_rate = std::chrono::milliseconds{50};
     static clock::time_point next_repeat_time = {};
     static int latest_controller_key_pressed = SDLK_UNKNOWN;
+    static float right_stick_y = 0.0f;          // JFG PORT: the right stick scrolls the launcher's pages and dialogs
+    static clock::time_point last_scroll_time = clock::now();
+
+    // JFG PORT: JFG_DEBUG_UI_INPUT (Recomp-Docs/REFERENCE.md) logs once a second which element has the focus in the
+    // launcher and the config menu, and every controller event the UI gets. JFG_DEBUG_UI_INPUT="secs:button,..." also
+    // feeds those presses into the UI (button: a b x y back start lb rb up down left right; "-down" releases the button,
+    // a press without a later release is released at once), for tests without a pad.
+    static int debug_ui_input = -1;
+    static std::vector<std::pair<float, int>> debug_ui_presses; // button; +1000: release only, +2000: press only
+    static const clock::time_point debug_ui_start = clock::now();
+    static clock::time_point debug_ui_next_log = clock::now();
+    if (debug_ui_input < 0) {
+        const char* env = std::getenv("JFG_DEBUG_UI_INPUT");
+        debug_ui_input = env != nullptr ? 1 : 0;
+        static const std::pair<const char*, int> names[] = {
+            { "a", SDL_CONTROLLER_BUTTON_A }, { "b", SDL_CONTROLLER_BUTTON_B }, { "x", SDL_CONTROLLER_BUTTON_X }, { "y", SDL_CONTROLLER_BUTTON_Y },
+            { "back", SDL_CONTROLLER_BUTTON_BACK }, { "start", SDL_CONTROLLER_BUTTON_START },
+            { "lb", SDL_CONTROLLER_BUTTON_LEFTSHOULDER }, { "rb", SDL_CONTROLLER_BUTTON_RIGHTSHOULDER },
+            { "up", SDL_CONTROLLER_BUTTON_DPAD_UP }, { "down", SDL_CONTROLLER_BUTTON_DPAD_DOWN },
+            { "left", SDL_CONTROLLER_BUTTON_DPAD_LEFT }, { "right", SDL_CONTROLLER_BUTTON_DPAD_RIGHT },
+            { "sdown", 100 } }; // 100: the left stick pushed down (released: back to the middle)
+        for (const char* p = env; p != nullptr && *p != '\0';) {
+            float secs = 0.0f; char name[16] = {};
+            if (std::sscanf(p, "%f:%15[a-z-]", &secs, name) == 2) {
+                const bool release = name[0] == '-';
+                const char* button = release ? name + 1 : name;
+                const bool released_later = !release && std::strstr(env, (std::string(":-") + button).c_str()) != nullptr;
+                for (const auto& n : names) {
+                    if (std::strcmp(n.first, button) == 0) debug_ui_presses.emplace_back(secs, n.second + (release ? 1000 : released_later ? 2000 : 0));
+                }
+            }
+            p = std::strchr(p, ',');
+            if (p != nullptr) p++;
+        }
+    }
+    if (debug_ui_input) {
+        const float since = std::chrono::duration<float>(clock::now() - debug_ui_start).count();
+        for (auto it = debug_ui_presses.begin(); it != debug_ui_presses.end();) {
+            if (since < it->first) { ++it; continue; }
+            SDL_Event press{};
+            if (it->second % 1000 == 100) {
+                press.type = SDL_CONTROLLERAXISMOTION;
+                press.caxis.axis = SDL_CONTROLLER_AXIS_LEFTY;
+                if (it->second < 1000 || it->second >= 2000) { press.caxis.value = 30000; recompui::queue_event(press); }
+                if (it->second < 2000) { press.caxis.value = 0; recompui::queue_event(press); }
+            }
+            else {
+                press.cbutton.button = (uint8_t)(it->second % 1000);
+                if (it->second < 1000 || it->second >= 2000) { press.type = SDL_CONTROLLERBUTTONDOWN; recompui::queue_event(press); }
+                if (it->second < 2000) { press.type = SDL_CONTROLLERBUTTONUP; recompui::queue_event(press); }
+            }
+            fprintf(stderr, "[ui-input] %.1f s: test button %d %s\n", since, it->second % 1000,
+                it->second >= 2000 ? "pressed" : it->second >= 1000 ? "released" : "pressed and released");
+            it = debug_ui_presses.erase(it);
+        }
+        // every change of the focus, with what the element is (the launcher's, or the config menu's while that is shown)
+        static Rml::Element* last_focus = nullptr;
+        Rml::ElementDocument* focus_doc = recompui::is_context_shown(recompui::get_launcher_context_id()) ? recompui::get_launcher_context_id().get_document()
+            : recompui::is_context_shown(recompui::get_config_context_id()) ? recompui::get_config_context_id().get_document() : nullptr;
+        if (Rml::ElementDocument* doc = focus_doc) {
+            Rml::Element* focus = doc->GetFocusLeafNode();
+            if (focus != last_focus) {
+                last_focus = focus;
+                std::string path;
+                for (Rml::Element* e = focus; e != nullptr && e != doc; e = e->GetParentNode()) {
+                    path = "<" + e->GetTagName() + (e->GetId().empty() ? "" : "#" + e->GetId()) +
+                        (e->GetClassNames().empty() ? "" : "." + e->GetClassNames()) + ">" + (path.empty() ? "" : " " + path);
+                    if (!e->GetId().empty()) break;
+                }
+                fprintf(stderr, "[ui-input] %.2f s: focus %s\n", since, path.c_str());
+            }
+        }
+        if (clock::now() >= debug_ui_next_log) {
+            debug_ui_next_log = clock::now() + std::chrono::seconds(1);
+            for (auto [name, id] : { std::pair{ "launcher", recompui::get_launcher_context_id() }, std::pair{ "config", recompui::get_config_context_id() } }) {
+                if (!recompui::is_context_shown(id)) continue;
+                Rml::ElementDocument* doc = id.get_document();
+                Rml::Element* focus = doc != nullptr ? doc->GetFocusLeafNode() : nullptr;
+                fprintf(stderr, "[ui-input] %.1f s: %s shown, capturing input %d, focus <%s id=\"%s\"> visible %d, prompt open %d\n", since, name,
+                    recompui::is_context_capturing_input() ? 1 : 0, focus ? focus->GetTagName().c_str() : "-",
+                    focus ? focus->GetId().c_str() : "", focus ? (focus->IsVisible(true) ? 1 : 0) : 0, recompui::is_prompt_open() ? 1 : 0);
+            }
+        }
+    }
 
     while (recompui::try_deque_event(cur_event)) {
         bool context_capturing_input = recompui::is_context_capturing_input();
         bool context_capturing_mouse = recompui::is_context_capturing_mouse();
+        if (debug_ui_input && (cur_event.type == SDL_CONTROLLERBUTTONDOWN || cur_event.type == SDL_CONTROLLERBUTTONUP)) {
+            fprintf(stderr, "[ui-input] controller button %d %s (capturing input %d, all input disabled %d)\n", cur_event.cbutton.button,
+                cur_event.type == SDL_CONTROLLERBUTTONDOWN ? "down" : "up", context_capturing_input ? 1 : 0, dino::input::all_input_disabled() ? 1 : 0);
+        }
 
         // Handle up button events even when input is disabled to avoid missing them during binding.
         if (cur_event.type == SDL_EventType::SDL_CONTROLLERBUTTONUP) {
@@ -671,6 +773,28 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                     break;
                 }
                 int sdl_key = cont_button_to_key(cur_event.cbutton);
+                // JFG PORT: in the launcher the bumpers switch pages, Start goes to the Play page's Start button and B is
+                // Back (as Esc: from a page to the sidebar, closes a dialog), unless B is bound to a menu input.
+                if (context_capturing_input && recompui::is_context_shown(recompui::get_launcher_context_id()) && !recompui::is_prompt_open()) {
+                    if (button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER || button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
+                        ::jfg_launcher_step_page(button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1 : -1);
+                        non_mouse_interacted = true;
+                        cont_interacted = true;
+                        break;
+                    }
+                    if (button == SDL_CONTROLLER_BUTTON_START && sdl_key == 0) {
+                        ::jfg_launcher_start_pressed();
+                        non_mouse_interacted = true;
+                        cont_interacted = true;
+                        break;
+                    }
+                    if (button == SDL_CONTROLLER_BUTTON_B && sdl_key == 0) {
+                        ui_state->context->ProcessKeyDown(Rml::Input::KeyIdentifier::KI_ESCAPE, 0);
+                        non_mouse_interacted = true;
+                        cont_interacted = true;
+                        break;
+                    }
+                }
                 if (context_capturing_input && sdl_key) {
                     ui_state->context->ProcessKeyDown(RmlSDL::ConvertKey(sdl_key), 0);
                     latest_controller_key_pressed = sdl_key;
@@ -699,6 +823,11 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                 break;
             case SDL_EventType::SDL_CONTROLLERAXISMOTION:
                 SDL_ControllerAxisEvent* axis_event = &cur_event.caxis;
+                if (axis_event->axis == SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_RIGHTY) {
+                    right_stick_y = axis_event->value * (1 / 32768.0f); // JFG PORT: scrolls the launcher (below)
+                    if (fabsf(right_stick_y) > 0.25f) cont_interacted = true;
+                    break;
+                }
                 if (axis_event->axis != SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_LEFTY && axis_event->axis != SDL_GameControllerAxis::SDL_CONTROLLER_AXIS_LEFTX) {
                     break;
                 }
@@ -773,12 +902,74 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
         }
     } // end dequeue event loop
 
+    // JFG PORT: JFG_DEBUG_CONFIG_TAB="<secs>,<tab>[,<element id>]" (Recomp-Docs/REFERENCE.md) opens this menu on tab <tab>
+    // (0 = Profiles) <secs> seconds after start, and a second later focuses the element (an option, to show its
+    // description), so window captures can show the menu without key presses.
+    {
+        static const clock::time_point debug_start = clock::now();
+        static float debug_tab_secs = 0.0f;
+        static int debug_tab = -2;
+        static char debug_focus_id[64] = {};
+        if (debug_tab == -2) {
+            debug_tab = -1;
+            if (const char* env = std::getenv("JFG_DEBUG_CONFIG_TAB")) {
+                if (std::sscanf(env, "%f,%d,%63s", &debug_tab_secs, &debug_tab, debug_focus_id) < 2) debug_tab = -1;
+            }
+        }
+        const auto since_start = clock::now() - debug_start;
+        if (debug_tab >= 0 && ultramodern::is_game_started() && !config_was_open &&
+            since_start >= std::chrono::duration<float>(debug_tab_secs)) {
+            ::jfg_config_menu_refresh();
+            recompui::show_context(recompui::get_config_context_id(), "");
+            recompui::get_config_tabset()->SetActiveTab(debug_tab);
+            debug_tab = -1;
+        }
+        if (debug_focus_id[0] != '\0' && debug_tab == -1 && config_was_open &&
+            since_start >= std::chrono::duration<float>(debug_tab_secs + 1.0f)) {
+            if (Rml::ElementDocument* doc = recompui::get_config_context_id().get_document()) {
+                if (Rml::Element* element = doc->GetElementById(debug_focus_id)) element->Focus(true);
+            }
+            debug_focus_id[0] = '\0';
+        }
+    }
+
+    // JFG PORT: the right stick scrolls the launcher, faster the further it is pushed (up to 1400 pixels a second).
+    {
+        const clock::time_point now = clock::now();
+        const float dt = std::min(0.1f, std::chrono::duration<float>(now - last_scroll_time).count());
+        last_scroll_time = now;
+        const float deadzone = 0.25f;
+        if (fabsf(right_stick_y) > deadzone && recompui::is_context_shown(recompui::get_launcher_context_id()) &&
+            recompui::is_context_capturing_input() && !recompui::is_prompt_open()) {
+            const float t = (fabsf(right_stick_y) - deadzone) / (1.0f - deadzone);
+            ::jfg_launcher_scroll((right_stick_y < 0 ? -1.0f : 1.0f) * t * t * 1400.0f * dt);
+        }
+    }
+
     // Handle controller key repeats.
     if (latest_controller_key_pressed != SDLK_UNKNOWN) {
         clock::time_point now = clock::now();
         if (now >= next_repeat_time) {
-            ui_state->context->ProcessKeyDown(RmlSDL::ConvertKey(latest_controller_key_pressed), 0);
-            next_repeat_time += repeat_rate;
+            // JFG PORT: in the launcher a held direction repeats slower, and stops at the ends of the sidebar instead of
+            // wrapping round (a single press still wraps): held, it went round and round the list.
+            bool stop = false;
+            clock::duration rate = repeat_rate;
+            if (recompui::is_context_shown(recompui::get_launcher_context_id())) {
+                rate = std::chrono::milliseconds{110};
+                if (Rml::ElementDocument* doc = recompui::get_launcher_context_id().get_document()) {
+                    Rml::Element* focus = doc->GetFocusLeafNode();
+                    const std::string id = focus != nullptr ? focus->GetId() : std::string();
+                    stop = (latest_controller_key_pressed == SDLK_DOWN && id == "nav_exit") ||
+                           (latest_controller_key_pressed == SDLK_UP && id == "nav_play");
+                }
+            }
+            if (stop) {
+                latest_controller_key_pressed = SDLK_UNKNOWN;
+            }
+            else {
+                ui_state->context->ProcessKeyDown(RmlSDL::ConvertKey(latest_controller_key_pressed), 0);
+                next_repeat_time += rate;
+            }
         }
     }
 

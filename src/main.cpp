@@ -255,6 +255,10 @@ int main(int argc, char** argv) {
         cli_args.rom_path = config_rom.c_str();
         cli_args.skip_launcher = true;
     }
+    // skip_launcher=1 (the launcher's "Skip the launcher" switch): straight into the game with the ROM loaded before.
+    if (!cli_args.force_launcher && jfg_launcher_skip()) {
+        cli_args.skip_launcher = true;
+    }
     if (cli_args.rom_path != nullptr) {
         recomp::RomValidationError rom_error = recomp::select_rom(cli_args.rom_path, supported_games[0].game_id);
         fprintf(stderr, "[jfg] --rom %s: %s\n", cli_args.rom_path,

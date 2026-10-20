@@ -7,6 +7,17 @@
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 #include "jfg_settings_api.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
@@ -69,6 +80,13 @@ void choose_profile(const std::string& name) {
     jfg::choose_profile(name);
 }
 
+std::string profile_preview(const std::string& name) { load_options(); return profile_preview_text(name); }
+bool keep_controls() { load_profile_choice(); return g_profile_keep_controls; }
+void set_keep_controls(bool keep) { set_profile_keep_controls(keep); }
+
+bool controller_bindings_unused() { load_options(); return (g.dual_stick || g.mouse_keyboard) && g.dual_layout; }
+bool keyboard_bindings_unused() { load_options(); return g.mouse_keyboard; }
+
 bool save_profile(const std::string& name) {
     load_profile_choice();
     if (!valid_profile_name(name) || builtin_profile(name) != nullptr) {
@@ -113,5 +131,18 @@ int dumped_texture_files() {
         if (it->is_regular_file(ec)) n++;
     }
     return ec ? -1 : n;
+}
+// Opens the texture_packs folder (next to the game; made if it is not there yet) in the file manager.
+void open_texture_packs_folder() {
+    std::error_code ec;
+    std::filesystem::create_directories("texture_packs", ec);
+    const std::filesystem::path folder = std::filesystem::absolute("texture_packs", ec);
+#if defined(_WIN32)
+    ShellExecuteW(NULL, L"open", folder.wstring().c_str(), NULL, NULL, SW_SHOWDEFAULT);
+#elif defined(__APPLE__)
+    std::system(("open \"" + folder.string() + "\"").c_str());
+#else
+    std::system(("xdg-open \"" + folder.string() + "\" &").c_str());
+#endif
 }
 } // namespace jfg::settings

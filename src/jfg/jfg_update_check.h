@@ -5,10 +5,14 @@
 
 // The launcher's own settings, bin\jfg_launcher.txt (written with explanations when it is missing):
 //   check_for_updates=1|0   0: the launcher makes no requests to GitHub (no update check, no list of recent changes);
-//   rom=<path>              a ROM to start the game with straight away, without the launcher (relative to bin).
+//   rom=<path>              a ROM to start the game with straight away, without the launcher (relative to bin);
+//   skip_launcher=0|1       1: start the game straight away with the ROM loaded in the launcher (its Play page sets it).
 // Read once at start-up (src/main.cpp), before the launcher or the update check runs.
 void jfg_launcher_config_load(const std::filesystem::path& app_folder);
 bool jfg_launcher_check_updates();
+void jfg_launcher_set_check_updates(bool check); // and saves it to the file (the check itself runs at start-up)
+bool jfg_launcher_skip();
+void jfg_launcher_set_skip(bool skip); // and saves it to the file
 std::string jfg_launcher_config_rom(); // an absolute path, or "" when none is set
 
 struct JfgUpdateInfo {
@@ -37,6 +41,8 @@ void jfg_update_reset();
 void jfg_update_fail(const std::string& message);
 // After stage 3: starts the new build. The caller then quits this one.
 void jfg_update_restart();
+// Starts the game again, on the launcher (--launcher). The caller then quits this run. False if it could not start it.
+bool jfg_restart_into_launcher();
 
 // The markdown of CHANGELOG.md that ships in assets/jfg_launcher, from its first version heading (newest first).
 std::string jfg_changelog_text();

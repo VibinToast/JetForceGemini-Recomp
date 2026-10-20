@@ -7,7 +7,7 @@ namespace recompui {
     Label::Label(Element *parent, LabelStyle label_style) : Element(parent, 0U, "div", true) {
         switch (label_style) {
         case LabelStyle::Annotation:
-            set_color(Color{ 233, 205, 53, 255 });
+            set_color(Color{ 60, 200, 255, 255 });
             set_font_size(18.0f);
             set_letter_spacing(2.52f);
             set_line_height(18.0f);

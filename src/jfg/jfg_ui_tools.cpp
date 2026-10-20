@@ -43,11 +43,12 @@ std::atomic<float> g_toolbar_height{ 0.0f };
 namespace {
 namespace ui = recompui;
 
-// --- look (dark, like a Windows menu bar) ----------------------------------------------------------------------------
-constexpr ui::Color BAR_BG{ 32, 32, 32, 245 }, PANEL_BG{ 43, 43, 43, 250 }, BORDER{ 75, 75, 75, 255 };
-constexpr ui::Color TEXT{ 240, 240, 240, 255 }, TEXT_DIM{ 160, 160, 160, 255 }, ACCENT{ 96, 205, 255, 255 };
-constexpr ui::Color BUTTON_BG{ 55, 55, 55, 255 }, BUTTON_HOVER{ 75, 75, 75, 255 }, ON_BG{ 40, 120, 70, 255 }, ON_HOVER{ 50, 145, 85, 255 };
-constexpr ui::Color DRAWER_BG{ 36, 36, 36, 255 }, LIST_BG{ 30, 30, 30, 255 }, NO_BORDER{ 0, 0, 0, 0 };
+// --- look (a menu bar in Jet Force Gemini colours, as the launcher: space navy, "Gemini" cyan, emblem gold) ---------
+constexpr ui::Color BAR_BG{ 5, 11, 28, 245 }, PANEL_BG{ 11, 23, 51, 250 }, BORDER{ 31, 61, 115, 255 };
+constexpr ui::Color TEXT{ 232, 243, 255, 255 }, TEXT_DIM{ 129, 153, 191, 255 }, ACCENT{ 60, 200, 255, 255 };
+constexpr ui::Color BUTTON_BG{ 14, 30, 66, 255 }, BUTTON_HOVER{ 26, 56, 118, 255 }, ON_BG{ 20, 104, 184, 255 }, ON_HOVER{ 30, 144, 232, 255 };
+constexpr ui::Color DRAWER_BG{ 8, 17, 40, 255 }, LIST_BG{ 6, 13, 32, 255 }, NO_BORDER{ 0, 0, 0, 0 };
+constexpr ui::Color GOLD{ 255, 178, 26, 255 };
 constexpr float FONT = 15.0f, FONT_SMALL = 13.0f;
 
 // --- game thread <-> UI thread ---------------------------------------------------------------------------------------
@@ -144,7 +145,9 @@ ui::Element* column(ui::Element* parent, float gap = 4.0f) {
 }
 
 void style_button(ui::Button* b, ui::Color bg, ui::Color hover) {
-    b->set_padding_top(4.0f); b->set_padding_bottom(4.0f); b->set_padding_left(10.0f); b->set_padding_right(10.0f);
+    // Less below than above: the line box keeps room under the letters for descenders, so equal padding left a bigger
+    // gap under the text than over it (measured on a capture: 3 / 2 gives the same space above and below in the bar).
+    b->set_padding_top(3.0f); b->set_padding_bottom(2.0f); b->set_padding_left(10.0f); b->set_padding_right(10.0f);
     b->set_border_radius(3.0f);
     b->set_border_width(1.0f);
     b->set_border_color(BORDER);
@@ -314,7 +317,7 @@ void set_captures(bool captures) {
     if (!captures) close_menus();
     if (t.input_status != nullptr) {
         t.input_status->set_text(captures ? "Mouse & keys: tools  (Alt / click outside: game)" : "Mouse & keys: game  (Alt: tools)");
-        t.input_status->set_color(captures ? ACCENT : ui::Color{ 120, 220, 120, 255 });
+        t.input_status->set_color(captures ? ACCENT : GOLD);
     }
 }
 
@@ -402,16 +405,38 @@ void rebuild_profile_menu() {
     list_user_profiles();
     load_profile_choice();
     text(m, "Built-in", FONT_SMALL, TEXT_DIM);
-    auto add = [m](const std::string& name) {
-        ui::Button* b = button(m, (g_active_profile == name ? "> " : "   ") + name, [name]() {
-            run_on_game([name](recomp_context*) { choose_profile(name); });
-            close_menus();
-        });
+    // Choosing a profile first shows what it changes (issue #7) in a panel under the list, applied with Apply. The panel
+    // is updated in place: the menu is not rebuilt from inside one of its own buttons.
+    struct Confirm { std::string pending; ui::Element* panel = nullptr; ui::Label* changes = nullptr; };
+    auto c = std::make_shared<Confirm>();
+    auto show = [c](const std::string& name) {
+        c->pending = name;
+        const std::string preview = profile_preview_text(name);
+        c->changes->set_text("Apply \"" + name + "\"?\n" + (preview.empty() ? std::string("It changes no settings.") : preview));
+        c->panel->set_display(ui::Display::Flex);
+    };
+    auto add = [m, show](const std::string& name) {
+        ui::Button* b = button(m, (g_active_profile == name ? "> " : "   ") + name, [name, show]() { show(name); });
         if (g_active_profile == name) b->set_color(ACCENT);
     };
     for (const BuiltinProfile& p : BUILTIN_PROFILES) add(p.name);
     if (!g_user_profiles.empty()) text(m, "Your profiles", FONT_SMALL, TEXT_DIM);
     for (const std::string& n : std::vector<std::string>(g_user_profiles)) add(n);
+    toggle(m, "Keep my controls (the Controls tab stays as it is)", g_profile_keep_controls, [c, show](bool on) {
+        set_profile_keep_controls(on);
+        if (!c->pending.empty()) show(c->pending);
+    });
+    c->panel = column(m, 6.0f);
+    c->panel->set_display(ui::Display::None);
+    c->panel->set_max_width(520.0f);
+    c->changes = text(c->panel, "", FONT_SMALL, TEXT);
+    ui::Element* buttons = row(c->panel);
+    button(buttons, "Apply", [c]() {
+        const std::string name = c->pending;
+        if (!name.empty()) run_on_game([name](recomp_context*) { choose_profile(name); });
+        close_menus();
+    });
+    button(buttons, "Cancel", [c]() { c->pending.clear(); c->panel->set_display(ui::Display::None); });
     text(m, "Save and edit profiles in the Select / Esc menu > Profiles.", FONT_SMALL, TEXT_DIM);
 }
 
@@ -428,7 +453,7 @@ void rebuild_textures_menu() {
         if (p == current) b->set_color(ACCENT);
     }
     button(m, "Reload pack (F6: next pack)", [current]() { set_texture_pack(current); close_menus(); });
-    text(m, "Texture dumping (bin\\texture_dump)", FONT_SMALL, TEXT_DIM);
+    text(m, "Texture dumping (texture_dump folder)", FONT_SMALL, TEXT_DIM);
     toggle(m, "Dump textures (this session)", g.texture_dump, [](bool on) { run_on_game([on](recomp_context*) { g.texture_dump = on; }); });
     toggle(m, "One folder per level", g.dump_by_level, [](bool on) { run_on_game([on](recomp_context*) { g.dump_by_level = on; save_options(); }); });
 }
