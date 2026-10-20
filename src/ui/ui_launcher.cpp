@@ -47,7 +47,8 @@ static const LauncherPageInfo LAUNCHER_PAGES[] = {
     { "controls", "Controls", "Dual-stick, mouse and keyboard, aiming, and the controller's stick and rumble.", "tab_jfg_controls" },
     { "bindings", "Bindings", "Button bindings for the controller and the keyboard.", "tab_controls" },
     { "graphics", "Graphics", "Window, resolution, frame rate, widescreen and effects.", "tab_jfg_graphics" },
-    { "textures", "Texture Packs", "Pick a texture pack from bin\\texture_packs, and dump the game's textures to make your own.", "tab_jfg_textures" },
+    { "textures", "Texture Packs", "Pick a texture pack from the texture_packs folder, and dump the game's textures to make your own.", "tab_jfg_textures" },
+    { "mods", "Mods", "Turn mods on and off, set their order and options, and install new ones.", "tab_mods" },
     { "about", "About", "Jet Force Gemini: Recompiled.", "nav_about" },
 };
 static const LauncherPageInfo& launcher_page_info() {

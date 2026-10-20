@@ -76,6 +76,8 @@ public:
     void set_mods_dirty(bool scan_mods) { mods_dirty = true; mod_scan_queued = scan_mods; }
     Element* get_first_mod_entry() { return !mod_entry_buttons.empty() ? mod_entry_buttons[0] : nullptr; }
     Element* get_mod_configure_button() { return mod_details_panel != nullptr ? mod_details_panel->get_configure_button() : nullptr; }
+    // JFG PORT: the context (document) this menu is in: the config menu or the launcher.
+    ContextId get_owner_context() const { return owner_context; }
 protected:
     std::string_view get_type_name() override { return "ModMenu"; }
 private:
@@ -116,6 +118,7 @@ private:
     std::string game_mod_id;
     bool mods_dirty = false;
     bool mod_scan_queued = false;
+    ContextId owner_context;
 
     ConfigSubMenu *config_sub_menu;
 };
