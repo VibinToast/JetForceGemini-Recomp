@@ -428,7 +428,7 @@ void rebuild_textures_menu() {
         if (p == current) b->set_color(ACCENT);
     }
     button(m, "Reload pack (F6: next pack)", [current]() { set_texture_pack(current); close_menus(); });
-    text(m, "Texture dumping (bin\\texture_dump)", FONT_SMALL, TEXT_DIM);
+    text(m, "Texture dumping (texture_dump folder)", FONT_SMALL, TEXT_DIM);
     toggle(m, "Dump textures (this session)", g.texture_dump, [](bool on) { run_on_game([on](recomp_context*) { g.texture_dump = on; }); });
     toggle(m, "One folder per level", g.dump_by_level, [](bool on) { run_on_game([on](recomp_context*) { g.dump_by_level = on; save_options(); }); });
 }

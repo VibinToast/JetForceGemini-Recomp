@@ -160,8 +160,8 @@ GRAPHICS = [
 TEXTURES = [
     ("group", None, "Texture Dumping", None, None),
     ("bool", "texture_dump", "Dump Textures", None,
-     "Saves every texture the game draws, the first time it appears, to bin\\texture_dump as &lt;hash&gt;.png. Off again at the next start. Upscale the files without renaming them and put them in a pack folder (bin\\texture_packs\\&lt;name&gt;)."),
-    ("bool", "dump_by_level", "One Folder per Level", None, "Dumps into bin\\texture_dump\\&lt;level number&gt; &lt;level name&gt; instead."),
+     "Saves every texture the game draws, the first time it appears, to the texture_dump folder next to the game, as &lt;hash&gt;.png. Off again at the next start. Upscale the files without renaming them and put them in a pack folder (texture_packs\\&lt;name&gt;)."),
+    ("bool", "dump_by_level", "One Folder per Level", None, "Dumps into texture_dump\\&lt;level number&gt; &lt;level name&gt; instead."),
 ]
 
 def row_ids(kind, key, extra):
@@ -256,8 +256,9 @@ TEXTURE_PACKS = '''                    <div class="config-option" style="margin:
                         </div>
                         <div style="display: block; width: 100%;">
                             <button class="button" style="display: inline-block; margin: 8dp; nav-up: auto; nav-down: auto; nav-left: #tab_jfg_textures;" data-event-click="reload_pack()">Reload Pack</button>
+                            <button class="button" style="display: inline-block; margin: 8dp; nav-up: auto; nav-down: auto; nav-left: auto;" data-event-click="open_pack_folder()">Open Texture Packs Folder</button>
                         </div>
-                        <div class="jfg-note" style="display: block; margin: 8dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Packs are the folders in bin\\texture_packs. F6 switches packs while playing. Reload after adding or changing files. {{dump_status}}</div>
+                        <div class="jfg-note" style="display: block; margin: 8dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Packs are the folders (or .rtz files) in the texture_packs folder next to the game. F6 switches packs while playing. Reload after adding or changing files. {{dump_status}}</div>
                     </div>'''
 
 PROFILES = '''<template name="config-menu__jfg_profiles">
@@ -299,7 +300,7 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
                 <div class="config__wrapper">
                     <p>A profile is a whole set of the port's settings (the General, Gameplay, Controls and Graphics tabs, and the weapon settings of the F10 tools). Choosing one first puts every setting back to the original game, then applies the profile.</p>
                     <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and visuals at 60 fps. <b>Modern and Balanced</b>: Modern with rebalanced weapons (a subjective take on the balance). <b>Extreme</b>: everything turned up, just for fun.</p>
-                    <p>Your own profiles are kept in bin\\profiles; changes made while one is active are saved to it. Not part of profiles: cheats, the Textures tab (texture pack, dumping), the volume, the Controller settings, the window, resolution, downsampling and anti-aliasing, and the button bindings.</p>
+                    <p>Your own profiles are kept in the profiles folder next to the game; changes made while one is active are saved to it. Not part of profiles: cheats, the Textures tab (texture pack, dumping), the volume, the Controller settings, the window, resolution, downsampling and anti-aliasing, and the button bindings.</p>
                     <p>Controller: Up/Down and Left/Right move between buttons, A chooses.</p>
                 </div>
             </div>

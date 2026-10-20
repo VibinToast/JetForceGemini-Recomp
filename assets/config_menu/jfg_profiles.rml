@@ -37,7 +37,7 @@
                 <div class="config__wrapper">
                     <p>A profile is a whole set of the port's settings (the General, Gameplay, Controls and Graphics tabs, and the weapon settings of the F10 tools). Choosing one first puts every setting back to the original game, then applies the profile.</p>
                     <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and visuals at 60 fps. <b>Modern and Balanced</b>: Modern with rebalanced weapons (a subjective take on the balance). <b>Extreme</b>: everything turned up, just for fun.</p>
-                    <p>Your own profiles are kept in bin\profiles; changes made while one is active are saved to it. Not part of profiles: cheats, the Textures tab (texture pack, dumping), the volume, the Controller settings, the window, resolution, downsampling and anti-aliasing, and the button bindings.</p>
+                    <p>Your own profiles are kept in the profiles folder next to the game; changes made while one is active are saved to it. Not part of profiles: cheats, the Textures tab (texture pack, dumping), the volume, the Controller settings, the window, resolution, downsampling and anti-aliasing, and the button bindings.</p>
                     <p>Controller: Up/Down and Left/Right move between buttons, A chooses.</p>
                 </div>
             </div>

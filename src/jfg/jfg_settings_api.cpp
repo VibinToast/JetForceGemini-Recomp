@@ -7,6 +7,17 @@
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 #include "jfg_settings_api.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
@@ -113,5 +124,18 @@ int dumped_texture_files() {
         if (it->is_regular_file(ec)) n++;
     }
     return ec ? -1 : n;
+}
+// Opens the texture_packs folder (next to the game; made if it is not there yet) in the file manager.
+void open_texture_packs_folder() {
+    std::error_code ec;
+    std::filesystem::create_directories("texture_packs", ec);
+    const std::filesystem::path folder = std::filesystem::absolute("texture_packs", ec);
+#if defined(_WIN32)
+    ShellExecuteW(NULL, L"open", folder.wstring().c_str(), NULL, NULL, SW_SHOWDEFAULT);
+#elif defined(__APPLE__)
+    std::system(("open \"" + folder.string() + "\"").c_str());
+#else
+    std::system(("xdg-open \"" + folder.string() + "\" &").c_str());
+#endif
 }
 } // namespace jfg::settings

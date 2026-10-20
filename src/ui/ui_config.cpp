@@ -47,7 +47,7 @@ void jfg_config_menu_refresh() {
     const int count = jfg::settings::texture_pack_count();
     jfg_pack_status = "In use: " + jfg::settings::texture_pack_name(pack) + (pack.empty() || count < 0 ? std::string() : " (" + std::to_string(count) + " textures)");
     const int dumped = jfg::settings::dumped_texture_files();
-    jfg_dump_status = dumped >= 0 ? "bin\\texture_dump: " + std::to_string(dumped) + " files." : std::string();
+    jfg_dump_status = dumped >= 0 ? "texture_dump folder: " + std::to_string(dumped) + " files." : std::string();
     for (Rml::DataModelHandle* handle : { &jfg_general_model_handle, &jfg_gameplay_model_handle, &jfg_controls_model_handle,
                                           &jfg_graphics_model_handle, &jfg_textures_model_handle }) {
         if (*handle) handle->DirtyAllVariables();
@@ -1149,6 +1149,9 @@ public:
             constructor.BindEventCallback("reload_pack", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
                 jfg::settings::set_texture_pack(jfg::settings::texture_pack());
                 jfg_config_menu_refresh();
+            });
+            constructor.BindEventCallback("open_pack_folder", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+                jfg::settings::open_texture_packs_folder();
             });
             jfg_textures_model_handle = constructor.GetModelHandle();
         }
