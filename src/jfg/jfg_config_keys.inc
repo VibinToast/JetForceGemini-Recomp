@@ -6,6 +6,7 @@ static const char* const jfg_graphics_keys[] = { "wm_option", "res_option", "ds_
 static const char* const jfg_textures_keys[] = { "texture_dump", "dump_by_level" };
 struct JfgTabFirst { const char* tab; const char* first; };
 static const JfgTabFirst jfg_tab_first_ids[] = {
+    { "tab_jfg_profiles", "jfg_profile_0" },
     { "tab_jfg_general", "jfg_main_volume_input" },
     { "tab_jfg_gameplay", "jfg_auto_save_on" },
     { "tab_jfg_controls", "jfg_dual_stick_on" },
