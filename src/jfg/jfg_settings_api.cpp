@@ -128,13 +128,18 @@ void delete_active_profile() {
 std::string profile_message() { return g_profile_message; }
 
 std::vector<std::string> texture_packs() {
+    load_texture_pack_choice();
     std::vector<std::string> out{ "" };
     const std::vector<std::string> packs = list_texture_packs();
     out.insert(out.end(), packs.begin(), packs.end());
     return out;
 }
 std::string texture_pack_name(const std::string& folder) { return pack_display_name(folder); }
-std::string texture_pack() { std::lock_guard lock(g_pack_mutex); return g_pack_folder; }
+TexturePackDetails texture_pack_details(const std::string& folder) {
+    PackInfo info = texture_pack_info(folder);
+    return { info.has_json, info.serial, info.name, info.version, info.author, info.website, info.description, std::move(info.image) };
+}
+std::string texture_pack() { load_texture_pack_choice(); std::lock_guard lock(g_pack_mutex); return g_pack_folder; }
 void set_texture_pack(const std::string& folder) { jfg::set_texture_pack(folder); }
 int texture_pack_count() { return g_texture_pack_count.load(); }
 int dumped_texture_files() {

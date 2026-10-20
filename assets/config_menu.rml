@@ -63,6 +63,19 @@
 		.jfg-desc__title { display: block; margin-bottom: 18dp; font-size: 30dp; line-height: 38dp; letter-spacing: 2dp; font-weight: bold; color: #ffb21a; }
 		.jfg-desc p { padding: 0dp; font-size: 25dp; line-height: 39dp; letter-spacing: 0.5dp; color: #e8f3ff; }
 		.jfg-desc p b { color: #3cc8ff; }
+		/* JFG PORT: the Textures tab's packs as cards (image, name, version and author from the pack's credits.json), and on
+		   the right the focused pack's details. */
+		.jfg-pack-list { display: block; width: 100%; margin-top: 16dp; }
+		.jfg-pack { display: flex; flex-direction: row; align-items: center; width: 100%; box-sizing: border-box; margin: 0dp 0dp 12dp; padding: 12dp;
+			text-align: left; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
+		.jfg-pack__thumb { flex: 0 0 auto; width: 72dp; height: 72dp; margin-right: 22dp; background-color: rgba(3, 8, 22, 0.8); }
+		.jfg-pack__text { display: block; flex: 1 1 auto; }
+		.jfg-pack__name { display: block; }
+		.jfg-pack__meta { display: block; margin-top: 10dp; font-size: 20dp; line-height: 24dp; letter-spacing: 1dp; font-weight: normal; color: #8199bf; }
+		.jfg-pack.jfg-selected .jfg-pack__meta { color: #e8f3ff; }
+		.jfg-pack-detail__image { display: block; width: 160dp; height: 160dp; margin-bottom: 28dp; }
+		.jfg-pack-detail__meta { display: block; margin: -6dp 0dp 18dp; font-size: 22dp; line-height: 28dp; color: #3cc8ff; }
+		.jfg-pack-detail__site { display: inline-block; margin-top: 24dp; padding: 14dp 18dp; font-size: 20dp; line-height: 22dp; letter-spacing: 1dp; text-transform: none; }
 		/* JFG PORT: eight tabs do not fit at the base size: they ran under the tools, launcher, quit and close buttons
 		   (absolutely placed at the top right). Slightly smaller tabs, and the tab row keeps clear of the four buttons. */
 		#config_tabset tabs { padding-right: 284dp; }

@@ -221,6 +221,19 @@
 			.rl-page .button:hover, .rl-page .button:focus { background-color: #0A2660; border-color: #FFB21A; color: #E8F3FF; }
 			.rl-page .button.jfg-selected { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; }
 			.rl-page .button.jfg-selected:hover, .rl-page .button.jfg-selected:focus { background-color: #1E90E8; border-color: #FFB21A; color: #050B1C; }
+			/* The Textures page's pack cards (as in config_menu.rml, at the launcher's size) and the focused pack's details. */
+			.rl-page .jfg-pack-list { display: block; width: 100%; margin-top: 12dp; }
+			.rl-page .jfg-pack { display: flex; flex-direction: row; align-items: center; width: 100%; box-sizing: border-box; margin: 0dp 0dp 10dp; padding: 10dp;
+				text-align: left; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
+			.rl-page .jfg-pack__thumb { flex: 0 0 auto; width: 60dp; height: 60dp; margin-right: 18dp; background-color: rgba(3, 8, 22, 0.8); }
+			.rl-page .jfg-pack__text { display: block; flex: 1 1 auto; }
+			.rl-page .jfg-pack__name { display: block; }
+			.rl-page .jfg-pack__meta { display: block; margin-top: 8dp; font-size: 16dp; line-height: 20dp; letter-spacing: 0.5dp; font-weight: normal; color: #8199BF; }
+			.rl-page .jfg-pack:hover .jfg-pack__meta, .rl-page .jfg-pack:focus .jfg-pack__meta { color: #E8F3FF; }
+			.rl-page .jfg-pack.jfg-selected .jfg-pack__meta { color: #050B1C; }
+			.rl-page .jfg-pack-detail__image { display: block; width: 128dp; height: 128dp; margin-bottom: 22dp; }
+			.rl-page .jfg-pack-detail__meta { display: block; margin: -4dp 0dp 14dp; font-family: "JetBrains Mono"; font-size: 18dp; line-height: 24dp; color: #3CC8FF; }
+			.rl-page .jfg-pack-detail__site { display: inline-block; margin-top: 18dp; padding: 10dp 14dp; font-size: 16dp; letter-spacing: 0.5dp; }
 			.rl-page input.text { border-radius: 0dp; }
 			.rl-page scrollbarvertical slidertrack { background: #1F3D73; opacity: 0.6; }
 			.rl-page scrollbarvertical sliderbar { background: #3CC8FF; opacity: 0.8; border-radius: 0dp; }
