@@ -17,6 +17,7 @@
 
 uint32_t rt64_jfg_matrix_check(const uint8_t* rdram, uint32_t address); // lib/rt64 src/hle/rt64_rsp.cpp (JFG port)
 void rt64_jfg_tag_matrix(uint32_t address, uint32_t id, uint32_t check, const float* model);
+void rt64_jfg_tag_bone_buffer(uint32_t address, uint32_t id);
 
 namespace jfg {
 
@@ -28,15 +29,39 @@ uint32_t push_caller = 0; // return address of the push function running now
 uint32_t push_source = 0; // its third argument: what it draws (transform, source matrix, position; the scale's bits)
 
 constexpr uint32_t OBJ_DEFINITION = 0x40;     // Object: pointer to its definition (objects.h)
+constexpr uint32_t OBJ_MODELS = 0x6C;         // Object: its model instances (ModelInstance_JFG*[], models.h)
+constexpr uint32_t OBJ_MODEL_INDEX = 0x3A;    // Object: s8, the one drawn (segment.unk3A)
+constexpr uint32_t INST_BONES = 0x10;         // ModelInstance_JFG: f32 *unk10[2], its two bone buffers (one per frame)
+
+uint32_t object_id(uint32_t object) {
+    // The object's address with its definition, so an object created where another one was freed differs.
+    return (object * 2654435761u) ^ rd32(object + OBJ_DEFINITION);
+}
 constexpr uint32_t ADDR_modelMtx = 0x800FAAB0; // D_800FAAB0: the float model matrix the push functions multiply with the camera
 constexpr uint32_t ADDR_lastMtx = 0x800FAB30;  // D_800FAB30: the Mtx the push function just wrote
 }
 
-// Entry of objPrintObject(dList, mtx, vtx, obj).
+// Entry of objPrintObject(dList, mtx, vtx, obj). A character's model has no model matrix of its own: its bones are
+// world-space matrices the game converts into a bone buffer of the model instance, and the model's display lists
+// multiply them onto the camera from there (G_DMAOFFSETS points at the buffer). Both of the instance's buffers are
+// tagged with the object, so RT64 can tell whose bones they are.
 extern "C" void jfg_interp_object(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    if (drawn_count < 16) drawn_objects[drawn_count] = (uint32_t)ctx->r7;
+    const uint32_t object = (uint32_t)ctx->r7;
+    if (drawn_count < 16) drawn_objects[drawn_count] = object;
     drawn_count++;
+    if (!valid_ptr(object)) return;
+
+    const uint32_t models = rd32(object + OBJ_MODELS);
+    const int index = (int8_t)rd8(object + OBJ_MODEL_INDEX);
+    if (!valid_ptr(models) || index < 0 || index > 15) return;
+    const uint32_t instance = rd32(models + (uint32_t)index * 4);
+    if (!valid_ptr(instance)) return;
+    const uint32_t id = (object_id(object) ^ ((uint32_t)index * 2246822519u)) | 1u; // never RT64's 0 ("not interpolated")
+    for (uint32_t i = 0; i < 2; i++) {
+        const uint32_t buffer = rd32(instance + INST_BONES + i * 4);
+        if (valid_ptr(buffer)) rt64_jfg_tag_bone_buffer(buffer & 0x00FFFFFFu, id == 0xFFFFFFFFu ? 1u : id);
+    }
 }
 
 // objPrintObject's return.
@@ -65,9 +90,8 @@ extern "C" void jfg_interp_pushed(uint8_t* rdram_, recomp_context* ctx) {
     uint32_t id = 0;
     const uint32_t object = (drawn_count > 0 && drawn_count <= 16) ? drawn_objects[drawn_count - 1] : 0;
     if (valid_ptr(object)) {
-        // The object's address with its definition (an object created where another one was freed differs), the
-        // place the matrix was pushed from and what it draws.
-        id = (object * 2654435761u) ^ rd32(object + OBJ_DEFINITION) ^ (push_caller * 40503u) ^ (push_source * 2246822519u);
+        // The object, the place the matrix was pushed from and what it draws.
+        id = object_id(object) ^ (push_caller * 40503u) ^ (push_source * 2246822519u);
         if (id == 0 || id == 0xFFFFFFFFu) id = 1; // RT64's "not interpolated" and "match automatically" values
     }
 
