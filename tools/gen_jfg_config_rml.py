@@ -257,7 +257,8 @@ def options_tab(name, items, tab_id, extra_markup="", before_markup="", desc_mar
         ''])
 
 # Pack buttons get ids (jfg_pack_0, ...) so the tabs / the launcher's sidebar can go down/right to the first one. Each
-# is a card: the pack's image (pack_image.png), its name, version and author (credits.json). Focusing or pointing at one
+# is a card: the pack's image (pack_image.png), its name, version and author (credits.json), and whether it is a folder
+# or an .rtz file. Focusing or pointing at one
 # shows its details on the right (PACK_DETAILS).
 TEXTURE_PACKS = '''                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Texture Pack</label></div>
                     <div class="config-option jfg-option" style="flex: 0 0 auto;">
@@ -269,6 +270,7 @@ TEXTURE_PACKS = '''                    <div class="config-option" style="margin:
                                     <div class="jfg-pack__name">{{p.label}}</div>
                                     <div class="jfg-pack__meta">{{p.version}} {{p.author}}</div>
                                 </div>
+                                <div class="jfg-pack__kind" data-if="p.kind != ''">{{p.kind}}</div>
                             </button>
                         </div>
                         <div style="display: block; width: 100%;">

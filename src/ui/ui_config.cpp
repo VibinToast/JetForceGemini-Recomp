@@ -41,6 +41,7 @@ struct JfgPackEntry {
     Rml::String version, author; // "Version 1.2", "by VibinToast" (empty if credits.json has none)
     Rml::String website, description, image;
     bool no_details = false; // a pack without credits.json
+    Rml::String kind;        // the label on its button: "Folder" or ".rtz" ("" for Off)
 };
 static std::vector<JfgProfileEntry> jfg_profile_entries;
 static std::vector<JfgPackEntry> jfg_pack_entries;
@@ -56,6 +57,9 @@ static void jfg_fill_pack_entry(JfgPackEntry& e) {
         e.description = "The game's own textures.";
         return;
     }
+    std::string ext = e.folder.size() > 4 ? e.folder.substr(e.folder.size() - 4) : std::string();
+    for (char& ch : ext) ch = (char)std::tolower((unsigned char)ch);
+    e.kind = ext == ".rtz" ? ".rtz" : "Folder";
     jfg::settings::TexturePackDetails d = jfg::settings::texture_pack_details(e.folder);
     if (!d.version.empty()) e.version = "Version " + d.version;
     if (!d.author.empty()) e.author = (e.version.empty() ? "By " : "by ") + d.author;
@@ -1285,6 +1289,7 @@ public:
                 entry.RegisterMember("description", &JfgPackEntry::description);
                 entry.RegisterMember("image", &JfgPackEntry::image);
                 entry.RegisterMember("no_details", &JfgPackEntry::no_details);
+                entry.RegisterMember("kind", &JfgPackEntry::kind);
             }
             constructor.RegisterArray<std::vector<JfgPackEntry>>();
             constructor.Bind("packs", &jfg_pack_entries);
