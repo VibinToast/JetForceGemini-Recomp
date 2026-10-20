@@ -61,9 +61,6 @@ float jfg_sniper_zoom(float zoom);                                     // contro
 int jfg_sniper_walk(int weapon);                                       // the characters' aim control (overlays 15-17)
 int jfg_flag_override(int flag);                                       // entry of mainGetGameFlag
 // jfg_gore.cpp
-void jfg_blood_more(uint8_t* rdram, recomp_context* ctx);              // entry of bloodSpurtAdd (after jfg_no_blood)
-void jfg_gore_splat(uint8_t* rdram, recomp_context* ctx);              // bloodSpurtUpdateAll, a splat's life countdown
-void jfg_gore_limb(uint8_t* rdram, recomp_context* ctx);               // entry of severedLimbControl
 void jfg_gore_on_blood_spurt(uint8_t* rdram, recomp_context* ctx);     // jfg_on_blood_spurt handler (jfg_api.cpp)
 void jfg_gore_on_blood_hit(uint8_t* rdram, recomp_context* ctx);       // jfg_on_blood_hit handler
 void jfg_gore_limb(uint8_t* rdram, recomp_context* ctx);               // jfg_on_severed_limb_tick handler
