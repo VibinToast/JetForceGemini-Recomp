@@ -47,11 +47,11 @@
 				transition: top left background-color color border-color 0.08s linear-in-out; }
 			/* The lift on hover is driven by the (stationary) shadow box, not the button itself: a button that moves out from under the
 			   cursor at its edge stops being hovered, moves back, and flickers. */
-			.rl-btn:hover { border-color: #E8F3FF; }
+			.rl-btn:hover { border-color: #FFB21A; }
 			.rl-btn-shadow:hover .rl-btn { top: -6dp; left: -6dp; }
 			.rl-btn.rl-active { background-color: #3CC8FF; color: #050B1C; }
 			.rl-btn.rl-active:hover { background-color: #1E90E8; border-color: #1E90E8; }
-			#window:not([mouse-active]) .rl-btn:focus { top: -6dp; left: -6dp; border-color: #E8F3FF; }
+			#window:not([mouse-active]) .rl-btn:focus { top: -6dp; left: -6dp; border-color: #FFB21A; }
 			.rl-btn--exit { border-color: #FF4A4A; color: #FF4A4A; }
 			.rl-btn--exit:hover, #window:not([mouse-active]) .rl-btn--exit:focus { background-color: #FF4A4A; border-color: #FF4A4A; color: #050B1C; }
 			.rl-separator { display: block; height: 2dp; margin: 6dp 0dp 18dp; background-color: #1F3D73; }
@@ -133,7 +133,7 @@
 				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; focus: auto; tab-index: auto; cursor: pointer; }
 			.rl-action:hover { background-color: #1E90E8; border-color: #1E90E8; }
 			.rl-action-shadow:hover .rl-action { top: -6dp; left: -6dp; }
-			#window:not([mouse-active]) .rl-action:focus { top: -6dp; left: -6dp; border-color: #E8F3FF; }
+			#window:not([mouse-active]) .rl-action:focus { top: -6dp; left: -6dp; border-color: #FFB21A; }
 			.rl-action--outline { background-color: #050B1C; color: #3CC8FF; }
 			.rl-action--outline:hover { background-color: #0A2660; color: #3CC8FF; }
 			.rl-start-shadow { display: block; position: relative; margin: 30dp 0dp 0dp 6dp; background-color: #0A2660; }
@@ -143,7 +143,7 @@
 			.rl-start.rl-ready { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; cursor: pointer; }
 			.rl-start.rl-ready:hover { background-color: #1E90E8; border-color: #1E90E8; }
 			.rl-start-shadow:hover .rl-start.rl-ready { top: -8dp; left: -8dp; }
-			#window:not([mouse-active]) .rl-start.rl-ready:focus { top: -8dp; left: -8dp; border-color: #E8F3FF; }
+			#window:not([mouse-active]) .rl-start.rl-ready:focus { top: -8dp; left: -8dp; border-color: #FFB21A; }
 			.rl-start-note { display: block; margin-top: 12dp; font-size: 17dp; text-align: center; color: #8199BF; }
 			.rl-skip { display: flex; flex-direction: row; align-items: center; margin-top: 10dp; }
 			.rl-skip-shadow { flex: 0 0 auto; }
@@ -155,7 +155,7 @@
 				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: none; focus: auto; tab-index: auto; cursor: pointer; }
 			.rl-banner:hover { background-color: #3A2400; }
 			.rl-banner-shadow:hover .rl-banner { top: -8dp; left: -8dp; }
-			#window:not([mouse-active]) .rl-banner:focus { top: -8dp; left: -8dp; border-color: #E8F3FF; background-color: #3A2400; }
+			#window:not([mouse-active]) .rl-banner:focus { top: -8dp; left: -8dp; border-color: #FFB21A; background-color: #3A2400; }
 			.rl-banner-title { display: block; font-family: "JFG Black"; font-weight: normal; font-size: 23dp; line-height: 26dp; color: #FFB21A; text-transform: uppercase; }
 			.rl-banner-text { display: block; margin-top: 6dp; font-size: 17dp; line-height: 24dp; color: #E8F3FF; }
 			.rl-keys { display: block; margin-top: 30dp; }
@@ -192,7 +192,7 @@
 			.rl-page .config-option__list .config-option__tab-label:hover { color: #E8F3FF; }
 			.rl-page .config-option__list input.radio:not(:disabled):checked+.config-option__tab-label { border-bottom: 2dp; border-color: #3CC8FF; color: #3CC8FF; }
 			.rl-page .config-option__list input.radio:not(:disabled):hover+.config-option__tab-label { color: #E8F3FF; }
-			#window:not([mouse-active]) .rl-page .config-option__list input.radio:not(:disabled):focus+.config-option__tab-label { animation: none; color: #050B1C; background-color: #3CC8FF; border-color: #E8F3FF; }
+			#window:not([mouse-active]) .rl-page .config-option__list input.radio:not(:disabled):focus+.config-option__tab-label { animation: none; color: #050B1C; background-color: #3CC8FF; border-color: #FFB21A; }
 			.rl-page .config-option__list input.range slidertrack { background-color: #1F3D73; height: 4dp; margin-top: 7dp; }
 			.rl-page .config-option__list input.range sliderbar { background-color: #3CC8FF; border-radius: 0dp; }
 			.rl-page .config-option__list input.range sliderbar:hover { background-color: #E8F3FF; }
@@ -218,9 +218,9 @@
 			.rl-page .config__wrapper_scroll p b, .rl-page .config__wrapper_scroll p i { color: #3CC8FF; }
 			.rl-page .button { border-radius: 0dp; border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF;
 				font-family: "JetBrains Mono"; font-weight: bold; font-size: 19dp; letter-spacing: 1dp; padding: 16dp 20dp; }
-			.rl-page .button:hover, .rl-page .button:focus { background-color: #0A2660; border-color: #E8F3FF; color: #E8F3FF; }
+			.rl-page .button:hover, .rl-page .button:focus { background-color: #0A2660; border-color: #FFB21A; color: #E8F3FF; }
 			.rl-page .button.jfg-selected { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; }
-			.rl-page .button.jfg-selected:hover, .rl-page .button.jfg-selected:focus { background-color: #1E90E8; border-color: #E8F3FF; color: #050B1C; }
+			.rl-page .button.jfg-selected:hover, .rl-page .button.jfg-selected:focus { background-color: #1E90E8; border-color: #FFB21A; color: #050B1C; }
 			.rl-page input.text { border-radius: 0dp; }
 			.rl-page scrollbarvertical slidertrack { background: #1F3D73; opacity: 0.6; }
 			.rl-page scrollbarvertical sliderbar { background: #3CC8FF; opacity: 0.8; border-radius: 0dp; }
