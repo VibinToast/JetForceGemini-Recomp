@@ -186,6 +186,8 @@ struct SquadTrack {
     SquadPose last;             // as after the member's last update
     uint32_t updated_tick = 0;  // g_game_ticks at that update, 0 = none
     uint32_t posed_tick = 0;    // g_game_ticks of the last in-between tick on which the game itself re-posed the model
+    uint32_t drawn_tick = 0;    // g_game_ticks of the last draw, and the model instance's +0x0B (current buffer) after it
+    uint8_t drawn_buffer = 0;
 };
 std::unordered_map<uint32_t, SquadTrack> g_squad_tracks; // by object
 // A pose is not read-only: through SquaddieGetTiltList (called by modGenAnimMatrices) it steps the member's head and
@@ -207,6 +209,25 @@ struct SquadDrawn {
 std::vector<SquadDrawn> g_squad_drawn;                   // objects that hold drawn values until jfg_squad_draw_end
 uint32_t g_squad_smoothed = 0;                           // members drawn in between, for JFG_DEBUG_STATS
 uint32_t g_squad_data_kept = 0;                          // extra poses that stepped the control data (put back), for JFG_DEBUG_STATS
+bool g_squad_reposed = false;                            // an extra pose this tick went into the buffer the update posed
+
+// camConvertMatrixList queues each posed matrix buffer (pointer, count; ConvListEntry, 8 bytes) for camTick, which
+// multiplies every entry by the camera and converts it from float to fixed point in place. A buffer queued twice is
+// converted twice and its matrices are garbage, so repeats are taken out of the queue (keeping the first entry).
+void squad_unqueue_repeats() {
+    constexpr uint32_t ADDR_convListCount = 0x800A2ED0, ADDR_convList = 0x800FA658; // D_800A2ED0, D_800FA658
+    const int count = (int)rd32(ADDR_convListCount);
+    if (count <= 1 || count > 4096) return;
+    std::unordered_set<uint32_t> seen;
+    int kept = 0;
+    for (int i = 0; i < count; i++) {
+        const uint32_t mtx = rd32(ADDR_convList + 8u * (uint32_t)i), n = rd32(ADDR_convList + 8u * (uint32_t)i + 4);
+        if (!seen.insert(mtx).second) continue;
+        if (kept != i) { wr32(ADDR_convList + 8u * (uint32_t)kept, mtx); wr32(ADDR_convList + 8u * (uint32_t)kept + 4, n); }
+        kept++;
+    }
+    if (kept != count) wr32(ADDR_convListCount, (uint32_t)kept);
+}
 
 SquadPose read_pose(uint32_t obj) {
     SquadPose p;
@@ -359,6 +380,18 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
         const uint32_t inst = model_instance(obj);
         SquadDrawn d{ obj, now, read_pose(obj) };
         if (inst != 0 && t.posed_tick == g_game_ticks - 1 && rd8(obj + 0x39) == 0xFF) {
+            // The squad update has usually posed the model already this tick (a flip after the last draw), into the
+            // buffer the last frame's display list does not use. A second flip here would pose into the one it does
+            // use, and RT64 reads a frame's display list only after the next frame is drawn: the frame before then
+            // showed this tick's pose too, so pairs of frames looked the same and squad members moved 30 times a
+            // second (found with a trace of the matrices RT64 loads, 2026-10-19). So the index goes back to the
+            // buffer of the last draw, and this pose replaces the update's in the buffer the update just wrote.
+            // Both poses queue the buffer for camTick's float-to-fixed conversion (camConvertMatrixList); the second
+            // entry is dropped after the draw (squad_unqueue_repeats), or the buffer is converted twice and garbled.
+            if (t.drawn_tick == g_game_ticks - 1 && rd8(inst + 0x0B) != t.drawn_buffer) {
+                wr8(inst + 0x0B, t.drawn_buffer);
+                g_squad_reposed = true;
+            }
             wr8(inst + 0x0A, 1);
             const uint32_t data = rd32(obj + 0x68);
             if (valid_ptr(data) && valid_ptr(data + 0xAC)) {
@@ -384,6 +417,21 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
 extern "C" void jfg_squad_draw_end(uint8_t* rdram) {
     g_rdram = rdram;
     squad_draw_restore();
+    if (g_squad_reposed) {
+        squad_unqueue_repeats();
+        g_squad_reposed = false;
+    }
+    // Which buffer each animated member's display list now uses (see the extra pose in jfg_squad_draw_begin).
+    if (g.frame_rate >= 1 && !g.skipping) {
+        for (const SquadMember& m : g_squad_members) {
+            const auto it = g_squad_tracks.find(m.obj);
+            if (it == g_squad_tracks.end() || !live_object(m.obj)) continue;
+            if (const uint32_t inst = model_instance(m.obj)) {
+                it->second.drawn_tick = g_game_ticks;
+                it->second.drawn_buffer = rd8(inst + 0x0B);
+            }
+        }
+    }
 }
 
 // Entry of viFrameSync(mesg). Returns 1 when the call has been handled here (skip in progress).
