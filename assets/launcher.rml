@@ -6,14 +6,13 @@
 		<!-- JFG PORT: VibinToast-style launcher in Jet Force Gemini colours, with the settings pages built in (src/ui/ui_launcher.cpp). The settings
 		     pages are the Select / Esc menu's own templates and data models, restyled here. -->
 		<link type="text/rcss" href="jfg_launcher/vibintoast.rcss"/>
-		<link type="text/template" href="config_menu/general.rml" />
 		<link type="text/template" href="config_menu/controls.rml" />
-		<link type="text/template" href="config_menu/graphics.rml" />
-		<link type="text/template" href="config_menu/sound.rml" />
-		<link type="text/template" href="config_menu/jfg_gameplay.rml" />
-		<link type="text/template" href="config_menu/jfg_visuals.rml" />
-		<link type="text/template" href="config_menu/jfg_textures.rml" />
 		<link type="text/template" href="config_menu/jfg_profiles.rml" />
+		<link type="text/template" href="config_menu/jfg_general.rml" />
+		<link type="text/template" href="config_menu/jfg_gameplay.rml" />
+		<link type="text/template" href="config_menu/jfg_controls.rml" />
+		<link type="text/template" href="config_menu/jfg_graphics.rml" />
+		<link type="text/template" href="config_menu/jfg_textures.rml" />
 		<style>
 			/* Colours (Jet Force Gemini): "Gemini" cyan #3CC8FF, hover #1E90E8, "Jet Force" red #E8202A, emblem gold #FFB21A,
 			   text #E8F3FF, muted #8199BF, space navy background #050B1C, panels #0B1733, borders #1F3D73, hard shadows #0A2660. */
@@ -212,12 +211,11 @@
 			.rl-page scrollbarvertical slidertrack { background: #1F3D73; opacity: 0.6; }
 			.rl-page scrollbarvertical sliderbar { background: #3CC8FF; opacity: 0.8; border-radius: 0dp; }
 			/* Left from an option row's first choice goes back to the sidebar (the base menu stops there). */
+			#rl_page_general .config-option__list input:first-of-type { nav-left: #tab_jfg_general; }
 			#rl_page_gameplay .config-option__list input:first-of-type { nav-left: #tab_jfg_gameplay; }
-			#rl_page_visuals .config-option__list input:first-of-type { nav-left: #tab_jfg_visuals; }
+			#rl_page_controls .config-option__list input:first-of-type { nav-left: #tab_jfg_controls; }
+			#rl_page_graphics .config-option__list input:first-of-type { nav-left: #tab_jfg_graphics; }
 			#rl_page_textures .config-option__list input:first-of-type { nav-left: #tab_jfg_textures; }
-			#rl_page_graphics .config-option__list input:first-of-type { nav-left: #tab_graphics; }
-			#rl_page_sound .config-option__list input:first-of-type { nav-left: #tab_sound; }
-			#rl_page_general .config-option__list input:first-of-type { nav-left: #tab_general; }
 		</style>
 	</head>
 	<body>
@@ -240,21 +238,19 @@
 								data-event-focus="set_page('play')" data-style-nav-right="rom_valid ? '#rl_start' : '#rl_browse'"
 								style="nav-up: #nav_exit; nav-down: #tab_jfg_profiles;">Play</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_profiles" class="rl-btn" data-class-rl-active="page == 'profiles'"
-								data-event-focus="set_page('profiles')" style="nav-up: #nav_play; nav-down: #tab_jfg_gameplay; nav-right: auto;">Profiles</button></div>
+								data-event-focus="set_page('profiles')" style="nav-up: #nav_play; nav-down: #tab_jfg_general; nav-right: auto;">Profiles</button></div>
+							<div class="rl-btn-shadow"><button id="tab_jfg_general" class="rl-btn" data-class-rl-active="page == 'general'"
+								data-event-focus="set_page('general')" style="nav-up: #tab_jfg_profiles; nav-down: #tab_jfg_gameplay; nav-right: #jfg_main_volume_input;">General</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_gameplay" class="rl-btn" data-class-rl-active="page == 'gameplay'"
-								data-event-focus="set_page('gameplay')" style="nav-up: #tab_jfg_profiles; nav-down: #tab_jfg_visuals; nav-right: #jfg_no_blood_on;">Gameplay</button></div>
-							<div class="rl-btn-shadow"><button id="tab_jfg_visuals" class="rl-btn" data-class-rl-active="page == 'visuals'"
-								data-event-focus="set_page('visuals')" style="nav-up: #tab_jfg_gameplay; nav-down: #tab_graphics; nav-right: #jfg_widescreen_on;">Visuals</button></div>
-							<div class="rl-btn-shadow"><button id="tab_graphics" class="rl-btn" data-class-rl-active="page == 'graphics'"
-								data-event-focus="set_page('graphics')" style="nav-up: #tab_jfg_visuals; nav-down: #tab_sound; nav-right: #res_original;">Graphics</button></div>
-							<div class="rl-btn-shadow"><button id="tab_sound" class="rl-btn" data-class-rl-active="page == 'sound'"
-								data-event-focus="set_page('sound')" style="nav-up: #tab_graphics; nav-down: #tab_controls; nav-right: #main_volume_input;">Sound</button></div>
-							<div class="rl-btn-shadow"><button id="tab_controls" class="rl-btn" data-class-rl-active="page == 'controls'"
-								data-event-focus="set_page('controls')" style="nav-up: #tab_sound; nav-down: #tab_general; nav-right: #cont_kb_toggle;">Controls</button></div>
-							<div class="rl-btn-shadow"><button id="tab_general" class="rl-btn" data-class-rl-active="page == 'general'"
-								data-event-focus="set_page('general')" style="nav-up: #tab_controls; nav-down: #tab_jfg_textures; nav-right: #joystick_deadzone_input;">Stick &amp; Rumble</button></div>
+								data-event-focus="set_page('gameplay')" style="nav-up: #tab_jfg_general; nav-down: #tab_jfg_controls; nav-right: #jfg_auto_save_on;">Gameplay</button></div>
+							<div class="rl-btn-shadow"><button id="tab_jfg_controls" class="rl-btn" data-class-rl-active="page == 'controls'"
+								data-event-focus="set_page('controls')" style="nav-up: #tab_jfg_gameplay; nav-down: #tab_controls; nav-right: #jfg_dual_stick_on;">Controls</button></div>
+							<div class="rl-btn-shadow"><button id="tab_controls" class="rl-btn" data-class-rl-active="page == 'bindings'"
+								data-event-focus="set_page('bindings')" style="nav-up: #tab_jfg_controls; nav-down: #tab_jfg_graphics; nav-right: #cont_kb_toggle;">Bindings</button></div>
+							<div class="rl-btn-shadow"><button id="tab_jfg_graphics" class="rl-btn" data-class-rl-active="page == 'graphics'"
+								data-event-focus="set_page('graphics')" style="nav-up: #tab_controls; nav-down: #tab_jfg_textures; nav-right: #jfg_wm_option_0;">Graphics</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_textures" class="rl-btn" data-class-rl-active="page == 'textures'"
-								data-event-focus="set_page('textures')" style="nav-up: #tab_general; nav-down: #nav_about; nav-right: #jfg_pack_0;">Texture Packs</button></div>
+								data-event-focus="set_page('textures')" style="nav-up: #tab_jfg_graphics; nav-down: #nav_about; nav-right: #jfg_pack_0;">Texture Packs</button></div>
 							<div class="rl-btn-shadow"><button id="nav_about" class="rl-btn" data-class-rl-active="page == 'about'"
 								data-event-focus="set_page('about')" style="nav-up: #tab_jfg_textures; nav-down: #nav_exit;">About</button></div>
 							<div class="rl-separator"></div>
@@ -308,11 +304,11 @@
 									<div class="rl-start-note" data-if="!rom_valid">Load a ROM to start.</div>
 									<div class="rl-keys">
 										<div class="rl-heading">While playing</div>
-										<div class="rl-key-row"><div class="rl-key">Select / Esc</div><div>This settings menu (Profiles, Gameplay, Visuals, Textures and the rest)</div></div>
+										<div class="rl-key-row"><div class="rl-key">Select / Esc</div><div>This settings menu (Profiles, General, Gameplay, Controls, Graphics and the rest)</div></div>
 										<div class="rl-key-row"><div class="rl-key">F10</div><div>Tools bar: cheats, level warp, items, weapons, texture packs (Alt: back to the game)</div></div>
 										<div class="rl-key-row"><div class="rl-key">F9</div><div>The original all-in-one debug window</div></div>
 										<div class="rl-key-row"><div class="rl-key">F5 / F6</div><div>Back to the title screen / next texture pack</div></div>
-										<div class="rl-key-row"><div class="rl-key">F7</div><div>Fly camera for screenshots (Visuals has its settings)</div></div>
+										<div class="rl-key-row"><div class="rl-key">F7</div><div>Fly camera for screenshots (General has its settings)</div></div>
 										<div class="rl-key-row"><div class="rl-key">F11 / Alt+Enter</div><div>Fullscreen</div></div>
 									</div>
 									<div class="rl-action-shadow rl-changelogs"><button id="rl_changelogs" class="rl-action rl-action--outline" data-event-click="show_changelog()" style="nav-left: #nav_play;">Changelogs</button></div>
@@ -322,11 +318,20 @@
 								<div class="rl-page" id="rl_page_profiles" data-if="page == 'profiles'">
 									<div class="rl-tpl" data-model="jfg_profiles_model"><template src="config-menu__jfg_profiles"/></div>
 								</div>
+								<div class="rl-page" id="rl_page_general" data-if="page == 'general'">
+									<div class="rl-tpl" data-model="jfg_general_model"><template src="config-menu__jfg_general"/></div>
+								</div>
 								<div class="rl-page" id="rl_page_gameplay" data-if="page == 'gameplay'">
 									<div class="rl-tpl" data-model="jfg_gameplay_model"><template src="config-menu__jfg_gameplay"/></div>
 								</div>
-								<div class="rl-page" id="rl_page_visuals" data-if="page == 'visuals'">
-									<div class="rl-tpl" data-model="jfg_visuals_model"><template src="config-menu__jfg_visuals"/></div>
+								<div class="rl-page" id="rl_page_controls" data-if="page == 'controls'">
+									<div class="rl-tpl" data-model="jfg_controls_model"><template src="config-menu__jfg_controls"/></div>
+								</div>
+								<div class="rl-page" id="rl_page_bindings" data-if="page == 'bindings'">
+									<div class="rl-tpl" data-model="controls_model"><template src="config-menu__controls"/></div>
+								</div>
+								<div class="rl-page" id="rl_page_graphics" data-if="page == 'graphics'">
+									<div class="rl-tpl" data-model="jfg_graphics_model"><template src="config-menu__jfg_graphics"/></div>
 								</div>
 								<div class="rl-page" id="rl_page_textures" data-if="page == 'textures'">
 									<div class="rl-pack-note">
@@ -334,18 +339,6 @@
 										<button class="rl-link rl-link--inline" data-event-click="open_url('https://vibintoast.com/projects/jfg-4k')" style="nav-left: #tab_jfg_textures; nav-up: none; nav-down: #jfg_pack_0;">More info: vibintoast.com/content/textures/jfg-4k.html</button>
 									</div>
 									<div class="rl-tpl" data-model="jfg_textures_model"><template src="config-menu__jfg_textures"/></div>
-								</div>
-								<div class="rl-page" id="rl_page_graphics" data-if="page == 'graphics'">
-									<div class="rl-tpl" data-model="graphics_model"><template src="config-menu__graphics"/></div>
-								</div>
-								<div class="rl-page" id="rl_page_sound" data-if="page == 'sound'">
-									<div class="rl-tpl" data-model="sound_options_model"><template src="config-menu__sound"/></div>
-								</div>
-								<div class="rl-page" id="rl_page_controls" data-if="page == 'controls'">
-									<div class="rl-tpl" data-model="controls_model"><template src="config-menu__controls"/></div>
-								</div>
-								<div class="rl-page" id="rl_page_general" data-if="page == 'general'">
-									<div class="rl-tpl" data-model="general_model"><template src="config-menu__general"/></div>
 								</div>
 
 								<!-- About -->
