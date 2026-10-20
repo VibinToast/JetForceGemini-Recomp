@@ -223,6 +223,7 @@
 			.rl-page .button.jfg-selected:hover, .rl-page .button.jfg-selected:focus { background-color: #1E90E8; border-color: #FFB21A; color: #050B1C; }
 			/* The Textures page's pack cards (as in config_menu.rml, at the launcher's size) and the focused pack's details. */
 			.rl-page .jfg-pack-list { display: block; width: 100%; margin-top: 12dp; }
+			.rl-page .jfg-pack-join { display: block; margin: 10dp 10dp 0dp; font-size: 16dp; line-height: 24dp; color: #FFB21A; }
 			.rl-page .jfg-pack { display: flex; flex-direction: row; align-items: center; width: 100%; box-sizing: border-box; margin: 0dp 0dp 10dp; padding: 10dp;
 				text-align: left; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
 			.rl-page .jfg-pack__thumb { flex: 0 0 auto; width: 60dp; height: 60dp; margin-right: 18dp; background-color: rgba(3, 8, 22, 0.8); }

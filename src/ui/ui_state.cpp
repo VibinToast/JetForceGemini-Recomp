@@ -40,6 +40,7 @@
 void jfg_config_menu_refresh(); // JFG PORT: src/ui/ui_config.cpp
 void jfg_config_step_tab(int dir); // JFG PORT: src/ui/ui_config.cpp
 void jfg_launcher_ui_tick(); // JFG PORT: src/ui/ui_launcher.cpp
+void jfg_config_pack_join_tick(); // JFG PORT: src/ui/ui_config.cpp (split texture packs)
 void jfg_launcher_step_page(int dir); // JFG PORT: src/ui/ui_launcher.cpp (controller: LB / RB)
 void jfg_launcher_start_pressed(); // JFG PORT: src/ui/ui_launcher.cpp (controller: Start)
 void jfg_launcher_scroll(float pixels); // JFG PORT: src/ui/ui_launcher.cpp (controller: right stick)
@@ -1019,6 +1020,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
         prev_height = height;
 
         jfg_launcher_ui_tick(); // JFG PORT: animates the launcher's About page
+        jfg_config_pack_join_tick(); // JFG PORT: joins split texture packs, shows the progress
         ui_state->context->Update();
         ui_state->context->Render();
         ui_state->render_interface.end(command_list, swap_chain_framebuffer);
