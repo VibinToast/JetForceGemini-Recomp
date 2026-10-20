@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
-project(JFGRecomp VERSION 1.0.0 LANGUAGES C CXX)
+# JFG PORT: the version comes from version.txt (the release workflow updates it); the launcher shows it.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/version.txt" JFG_VERSION LIMIT_COUNT 1)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/version.txt")
+project(JFGRecomp VERSION ${JFG_VERSION} LANGUAGES C CXX)
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -103,6 +106,7 @@ add_custom_target(MakeRecompControllerDB
 # Main executable
 add_executable(JetForceGeminiRecompiled)
 add_dependencies(JetForceGeminiRecompiled MakeRecompControllerDB)
+target_compile_definitions(JetForceGeminiRecompiled PRIVATE JFG_VERSION_STRING="${JFG_VERSION}")
 
 if (APPLE)
     set_target_properties(JetForceGeminiRecompiled PROPERTIES
