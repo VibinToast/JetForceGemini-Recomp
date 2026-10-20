@@ -3134,9 +3134,18 @@ diff -ruN a/src/contrib/miniz/miniz.c b/src/contrib/miniz/miniz.c
                  if (((mz_uint64)MZ_READ_LE32(p + MZ_ZIP_CDH_LOCAL_HEADER_OFS) + MZ_ZIP_LOCAL_DIR_HEADER_SIZE + comp_size) > pZip->m_archive_size)
                      return mz_zip_set_error(pZip, MZ_ZIP_INVALID_HEADER_OR_CORRUPTED);
 diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
---- a/src/hle/rt64_workload_queue.cpp	2026-10-19 14:13:05.484056800 -0500
-+++ b/src/hle/rt64_workload_queue.cpp	2026-10-19 14:13:05.485058300 -0500
-@@ -93,11 +93,29 @@
+--- a/src/hle/rt64_workload_queue.cpp	2026-10-19 23:30:17.000000000 -0500
++++ b/src/hle/rt64_workload_queue.cpp	2026-10-19 23:30:17.000000000 -0500
+@@ -50,6 +50,8 @@
+         barrierCursor = int(workloads.size()) - 1;
+         workloadId = 0;
+         lastPresentId = 0;
++        jfgHeldFrameIndex = -1; // JFG PORT
++        jfgBarrierOwed = false;
+     }
+ 
+     void WorkloadQueue::advanceToNextWorkload() {
+@@ -93,11 +95,29 @@
          std::unique_lock<std::mutex> threadLock(threadMutex);
      }
  
@@ -3167,7 +3176,7 @@ diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
      }
  
      void WorkloadQueue::setup(const External &ext) {
-@@ -126,7 +144,7 @@
+@@ -126,7 +146,7 @@
      }
  
      void WorkloadQueue::threadConfigurationUpdate(hlslpp::uint2 viFbSize, WorkloadConfiguration &workloadConfig) {
@@ -3176,7 +3185,7 @@ diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
          const bool sizeChanged = ext.sharedResources->swapChainSizeChanged;
          ext.sharedResources->swapChainSizeChanged = false;
          
-@@ -261,11 +279,17 @@
+@@ -261,11 +281,17 @@
          if (ext.sharedResources->fbConfigChanged || sizeChanged) {
              {
                  // Wait until the other queue has stopped using the interpolated color targets.
@@ -3195,7 +3204,7 @@ diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
              }
  
              std::scoped_lock<std::mutex> managerLock(ext.sharedResources->managerMutex);
-@@ -811,7 +835,7 @@
+@@ -811,7 +837,7 @@
                      }
  
                      // Do the resolve if using MSAA while target override is active and we're on the correct framebuffer pair index.
@@ -3204,7 +3213,59 @@ diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
                          overrideTarget->resize(ext.workloadGraphicsWorker, colorTarget->width, colorTarget->height);
                          overrideTarget->resolveFromTarget(ext.workloadGraphicsWorker, colorTarget, ext.shaderLibrary);
                      }
-@@ -1000,6 +1024,13 @@
+@@ -971,10 +997,49 @@
+                 workloadProfiler.start();
+                 threadConfigurationUpdate(workload.viFbSize, workloadConfig);
+ 
++                // JFG PORT: an off-screen workload draws only into images narrower than the screen (Jet Force Gemini draws its
++                // character shadow texture, 64 wide, as a task of its own before each frame). RT64 takes one workload as one
++                // frame, so in a level every screen frame was matched against the shadow texture instead of the screen frame
++                // before it, and the shadow workload, which has nothing to interpolate, reset the tick count: interpolation
++                // never added a frame (screen rate stayed at the game's 60). An off-screen workload now leaves the tick count
++                // and the interpolated frame counters alone, and the screen frame before it is kept to match the next one
++                // against (with its workload: the barrier waits, once).
++                bool jfgHoldBarrier = false;
++                bool jfgOffscreen = !workload.paused && (workload.fbPairCount > 0) && (workload.viFbSize.x > 0);
++                for (uint32_t f = 0; jfgOffscreen && (f < workload.fbPairCount); f++) {
++                    if (workload.fbPairs[f].colorImage.width >= workload.viFbSize.x) {
++                        jfgOffscreen = false;
++                    }
++                }
++
+                 // FIXME: This is a very hacky way to find out if we need to advance the frame if the workload was paused for the first time.
+                 if (!workload.paused || (!gameFrames[curFrameIndex].workloads.empty() && (gameFrames[curFrameIndex].workloads[0] != (uint32_t)processCursor))) {
+-                    prevFrameIndex = curFrameIndex;
+-                    curFrameIndex = (curFrameIndex + 1) % gameFrames.size();
++                    uint32_t jfgMatchIndex = curFrameIndex;
++                    if (jfgOffscreen) {
++                        // Hold the screen frame before it. A second off-screen workload in a row lets it go: the barrier is
++                        // only ever held back by one workload.
++                        if ((jfgHeldFrameIndex < 0) && !gameFrames[curFrameIndex].workloads.empty()) {
++                            jfgHeldFrameIndex = int32_t(curFrameIndex);
++                            jfgHoldBarrier = true;
++                        }
++                        else {
++                            jfgHeldFrameIndex = -1;
++                        }
++                    }
++                    else if (jfgHeldFrameIndex >= 0) {
++                        jfgMatchIndex = uint32_t(jfgHeldFrameIndex);
++                    }
++
++                    uint32_t nextFrameIndex = (curFrameIndex + 1) % gameFrames.size();
++                    if (int32_t(nextFrameIndex) == jfgHeldFrameIndex) {
++                        nextFrameIndex = (nextFrameIndex + 1) % gameFrames.size();
++                    }
++
++                    prevFrameIndex = jfgMatchIndex;
++                    curFrameIndex = nextFrameIndex;
++                    if (!jfgOffscreen) {
++                        jfgHeldFrameIndex = -1;
++                    }
+                 }
+                 
+                 // TODO: The frame detection needs to be more elaborate than just matching one workload to one frame.
+@@ -1000,6 +1065,13 @@
                              continue;
                          }
  
@@ -3218,6 +3279,95 @@ diff -ruN a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
                          const auto &colorImg = fbPair.colorImage;
                          if (colorSet.find(colorImg.address) != colorSet.end()) {
                              continue;
+@@ -1046,7 +1118,7 @@
+                     generateInterpolatedFrames = !workload.paused && displayRateAboveOriginal && !interpolationTargetKey.isEmpty();
+ 
+                     const bool resetTicks = !generateInterpolatedFrames || (originalRateForTicks != workload.viOriginalRate) || (displayRateForTicks != workloadConfig.targetRate) || !displayRateAboveOriginal;
+-                    if (resetTicks) {
++                    if (resetTicks && !jfgOffscreen) { // JFG PORT: !jfgOffscreen
+                         logicalTicks = 0;
+                         displayTicks = 0;
+                         originalRateForTicks = workload.viOriginalRate;
+@@ -1078,8 +1150,11 @@
+                 ext.sharedResources->viOriginalRate = workload.viOriginalRate;
+                 
+                 // Get the current and previous set of frame counters. The other set can be in use by the present queue. Skip if no new present event has arrived before this workload event.
+-                InterpolatedFrameCounters &prevFrameCounters = ext.sharedResources->interpolatedFrames[ext.sharedResources->interpolatedFramesIndex];
+-                const bool useDifferentCounters = (lastPresentId != workload.presentId);
++                // JFG PORT: an off-screen workload gets counters of its own: the shared ones belong to the screen frames (taking
++                // them would let the next screen frame draw over interpolated frames that are still being presented).
++                InterpolatedFrameCounters jfgOffscreenCounters;
++                InterpolatedFrameCounters &prevFrameCounters = jfgOffscreen ? jfgOffscreenCounters : ext.sharedResources->interpolatedFrames[ext.sharedResources->interpolatedFramesIndex];
++                const bool useDifferentCounters = !jfgOffscreen && (lastPresentId != workload.presentId);
+                 if (useDifferentCounters) {
+                     ext.sharedResources->interpolatedFramesIndex = ext.sharedResources->interpolatedFramesIndex ^ 1;
+                     lastPresentId = workload.presentId;
+@@ -1093,7 +1168,7 @@
+                     });
+                 }
+ 
+-                InterpolatedFrameCounters &curFrameCounters = ext.sharedResources->interpolatedFrames[ext.sharedResources->interpolatedFramesIndex];
++                InterpolatedFrameCounters &curFrameCounters = jfgOffscreen ? jfgOffscreenCounters : ext.sharedResources->interpolatedFrames[ext.sharedResources->interpolatedFramesIndex];
+                 curFrameCounters.skipped = false;
+                 curFrameCounters.presented = 0;
+                 curFrameCounters.available = 0;
+@@ -1222,7 +1297,18 @@
+                 threadConfigurationValidate();
+ 
+                 if (!workload.paused) {
+-                    threadAdvanceBarrier();
++                    // JFG PORT: an off-screen workload that holds the screen frame before it leaves the barrier on that
++                    // frame's workload; the next one catches up.
++                    if (jfgHoldBarrier) {
++                        jfgBarrierOwed = true;
++                    }
++                    else {
++                        threadAdvanceBarrier();
++                        if (jfgBarrierOwed) {
++                            jfgBarrierOwed = false;
++                            threadAdvanceBarrier();
++                        }
++                    }
+                 }
+ 
+                 processCursor = -1;
+diff -ruN a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
+--- a/src/hle/rt64_workload_queue.h	2026-10-19 23:30:17.000000000 -0500
++++ b/src/hle/rt64_workload_queue.h	2026-10-19 23:30:17.000000000 -0500
+@@ -79,6 +79,9 @@
+         std::mutex workerMutex;
+         std::mutex threadMutex;
+         std::atomic<bool> threadsRunning = false;
++        // JFG PORT: the present queue is waiting for a workload that is not done yet (written under interpolatedMutex).
++        // It has finished every earlier present, so interpolated frames still counted as available will never be shown.
++        bool jfgPresentBlocked = false;
+         std::atomic<bool> rtEnabled = false;
+         std::atomic<bool> ubershadersOnly = false;
+         std::atomic<bool> ubershadersVisible = false;
+@@ -97,9 +100,13 @@
+         ProfilingTimer rendererGPUProfiler = ProfilingTimer(120);
+         ProfilingTimer matchingProfiler = ProfilingTimer(120);
+         ProfilingTimer workloadProfiler = ProfilingTimer(120);
+-        std::array<GameFrame, 2> gameFrames;
++        // JFG PORT: three frames, so the last screen frame can be kept as the one to match against while an off-screen
++        // workload (one that draws no screen-sized image, see renderThreadLoop) takes a frame of its own.
++        std::array<GameFrame, 3> gameFrames;
+         uint32_t prevFrameIndex = uint32_t(gameFrames.size()) - 1;
+         uint32_t curFrameIndex = 0;
++        int32_t jfgHeldFrameIndex = -1; // the screen frame kept while an off-screen workload runs, -1 = none
++        bool jfgBarrierOwed = false;    // its workload is kept too: the barrier advances twice after the next one
+ 
+         WorkloadQueue();
+         ~WorkloadQueue();
+@@ -108,7 +115,7 @@
+         void repeatLastWorkload();
+         uint32_t previousWriteCursor() const;
+         void waitForIdle();
+-        void waitForWorkloadId(uint64_t waitId);
++        void waitForWorkloadId(uint64_t waitId, bool presentQueue = false); // JFG PORT: presentQueue, see jfgPresentBlocked
+         void setup(const External &ext);
+         void updateMultisampling();
+         void threadConfigurationUpdate(hlslpp::uint2 viFbSize, WorkloadConfiguration &workloadConfig);
 diff -ruN a/src/hle/rt64_workload.h b/src/hle/rt64_workload.h
 --- a/src/hle/rt64_workload.h	2026-10-19 03:12:17.680009800 -0500
 +++ b/src/hle/rt64_workload.h	2026-10-19 03:12:17.683009300 -0500
@@ -3240,28 +3390,6 @@ diff -ruN a/src/hle/rt64_workload.cpp b/src/hle/rt64_workload.cpp
          drawData.prevViewTransforms.clear();
          drawData.prevProjTransforms.clear();
          drawData.prevViewProjTransforms.clear();
-diff -ruN a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
---- a/src/hle/rt64_workload_queue.h	2026-10-19 14:13:05.548056000 -0500
-+++ b/src/hle/rt64_workload_queue.h	2026-10-19 14:13:05.548056000 -0500
-@@ -79,6 +79,9 @@
-         std::mutex workerMutex;
-         std::mutex threadMutex;
-         std::atomic<bool> threadsRunning = false;
-+        // JFG PORT: the present queue is waiting for a workload that is not done yet (written under interpolatedMutex).
-+        // It has finished every earlier present, so interpolated frames still counted as available will never be shown.
-+        bool jfgPresentBlocked = false;
-         std::atomic<bool> rtEnabled = false;
-         std::atomic<bool> ubershadersOnly = false;
-         std::atomic<bool> ubershadersVisible = false;
-@@ -108,7 +111,7 @@
-         void repeatLastWorkload();
-         uint32_t previousWriteCursor() const;
-         void waitForIdle();
--        void waitForWorkloadId(uint64_t waitId);
-+        void waitForWorkloadId(uint64_t waitId, bool presentQueue = false); // JFG PORT: presentQueue, see jfgPresentBlocked
-         void setup(const External &ext);
-         void updateMultisampling();
-         void threadConfigurationUpdate(hlslpp::uint2 viFbSize, WorkloadConfiguration &workloadConfig);
 diff -ruN a/src/render/rt64_framebuffer_renderer_call.h b/src/render/rt64_framebuffer_renderer_call.h
 --- a/src/render/rt64_framebuffer_renderer_call.h	2026-10-19 16:01:08.550375700 -0500
 +++ b/src/render/rt64_framebuffer_renderer_call.h	2026-10-19 16:01:08.550375700 -0500
