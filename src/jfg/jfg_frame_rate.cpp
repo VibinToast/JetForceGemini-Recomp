@@ -16,6 +16,8 @@
 #include "jfg_port.h"
 #include "jfg_rt64.h"
 
+extern std::atomic_bool exited; // N64ModernRuntime (librecomp/src/recomp.cpp): the game is closing
+
 namespace jfg {
 
 std::atomic<float> g_fps{ 0.0f }; // game frames per second, for the "Show FPS" option
@@ -434,11 +436,90 @@ extern "C" void jfg_squad_draw_end(uint8_t* rdram) {
     }
 }
 
+// --- Frame step and slow motion (testing) ---------------------------------------------------------------------------
+// For looking at motion one frame at a time. The game thread is held at the entry of viFrameSync, after a tick has
+// built its frame and before it is swapped in, so every tick runs exactly as it would (the 60 fps squad cadence
+// included) and only the time between ticks changes. End freezes and unfreezes, F8 runs one more tick while
+// frozen (held down: steps at the key repeat rate). The picture on screen is the frame before the one held, so each
+// step shows the next frame in order.
+// Tests (no key presses): JFG_DEBUG_STEP=<file> freezes once the file holds a number and runs as many ticks as that
+// number, counted from when it first appeared (write 0, capture, write 1, capture, ...); -1 runs freely again. JFG_DEBUG_SLOWMO=<factor>
+// makes each tick last <factor> times as long.
+// After a hold, the retraces counted meanwhile are dropped, so the game does not take the hold for a slow frame
+// (it would fall to 20 fps at the original rate) and the next tick simulates its usual time.
+namespace {
+std::atomic<bool> g_step_frozen{ false };
+std::atomic<int> g_step_requests{ 0 };
+}
+
+// From the SDL event filter (jfg_tools_key, any thread): End pressed (step = false), or F8 (step = true).
+void frame_step_key(bool step) {
+    if (!step) {
+        const bool frozen = !g_step_frozen.load();
+        g_step_requests.store(0);
+        g_step_frozen.store(frozen);
+        std::fprintf(stderr, "[jfg] frame step %s (F8: one frame)\n", frozen ? "on" : "off");
+    }
+    else if (g_step_frozen.load()) {
+        if (g_step_requests.load() < 2) g_step_requests.fetch_add(1);
+    }
+}
+
+namespace {
+// The number in the JFG_DEBUG_STEP file: -2 while there has been none, -1 = run freely. While the file is being
+// written (empty, or locked by the writer) the last number read stands.
+int step_file_target() {
+    static const char* const path = std::getenv("JFG_DEBUG_STEP");
+    static int last = -2;
+    if (path == nullptr) return -2;
+    FILE* f = std::fopen(path, "r");
+    if (f == nullptr) return last;
+    int n = 0;
+    if (std::fscanf(f, "%d", &n) == 1) last = n;
+    std::fclose(f);
+    return last;
+}
+
+void frame_step_hold(recomp_context* ctx) {
+    static const double slowmo = std::getenv("JFG_DEBUG_SLOWMO") ? std::atof(std::getenv("JFG_DEBUG_SLOWMO")) : 1.0;
+    static const bool scripted = std::getenv("JFG_DEBUG_STEP") != nullptr;
+    static int file_steps = 0;     // ticks run since the step file appeared
+    static auto last_tick = std::chrono::steady_clock::now();
+    bool held = false;
+    if (slowmo > 1.0) {
+        // A tick normally lasts its video frames at 60 a second.
+        const uint32_t frames = g.frame_rate >= 1 ? 1u : std::max<uint32_t>(rd8(0x800FECAC /* gVideoDeltaTime */), 1u);
+        const auto until = last_tick + std::chrono::microseconds((long long)(slowmo * frames * 1000000.0 / 60.0));
+        while (std::chrono::steady_clock::now() < until && !exited.load()) { std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
+        held = true;
+    }
+    for (int polls = 0; !exited.load(); polls++) {
+        if (scripted && polls % 4 == 0) {
+            const int target = step_file_target();
+            if (target == -2 || target == -1) break;
+            if (file_steps < target) { file_steps++; std::fprintf(stderr, "[jfg] frame step %d: tick %u\n", file_steps, g_game_ticks); break; }
+        }
+        else if (!scripted) {
+            if (!g_step_frozen.load()) break;
+            if (g_step_requests.load() > 0) { g_step_requests.fetch_sub(1); std::fprintf(stderr, "[jfg] frame step: tick %u\n", g_game_ticks); break; }
+        }
+        held = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    if (held) {
+        constexpr uint32_t ADDR_gVideoMesgQueue = 0x800FEB80;
+        while ((int32_t)call_game(osRecvMesg_recomp, ctx, { ADDR_gVideoMesgQueue, 0, 0 /* NOBLOCK */ }) != -1) {}
+    }
+    last_tick = std::chrono::steady_clock::now();
+}
+}
+
 // Entry of viFrameSync(mesg). Returns 1 when the call has been handled here (skip in progress).
 // Frame pacing log (JFG_DEBUG_PACING=1): per tick, how long the tick took up to viFrameSync and in viFrameSync.
 std::chrono::steady_clock::time_point g_pace_tick_start, g_pace_sync_start;
 extern "C" int jfg_vi_skip(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
+    if (!g.skipping) frame_step_hold(ctx);
     g_pace_sync_start = std::chrono::steady_clock::now(); { static const bool pl = std::getenv("JFG_DEBUG_PACING") != nullptr; if (pl) std::fprintf(stderr, "[pace] vi queue at entry: %d\n", (int)rd32(0x800FEB80 + 8)); }
     if (g.frame_rate >= 1 && !g.skipping) {
         // 60 fps. viFrameSync waits until gVideoDeltaTime retraces have been counted (runInOneFrame makes that 1) and

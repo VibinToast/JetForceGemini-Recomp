@@ -702,7 +702,7 @@ void tools_game_tick(recomp_context* ctx) {
 
 } // namespace jfg
 
-// F10 and Alt, from the SDL event filter (src/debug_ui/backend.cpp; any thread). Alt counts when it is pressed and
+// F10, Alt, and End and F8 for frame step (jfg_frame_rate.cpp), from the SDL event filter (src/debug_ui/backend.cpp; any thread). Alt counts when it is pressed and
 // released with no other key in between, like a Windows menu bar.
 extern "C" void jfg_tools_key(int scancode, int down, int repeat) {
     static bool alt_alone = false;
@@ -710,7 +710,9 @@ extern "C" void jfg_tools_key(int scancode, int down, int repeat) {
     if (down && !repeat) {
         alt_alone = alt;
         if (scancode == SDL_SCANCODE_F10) jfg::g_toggle_request = true;
+        if (scancode == SDL_SCANCODE_END) jfg::frame_step_key(false);
     }
+    if (down && scancode == SDL_SCANCODE_F8) jfg::frame_step_key(true); // repeats while held
     else if (!down && alt) {
         if (alt_alone) jfg::g_alt_request = true;
         alt_alone = false;
