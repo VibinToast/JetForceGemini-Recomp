@@ -43,11 +43,12 @@ std::atomic<float> g_toolbar_height{ 0.0f };
 namespace {
 namespace ui = recompui;
 
-// --- look (dark, like a Windows menu bar) ----------------------------------------------------------------------------
-constexpr ui::Color BAR_BG{ 32, 32, 32, 245 }, PANEL_BG{ 43, 43, 43, 250 }, BORDER{ 75, 75, 75, 255 };
-constexpr ui::Color TEXT{ 240, 240, 240, 255 }, TEXT_DIM{ 160, 160, 160, 255 }, ACCENT{ 96, 205, 255, 255 };
-constexpr ui::Color BUTTON_BG{ 55, 55, 55, 255 }, BUTTON_HOVER{ 75, 75, 75, 255 }, ON_BG{ 40, 120, 70, 255 }, ON_HOVER{ 50, 145, 85, 255 };
-constexpr ui::Color DRAWER_BG{ 36, 36, 36, 255 }, LIST_BG{ 30, 30, 30, 255 }, NO_BORDER{ 0, 0, 0, 0 };
+// --- look (a menu bar in Jet Force Gemini colours, as the launcher: space navy, "Gemini" cyan, emblem gold) ---------
+constexpr ui::Color BAR_BG{ 5, 11, 28, 245 }, PANEL_BG{ 11, 23, 51, 250 }, BORDER{ 31, 61, 115, 255 };
+constexpr ui::Color TEXT{ 232, 243, 255, 255 }, TEXT_DIM{ 129, 153, 191, 255 }, ACCENT{ 60, 200, 255, 255 };
+constexpr ui::Color BUTTON_BG{ 14, 30, 66, 255 }, BUTTON_HOVER{ 26, 56, 118, 255 }, ON_BG{ 20, 104, 184, 255 }, ON_HOVER{ 30, 144, 232, 255 };
+constexpr ui::Color DRAWER_BG{ 8, 17, 40, 255 }, LIST_BG{ 6, 13, 32, 255 }, NO_BORDER{ 0, 0, 0, 0 };
+constexpr ui::Color GOLD{ 255, 178, 26, 255 };
 constexpr float FONT = 15.0f, FONT_SMALL = 13.0f;
 
 // --- game thread <-> UI thread ---------------------------------------------------------------------------------------
@@ -144,7 +145,9 @@ ui::Element* column(ui::Element* parent, float gap = 4.0f) {
 }
 
 void style_button(ui::Button* b, ui::Color bg, ui::Color hover) {
-    b->set_padding_top(4.0f); b->set_padding_bottom(4.0f); b->set_padding_left(10.0f); b->set_padding_right(10.0f);
+    // Less below than above: the line box keeps room under the letters for descenders, so equal padding left a bigger
+    // gap under the text than over it (measured on a capture: 3 / 2 gives the same space above and below in the bar).
+    b->set_padding_top(3.0f); b->set_padding_bottom(2.0f); b->set_padding_left(10.0f); b->set_padding_right(10.0f);
     b->set_border_radius(3.0f);
     b->set_border_width(1.0f);
     b->set_border_color(BORDER);
@@ -314,7 +317,7 @@ void set_captures(bool captures) {
     if (!captures) close_menus();
     if (t.input_status != nullptr) {
         t.input_status->set_text(captures ? "Mouse & keys: tools  (Alt / click outside: game)" : "Mouse & keys: game  (Alt: tools)");
-        t.input_status->set_color(captures ? ACCENT : ui::Color{ 120, 220, 120, 255 });
+        t.input_status->set_color(captures ? ACCENT : GOLD);
     }
 }
 

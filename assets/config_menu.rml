@@ -33,17 +33,36 @@
 	<link type="text/template" href="config_menu/jfg_graphics.rml" />
 	<link type="text/template" href="config_menu/jfg_textures.rml" />
 	<style>
-		.jfg-selected { border-color: #e9cd35; background-color: rgba(233, 205, 53, 0.35); color: #f2f2f2; }
-		.jfg-note { color: #e9cd35; }
+		.jfg-selected { border-color: #3cc8ff; background-color: rgba(60, 200, 255, 0.35); color: #e8f3ff; }
+		.jfg-note { color: #3cc8ff; }
+		/* JFG PORT: group headings in the emblem gold, as in the launcher (the options and selections are "Gemini" cyan). */
+		.config-group__title { color: #ffb21a; }
+		/* The chosen choice of each option, the open tab and the sliders in "Gemini" cyan, the window edge in the
+		   launcher's border blue (recomp.rcss has them white). */
+		.config-option__list input.radio:not(:disabled):checked+.config-option__tab-label { border-color: #3cc8ff; color: #3cc8ff; }
+		.tab:selected { color: #3cc8ff; }
+		.tab:selected .tab__indicator { background-color: #3cc8ff; }
+		.config-option__list input.range slidertrack { background-color: rgba(60, 200, 255, 0.3); }
+		.config-option__list input.range sliderbar { background-color: #3cc8ff; }
+		.config-option__list input.range sliderbar:hover { background-color: #e8f3ff; }
+		.centered-page__modal { border-color: #1f3d73; }
+		/* The quit and close buttons (top right): navy with a blue edge and cyan icons; quit turns "Jet Force" red. */
+		.config__icon-buttons .icon-button { border-color: #1f3d73; background-color: rgba(11, 23, 51, 0.9); }
+		.config__icon-buttons .icon-button svg { image-color: #3cc8ff; }
+		.config__icon-buttons .icon-button:hover, .config__icon-buttons .icon-button:focus { border-color: #3cc8ff; background-color: rgba(60, 200, 255, 0.25); }
+		.config__icon-buttons .icon-button:hover svg, .config__icon-buttons .icon-button:focus svg { image-color: #e8f3ff; }
+		#config__quit-game-button svg { image-color: #e8202a; }
+		#config__quit-game-button:hover, #config__quit-game-button:focus { border-color: #e8202a; background-color: rgba(232, 32, 42, 0.3); }
+		#config__quit-game-button:hover svg, #config__quit-game-button:focus svg { image-color: #e8f3ff; }
 		/* JFG PORT: the focused option's description (the port's tabs): the option's name as a heading and larger,
-		   brighter text with more space between lines, set off by a gold bar. */
+		   brighter text with more space between lines, set off by a cyan bar. */
 		.jfg-desc { padding: 32dp 36dp; }
-		/* The port's options sit slightly in from their group's heading (the yellow titles). */
+		/* The port's options sit slightly in from their group's heading (the gold titles). */
 		.jfg-option { margin-left: 28dp; }
-		.jfg-desc__card { display: block; padding: 6dp 0dp 6dp 26dp; border-left: 4dp #e9cd35; }
-		.jfg-desc__title { display: block; margin-bottom: 18dp; font-size: 30dp; line-height: 38dp; letter-spacing: 2dp; font-weight: bold; color: #e9cd35; }
-		.jfg-desc p { padding: 0dp; font-size: 25dp; line-height: 39dp; letter-spacing: 0.5dp; color: #f2f2f2; }
-		.jfg-desc p b { color: #e9cd35; }
+		.jfg-desc__card { display: block; padding: 6dp 0dp 6dp 26dp; border-left: 4dp #3cc8ff; }
+		.jfg-desc__title { display: block; margin-bottom: 18dp; font-size: 30dp; line-height: 38dp; letter-spacing: 2dp; font-weight: bold; color: #ffb21a; }
+		.jfg-desc p { padding: 0dp; font-size: 25dp; line-height: 39dp; letter-spacing: 0.5dp; color: #e8f3ff; }
+		.jfg-desc p b { color: #3cc8ff; }
 		/* JFG PORT: eight tabs do not fit at the base size: they ran under the quit and close buttons (absolutely placed at
 		   the top right). Slightly smaller tabs, and the tab row keeps clear of the buttons. */
 		#config_tabset tabs { padding-right: 144dp; }

@@ -124,18 +124,18 @@ void recompui::init_prompt_context() {
     prompt_state.confirm_button->set_margin_left(12, Unit::Dp);
     prompt_state.confirm_button->set_margin_right(12, Unit::Dp);
     prompt_state.confirm_button->set_text_align(TextAlign::Center);
-    prompt_state.confirm_button->set_color(Color{ 204, 204, 204, 255 });
+    prompt_state.confirm_button->set_color(Color{ 169, 190, 221, 255 });
     prompt_state.confirm_button->add_pressed_callback(run_confirm_callback);
     
     Style* confirm_hover_style = prompt_state.confirm_button->get_hover_style();
     confirm_hover_style->set_border_color(Color{ 69, 208, 67, 255 });
     confirm_hover_style->set_background_color(Color{ 69, 208, 67, 76 });
-    confirm_hover_style->set_color(Color{ 242, 242, 242, 255 });
+    confirm_hover_style->set_color(Color{ 232, 243, 255, 255 });
     
     Style* confirm_focus_style = prompt_state.confirm_button->get_focus_style();
     confirm_focus_style->set_border_color(Color{ 69, 208, 67, 255 });
     confirm_focus_style->set_background_color(Color{ 69, 208, 67, 76 });
-    confirm_focus_style->set_color(Color{ 242, 242, 242, 255 });
+    confirm_focus_style->set_color(Color{ 232, 243, 255, 255 });
 
     prompt_state.cancel_button = context.create_element<Button>(prompt_state.prompt_controls, "", ButtonStyle::Primary);
     prompt_state.cancel_button->set_min_width(185.0f, Unit::Dp);
@@ -144,18 +144,18 @@ void recompui::init_prompt_context() {
     prompt_state.cancel_button->set_margin_left(12, Unit::Dp);
     prompt_state.cancel_button->set_margin_right(12, Unit::Dp);
     prompt_state.cancel_button->set_text_align(TextAlign::Center);
-    prompt_state.cancel_button->set_color(Color{ 204, 204, 204, 255 });
+    prompt_state.cancel_button->set_color(Color{ 169, 190, 221, 255 });
     prompt_state.cancel_button->add_pressed_callback(run_cancel_callback);
     
     Style* cancel_hover_style = prompt_state.cancel_button->get_hover_style();
-    cancel_hover_style->set_border_color(Color{ 248, 96, 57, 255 });
-    cancel_hover_style->set_background_color(Color{ 248, 96, 57, 76 });
-    cancel_hover_style->set_color(Color{ 242, 242, 242, 255 });
+    cancel_hover_style->set_border_color(Color{ 232, 32, 42, 255 });
+    cancel_hover_style->set_background_color(Color{ 232, 32, 42, 76 });
+    cancel_hover_style->set_color(Color{ 232, 243, 255, 255 });
 
     Style* cancel_focus_style = prompt_state.cancel_button->get_focus_style();
-    cancel_focus_style->set_border_color(Color{ 248, 96, 57, 255 });
-    cancel_focus_style->set_background_color(Color{ 248, 96, 57, 76 });
-    cancel_focus_style->set_color(Color{ 242, 242, 242, 255 });
+    cancel_focus_style->set_border_color(Color{ 232, 32, 42, 255 });
+    cancel_focus_style->set_background_color(Color{ 232, 32, 42, 76 });
+    cancel_focus_style->set_color(Color{ 232, 243, 255, 255 });
 
 
     context.close();
@@ -166,22 +166,22 @@ void style_button(recompui::Button* button, recompui::ButtonVariant variant) {
 
     switch (variant) {
         case recompui::ButtonVariant::Primary:
-            button_color = { 233, 205, 53, 255 };
+            button_color = { 60, 200, 255, 255 };
             break;
         case recompui::ButtonVariant::Secondary:
-            button_color = { 233, 176, 53, 255 };
+            button_color = { 255, 178, 26, 255 };
             break;
         case recompui::ButtonVariant::Tertiary:
-            button_color = { 242, 242, 242, 255 };
+            button_color = { 232, 243, 255, 255 };
             break;
         case recompui::ButtonVariant::Success:
             button_color = { 69, 208, 67, 255 };
             break;
         case recompui::ButtonVariant::Error:
-            button_color = { 248, 96, 57, 255 };
+            button_color = { 232, 32, 42, 255 };
             break;
         case recompui::ButtonVariant::Warning:
-            button_color = { 233, 205, 53, 255 };
+            button_color = { 60, 200, 255, 255 };
             break;
         default:
             assert(false);
