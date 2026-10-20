@@ -110,6 +110,7 @@ struct Tools {
     int warp_level = 0, warp_character = 1, warp_entrance = 0;
     bool captures = true;
 } t;
+std::atomic<int> g_here_level{ -1 }, g_here_entrance{ 0 }; // the current level and entrance, as the game thread last read them
 
 void style_text(ui::Label* l, float size, ui::Color color) {
     l->set_font_size(size);
@@ -487,6 +488,23 @@ void build_warp_window() {
     filter->set_font_size(FONT);
     filter->set_color(TEXT);
     filter->add_text_changed_callback([](const std::string& s) { t.level_filter = s; rebuild_level_list(); });
+    // Where the player is now (read on the game thread like the bar's status), and a button to pick it.
+    ui::Element* here = row(body);
+    add_field(here, ToolField{ ToolField::Note, "", 0, 1, 1, 1, nullptr, nullptr, [](recomp_context*) {
+        const int level = (int16_t)rd16(ADDR_currentLevel), entrance = (int16_t)rd16(ADDR_currentEntrance);
+        g_here_level = level; g_here_entrance = entrance;
+        return "Now in: level " + std::to_string(level) + " " +
+               ((level >= 0 && level < (int)g_level_names.size()) ? g_level_names[level] : std::string("?")) +
+               "   entrance " + std::to_string(entrance);
+    } }, GROUP_BAR);
+    g_bound.back().label->set_color(TEXT);
+    button(here, "Pick", []() {
+        const int level = g_here_level, entrance = g_here_entrance;
+        if (level < 0) return;
+        t.warp_level = level;
+        t.warp_entrance = std::clamp(entrance, 0, 31);
+        update_warp_choice();
+    });
     t.warp_choice = text(body, "", FONT, ACCENT);
     ui::Element* chars = row(body);
     text(chars, "Character");
