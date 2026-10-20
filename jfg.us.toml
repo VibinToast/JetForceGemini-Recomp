@@ -150,14 +150,6 @@ text = "{ void jfg_debug_frame(uint8_t*, recomp_context*); jfg_debug_frame(rdram
 func = "func_80044FAC_45BAC"
 before_vram = 0x800457BC
 text = "{ uint32_t jfg_frame_sync(uint8_t*, uint32_t); ctx->r2 = (int32_t)jfg_frame_sync(rdram, (uint32_t)ctx->r2); }"
-
-# "No blood" option: overlay 8's bloodSpurtAdd and bloodHitSpriteAdd (both return nothing) do nothing when it is on.
-# Gore options (src/jfg/jfg_gore.cpp): bloodSpurtAdd also makes the extra drops of "Blood amount" (jfg_blood_more).
-[[patches.hook]]
-func = "bloodSpurtAdd"
-before_vram = 0x820801CC
-text = "{ int jfg_no_blood(void); if (jfg_no_blood()) { recomp_exit_function(); return; } void jfg_blood_more(uint8_t*, recomp_context*); jfg_blood_more(rdram, ctx); }"
-
 # "Blood stays": bloodSpurtUpdateAll where a splat's life (+0x3C) is counted down, $s0 = the pool entry.
 [[patches.hook]]
 func = "bloodSpurtUpdateAll"

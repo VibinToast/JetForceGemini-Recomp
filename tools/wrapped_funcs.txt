@@ -11,6 +11,7 @@ mainChangeLevel
 girlBossControl
 boyBossControl
 dogBossControl
+bloodSpurtAdd
 
 # Calls between overlays from code a mod hook regenerated (jfg_mods.cpp)
 TrapDanglingJump
