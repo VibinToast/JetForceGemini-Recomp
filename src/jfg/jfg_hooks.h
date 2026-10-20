@@ -49,6 +49,11 @@ int jfg_hide_object(uint8_t* rdram, recomp_context* ctx);              // entry 
 void jfg_hide_shadow(uint8_t* rdram, recomp_context* ctx);             // shadowGenerate, per object
 void jfg_floyd_done(void);                                             // return of sidekickControl
 int jfg_floyd_mute(uint32_t id);                                       // entry of amSndPlay
+// jfg_interpolation.cpp
+void jfg_interp_object(uint8_t* rdram, recomp_context* ctx);            // entry of objPrintObject
+void jfg_interp_object_done(uint8_t* rdram, recomp_context* ctx);       // return of objPrintObject
+void jfg_interp_push(uint8_t* rdram, recomp_context* ctx);              // entry of the four matrix push functions
+void jfg_interp_pushed(uint8_t* rdram, recomp_context* ctx);            // ... after they note the matrix written
 // jfg_gameplay.cpp
 int jfg_no_blood(void);                                                // entry of bloodSpurtAdd, bloodHitSpriteAdd
 int jfg_refuel_amount(int amount);                                     // refuelControl
