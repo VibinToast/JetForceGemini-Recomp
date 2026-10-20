@@ -148,6 +148,29 @@ checks that the result is a whole pack, and deletes the parts. If a part is miss
 are left as they are and the Textures page says so; Reload Pack tries again once they have changed. If `<pack>.rtz` is
 already there, the parts are left alone.
 
+## The official pack in the launcher
+
+The launcher's Texture Packs page has a box for the official HD pack
+([JetForceGemini-HD_TexturePack](https://github.com/VibinToast/JetForceGemini-HD_TexturePack)). With **Check for
+Updates** on, it reads the latest release on GitHub and offers each size in it: **Download**, **Update** when an
+older version is installed, or **Installed**. A download shows its progress and can be cancelled; one that stops
+(no connection) carries on where it stopped when pressed again. The file is checked against GitHub's SHA-256 before it
+is used. After an update the older version of that size is deleted and, if it was the pack in use, the new one takes
+its place (a first download is chosen too, when no pack is in use).
+
+**Official HD Texture Pack** in the General settings (Launcher group), or `show_official_pack=0` in `jfg_launcher.txt`,
+hides the box; GitHub is then not asked about the pack.
+
+To publish a version, upload the files to a release (marked latest) and nothing else; their names say what they are:
+
+- `Official_Recomp_HD-<variant>_v<version>.rtz`, for example `Official_Recomp_HD-2K_v1.1.0.rtz`;
+- or, for a pack over 2 GB, its parts from `split_rtz.bat`: `Official_Recomp_HD-4K_v1.1.0.rtz.001`, `.002`. The
+  launcher downloads every part and joins them.
+
+Each pack's `credits.json` needs `"id": "Official_Recomp_HD"`, its `variant` and its `version`, so the launcher knows
+which version is installed. The first release (1.0.0, `1K-Toasty-HD.rtz` and `2K-Toasty-HD.rtz`, without
+`credits.json`) is recognised by its exact file sizes.
+
 ## Sharing a pack
 
 The dumped textures are the game's own images, and an upscale of them is still derived from the game. Do not share

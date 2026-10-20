@@ -176,6 +176,32 @@
 				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; focus: auto; tab-index: auto; cursor: pointer; }
 			.rl-link:hover { color: #E8F3FF; background-color: #0A2660; border-color: #3CC8FF; }
 			#window:not([mouse-active]) .rl-link:focus { color: #E8F3FF; background-color: #0A2660; border-color: #3CC8FF; }
+			/* The official HD texture pack: one row across the top of the Texture Packs page - its name and status, a button
+			   per size (or the download's progress), then the last result and More info on the right. */
+			.rl-official { display: flex; flex: 0 0 auto; flex-direction: row; align-items: center; margin-bottom: 14dp; padding: 10dp 14dp;
+				background-color: #0B1733; border-width: 2dp; border-color: #1F3D73; }
+			.rl-official-head { display: block; flex: 0 0 auto; width: 200dp; margin-right: 14dp; }
+			.rl-official-title { display: block; font-family: "JFG Black"; font-weight: normal; font-size: 16dp; line-height: 20dp; color: #FFB21A; text-transform: uppercase; }
+			.rl-official-status { display: block; font-size: 13dp; line-height: 18dp; color: #8199BF; }
+			.rl-official-btns { display: flex; flex: 0 0 auto; flex-direction: row; align-items: center; }
+			.rl-official-btn { display: flex; flex: 0 0 auto; flex-direction: row; align-items: center; margin-right: 10dp; padding: 5dp 12dp 5dp 10dp;
+				border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF; text-align: left; cursor: pointer;
+				nav-up: none; nav-down: #jfg_pack_0; nav-left: auto; nav-right: auto; focus: auto; tab-index: auto; }
+			.rl-official-btn:hover { background-color: #0A2660; border-color: #FFB21A; }
+			#window:not([mouse-active]) .rl-official-btn:focus { background-color: #0A2660; border-color: #FFB21A; }
+			.rl-official-btn.rl-installed { border-color: #1F3D73; color: #8199BF; cursor: auto; }
+			.rl-official-variant { display: block; margin-right: 10dp; font-family: "JFG Black"; font-weight: normal; font-size: 20dp; line-height: 24dp; }
+			.rl-official-meta { display: block; white-space: nowrap; }
+			.rl-official-size { display: block; font-size: 12dp; line-height: 15dp; }
+			.rl-official-action { display: block; font-size: 12dp; line-height: 15dp; font-weight: bold; text-transform: uppercase; }
+			.rl-official-busy { display: flex; flex: 1 1 auto; flex-direction: row; align-items: center; }
+			.rl-official-progress { display: block; flex: 1 1 auto; margin-right: 12dp; }
+			.rl-official-text { display: block; margin-bottom: 4dp; font-size: 14dp; line-height: 18dp; color: #E8F3FF; }
+			.rl-official-bar { display: block; height: 10dp; background-color: #050B1C; border-width: 2dp; border-color: #1F3D73; }
+			.rl-official-cancel { flex: 0 0 auto; margin: 0dp; padding: 8dp 14dp; font-size: 16dp; line-height: 18dp;
+				nav-up: none; nav-down: #jfg_pack_0; nav-left: #tab_jfg_textures; nav-right: none; }
+			.rl-official-result { display: block; flex: 1 1 auto; margin: 0dp 12dp 0dp 4dp; font-size: 13dp; line-height: 18dp; color: #FFB21A; }
+			.rl-official-info { flex: 0 0 auto; margin: 0dp 0dp 0dp auto; nav-up: none; nav-down: #jfg_pack_0; nav-right: none; }
 			.rl-pack-note { display: block; flex: 0 0 auto; margin-bottom: 16dp; padding: 14dp 18dp; font-size: 18dp; line-height: 26dp; color: #E8F3FF; background-color: #0B1733; border-width: 2dp; border-color: #1F3D73; }
 			.rl-link--inline { display: inline-block; width: auto; margin: 8dp 0dp 0dp; }
 			.rl-list { display: block; margin-top: 6dp; }
@@ -232,6 +258,14 @@
 			.rl-page .jfg-pack__meta { display: block; margin-top: 8dp; font-size: 16dp; line-height: 20dp; letter-spacing: 0.5dp; font-weight: normal; color: #8199BF; }
 			.rl-page .jfg-pack:hover .jfg-pack__meta, .rl-page .jfg-pack:focus .jfg-pack__meta { color: #E8F3FF; }
 			.rl-page .jfg-pack.jfg-selected .jfg-pack__meta { color: #050B1C; }
+			.rl-page .jfg-pack-status { white-space: nowrap; } /* the "In use" line keeps its variant bubble on the same line */
+			.rl-page .jfg-pack__variant { display: inline-block; margin-left: 10dp; padding: 2dp 10dp; border-radius: 12dp; background-color: #FFB21A; color: #050B1C;
+				font-family: "JetBrains Mono"; font-weight: bold; font-size: 15dp; line-height: 19dp; vertical-align: middle; }
+			.rl-page .jfg-pack__size { margin-left: 14dp; }
+			.rl-page .jfg-pack__tags { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; margin-left: 12dp; }
+			.rl-page .jfg-pack__update { display: block; margin-bottom: 6dp; padding: 2dp 8dp; background-color: #FFB21A; color: #050B1C;
+				font-family: "JetBrains Mono"; font-weight: bold; font-size: 12dp; line-height: 16dp; text-transform: uppercase; }
+			.rl-page .jfg-pack__tags .jfg-pack__kind { margin-left: 0dp; }
 			.rl-page .jfg-pack__kind { flex: 0 0 auto; margin-left: 12dp; padding: 2dp 8dp; border-width: 2dp; border-color: #FFB21A; color: #FFB21A; font-size: 14dp; line-height: 18dp; text-transform: uppercase; }
 			.rl-page .jfg-pack.jfg-selected .jfg-pack__kind { border-color: #050B1C; color: #050B1C; }
 			.rl-page .jfg-pack-detail__image { display: block; width: 128dp; height: 128dp; margin-bottom: 22dp; }
@@ -280,7 +314,8 @@
 							<div class="rl-btn-shadow"><button id="tab_jfg_graphics" class="rl-btn" data-class-rl-active="page == 'graphics'"
 								data-event-focus="set_page('graphics')" style="nav-up: #tab_controls; nav-down: #tab_jfg_textures; nav-right: #jfg_wm_option_0;">Graphics</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_textures" class="rl-btn" data-class-rl-active="page == 'textures'"
-								data-event-focus="set_page('textures')" style="nav-up: #tab_jfg_graphics; nav-down: #tab_mods; nav-right: #jfg_pack_0;">Texture Packs</button></div>
+								data-event-focus="set_page('textures')" style="nav-up: #tab_jfg_graphics; nav-down: #tab_mods;"
+								data-style-nav-right="!official_shown ? '#jfg_pack_0' : (official_busy ? '#rl_official_cancel' : '#rl_official_info')">Texture Packs</button></div>
 							<div class="rl-btn-shadow"><button id="tab_mods" class="rl-btn" data-class-rl-active="page == 'mods'"
 								data-event-focus="set_page('mods')" style="nav-up: #tab_jfg_textures; nav-down: #nav_about; nav-right: auto;">Mods</button></div>
 							<div class="rl-btn-shadow"><button id="nav_about" class="rl-btn" data-class-rl-active="page == 'about'"
@@ -323,14 +358,22 @@
 									</div></div>
 									<div class="rl-banner-shadow" data-if="update_available">
 										<button id="rl_update_banner" class="rl-banner" data-event-click="show_update()"
-											style="nav-left: #nav_play; nav-up: #rl_browse; nav-down: #rl_start;">
+											style="nav-left: #nav_play; nav-up: #rl_browse;" data-style-nav-down="official_update ? '#rl_pack_banner' : '#rl_start'">
 											<span class="rl-banner-title">Update available: v{{update_version}}</span>
 											<span class="rl-banner-text">See what is new and update. Your saves and settings are kept.</span>
 										</button>
 									</div>
+									<!-- An installed official HD texture pack with a newer version out (src/ui/ui_launcher.cpp) -->
+									<div class="rl-banner-shadow" data-if="official_update">
+										<button id="rl_pack_banner" class="rl-banner" data-event-click="official_show_update()" style="nav-left: #nav_play; nav-down: #rl_start;"
+											data-style-nav-up="update_available ? '#rl_update_banner' : '#rl_browse'">
+											<span class="rl-banner-title">{{official_update_title}}</span>
+											<span class="rl-banner-text">{{official_update_text}}</span>
+										</button>
+									</div>
 									<div class="rl-start-shadow">
 										<button id="rl_start" class="rl-start" data-attrif-autofocus="rom_valid" data-class-rl-ready="rom_valid" data-event-click="start_game()"
-											data-style-nav-up="update_available ? '#rl_update_banner' : '#rl_browse'"
+											data-style-nav-up="official_update ? '#rl_pack_banner' : (update_available ? '#rl_update_banner' : '#rl_browse')"
 											style="nav-left: #nav_play;">Start Jet Force Gemini</button>
 									</div>
 									<div class="rl-start-note" data-if="!rom_valid">Load a ROM to start.</div>
@@ -374,9 +417,32 @@
 									<div class="rl-tpl" data-model="jfg_graphics_model"><template src="config-menu__jfg_graphics"/></div>
 								</div>
 								<div class="rl-page" id="rl_page_textures" data-if="page == 'textures'">
-									<div class="rl-pack-note">
-										<span>The JFG 4K texture pack is a separate download.</span>
-										<button class="rl-link rl-link--inline" data-event-click="open_url('https://vibintoast.com/projects/jfg-4k')" style="nav-left: #tab_jfg_textures; nav-up: none; nav-down: #jfg_pack_0;">More info: vibintoast.com/projects/jfg-4k</button>
+									<!-- The official HD texture pack: a button per size in its latest release (src/jfg/jfg_pack_install.cpp) -->
+									<div class="rl-official" data-if="official_shown">
+										<div class="rl-official-head">
+											<div class="rl-official-title">Official HD Pack</div>
+											<div class="rl-official-status">{{official_status}}</div>
+										</div>
+										<div class="rl-official-btns" data-if="!official_busy">
+											<button class="rl-official-btn" data-for="r : official_rows" data-attr-id="'rl_official_' + it_index" data-class-rl-installed="r.installed"
+												data-event-click="official_install(r.variant)" data-style-nav-left="it_index == 0 ? '#tab_jfg_textures' : 'auto'">
+												<div class="rl-official-variant">{{r.variant}}</div>
+												<div class="rl-official-meta">
+													<div class="rl-official-size">{{r.size_text}}</div>
+													<div class="rl-official-action">{{r.action}}</div>
+												</div>
+											</button>
+										</div>
+										<div class="rl-official-busy" data-if="official_busy">
+											<div class="rl-official-progress">
+												<div class="rl-official-text">{{official_text}}</div>
+												<div class="rl-official-bar"><div class="rl-progress-bar" data-style-width="official_percent + '%'"></div></div>
+											</div>
+											<button class="rl-action rl-action--outline rl-official-cancel" id="rl_official_cancel" data-event-click="official_cancel()">Cancel</button>
+										</div>
+										<div class="rl-official-result" data-if="!official_busy">{{official_result}}</div>
+										<button class="rl-link rl-link--inline rl-official-info" id="rl_official_info" data-if="!official_busy" data-event-click="open_url('https://vibintoast.com/projects/jfg-4k')"
+											data-style-nav-left="official_rows.size > 0 ? 'auto' : '#tab_jfg_textures'">More info</button>
 									</div>
 									<div class="rl-tpl" data-model="jfg_textures_model"><template src="config-menu__jfg_textures"/></div>
 								</div>
