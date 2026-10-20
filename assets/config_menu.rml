@@ -35,6 +35,15 @@
 	<style>
 		.jfg-selected { border-color: #e9cd35; background-color: rgba(233, 205, 53, 0.35); color: #f2f2f2; }
 		.jfg-note { color: #e9cd35; }
+		/* JFG PORT: the focused option's description (the port's tabs): the option's name as a heading and larger,
+		   brighter text with more space between lines, set off by a gold bar. */
+		.jfg-desc { padding: 32dp 36dp; }
+		/* The port's options sit slightly in from their group's heading (the yellow titles). */
+		.jfg-option { margin-left: 28dp; }
+		.jfg-desc__card { display: block; padding: 6dp 0dp 6dp 26dp; border-left: 4dp #e9cd35; }
+		.jfg-desc__title { display: block; margin-bottom: 18dp; font-size: 30dp; line-height: 38dp; letter-spacing: 2dp; font-weight: bold; color: #e9cd35; }
+		.jfg-desc p { padding: 0dp; font-size: 25dp; line-height: 39dp; letter-spacing: 0.5dp; color: #f2f2f2; }
+		.jfg-desc p b { color: #e9cd35; }
 		/* JFG PORT: eight tabs do not fit at the base size: they ran under the quit and close buttons (absolutely placed at
 		   the top right). Slightly smaller tabs, and the tab row keeps clear of the buttons. */
 		#config_tabset tabs { padding-right: 144dp; }

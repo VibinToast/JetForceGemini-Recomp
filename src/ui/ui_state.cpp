@@ -775,24 +775,34 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
         }
     } // end dequeue event loop
 
-    // JFG PORT: JFG_DEBUG_CONFIG_TAB="<secs>,<tab>" (Recomp-Docs/REFERENCE.md) opens this menu on tab <tab> (0 = Profiles)
-    // <secs> seconds after start, so window captures can show the menu without key presses.
+    // JFG PORT: JFG_DEBUG_CONFIG_TAB="<secs>,<tab>[,<element id>]" (Recomp-Docs/REFERENCE.md) opens this menu on tab <tab>
+    // (0 = Profiles) <secs> seconds after start, and a second later focuses the element (an option, to show its
+    // description), so window captures can show the menu without key presses.
     {
         static const clock::time_point debug_start = clock::now();
         static float debug_tab_secs = 0.0f;
         static int debug_tab = -2;
+        static char debug_focus_id[64] = {};
         if (debug_tab == -2) {
             debug_tab = -1;
             if (const char* env = std::getenv("JFG_DEBUG_CONFIG_TAB")) {
-                if (std::sscanf(env, "%f,%d", &debug_tab_secs, &debug_tab) != 2) debug_tab = -1;
+                if (std::sscanf(env, "%f,%d,%63s", &debug_tab_secs, &debug_tab, debug_focus_id) < 2) debug_tab = -1;
             }
         }
+        const auto since_start = clock::now() - debug_start;
         if (debug_tab >= 0 && ultramodern::is_game_started() && !config_was_open &&
-            clock::now() - debug_start >= std::chrono::duration<float>(debug_tab_secs)) {
+            since_start >= std::chrono::duration<float>(debug_tab_secs)) {
             ::jfg_config_menu_refresh();
             recompui::show_context(recompui::get_config_context_id(), "");
             recompui::get_config_tabset()->SetActiveTab(debug_tab);
             debug_tab = -1;
+        }
+        if (debug_focus_id[0] != '\0' && debug_tab == -1 && config_was_open &&
+            since_start >= std::chrono::duration<float>(debug_tab_secs + 1.0f)) {
+            if (Rml::ElementDocument* doc = recompui::get_config_context_id().get_document()) {
+                if (Rml::Element* element = doc->GetElementById(debug_focus_id)) element->Focus(true);
+            }
+            debug_focus_id[0] = '\0';
         }
     }
 

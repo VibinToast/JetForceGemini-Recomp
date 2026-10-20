@@ -198,6 +198,14 @@
 			.rl-page .jfg-note { color: #3CC8FF; }
 			.rl-page .config__wrapper p { font-family: "JetBrains Mono"; font-size: 18dp; line-height: 27dp; color: #E8F3FF; }
 			.rl-page .config__wrapper p b, .rl-page .config__wrapper p i { color: #3CC8FF; }
+			/* The focused option's description (generated pages): the option's name as a heading, larger text, a cyan bar. */
+			.rl-page .jfg-desc { padding: 26dp 28dp; }
+			/* Options slightly in from their group's heading, closer together than in the game's menu (its 16dp / 24dp left
+			   gaps that looked too big at the launcher's smaller text). */
+			.rl-page .jfg-option { margin: 4dp 0dp 12dp 24dp; }
+			.rl-page .jfg-desc__card { display: block; padding: 4dp 0dp 4dp 22dp; border-left: 3dp #3CC8FF; }
+			.rl-page .jfg-desc__title { display: block; margin-bottom: 16dp; font-family: "JetBrains Mono"; font-weight: bold; font-size: 23dp; line-height: 30dp; letter-spacing: 0.5dp; color: #FFB21A; }
+			.rl-page .jfg-desc p { padding: 0dp; font-family: "JetBrains Mono"; font-size: 20dp; line-height: 32dp; color: #E8F3FF; }
 			/* The Graphics page's info text (config__wrapper_scroll) is position: fixed in the game's own menu, which here floated it to
 			   the top right of the window over the options: make it a box beside the options like the other pages. */
 			.rl-page .config__wrapper_scroll, .rl-page .config__wrapper_scroll:last-child { position: relative; margin-left: 18dp; margin-right: 0dp; width: auto; flex: 1 1 100%; height: auto; padding: 16dp; overflow-y: auto; background-color: rgba(3, 8, 22, 0.78); border-radius: 0dp; border-width: 2dp; border-color: #1F3D73; text-align: left; }
