@@ -141,6 +141,7 @@ static void set_launcher_page(const std::string& page) {
     model_handle.DirtyVariable("page");
     model_handle.DirtyVariable("page_title");
     model_handle.DirtyVariable("page_subtitle");
+    model_handle.DirtyVariable("skip_launcher"); // the General page has the same switch
 }
 
 // ---- controller (ui_state.cpp, while the launcher is shown; D-pad / left stick / A / Select already work as keys) ------
@@ -210,7 +211,12 @@ void jfg_launcher_ui_tick() {
         }
         pending_focus_id.clear();
     }
-    if (model_handle && !update_available) {
+    // "Check for Updates" turned off (General page): the banner and the triangle go; turned on, they come once found.
+    if (model_handle && update_available && !jfg_launcher_check_updates() && !update_dialog) {
+        update_available = false;
+        model_handle.DirtyVariable("update_available");
+    }
+    if (model_handle && !update_available && jfg_launcher_check_updates()) {
         JfgUpdateInfo info;
         if (jfg_update_available(info)) {
             update_available = true;
@@ -326,6 +332,8 @@ public:
         queue_launcher_image("jfg_scanlines", "jfg_launcher/scanlines.png");
         logo_available = queue_launcher_image("jfg_logo", "jfg_launcher/logo.png");
 		launcher_context = recompui::create_context(dino::runtime::get_asset_path("launcher.rml"));
+        // JFG PORT: with a ROM loaded, the launcher opens on its Start button (autofocus in launcher.rml follows rom_valid).
+        if (rom_valid) focus_soon("rl_start");
     }
     void register_events(recompui::UiEventListenerInstancer& listener) override {
         recompui::register_event(listener, "select_rom",
@@ -463,6 +471,13 @@ public:
         });
         constructor.BindEventCallback("browse_rom", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
             open_rom_select_dialog();
+        });
+        // "Skip the launcher" (Play page, once a ROM is loaded): saved to bin\jfg_launcher.txt as skip_launcher.
+        constructor.BindFunc("skip_launcher", [](Rml::Variant& out) { out = jfg_launcher_skip(); });
+        constructor.BindEventCallback("toggle_skip_launcher", [](Rml::DataModelHandle handle, Rml::Event&, const Rml::VariantList&) {
+            jfg_launcher_set_skip(!jfg_launcher_skip());
+            handle.DirtyVariable("skip_launcher");
+            jfg_config_menu_refresh(); // the General page's copy of the switch
         });
         constructor.BindEventCallback("start_game", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
             if (rom_valid) start_game_preflight();
