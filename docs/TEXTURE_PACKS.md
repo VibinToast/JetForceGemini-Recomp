@@ -60,14 +60,15 @@ pack folder. Some notes:
 The game writes a file called `rt64.json` into the pack folder. It lists every image it found, and you need it for
 the packing steps below, so select the pack in the game at least once.
 
-## Give the pack a name, author and image
+## Give the pack a version, author and image
 
 Put a file called `credits.json` at the top of the pack folder, next to `rt64.json`:
 
 ```json
 {
-  "name": "4K-Toasty-HD",
-  "version": "1.2",
+  "id": "Official_Recomp_HD",
+  "variant": "4K",
+  "version": "1.1.0",
   "author": "VibinToast",
   "website": "https://vibintoast.com/",
   "description": "My official upscaled Textures for Jet Force Gemini.",
@@ -75,10 +76,14 @@ Put a file called `credits.json` at the top of the pack folder, next to `rt64.js
 }
 ```
 
-Every field is optional. The **Textures** tab (and the launcher's Texture Packs page) lists the pack under `name`
-with its version and author, and shows the image, the description and a button for the website when the pack is
-selected or highlighted. `image` is a PNG at the top of the pack, `pack_image.png` if left out; it is shown square, so
-a square picture (64x64 or larger) fits best. Without `credits.json` the pack is listed by its folder or file name.
+Every field is optional. The **Textures** tab (and the launcher's Texture Packs page) lists the pack under its folder or
+file name, with its version and author, and shows the image, the description and a button for the website when the pack
+is highlighted. A version at the end of the name is left out there: `Official_Recomp_HD-4K_v1.1.0.rtz` is listed as
+`Official_Recomp_HD-4K`. `image` is a PNG at the top of the pack, `pack_image.png` if left out; it is shown square, so a
+square picture (64x64 or larger) fits best.
+
+`id` and `variant` name the pack and its size; `halve_rtz.bat` uses them (below). Name the file
+`<id>-<variant>_v<version>.rtz` to match.
 
 `png_to_dds.bat` copies `credits.json` and the image into the `_dds` folder, and `make_rtz.bat` packs them into the `.rtz`.
 
@@ -119,6 +124,29 @@ Put a pack in one place, not both. To change a pack later, edit the folder and r
 By default `make_rtz.bat` stores files without compression, which loads fastest. For a DDS pack, set `$Compression`
 to `Optimal` at the top of `make_rtz.ps1` if you want a smaller file.
 
+## 6. Smaller versions and large packs (optional)
+
+**Half-size copies.** Drag a `.rtz` onto `tools/textures/halve_rtz.bat` to make a copy at half the resolution, for
+example a 2K pack from a 4K one. Drag the 2K onto it again for a 1K. It asks for the new pack's variant (`2K`), and
+writes `<id>-<variant>_v<version>.rtz` next to the pack you dragged, from the `id` and `version` in its `credits.json`
+(for example `Official_Recomp_HD-2K_v1.1.0.rtz`), with the new variant in the copy's `credits.json`. A pack without an
+`id` is asked for one. The pack you drag is not changed.
+
+- DDS textures with mipmaps (what `png_to_dds.bat` makes) drop their largest mipmap. The next one down is the same
+  texture at half size, so nothing is compressed again and it takes about a minute for a 3 GB pack.
+- PNG textures are scaled down.
+- Only the textures are halved. `credits.json`, `pack_image.png` and `rt64.json` are copied as they are, apart from
+  the variant.
+
+**Splitting a large pack.** GitHub does not accept files of 2 GB or more. Drag a `.rtz` onto
+`tools/textures/split_rtz.bat` to split it into two parts (more if two would still be too big): `<pack>.rtz.001`,
+`<pack>.rtz.002`, next to the pack, plus `<pack>.rtz.sha256` with the checksum of the whole pack and of each part.
+To join the parts back into the pack:
+
+```
+copy /b 4K-Toasty-HD.rtz.001 + 4K-Toasty-HD.rtz.002 4K-Toasty-HD.rtz
+```
+
 ## Sharing a pack
 
 The dumped textures are the game's own images, and an upscale of them is still derived from the game. Do not share
@@ -135,3 +163,5 @@ under whatever terms you choose; check what the tool or model you used allows.
 | Test | Textures tab, **F6**, **Reload** |
 | Convert to DDS (optional) | `tools/textures/png_to_dds.bat` (needs `texconv.exe`) |
 | Pack into one file | `tools/textures/make_rtz.bat` |
+| Half-size copy (4K to 2K to 1K) | `tools/textures/halve_rtz.bat` |
+| Split for a GitHub release | `tools/textures/split_rtz.bat` |
