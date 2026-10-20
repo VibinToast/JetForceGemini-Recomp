@@ -60,7 +60,7 @@ Each file has a `.sha256` next to it. The release isn't published until all six 
 
 - **Both:** install the [GitHub CLI](https://cli.github.com) and sign in with `gh auth login`. Keep `baserom.us.z64` next
   to the build scripts, or set `JFG_ROM` to wherever it is.
-- **Windows:** the same tools as a normal `build_windows.bat` build. The release build reuses your `build` folder, so it
+- **Windows:** the same tools as a normal `build_windows.bat` build. The release build reuses your build folders, so it
   only rebuilds what changed.
 - **Linux:** Docker or Podman. The build runs in a container made from `tools/linux-build/Dockerfile` (Ubuntu 22.04
   with clang 18), which is set up automatically the first time. On Windows, use WSL2 with Docker Desktop's WSL

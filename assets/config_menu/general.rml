@@ -1,0 +1,126 @@
+<template name="config-menu__general">
+    <head>
+    </head>
+    <body>
+        <form class="config__form" id="conf-general__form">
+            <div class="config__hz-wrapper" id="conf-general__hz-wrapper">
+                <!-- Options -->
+                <div class="config__wrapper" data-event-mouseout="set_cur_config_index(-1)" id="conf-general__wrapper">
+                    <!-- joystick deadzone -->
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(0)">
+                        <label class="config-option__title">Joystick Deadzone</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{joystick_deadzone}}%</label>
+                            <input
+                                class="nav-vert"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(0)"
+                                id="joystick_deadzone_input"
+                                type="range"
+                                min="0"
+                                max="100"
+                                style="flex: 1; margin: 0dp; nav-up: #tab_general; nav-down: #joystick_range_input"
+                                data-value="joystick_deadzone"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- joystick range -->
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(1)">
+                        <label class="config-option__title">Joystick Range</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{joystick_range}}%</label>
+                            <input
+                                class="nav-vert"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(1)"
+                                id="joystick_range_input"
+                                type="range"
+                                min="0"
+                                max="100"
+                                style="flex: 1; margin: 0dp; nav-up: #joystick_deadzone_input; nav-down: #rumble_strength_input"
+                                data-value="joystick_range"
+                            />
+                        </div>
+                        <div class="config-option__details" data-if="joystick_range<62">A range less than 62% is not recommended!</div>
+                    </div>
+
+                    <!-- rumble strength -->
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(2)">
+                        <label class="config-option__title">Rumble Strength</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{rumble_strength}}%</label>
+                            <input
+                                class="nav-vert"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(2)"
+                                id="rumble_strength_input"
+                                type="range"
+                                min="0"
+                                max="100"
+                                style="flex: 1; margin: 0dp; nav-up: #joystick_range_input; nav-down: #bg_input_enabled"
+                                data-value="rumble_strength"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- background input -->
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(3)" id="conf-general__Background-Input">
+                        <label class="config-option__title">Background Input</label>
+                        <div class="config-option__list">
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(3)"
+                                name="background_input_mode"
+                                data-checked="background_input_mode"
+                                value="On"
+                                id="bg_input_enabled"
+                                style="nav-up: #rumble_strength_input; nav-down: none"
+                            />
+                            <label class="config-option__tab-label" for="bg_input_enabled">On</label>
+
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(3)"
+                                name="background_input_mode"
+                                data-checked="background_input_mode"
+                                value="Off"
+                                id="bg_input_disabled"
+                                style="nav-up: #rumble_strength_input; nav-down: none"
+                            />
+                            <label class="config-option__tab-label" for="bg_input_disabled">Off</label>
+                        </div>
+                    </div>
+
+                </div>
+                <!-- Descriptions -->
+                <div class="config__wrapper">
+                    <p data-if="cur_config_index == 0">
+                        Applies a deadzone to joystick inputs.<br/>
+                        <br/>
+                        <b>Note: the game may apply a small additional deadzone of its own.</b>
+                    </p>
+                    <p data-if="cur_config_index == 1">
+                        Sets the input range the joystick is mapped to. In practice, a real N64 controller usually does not reach the full technical range.<br/>
+                        <br/>
+                        Values above 62% will increase joystick sensitivity. <i>Warning:</i> It is not recommended to set this option below 62% as you will no longer be able to reach maximum control stick values, which may hinder gameplay.<br/>
+                        <br/>
+                        If your joystick cannot reach 100% in cardinal directions then you will need to adjust this setting to be above 62% to compensate.
+                    </p>
+                    <p data-if="cur_config_index == 2">
+                        Controls the strength of rumble when using a controller that supports it. <b>Setting this to zero will disable rumble.</b><br/>
+                        <br/>
+                        Jet Force Gemini supports the Rumble Pak.
+                    </p>
+                    <p data-if="cur_config_index == 3">
+                        Allows the game to read controller input when out of focus.
+                        <br/>
+                        <b>This setting does not affect keyboard input.</b>
+                    </p>
+                </div>
+            </div>
+        </form>
+    </body>
+</template>

@@ -1,0 +1,38 @@
+#!/bin/sh
+set -u
+
+# The game loads its UI and controller database relative to the process
+# working directory. Desktop launchers do not start AppImages in usr/bin, so
+# enter the bundled game directory before starting the real executable.
+appdir="${APPDIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
+cd "$appdir/usr/bin"
+
+# Keep a persistent console log even when Game Mode closes the application
+# without showing a terminal. The child is deliberately not exec'd so this
+# wrapper can record SIGKILL/OOM/quick_exit statuses that bypass crash.log.
+config_dir="${APP_FOLDER_PATH:-${XDG_CONFIG_HOME:-${HOME:-/tmp}/.config}/DiddyKongRacingRecompiled}"
+if ! mkdir -p "$config_dir" 2>/dev/null; then
+    config_dir="${TMPDIR:-/tmp}/DiddyKongRacingRecompiled"
+    mkdir -p "$config_dir"
+fi
+
+runtime_log="$config_dir/runtime.log"
+previous_log="$config_dir/runtime.previous.log"
+last_exit_log="$config_dir/last-exit.log"
+if [ -f "$runtime_log" ]; then
+    mv -f "$runtime_log" "$previous_log"
+fi
+
+{
+    printf '[DKR] Runtime started: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    ./DiddyKongRacingRecompiled "$@"
+    status=$?
+    if [ "$status" -ge 128 ]; then
+        printf '[DKR] Runtime exited with status %d (signal %d)\n' "$status" "$((status - 128))"
+    else
+        printf '[DKR] Runtime exited with status %d\n' "$status"
+    fi
+    printf '%s status=%d\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$status" > "$last_exit_log"
+} >> "$runtime_log" 2>&1
+
+exit "$status"

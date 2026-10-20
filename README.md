@@ -72,7 +72,8 @@ sudo apt install git cmake ninja-build clang lld python3 libsdl2-dev libvulkan-d
 ```
 
 The game ends up in `bin`, together with its saves and settings. The build also creates empty `bin/mods` and `bin/texture_packs` folders for mods and texture packs (see
-[docs/TEXTURE_PACKS.md](docs/TEXTURE_PACKS.md)); anything already in them is kept. The `build` folder is only needed for building.
+[docs/TEXTURE_PACKS.md](docs/TEXTURE_PACKS.md)); anything already in them is kept. The build itself happens in this folder
+(`lib`, `build-tools`, `build-windows` / `build-linux`, `RecompiledFuncs`), none of which is committed.
 Keep `bin` private, because it holds a copy of the ROM.
 
 ## Keys
@@ -91,8 +92,13 @@ Keep `bin` private, because it holds a copy of the ROM.
 The port uses [N64Recomp](https://github.com/N64Recomp/N64Recomp) to translate the game's code (configured by
 `jfg.us.toml` and `jfg.us.syms.toml`), [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime) in place
 of the N64 operating system, and [RT64](https://github.com/rt64/rt64) for rendering. It is built on
-[cyscott/dkr-recomp](https://github.com/cyscott/dkr-recomp), which the build scripts download and patch with
-`patches/`. The port's own code is in `src/jfg/`.
+[cyscott/dkr-recomp](https://github.com/cyscott/dkr-recomp), whose history is merged into this repository: its files
+are edited here directly. The port's own code is in `src/jfg/`.
+
+N64Recomp, N64ModernRuntime and RT64 (and RT64's plume) are git submodules in `lib/`, each pointing at the port's
+fork on its `jfg` branch: the base project's fixes and the port's own changes are commits there. To change one,
+commit on that fork's `jfg` branch and commit the new submodule commit here; the build scripts check out the
+commits this repository pins (set `JFG_KEEP_LIBS=1` to build with `lib/` as it is).
 
 ## AI disclosure
 
