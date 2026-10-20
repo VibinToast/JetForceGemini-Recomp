@@ -86,3 +86,4 @@ recompcontrollerdb.txt
 
 # clangd cache
 .cache/
+.jfg_drive
