@@ -23,6 +23,20 @@ RECOMP_IMPORT("*", float jfg_get_tick_scale(void));
 // The current level number.
 RECOMP_IMPORT("*", int jfg_get_level(void));
 
+// --- event data ---------------------------------------------------------------------------------------------------
+
+// jfg_on_blood_spurt: a spurt of blood drops. Change any field; set cancel to 1 to drop it; amount is the drops in
+// percent (100 = the game's own, 200 = twice as many; the extra ones spread a little).
+typedef struct {
+    float x, y, z;
+    float vx, vy, vz;
+    int alpha;
+    int count;
+    float scale;
+    int amount;
+    int cancel;
+} JfgBloodSpurt;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
@@ -32,5 +46,11 @@ RECOMP_IMPORT("*", int jfg_get_level(void));
 // jfg_on_boss_fight_control(void* player, int frames, int character)
 //     Each tick the player is controlled in a boss fight, before the game's control code runs. player: the player's
 //     object; frames: video frames the tick covers; character: 0 Vela, 1 Juno, 2 Lupus.
+// jfg_on_blood_spurt(JfgBloodSpurt* blood)
+//     Blood drops are about to be added. The game's own options (No blood, Blood amount) have already applied.
+// jfg_on_blood_hit(JfgBloodHit* hit)
+//     A blood hit sprite is about to be added.
+// jfg_on_severed_limb_tick(void* limb, int frames)
+//     Each tick a severed body part (an object) is updated, before the game's code for it.
 
 #endif

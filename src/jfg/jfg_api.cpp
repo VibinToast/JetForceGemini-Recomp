@@ -13,6 +13,10 @@ namespace jfg::api {
 namespace {
 // Event names for mods, in the order of Event.
 const char* const g_event_names[] = { "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", nullptr };
+const char* const g_event_names[] = {
+    "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", "jfg_on_blood_spurt", "jfg_on_blood_hit",
+    "jfg_on_severed_limb_tick", nullptr
+};
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
 std::vector<Handler> g_internal[(size_t)Event::Count];
@@ -33,6 +37,15 @@ void get_level(uint8_t* rdram_, recomp_context* ctx) {
     ctx->r2 = (gpr)(int32_t)(int16_t)rd16(ADDR_currentLevel);
 }
 } // namespace
+
+Payload::Payload(recomp_context* ctx_, uint32_t size) : ctx(ctx_), saved_sp(ctx_->r29) {
+    addr = ((uint32_t)saved_sp - size - 0x20) & ~0xFu;
+    ctx->r29 = (gpr)(int32_t)(addr - 0x20);
+}
+
+Payload::~Payload() {
+    ctx->r29 = saved_sp;
+}
 
 void add_internal(Event event, Handler handler) {
     g_internal[(size_t)event].push_back(handler);
@@ -56,6 +69,9 @@ void fire(uint8_t* rdram_, recomp_context* ctx, Event event, int32_t arg0, int32
 void register_api() {
     add_internal(Event::LevelChange, jfg_change_level_log); // JFG_DEBUG_STATS log (jfg_diagnostics.cpp)
     add_internal(Event::BossFightControl, jfg_boss_tick);   // boss-fight control layout (jfg_controls.cpp)
+    add_internal(Event::BloodSpurt, jfg_gore_on_blood_spurt); // No blood, Blood amount (jfg_gore.cpp)
+    add_internal(Event::BloodHit, jfg_gore_on_blood_hit);     // No blood
+    add_internal(Event::SeveredLimbTick, jfg_gore_limb);      // Body parts stay
     recomp::overlays::register_base_events(g_event_names);
     recomp::overlays::register_base_export("jfg_api_version", api_version);
     recomp::overlays::register_base_export("jfg_get_tick_scale", get_tick_scale);
@@ -87,4 +103,37 @@ JFG_WRAP(boyBossControl) {
 JFG_WRAP(dogBossControl) {
     jfg::api::fire(rdram, ctx, jfg::api::Event::BossFightControl, (int32_t)ctx->r4, (int32_t)ctx->r5, 2);
     dogBossControl_orig(rdram, ctx);
+}
+
+// bloodSpurtAdd(x, y, z, vx, vy, vz, alpha, count, scale): jfg_on_blood_spurt with the arguments in a JfgBloodSpurt.
+// x and y are in $f12/$f14, z and vx in $a2/$a3, the rest in the caller's argument slots ($sp + 0x10..). Callbacks may
+// change them, cancel the spurt, or set amount: drops in percent, the extra ones spread a little (jfg_gore.cpp).
+JFG_WRAP(bloodSpurtAdd) {
+    using namespace jfg;
+    namespace b = jfg::api::blood_spurt;
+    g_rdram = rdram;
+    const uint32_t sp = (uint32_t)ctx->r29;
+    int32_t amount, cancel;
+    {
+        api::Payload p(ctx, b::SIZE);
+        wr32(p.addr + b::X, ctx->f12.u32l);
+        wr32(p.addr + b::Y, ctx->f14.u32l);
+        wr32(p.addr + b::Z, (uint32_t)ctx->r6);
+        wr32(p.addr + b::VX, (uint32_t)ctx->r7);
+        for (uint32_t i = 0; i < 5; i++) wr32(p.addr + b::VY + i * 4, rd32(sp + 0x10 + i * 4)); // vy, vz, alpha, count, scale
+        wr32(p.addr + b::AMOUNT, 100);
+        wr32(p.addr + b::CANCEL, 0);
+        api::fire(rdram, ctx, api::Event::BloodSpurt, (int32_t)p.addr);
+        g_rdram = rdram;
+        ctx->f12.u32l = rd32(p.addr + b::X);
+        ctx->f14.u32l = rd32(p.addr + b::Y);
+        ctx->r6 = (gpr)(int32_t)rd32(p.addr + b::Z);
+        ctx->r7 = (gpr)(int32_t)rd32(p.addr + b::VX);
+        for (uint32_t i = 0; i < 5; i++) wr32(sp + 0x10 + i * 4, rd32(p.addr + b::VY + i * 4));
+        amount = (int32_t)rd32(p.addr + b::AMOUNT);
+        cancel = (int32_t)rd32(p.addr + b::CANCEL);
+    }
+    if (cancel) return;
+    jfg_blood_extra_drops(rdram, ctx, amount);
+    bloodSpurtAdd_orig(rdram, ctx);
 }
