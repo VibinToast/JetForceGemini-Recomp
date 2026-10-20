@@ -157,3 +157,9 @@ JFG_WRAP(bloodHitSpriteAdd) {
     if (cancel) return;
     bloodHitSpriteAdd_orig(rdram, ctx);
 }
+
+// severedLimbControl(limb, updateRate): jfg_on_severed_limb_tick, then the game's code.
+JFG_WRAP(severedLimbControl) {
+    jfg::api::fire(rdram, ctx, jfg::api::Event::SeveredLimbTick, (int32_t)ctx->r4, (int32_t)ctx->r5);
+    severedLimbControl_orig(rdram, ctx);
+}

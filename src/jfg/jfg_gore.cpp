@@ -9,7 +9,6 @@
 // Body parts (objects.c / spranim.c): a severed limb is an object (behaviour severedLimbControl, data at object + 0x68)
 // with a life timer (data + 0x14, s16, counted down by twice the update rate) after which it fades out (object + 0x39)
 // and is freed. Limbs whose type (data + 0x17) is 2 or more are pickups (drone heads) and are left alone. "Body parts
-// stay" keeps the timer of the newest LIMBS_KEPT limbs up (hook at the entry of severedLimbControl); limbs are objects
 // stay" keeps the timer of the newest LIMBS_KEPT limbs up (jfg_on_severed_limb_tick handler); limbs are objects
 // with models of their own, so the older ones still go, to keep the object heap from filling up.
 //
@@ -102,7 +101,6 @@ extern "C" void jfg_gore_splat(uint8_t* rdram_, recomp_context* ctx) {
     if (stats && ++calls % 300 == 0) std::fprintf(stderr, "[jfg] blood pool: %d splats, %d kept\n", splats, kept);
 }
 
-// Entry of severedLimbControl(object, updateRate).
 // jfg_on_severed_limb_tick(limb, frames) handler.
 extern "C" void jfg_gore_limb(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
