@@ -82,6 +82,14 @@ void unload_overlay_safely(uint32_t ram) {
 }
 }
 
+// Where the overlay with this ROM address is loaded now, or 0 (jfg_mods.cpp, TrapDanglingJump's wrapper).
+extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom) {
+    for (const auto& [ram, ovl] : jfg_loaded_overlays) {
+        if (ovl.rom == rom) return ram;
+    }
+    return 0;
+}
+
 extern "C" void jfg_overlay_loaded(uint8_t* rdram, recomp_context* ctx) {
     gpr header = ctx->r30;
     uint32_t ram = (uint32_t)MEM_W(OVL_VRAM_BASE, header);

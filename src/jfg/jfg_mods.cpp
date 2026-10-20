@@ -22,6 +22,7 @@
 #include "librecomp/overlays.hpp"
 #include "recomp.h"
 #include "jfg_api.h"
+#include "jfg_hooks.h"
 
 namespace jfg {
 void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
@@ -267,6 +268,12 @@ extern "C" void jfg_recomp_printf(uint8_t* rdram, recomp_context* ctx) {
     ctx->r2 = len;
 }
 
+namespace {
+// Each overlay's code at its private link address (0x82000000+), where code a mod hook regenerated runs.
+struct PrivateCode { uint32_t link, size, rom; };
+std::vector<PrivateCode> g_private_code;
+} // namespace
+
 // Called from jfg_on_init (jfg_glue.cpp): after the runtime has built its function table, before mods are loaded.
 // A regenerated (hooked) overlay function calls the other functions of its own overlay by address lookup
 // (librecomp's apply_regenlist sets use_lookup_for_all_function_calls), and in the pre-linked code those addresses
@@ -287,6 +294,7 @@ extern "C" void jfg_mods_alias_overlays(void) {
             continue; // not laid out the way prepare_overlays.py did it: leave this section alone
         }
         sections++;
+        g_private_code.push_back(PrivateCode{ ov.link, ov.text, ov.rom });
         for (uint32_t off = 0; off < ov.text; off += 4) {
             if (recomp_func_t* f = recomp::overlays::get_func_by_section_index_function_offset(it->second, off)) {
                 recomp::overlays::add_loaded_function((int32_t)(ov.link + off), f);
@@ -298,6 +306,35 @@ extern "C" void jfg_mods_alias_overlays(void) {
     std::snprintf(line, sizeof line, "mods: %d functions of %d overlays callable at their private addresses", funcs,
                   sections);
     jfg::jfg_log_line("jfg_mods.log", line);
+}
+
+// Calls from one overlay into another go through the game's lazy linker, TrapDanglingJump, which finds the call site
+// from $ra - 8. Code a mod hook regenerated runs at its overlay's private address, so its $ra is private too and the
+// linker read outside RDRAM (a crash in the Lurg fight with a hook on boyBossControl). Such a $ra is moved to where
+// that overlay is loaded; the recompiled code returns natively, without it.
+extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
+
+JFG_WRAP(TrapDanglingJump) {
+    const uint32_t ra = (uint32_t)ctx->r31;
+    if (ra >= 0x82000000u) {
+        for (const PrivateCode& code : g_private_code) {
+            if (ra - code.link <= code.size) {
+                if (const uint32_t ram = jfg_overlay_loaded_at(code.rom)) {
+                    ctx->r31 = (gpr)(int32_t)(ram + (ra - code.link));
+                    static bool logged = false;
+                    if (!logged) {
+                        logged = true;
+                        char line[128];
+                        std::snprintf(line, sizeof line, "mods: a regenerated function called into another overlay "
+                                      "(return address 0x%08X, loaded at 0x%08X)", ra, ram + (ra - code.link));
+                        jfg::jfg_log_line("jfg_mods.log", line);
+                    }
+                }
+                break;
+            }
+        }
+    }
+    TrapDanglingJump_orig(rdram, ctx);
 }
 
 extern "C" void jfg_register_asset_mods(void); // jfg_assets.cpp
