@@ -20,3 +20,4 @@
 - Better Weapon Switching Menu
 - Minimap
 - Gyro Aim
+- Locale Support
