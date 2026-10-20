@@ -15,5 +15,8 @@ bloodSpurtAdd
 bloodHitSpriteAdd
 severedLimbControl
 
+# Gore options (jfg_gore.cpp)
+bloodSpurtUpdateAll
+
 # Calls between overlays from code a mod hook regenerated (jfg_mods.cpp)
 TrapDanglingJump

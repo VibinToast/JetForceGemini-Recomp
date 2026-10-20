@@ -2,9 +2,9 @@
 //
 // Blood (overlay 8): bloodSpurtAdd puts a drop into a pool of 64 entries (0x54 bytes each). A drop flies (state +0x4A
 // = 1), lands (2) and lies as a splat (3) whose life (+0x3C, s16, 300 at the start) bloodSpurtUpdateAll counts down by
-// the update rate; at 0 the entry is freed. "Blood stays" keeps the life of the newest splats full (hook at that
-// countdown, the entry in $s0). Only BLOOD_KEPT are kept, so the pool always has room for new drops: older splats run
-// out within a second.
+// the update rate; at 0 the entry is freed. "Blood stays" keeps the life of the newest splats full (bloodSpurtUpdateAll's
+// wrapper sets it before the game counts it down). Only BLOOD_KEPT are kept, so the pool always has room for new drops:
+// older splats run out within a second.
 //
 // Body parts (objects.c / spranim.c): a severed limb is an object (behaviour severedLimbControl, data at object + 0x68)
 // with a life timer (data + 0x14, s16, counted down by twice the update rate) after which it fades out (object + 0x39)
@@ -77,14 +77,9 @@ bool keep_newest(Tracker& t, uint32_t addr, int keep) {
 Tracker g_splats, g_limbs;
 } // namespace
 
-// bloodSpurtUpdateAll, where a splat's life is counted down ($s0 = the pool entry).
-extern "C" void jfg_gore_splat(uint8_t* rdram_, recomp_context* ctx) {
-    g_rdram = rdram_;
+// "Blood stays", before bloodSpurtUpdateAll counts the splats' lives down.
+void keep_splats() {
     if (!g.gore_keep_blood) return;
-    const uint32_t entry = (uint32_t)ctx->r16;
-    if (keep_newest(g_splats, entry, BLOOD_KEPT)) wr16(entry + SPLAT_LIFE_OFFSET, (uint16_t)SPLAT_LIFE);
-    // One that is no longer among the newest makes room soon, so new drops find free entries.
-    else if ((int16_t)rd16(entry + SPLAT_LIFE_OFFSET) > SPLAT_LIFE_LEFT) wr16(entry + SPLAT_LIFE_OFFSET, (uint16_t)SPLAT_LIFE_LEFT);
     const uint32_t ovl = jfg_overlay_loaded_at(OVERLAY_8_ROM);
     if (ovl == 0) return;
     static const bool stats = std::getenv("JFG_DEBUG_STATS") != nullptr;
@@ -132,7 +127,6 @@ extern "C" void jfg_blood_extra_drops(uint8_t* rdram_, recomp_context* ctx, int 
     g_rdram = rdram_;
     static std::mt19937 rng{ 0x4A464721u };
     std::uniform_real_distribution<float> spread(0.75f, 1.25f), chance(0.0f, 1.0f);
-    const float extra_f = (float)(g.blood_amount - 100) / 100.0f;
     const float extra_f = (float)(amount - 100) / 100.0f;
     int extra = (int)extra_f;
     if (chance(rng) < extra_f - (float)extra) extra++;
@@ -140,7 +134,6 @@ extern "C" void jfg_blood_extra_drops(uint8_t* rdram_, recomp_context* ctx, int 
     auto as_bits = [](float f) { uint32_t bits; std::memcpy(&bits, &f, 4); return bits; };
     const uint32_t sp = (uint32_t)ctx->r29;
     const uint32_t dy_bits = rd32(sp + 0x10), dz_bits = rd32(sp + 0x14);
-    busy = true;
     for (int i = 0; i < extra; i++) {
         recomp_context c = *ctx;
         c.r7 = (gpr)(int32_t)as_bits(as_float((uint32_t)ctx->r7) * spread(rng));
@@ -148,9 +141,14 @@ extern "C" void jfg_blood_extra_drops(uint8_t* rdram_, recomp_context* ctx, int 
         wr32(sp + 0x14, as_bits(as_float(dz_bits) * spread(rng)));
         bloodSpurtAdd_orig(rdram_, &c);
     }
-    busy = false;
     wr32(sp + 0x10, dy_bits);
     wr32(sp + 0x14, dz_bits);
 }
 
 } // namespace jfg
+
+JFG_WRAP(bloodSpurtUpdateAll) {
+    jfg::g_rdram = rdram;
+    jfg::keep_splats();
+    bloodSpurtUpdateAll_orig(rdram, ctx);
+}

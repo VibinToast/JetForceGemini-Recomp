@@ -12,7 +12,6 @@ extern "C" void recomp_trigger_event(uint8_t* rdram, recomp_context* ctx, uint32
 namespace jfg::api {
 namespace {
 // Event names for mods, in the order of Event.
-const char* const g_event_names[] = { "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", nullptr };
 const char* const g_event_names[] = {
     "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", "jfg_on_blood_spurt", "jfg_on_blood_hit",
     "jfg_on_severed_limb_tick", nullptr
