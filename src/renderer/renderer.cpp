@@ -6,7 +6,7 @@ extern "C" void jfg_texture_dump_folder(char* buf, int size); // src/jfg/jfg_tex
 extern "C" int jfg_texture_pack_current(char* buf, int size); // the chosen pack folder (relative, "" = none); returns a change counter
 extern "C" int jfg_texture_three_point(void); // src/jfg/jfg_visuals.cpp: "Texture filtering" (1 = the N64's three-point filter)
 extern "C" int jfg_output_filtering(void);    // src/jfg/jfg_visuals.cpp: "Picture scaling" (0 anti-aliased pixel scaling, 1 linear, 2 nearest)
-extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_frame_rate.cpp: "Frame rate" option; -1 = use the Graphics setting, 0 = Original, 1 = Display
+extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_frame_rate.cpp: "Frame rate" option; 0 = Original, 1 = Display (-1 would use rr_option)
 #define HLSL_CPU
 #include "hle/rt64_application.h"
 #include "renderer.hpp"
@@ -284,7 +284,7 @@ void set_application_user_config(RT64::Application* application, const ultramode
     application->userConfig.antialiasing = to_rt64(config.msaa_option);
     application->userConfig.refreshRate = to_rt64(config.rr_option);
     application->userConfig.refreshRateTarget = config.rr_manual_value;
-    // JFG PORT: the F9 menu's "Frame rate" option can override the Graphics menu's Framerate setting.
+    // JFG PORT: the "Frame rate" option (Graphics tab, F9 menu) replaces the recomp's own Framerate setting.
     switch (jfg_refresh_override()) {
         case 0: application->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Original; break;
         case 1: application->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Display; break;
