@@ -29,5 +29,8 @@ RECOMP_IMPORT("*", int jfg_get_level(void));
 //     Once per game tick, before the game runs it. frames: video frames the tick covers (2 at 30 fps, 1 at 60 fps).
 // jfg_on_level_change(int level, int character)
 //     The game starts changing to `level`, with `character` playing.
+// jfg_on_boss_fight_control(void* player, int frames, int character)
+//     Each tick the player is controlled in a boss fight, before the game's control code runs. player: the player's
+//     object; frames: video frames the tick covers; character: 0 Vela, 1 Juno, 2 Lupus.
 
 #endif

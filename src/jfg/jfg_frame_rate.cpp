@@ -696,7 +696,7 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
                 std::fprintf(stderr, "[jfg] ticks/s %.1f, mean frames per tick %.2f, level %d, skipping %d, tune %d state %d\n", n / secs, sum / double(n), (int)(int16_t)rd16(ADDR_currentLevel), int(g.skipping),
                     (int)rd8(ADDR_tuneSeqNo), valid_ptr(rd32(ADDR_tuneSeqPlayer)) ? (int)rd32(rd32(ADDR_tuneSeqPlayer) + 0x2C) : -1);
                 if (g_cam.player != 0) std::fprintf(stderr, "[jfg] player at %.0f %.0f %.0f, speed factor %.2f\n", rdf(g_cam.player + 0x0C), rdf(g_cam.player + 0x10), rdf(g_cam.player + 0x14), g_cam.move_factor);
-                std::fprintf(stderr, "[jfg] robotMission %d, dual stick active %d, game mode %d, vi mode %d, next level %d\n", (int)rd8(ADDR_robotMission), jfg_dual_stick_active(), (int)rd32(ADDR_mainGameMode), (int)rd8(ADDR_sResolutionIndex), (int)(int16_t)rd16(ADDR_nextLevel));
+                std::fprintf(stderr, "[jfg] robotMission %d, dual stick active %d, boss controls %d, game mode %d, vi mode %d, next level %d\n", (int)rd8(ADDR_robotMission), jfg_dual_stick_active(), int(boss_control_active()), (int)rd32(ADDR_mainGameMode), (int)rd8(ADDR_sResolutionIndex), (int)(int16_t)rd16(ADDR_nextLevel));
                 std::fprintf(stderr, "[jfg] squad: %d members this tick, %u drawn in between since the last line, %u extra poses put back\n", (int)g_squad_members.size(), g_squad_smoothed, g_squad_data_kept);
                 g_squad_smoothed = 0;
                 g_squad_data_kept = 0;

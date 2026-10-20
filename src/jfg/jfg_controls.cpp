@@ -50,7 +50,8 @@ std::atomic<bool> g_aim_jump_active{ false }; // a jump from aiming is under way
 CameraControl g_cam; // see jfg_port.h
 
 // Boss fights: the player's boss control (boyBossControl / dogBossControl / girlBossControl) runs in place of the
-// normal one; jfg_boss_tick (hook at their entry) notes the tick. See boss_controls().
+// normal one; jfg_boss_tick (internal handler of jfg_on_boss_fight_control, jfg_api.cpp) notes the tick. See
+// boss_controls().
 uint32_t g_tick_count = 0;     // jfg_camera_controls calls
 uint32_t g_boss_seen_tick = 0; // g_tick_count when the boss control last ran
 bool boss_control_active() { return g_boss_seen_tick != 0 && g_tick_count - g_boss_seen_tick <= 2; }
@@ -292,7 +293,7 @@ static void aim_controls(uint32_t obj, uint32_t pad, float frames) {
 }
 
 // --- boss fights -----------------------------------------------------------------------------------------------------
-extern "C" void jfg_boss_tick(void) {
+extern "C" void jfg_boss_tick(uint8_t*, recomp_context*) {
     g_boss_seen_tick = g_tick_count;
 }
 
