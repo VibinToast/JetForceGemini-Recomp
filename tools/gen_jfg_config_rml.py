@@ -188,7 +188,7 @@ def option_markup(items, first_nav_up):
             continue
         ev = f'data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index({idx})"'
         ids = rows[idx]
-        out.append(f'                    <div class="config-option" data-event-mouseover="set_cur_config_index({idx})">')
+        out.append(f'                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index({idx})">')
         out.append(f'                        <label class="config-option__title">{t}</label>')
         if kind == "bool":
             out.append('                        <div class="config-option__list">')
@@ -211,7 +211,10 @@ def option_markup(items, first_nav_up):
             out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}" data-value="{key}"/>')
             out.append('                        </div>')
         out.append('                    </div>')
-        helps.append(f'                    <p data-if="cur_config_index == {idx}">{help_text}</p>')
+        # The focused option's description: its name as a heading, then the text (styled by .jfg-desc in config_menu.rml
+        # and launcher.rml). data-if goes on a wrapper without its own display style (it hides with display: none).
+        helps.append(f'                    <div data-if="cur_config_index == {idx}"><div class="jfg-desc__card">'
+                     f'<div class="jfg-desc__title">{t}</div><p>{help_text}</p></div></div>')
         idx += 1
     return out, helps, idx
 
@@ -236,7 +239,7 @@ def options_tab(name, items, tab_id, extra_markup="", before_markup=""):
         extra_markup,
         '                </div>',
         '                <!-- Descriptions -->',
-        '                <div class="config__wrapper">',
+        '                <div class="config__wrapper jfg-desc">',
         *helps,
         '                </div>',
         '            </div>',
@@ -247,7 +250,7 @@ def options_tab(name, items, tab_id, extra_markup="", before_markup=""):
 
 # Pack buttons get ids (jfg_pack_0, ...) so the tabs / the launcher's sidebar can go down/right to the first one.
 TEXTURE_PACKS = '''                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Texture Pack</label></div>
-                    <div class="config-option" style="flex: 0 0 auto;">
+                    <div class="config-option jfg-option" style="flex: 0 0 auto;">
                         <label class="config-option__title">{{pack_status}}</label>
                         <div style="display: block; width: 100%;">
                             <button class="button" style="display: inline-block; margin: 8dp; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto;" data-for="p : packs" data-attr-id="'jfg_pack_' + it_index" data-style-nav-left="it_index == 0 ? '#tab_jfg_textures' : 'auto'" data-style-nav-up="it_index == 0 ? '#tab_jfg_textures' : 'auto'" data-event-click="set_pack(p.folder)" data-class-jfg-selected="p.selected">{{p.label}}</button>
