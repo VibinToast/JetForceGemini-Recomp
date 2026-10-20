@@ -77,7 +77,8 @@
 					<tabset class="tabs" id="config_tabset">
 						<!-- JFG PORT: the port's tabs (see config_tab_to_index), plus Bindings (the recomp's Controls tab) and Mods.
 						     The recomp's General, Graphics and Sound options are in the port's tabs. -->
-						<tab class="tab" autofocus id="tab_jfg_profiles">
+						<!-- The top row wraps round: Left from Profiles goes to the close button, Right from it back here. -->
+						<tab class="tab" autofocus id="tab_jfg_profiles" style="nav-left: #config__close-menu-button;">
 							<div>Profiles</div>
 							<div class="tab__indicator"></div>
 						</tab>
@@ -154,6 +155,7 @@
 							class="icon-button"
 							onclick="close_config_menu"
 							id="config__close-menu-button"
+							style="nav-right: #tab_jfg_profiles;"
 						>
 							<svg src="icons/X.svg" />
 						</button>

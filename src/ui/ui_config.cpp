@@ -196,8 +196,12 @@ void close_config_menu_impl() {
     if (recompui::is_context_shown(sub_menu_context)) {
     	recompui::hide_context(sub_menu_context);
     }
-    else {
+    else if (recompui::is_context_shown(config_context)) {
     	recompui::hide_context(config_context);
+    }
+    else {
+        // JFG PORT: closed already (Close reached twice before the menu went, e.g. a double click): nothing to do.
+        return;
     }
 
     if (!ultramodern::is_game_started()) {
