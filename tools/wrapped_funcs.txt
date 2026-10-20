@@ -12,6 +12,7 @@ girlBossControl
 boyBossControl
 dogBossControl
 bloodSpurtAdd
+bloodHitSpriteAdd
 
 # Calls between overlays from code a mod hook regenerated (jfg_mods.cpp)
 TrapDanglingJump

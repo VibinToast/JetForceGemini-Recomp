@@ -37,6 +37,12 @@ typedef struct {
     int cancel;
 } JfgBloodSpurt;
 
+// jfg_on_blood_hit: a blood hit sprite. Set cancel to 1 to drop it.
+typedef struct {
+    float x, y, z;
+    int cancel;
+} JfgBloodHit;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)

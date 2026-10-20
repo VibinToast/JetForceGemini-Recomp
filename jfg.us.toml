@@ -162,10 +162,6 @@ func = "severedLimbControl"
 before_vram = 0x80027844
 text = "{ void jfg_gore_limb(uint8_t*, recomp_context*); jfg_gore_limb(rdram, ctx); }"
 
-[[patches.hook]]
-func = "bloodHitSpriteAdd"
-before_vram = 0x82080334
-text = "{ int jfg_no_blood(void); if (jfg_no_blood()) { recomp_exit_function(); return; } }"
 
 # "Hit flash opacity" option (src/jfg/jfg_visuals.cpp): entry of frontFlashScreen(arg0, player, color), the red screen
 # when the character is hit (color in $a2). Returns the colour to use, 0 = no flash (the function returns nothing).
