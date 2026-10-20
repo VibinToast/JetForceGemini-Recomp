@@ -405,16 +405,38 @@ void rebuild_profile_menu() {
     list_user_profiles();
     load_profile_choice();
     text(m, "Built-in", FONT_SMALL, TEXT_DIM);
-    auto add = [m](const std::string& name) {
-        ui::Button* b = button(m, (g_active_profile == name ? "> " : "   ") + name, [name]() {
-            run_on_game([name](recomp_context*) { choose_profile(name); });
-            close_menus();
-        });
+    // Choosing a profile first shows what it changes (issue #7) in a panel under the list, applied with Apply. The panel
+    // is updated in place: the menu is not rebuilt from inside one of its own buttons.
+    struct Confirm { std::string pending; ui::Element* panel = nullptr; ui::Label* changes = nullptr; };
+    auto c = std::make_shared<Confirm>();
+    auto show = [c](const std::string& name) {
+        c->pending = name;
+        const std::string preview = profile_preview_text(name);
+        c->changes->set_text("Apply \"" + name + "\"?\n" + (preview.empty() ? std::string("It changes no settings.") : preview));
+        c->panel->set_display(ui::Display::Flex);
+    };
+    auto add = [m, show](const std::string& name) {
+        ui::Button* b = button(m, (g_active_profile == name ? "> " : "   ") + name, [name, show]() { show(name); });
         if (g_active_profile == name) b->set_color(ACCENT);
     };
     for (const BuiltinProfile& p : BUILTIN_PROFILES) add(p.name);
     if (!g_user_profiles.empty()) text(m, "Your profiles", FONT_SMALL, TEXT_DIM);
     for (const std::string& n : std::vector<std::string>(g_user_profiles)) add(n);
+    toggle(m, "Keep my controls (the Controls tab stays as it is)", g_profile_keep_controls, [c, show](bool on) {
+        set_profile_keep_controls(on);
+        if (!c->pending.empty()) show(c->pending);
+    });
+    c->panel = column(m, 6.0f);
+    c->panel->set_display(ui::Display::None);
+    c->panel->set_max_width(520.0f);
+    c->changes = text(c->panel, "", FONT_SMALL, TEXT);
+    ui::Element* buttons = row(c->panel);
+    button(buttons, "Apply", [c]() {
+        const std::string name = c->pending;
+        if (!name.empty()) run_on_game([name](recomp_context*) { choose_profile(name); });
+        close_menus();
+    });
+    button(buttons, "Cancel", [c]() { c->pending.clear(); c->panel->set_display(ui::Display::None); });
     text(m, "Save and edit profiles in the Select / Esc menu > Profiles.", FONT_SMALL, TEXT_DIM);
 }
 
