@@ -18,6 +18,7 @@
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
+#include "jfg_settings_api.h"
 
 namespace jfg {
 
@@ -111,14 +112,20 @@ void draw_options() {
             options_help("Objects normally fade out and disappear beyond a set distance. With this they stay drawn. Takes effect "
                          "for the objects in play; level scenery itself is not affected.");
             if (FRAME_RATE_OPTION) {
-                static const char* const rates[] = { "Original (30, drops to 20)", "60", "60 + interpolated (monitor rate)" };
+                static const char* const rates[] = { "Original (30, drops to 20)", "60", "60 + interpolated (experimental)" };
                 ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
                 changed |= ImGui::Combo("Frame rate", &g.frame_rate, rates, IM_ARRAYSIZE(rates));
+                if (frame_rate_needs_restart()) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Used after the game restarts.");
+                    ImGui::SameLine();
+                    if (ImGui::Button("Restart now")) jfg::settings::restart_game();
+                }
                 options_help("60: the game updates every video frame instead of every second one; game speed stays the same. If a "
                              "frame runs long, the game simply advances further in the next one. "
                              "Interpolated: the renderer also adds in-between frames up to your monitor's refresh rate (like the "
-                             "Graphics menu's Framerate: Display); some moving objects may look off. With Original, the Graphics "
-                             "menu's own Framerate setting applies.");
+                             "Graphics menu's Framerate: Display). Experimental: some moving objects may look off. A change "
+                             "applies after the game restarts. With Original, the Graphics menu's own Framerate setting "
+                             "applies.");
                 static const int limits[] = { 0, 90, 120, 144, 165, 240 };
                 static const char* const limit_names[] = { "Monitor", "90", "120", "144", "165", "240" };
                 int limit_index = 0;

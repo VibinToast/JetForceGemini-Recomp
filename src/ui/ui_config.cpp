@@ -226,6 +226,33 @@ void jfg_launcher_commit_settings() {
 }
 
 void close_config_menu() {
+    // JFG PORT: a changed "Frame rate" applies after a restart (src/jfg/jfg_frame_rate.cpp). Asked once per value;
+    // Later closes the menu as usual (with the graphics prompt below if needed).
+    static int jfg_restart_asked_for = -1;
+    const int jfg_rate = jfg::settings::get("frame_rate");
+    if (jfg::settings::frame_rate_needs_restart() && jfg_rate != jfg_restart_asked_for) {
+        jfg_restart_asked_for = jfg_rate;
+        recompui::open_choice_prompt(
+            "Restart to change the frame rate?",
+            "The new frame rate is used after the game restarts. Any progress since your last save will be lost.",
+            "Restart Now",
+            "Later",
+            []() {
+                if (ultramodern::renderer::get_graphics_config() != new_options) apply_graphics_config();
+                dino::config::save_config();
+                jfg::settings::restart_game();
+            },
+            []() {
+                close_config_menu();
+            },
+            recompui::ButtonVariant::Primary,
+            recompui::ButtonVariant::Tertiary,
+            true,
+            "config__close-menu-button"
+        );
+        return;
+    }
+
     if (ultramodern::renderer::get_graphics_config() != new_options) {
         recompui::open_choice_prompt(
             "Graphics options have changed",

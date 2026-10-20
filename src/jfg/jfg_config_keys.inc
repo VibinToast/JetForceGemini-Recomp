@@ -74,7 +74,7 @@ static const JfgOptionTitle jfg_option_titles[] = {
     { "res_option", "Resolution", 'c', "", "0:Original|1:Original 2x|2:Auto" },
     { "ds_option", "Downsampling", 'c', "", "1:Off|2:2x|4:4x" },
     { "msaa_option", "Anti-Aliasing (MSAA)", 'c', "", "0:None|1:2x|2:4x" },
-    { "frame_rate", "Frame Rate", 'c', "", "0:Original|1:60|2:60 + Interpolated" },
+    { "frame_rate", "Frame Rate", 'c', "", "0:Original|1:60|2:60 + Interpolated (Experimental)" },
     { "interp_limit", "Interpolation Limit", 'c', "", "0:Monitor|90:90|120:120|144:144|165:165|240:240" },
     { "widescreen", "Widescreen", 'b', "", "" },
     { "fov", "Field of View", 'r', "%", "" },
