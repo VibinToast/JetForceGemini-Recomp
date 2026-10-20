@@ -18,6 +18,7 @@
 #include "imgui/imgui.h"
 #include "debug_ui/debug_ui.hpp"
 #include "debug_ui/backend.hpp"
+#include "jfg_api.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -46,6 +47,7 @@ static float toolbar_offset() {
 // Called once per game tick on the game's main thread (hook at the entry of func_80044FAC_45BAC).
 extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     g_rdram = rdram;
+    jfg::api::fire(rdram, ctx, jfg::api::Event::GameTick, (int32_t)rd32(ADDR_delayDat));
     jfg_camera_restore();
     load_options();
     update_dump_folder();

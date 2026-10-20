@@ -5,3 +5,6 @@
 SquaddieControl
 SquadronControl
 squadsModuleTick
+
+# Mod API events (jfg_api.cpp)
+mainChangeLevel
