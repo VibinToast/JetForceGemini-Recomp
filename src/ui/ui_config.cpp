@@ -187,6 +187,12 @@ static int scanned_input_index = -1;
 static int focused_input_index = -1;
 static int focused_config_option_index = -1;
 
+// No option's description: a new launcher page starts with none, not one from the page before (the focused option's
+// number is shared by the pages).
+void jfg_config_clear_option_focus() {
+    focused_config_option_index = -1;
+}
+
 static bool msaa2x_supported = false;
 static bool msaa4x_supported = false;
 static bool msaa8x_supported = false;

@@ -375,7 +375,7 @@
 								<div class="rl-page" id="rl_page_textures" data-if="page == 'textures'">
 									<div class="rl-pack-note">
 										<span>The JFG 4K texture pack is a separate download.</span>
-										<button class="rl-link rl-link--inline" data-event-click="open_url('https://vibintoast.com/projects/jfg-4k')" style="nav-left: #tab_jfg_textures; nav-up: none; nav-down: #jfg_pack_0;">More info: vibintoast.com/content/textures/jfg-4k.html</button>
+										<button class="rl-link rl-link--inline" data-event-click="open_url('https://vibintoast.com/projects/jfg-4k')" style="nav-left: #tab_jfg_textures; nav-up: none; nav-down: #jfg_pack_0;">More info: vibintoast.com/projects/jfg-4k</button>
 									</div>
 									<div class="rl-tpl" data-model="jfg_textures_model"><template src="config-menu__jfg_textures"/></div>
 								</div>

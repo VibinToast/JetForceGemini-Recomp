@@ -59,9 +59,9 @@ static std::string pack_file_name(const std::string& folder) {
     return name;
 }
 
-// A pack's details: credits.json at its top level (name, version, author, website, description, image), and the image it
-// names (pack_image.png by default). Read once per pack and kept until the file changes (checked by the list, not by
-// pack_display_name, which runs every frame for the on-screen pack name).
+// A pack's details: credits.json at its top level (version, variant, author, website, description, image), and the image
+// it names (pack_image.png by default). Read once per pack and kept until the file changes (checked by the list). The
+// pack's name is its file or folder name, not one in credits.json.
 struct PackMeta {
     std::filesystem::file_time_type stamp{};
     uintmax_t size = 0;
@@ -88,7 +88,7 @@ static void parse_pack_json(PackInfo& info, const std::vector<char>& text,
     nlohmann::json j = nlohmann::json::parse(text.begin(), text.end(), nullptr, false);
     if (!j.is_object()) return;
     info.has_json = true;
-    info.name = json_string(j, "name");
+    info.variant = json_string(j, "variant");
     info.version = json_string(j, "version");
     info.author = json_string(j, "author");
     info.website = json_string(j, "website");
@@ -190,15 +190,20 @@ PackInfo texture_pack_info(const std::string& folder) {
     return info;
 }
 
+// The folder / file name without a version at its end: Official_Recomp_HD-2K_v1.1.0.rtz is Official_Recomp_HD-2K (the
+// version is shown from credits.json).
 std::string pack_display_name(const std::string& folder) {
     if (folder.empty()) return "Off (original textures)";
-    {
-        std::lock_guard lock(g_pack_meta_mutex);
-        auto it = g_pack_meta.find(folder);
-        if (it != g_pack_meta.end()) return it->second.info.name.empty() ? pack_file_name(folder) : it->second.info.name;
+    std::string name = pack_file_name(folder);
+    const size_t v = name.rfind("_v");
+    if (v != std::string::npos && v > 0 && v + 2 < name.size() && std::isdigit((unsigned char)name[v + 2])) {
+        bool version = true;
+        for (size_t i = v + 2; i < name.size(); i++) {
+            if (!std::isdigit((unsigned char)name[i]) && name[i] != '.') version = false;
+        }
+        if (version) name.resize(v);
     }
-    const PackInfo info = texture_pack_info(folder);
-    return info.name.empty() ? pack_file_name(folder) : info.name;
+    return name;
 }
 
 // Chooses a pack (or "" for none), saves the choice and makes the renderer (re)load it.
@@ -230,6 +235,9 @@ static void load_texture_pack_choice_now() {
         std::error_code ec;
         if (std::filesystem::is_directory("texture_pack", ec)) folder = "texture_pack"; // as before packs had names
     }
+    // A saved pack that is no longer there (removed or renamed) is Off; the file keeps the choice for when it is back.
+    std::error_code ec;
+    if (!folder.empty() && !std::filesystem::exists(std::filesystem::u8path(folder), ec)) folder.clear();
     std::lock_guard lock(g_pack_mutex);
     g_pack_folder = folder;
     g_pack_generation++;

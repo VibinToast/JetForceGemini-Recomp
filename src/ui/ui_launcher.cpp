@@ -37,6 +37,7 @@ static bool logo_available = false;   // assets/jfg_launcher/logo.png exists: sh
 static constexpr int TOAST_FRAMES = 180, TOAST_FPS = 30;
 void jfg_launcher_commit_settings();  // ui_config.cpp: applies pending graphics changes and saves the settings
 void jfg_config_menu_refresh();       // ui_config.cpp: refreshes the port's tabs (profiles, texture packs)
+void jfg_config_clear_option_focus(); // ui_config.cpp: no option's description shown
 
 struct LauncherPageInfo { const char* id; const char* title; const char* subtitle; const char* nav_id; };
 static const LauncherPageInfo LAUNCHER_PAGES[] = {
@@ -137,6 +138,7 @@ static void set_launcher_page(const std::string& page) {
     if (launcher_page == page) return;
     jfg_launcher_commit_settings(); // leaving a settings page keeps its changes
     launcher_page = page;
+    jfg_config_clear_option_focus();
     jfg_config_menu_refresh();
     model_handle.DirtyVariable("page");
     model_handle.DirtyVariable("page_title");
