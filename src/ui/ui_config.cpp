@@ -725,6 +725,17 @@ public:
                 }
                 focused_config_option_index = option_index;
                 model_handle.DirtyVariable("cur_config_index");
+                // JFG PORT: an option that gets the focus (controller, keyboard) scrolls into view as a whole row - its
+                // title and every choice. The focused radio or slider alone sits under the title, so at the bottom of a
+                // list the choices stayed below the edge of the box.
+                if (option_index >= 0 && event.GetType() == "focus") {
+                    for (Rml::Element* e = event.GetTargetElement(); e != nullptr; e = e->GetParentNode()) {
+                        if (e->IsClassSet("config-option")) {
+                            e->ScrollIntoView(Rml::ScrollIntoViewOptions(Rml::ScrollAlignment::Nearest, Rml::ScrollAlignment::Nearest));
+                            break;
+                        }
+                    }
+                }
             });
 
         constructor.Bind("cur_config_index", &focused_config_option_index);

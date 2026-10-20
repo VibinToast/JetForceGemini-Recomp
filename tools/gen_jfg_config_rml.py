@@ -321,7 +321,8 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
 </template>
 '''
 
-GENERAL_NOTE = '''                    <div class="jfg-note" style="display: block; margin: 32dp 12dp 16dp; font-size: 18dp; line-height: 26dp;">F10: the tools bar (cheats, level warp, items, weapons, texture packs). F9 or ` (backquote): the all-in-one debug window.</div>'''
+# In a wrapper the launcher hides (it has no F10 or F9: it is the game's menu that has them).
+GENERAL_NOTE = '''                    <div class="jfg-keys-note"><div class="jfg-note" style="display: block; margin: 32dp 12dp 16dp; font-size: 18dp; line-height: 26dp;">F10: the tools bar (cheats, level warp, items, weapons, texture packs). F9 or ` (backquote): the all-in-one debug window.</div></div>'''
 
 # (name, items, extra markup after the options, markup before them). Each is assets/config_menu/<name>.rml, bound to the
 # data model <name>_model, its tab is tab_<name>.
