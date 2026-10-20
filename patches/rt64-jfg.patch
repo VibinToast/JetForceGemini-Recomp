@@ -2980,9 +2980,32 @@ diff -ruN a/src/shared/rt64_gpu_tile.h b/src/shared/rt64_gpu_tile.h
      struct GPUTile {
          float2 ulScale;
 diff -ruN a/src/shaders/TextureSampler.hlsli b/src/shaders/TextureSampler.hlsli
---- a/src/shaders/TextureSampler.hlsli	2026-10-18 03:16:41.329792600 -0500
-+++ b/src/shaders/TextureSampler.hlsli	2026-10-18 03:16:41.329792600 -0500
-@@ -335,6 +335,23 @@
+--- a/src/shaders/TextureSampler.hlsli	2026-10-19 19:13:55.763285000 -0500
++++ b/src/shaders/TextureSampler.hlsli	2026-10-19 19:13:55.763285000 -0500
+@@ -237,7 +237,21 @@
+     
+     const bool flagShiftedByHalf = gpuTileFlagShiftedByHalf(gpuTile.flags);
+     if (flagShiftedByHalf) {
+-        uvCoord += float2(0.5f, 0.5f);
++        // JFG PORT: a point-sampled rectangle (HUD digits, text) with a replacement is sampled at vertexUV, which runs
++        // continuously from uls/ult at the rectangle's edge (original textures use lowResUV, already right). The N64 shows
++        // texel uls + i * step whole in pixel i, so on a forward axis pixel i covers [uls + i, uls + i + 1): no shift. On an
++        // axis drawn backwards (negative dsdx / dtdy, which ddx / ddy show; with flip the axes trade places) it covers
++        // (ult - i, ult - i + 1], one texel above vertexUV. The half texel was wrong both ways: on a forward axis the
++        // replacement sat half a texel left and showed half a texel of the next digit in the strip; on a backward one the
++        // last row was drawn a whole texel tall and the first half a texel. Triangles and filtered draws keep the half.
++        const bool jfgPointRect = renderFlagRect(renderFlags) && (otherMode.textFilt() == G_TF_POINT) && !renderFlagLinearFiltering(renderFlags);
++        if (jfgPointRect) {
++            const float2 jfgStep = ddxUVx + ddyUVy;
++            uvCoord += float2((jfgStep.x < 0.0f) ? 1.0f : 0.0f, (jfgStep.y < 0.0f) ? 1.0f : 0.0f);
++        }
++        else {
++            uvCoord += float2(0.5f, 0.5f);
++        }
+     }
+     
+     uvCoord *= gpuTile.tcScale;
+@@ -335,6 +349,23 @@
      }
  #endif
  
