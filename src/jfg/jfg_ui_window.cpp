@@ -123,9 +123,8 @@ void draw_options() {
                 options_help("60: the game updates every video frame instead of every second one; game speed stays the same. If a "
                              "frame runs long, the game simply advances further in the next one. "
                              "Interpolated: the renderer also adds in-between frames up to your monitor's refresh rate (like the "
-                             "Graphics menu's Framerate: Display). Experimental: some moving objects may look off. A change "
-                             "applies after the game restarts. With Original, the Graphics menu's own Framerate setting "
-                             "applies.");
+                             "Graphics menu's Framerate: Display). Experimental: some moving objects may look off. With "
+                             "Original, the Graphics tab's Renderer Framerate applies.");
                 static const int limits[] = { 0, 90, 120, 144, 165, 240 };
                 static const char* const limit_names[] = { "Monitor", "90", "120", "144", "165", "240" };
                 int limit_index = 0;

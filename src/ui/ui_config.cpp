@@ -822,6 +822,18 @@ static const UpstreamOption upstream_options[] = {
             new_options.ds_option = v;
             set_graphics_now();
         } },
+    // The recomp's own Framerate and its Manual target (used while the port's Frame Rate is Original).
+    { "rr_option", [] { return (int)new_options.rr_option; },
+        [](int v) {
+            if (v < 0 || v >= (int)ultramodern::renderer::RefreshRate::OptionCount) return;
+            new_options.rr_option = (ultramodern::renderer::RefreshRate)v;
+            set_graphics_now();
+        } },
+    { "rr_manual_value", [] { return new_options.rr_manual_value; },
+        [](int v) {
+            new_options.rr_manual_value = std::clamp(v, 20, 360);
+            set_graphics_now();
+        } },
     // A level the graphics card cannot do falls back to the next one down.
     { "msaa_option", [] { return (int)new_options.msaa_option; },
         [](int v) {
