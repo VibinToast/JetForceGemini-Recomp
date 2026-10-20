@@ -48,7 +48,7 @@ cmake --build "$OUT/build-tools" --parallel --target N64RecompCLI RSPRecomp
 # The game code is generated again only when something it is made from changed (the hash below, saved with it), so
 # a rebuild after a change in src/ or lib/ compiles only that. JFG_REGENERATE=1 generates it again anyway.
 STAMP=RecompiledFuncs/.inputs_hash
-inputs_hash() { python3 tools/recomp_inputs_hash.py "$ROM" jfg.us.toml jfg.us.syms.toml rsp-aspMain.jfg.toml tools/*.py \
+inputs_hash() { python3 tools/recomp_inputs_hash.py "$ROM" jfg.us.toml JFGRecompSyms/jfg.us.syms.toml rsp-aspMain.jfg.toml tools/*.py \
   tools/jfg.us.dynamic_relocs.json "$OUT/build-tools/N64Recomp" "$OUT/build-tools/RSPRecomp"; }
 if [ -z "${JFG_REGENERATE:-}" ] && [ -f "$STAMP" ] && [ -f rsp/aspMain.cpp ] && [ "$(cat "$STAMP")" = "$(inputs_hash)" ]; then
   say "game code is up to date (ROM, recompiler configs and tools unchanged): not generated again"
@@ -61,8 +61,8 @@ else
   "$OUT/build-tools/N64Recomp" jfg.us.toml > recomp.log 2>&1 || { tail -20 recomp.log; die "N64Recomp failed (full output: $HERE/recomp.log)"; }
   "$OUT/build-tools/RSPRecomp" rsp-aspMain.jfg.toml       # audio microcode -> rsp/aspMain.cpp
   python3 tools/merge_gen_anim_data.py RecompiledFuncs
-  python3 tools/fix_dynamic_relocs.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json baserom.us.recomp.z64 jfg.us.syms.toml
-  python3 tools/refuse_mod_hooks.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json jfg.us.syms.toml jfg.us.toml
+  python3 tools/fix_dynamic_relocs.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json baserom.us.recomp.z64 JFGRecompSyms/jfg.us.syms.toml
+  python3 tools/refuse_mod_hooks.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json JFGRecompSyms/jfg.us.syms.toml jfg.us.toml
   inputs_hash > "$STAMP"   # last, so a run that stopped half-way generates again next time
 fi
 
