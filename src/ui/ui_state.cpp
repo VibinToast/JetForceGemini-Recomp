@@ -45,6 +45,7 @@ void jfg_launcher_start_pressed(); // JFG PORT: src/ui/ui_launcher.cpp (controll
 void jfg_launcher_scroll(float pixels); // JFG PORT: src/ui/ui_launcher.cpp (controller: right stick)
 extern "C" void jfg_settings_menu_open(int open); // JFG PORT: src/jfg/jfg_camera.cpp (pauses the game)
 extern "C" void jfg_tools_ui_frame(void); // JFG PORT: src/jfg/jfg_ui_tools.cpp
+extern "C" int jfg_tools_controller_button(int button, int down, int bound); // JFG PORT: src/jfg/jfg_ui_tools.cpp (controller)
 
 static std::vector<char> read_file(const std::filesystem::path& filepath) {
     std::vector<char> ret{};
@@ -726,6 +727,10 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
             if (sdl_key == latest_controller_key_pressed) {
                 latest_controller_key_pressed = SDLK_UNKNOWN;
             }
+            // JFG PORT: F10's tools act on B and Start when they are let go (the game behind must not see them held).
+            if (!dino::input::all_input_disabled()) {
+                ::jfg_tools_controller_button(cur_event.cbutton.button, 0, sdl_key != 0);
+            }
         }
 
         if (!dino::input::all_input_disabled()) {
@@ -773,6 +778,13 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                     break;
                 }
                 int sdl_key = cont_button_to_key(cur_event.cbutton);
+                // JFG PORT: in F10's tools the bumpers switch menus, B is Back and Start hands the controller to the game
+                // (src/jfg/jfg_ui_tools.cpp), unless the button is bound to a menu input.
+                if (context_capturing_input && ::jfg_tools_controller_button(button, 1, sdl_key != 0)) {
+                    non_mouse_interacted = true;
+                    cont_interacted = true;
+                    break;
+                }
                 // JFG PORT: in the launcher the bumpers switch pages, Start goes to the Play page's Start button and B is
                 // Back (as Esc: from a page to the sidebar, closes a dialog), unless B is bound to a menu input.
                 if (context_capturing_input && recompui::is_context_shown(recompui::get_launcher_context_id()) && !recompui::is_prompt_open()) {
