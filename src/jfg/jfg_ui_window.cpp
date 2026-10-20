@@ -119,6 +119,21 @@ void draw_options() {
                              "Interpolated: the renderer also adds in-between frames up to your monitor's refresh rate (like the "
                              "Graphics menu's Framerate: Display); some moving objects may look off. With Original, the Graphics "
                              "menu's own Framerate setting applies.");
+                static const int limits[] = { 0, 90, 120, 144, 165, 240 };
+                static const char* const limit_names[] = { "Monitor", "90", "120", "144", "165", "240" };
+                int limit_index = 0;
+                for (int i = 0; i < IM_ARRAYSIZE(limits); i++) if (g.interp_limit == limits[i]) limit_index = i;
+                ImGui::BeginDisabled(g.frame_rate != 2);
+                ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+                if (ImGui::Combo("Interpolation limit", &limit_index, limit_names, IM_ARRAYSIZE(limit_names))) {
+                    g.interp_limit = limits[limit_index];
+                    changed = true;
+                }
+                ImGui::EndDisabled();
+                options_help("With 60 + interpolated: the most frames a second the renderer makes. Monitor: your monitor's "
+                             "refresh rate. A lower limit takes less from the graphics card (try it if the frame rate is uneven "
+                             "in a large or maximized window). Motion is smoothest at a multiple of 60 (120, 240) and at most "
+                             "your monitor's rate.");
             }
             ImGui::EndTabItem();
         }
