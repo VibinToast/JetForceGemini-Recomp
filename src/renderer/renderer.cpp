@@ -6,6 +6,7 @@ extern "C" void jfg_texture_dump_folder(char* buf, int size); // src/jfg/jfg_tex
 extern "C" int jfg_texture_pack_current(char* buf, int size); // the chosen pack folder (relative, "" = none); returns a change counter
 extern "C" int jfg_texture_three_point(void); // src/jfg/jfg_visuals.cpp: "Texture filtering" (1 = the N64's three-point filter)
 extern "C" int jfg_output_filtering(void);    // src/jfg/jfg_visuals.cpp: "Picture scaling" (0 anti-aliased pixel scaling, 1 linear, 2 nearest)
+extern "C" int jfg_interp_limit(void);       // src/jfg/jfg_frame_rate.cpp: "Interpolation Limit" option; 0 = the monitor's rate
 extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_frame_rate.cpp: "Frame rate" option; -1 = use the Graphics setting, 0 = Original, 1 = Display
 #define HLSL_CPU
 #include "hle/rt64_application.h"
@@ -287,7 +288,16 @@ void set_application_user_config(RT64::Application* application, const ultramode
     // JFG PORT: the F9 menu's "Frame rate" option can override the Graphics menu's Framerate setting.
     switch (jfg_refresh_override()) {
         case 0: application->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Original; break;
-        case 1: application->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Display; break;
+        case 1:
+            // With an Interpolation Limit, RT64's Manual rate (capped at the monitor's rate by RT64 itself).
+            if (jfg_interp_limit() > 0) {
+                application->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Manual;
+                application->userConfig.refreshRateTarget = jfg_interp_limit();
+            }
+            else {
+                application->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Display;
+            }
+            break;
         default: break;
     }
     application->userConfig.internalColorFormat = to_rt64(config.hpfb_option);
@@ -555,14 +565,18 @@ void RT64Context::update_game_aspect_override() {
                 app->updateEnhancementConfig();
             }
         }
-        // And the "Frame rate" option (Display = interpolate up to the monitor's refresh rate).
-        static int applied_rate = -2;
+        // And the "Frame rate" option (Display = interpolate up to the monitor's refresh rate; with an Interpolation
+        // Limit, up to that).
+        static int applied_rate = -2, applied_limit = -1;
         const int rate = jfg_refresh_override();
-        if (rate != applied_rate) {
+        const int limit = jfg_interp_limit();
+        if ((rate != applied_rate) || (limit != applied_limit)) {
             applied_rate = rate;
+            applied_limit = limit;
             const auto &config = ultramodern::renderer::get_graphics_config();
-            app->userConfig.refreshRate = (rate == 1) ? RT64::UserConfiguration::RefreshRate::Display
+            app->userConfig.refreshRate = (rate == 1) ? ((limit > 0) ? RT64::UserConfiguration::RefreshRate::Manual : RT64::UserConfiguration::RefreshRate::Display)
                 : (rate == 0) ? RT64::UserConfiguration::RefreshRate::Original : to_rt64(config.rr_option);
+            app->userConfig.refreshRateTarget = ((rate == 1) && (limit > 0)) ? limit : config.rr_manual_value;
             app->updateUserConfig(false);
         }
         // And the filtering options. Both are read by RT64 every frame, so no framebuffers need to be discarded.
