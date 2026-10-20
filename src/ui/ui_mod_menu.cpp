@@ -703,7 +703,7 @@ ModMenu::ModMenu(Element *parent) : Element(parent) {
         body_empty_container->set_display(Display::None);
         {
             context.create_element<Element>(body_empty_container);
-            context.create_element<Label>(body_empty_container, "You have no mods. Go get some!", LabelStyle::Large);
+            context.create_element<Label>(body_empty_container, "You have no mods.", LabelStyle::Large);
             context.create_element<Element>(body_empty_container);
         } // body_empty_container
 

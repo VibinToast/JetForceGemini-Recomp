@@ -63,9 +63,9 @@
 		.jfg-desc__title { display: block; margin-bottom: 18dp; font-size: 30dp; line-height: 38dp; letter-spacing: 2dp; font-weight: bold; color: #ffb21a; }
 		.jfg-desc p { padding: 0dp; font-size: 25dp; line-height: 39dp; letter-spacing: 0.5dp; color: #e8f3ff; }
 		.jfg-desc p b { color: #3cc8ff; }
-		/* JFG PORT: eight tabs do not fit at the base size: they ran under the quit and close buttons (absolutely placed at
-		   the top right). Slightly smaller tabs, and the tab row keeps clear of the buttons. */
-		#config_tabset tabs { padding-right: 144dp; }
+		/* JFG PORT: eight tabs do not fit at the base size: they ran under the launcher, quit and close buttons (absolutely
+		   placed at the top right). Slightly smaller tabs, and the tab row keeps clear of the three buttons. */
+		#config_tabset tabs { padding-right: 214dp; }
 		#config_tabset tab.tab { nav-up: none; padding-left: 16dp; padding-right: 16dp; font-size: 32dp; letter-spacing: 2dp; line-height: 32dp; }
 	</style>
 </head>
@@ -135,6 +135,14 @@
 						</panel>
 					</tabset>
 					<div class="config__icon-buttons">
+						<!-- JFG PORT: Return to Launcher (restarts the game on the launcher: src/ui/ui_config.cpp) -->
+						<button
+							class="icon-button"
+							onclick="open_return_to_launcher_prompt"
+							id="config__launcher-button"
+						>
+							<svg src="icons/Launcher.svg" />
+						</button>
 						<button
 							class="icon-button"
 							onclick="open_quit_game_prompt"

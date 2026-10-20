@@ -145,6 +145,9 @@
 			.rl-start-shadow:hover .rl-start.rl-ready { top: -8dp; left: -8dp; }
 			#window:not([mouse-active]) .rl-start.rl-ready:focus { top: -8dp; left: -8dp; border-color: #E8F3FF; }
 			.rl-start-note { display: block; margin-top: 12dp; font-size: 17dp; text-align: center; color: #8199BF; }
+			.rl-skip { display: flex; flex-direction: row; align-items: center; margin-top: 10dp; }
+			.rl-skip-shadow { flex: 0 0 auto; }
+			.rl-skip-note { display: block; flex: 1 1 auto; margin: 16dp 0dp 0dp 18dp; font-size: 15dp; line-height: 22dp; color: #8199BF; }
 			/* A newer release exists: a bar on the Play page, above the Start button, that opens the update dialog. */
 			.rl-banner-shadow { display: block; position: relative; margin: 26dp 0dp 0dp 6dp; background-color: #5A3A00; }
 			.rl-banner { display: block; position: relative; top: -6dp; left: -6dp; padding: 14dp 20dp; border-width: 2dp; border-color: #FFB21A;
@@ -245,7 +248,7 @@
 									<div class="rl-wordmark__sub">RECOMPILED<span class="rl-cursor">_</span></div>
 								</div>
 							</div>
-							<div class="rl-btn-shadow"><button id="nav_play" class="rl-btn" autofocus data-class-rl-active="page == 'play'"
+							<div class="rl-btn-shadow"><button id="nav_play" class="rl-btn" data-attrif-autofocus="!rom_valid" data-class-rl-active="page == 'play'"
 								data-event-focus="set_page('play')" data-style-nav-right="rom_valid ? '#rl_start' : '#rl_browse'"
 								style="nav-up: #nav_exit; nav-down: #tab_jfg_profiles;">Play</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_profiles" class="rl-btn" data-class-rl-active="page == 'profiles'"
@@ -310,11 +313,19 @@
 										</button>
 									</div>
 									<div class="rl-start-shadow">
-										<button id="rl_start" class="rl-start" data-class-rl-ready="rom_valid" data-event-click="start_game()"
+										<button id="rl_start" class="rl-start" data-attrif-autofocus="rom_valid" data-class-rl-ready="rom_valid" data-event-click="start_game()"
 											data-style-nav-up="update_available ? '#rl_update_banner' : '#rl_browse'"
 											style="nav-left: #nav_play;">Start Jet Force Gemini</button>
 									</div>
 									<div class="rl-start-note" data-if="!rom_valid">Load a ROM to start.</div>
+									<!-- Skip the launcher next time (jfg_launcher.txt next to the game, skip_launcher): only with a ROM loaded -->
+									<div data-if="rom_valid">
+										<div class="rl-skip">
+											<div class="rl-action-shadow rl-skip-shadow"><button id="rl_skip_launcher" class="rl-action" data-class-rl-action--outline="!skip_launcher" data-event-click="toggle_skip_launcher()"
+												style="nav-left: #nav_play; nav-up: #rl_start;">Skip the launcher: {{ skip_launcher ? 'On' : 'Off' }}</button></div>
+											<div class="rl-skip-note">On: the game starts straight away with this ROM next time. In the game, the launcher button next to Quit in the settings menu (Select / Esc) brings you back here.</div>
+										</div>
+									</div>
 									<div class="rl-keys">
 										<div class="rl-heading">While playing</div>
 										<div class="rl-key-row"><div class="rl-key">Select / Esc</div><div>This settings menu (Profiles, General, Gameplay, Controls, Graphics and the rest)</div></div>

@@ -27,6 +27,11 @@ GENERAL = [
      "F7 (or F10 > Tools) flies a free camera for screenshots: WASD / left stick move where it looks, mouse / right stick look, Space / A up, Ctrl / B down, holding fire flies faster. F7 again ends it."),
     ("bool", "fly_freeze", "Freeze While Flying", None, "The game stands still while the fly camera is on (enemies, effects and the level stop as when paused)."),
     ("bool", "fly_hide_hud", "Hide HUD While Flying", None, "The health meter and the rest of the HUD are hidden while the fly camera is on."),
+    ("group", None, "Launcher", None, None),
+    ("bool", "skip_launcher", "Skip the Launcher", None,
+     "<b>On</b>: the game starts straight away with your ROM, without the launcher. In the game, the launcher button next to Quit in this menu still takes you back to it. Saved in jfg_launcher.txt next to the game."),
+    ("bool", "check_for_updates", "Check for Updates", None,
+     "<b>On</b>: when the game starts it asks GitHub whether a newer release exists, and the launcher and a note in the game show one. <b>Off</b>: it never contacts GitHub. Turning it on checks straight away. Saved in jfg_launcher.txt next to the game."),
 ]
 
 GAMEPLAY = [
