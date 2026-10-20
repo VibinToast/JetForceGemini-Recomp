@@ -63,6 +63,7 @@ namespace recompui {
     ContextId get_launcher_context_id();
     ContextId get_config_context_id();
     ContextId get_config_sub_menu_context_id();
+    ContextId get_config_sub_menu_parent_context(); // JFG PORT: the config menu or the launcher (ui_mod_menu.cpp)
 
     enum class ConfigTab {
         General,

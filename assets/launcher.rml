@@ -7,6 +7,7 @@
 		     pages are the Select / Esc menu's own templates and data models, restyled here. -->
 		<link type="text/rcss" href="jfg_launcher/vibintoast.rcss"/>
 		<link type="text/template" href="config_menu/controls.rml" />
+		<link type="text/template" href="config_menu/mods.rml" />
 		<link type="text/template" href="config_menu/jfg_profiles.rml" />
 		<link type="text/template" href="config_menu/jfg_general.rml" />
 		<link type="text/template" href="config_menu/jfg_gameplay.rml" />
@@ -250,9 +251,11 @@
 							<div class="rl-btn-shadow"><button id="tab_jfg_graphics" class="rl-btn" data-class-rl-active="page == 'graphics'"
 								data-event-focus="set_page('graphics')" style="nav-up: #tab_controls; nav-down: #tab_jfg_textures; nav-right: #jfg_wm_option_0;">Graphics</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_textures" class="rl-btn" data-class-rl-active="page == 'textures'"
-								data-event-focus="set_page('textures')" style="nav-up: #tab_jfg_graphics; nav-down: #nav_about; nav-right: #jfg_pack_0;">Texture Packs</button></div>
+								data-event-focus="set_page('textures')" style="nav-up: #tab_jfg_graphics; nav-down: #tab_mods; nav-right: #jfg_pack_0;">Texture Packs</button></div>
+							<div class="rl-btn-shadow"><button id="tab_mods" class="rl-btn" data-class-rl-active="page == 'mods'"
+								data-event-focus="set_page('mods')" style="nav-up: #tab_jfg_textures; nav-down: #nav_about; nav-right: auto;">Mods</button></div>
 							<div class="rl-btn-shadow"><button id="nav_about" class="rl-btn" data-class-rl-active="page == 'about'"
-								data-event-focus="set_page('about')" style="nav-up: #tab_jfg_textures; nav-down: #nav_exit;">About</button></div>
+								data-event-focus="set_page('about')" style="nav-up: #tab_mods; nav-down: #nav_exit;">About</button></div>
 							<div class="rl-separator"></div>
 							<div class="rl-btn-shadow"><button id="nav_exit" class="rl-btn rl-btn--exit" onclick="exit_game"
 								style="nav-up: #nav_about; nav-down: #nav_play;">Exit</button></div>
@@ -339,6 +342,10 @@
 										<button class="rl-link rl-link--inline" data-event-click="open_url('https://vibintoast.com/projects/jfg-4k')" style="nav-left: #tab_jfg_textures; nav-up: none; nav-down: #jfg_pack_0;">More info: vibintoast.com/content/textures/jfg-4k.html</button>
 									</div>
 									<div class="rl-tpl" data-model="jfg_textures_model"><template src="config-menu__jfg_textures"/></div>
+								</div>
+								<!-- data-visible, not data-if: the mod menu (ui_mod_menu.cpp) must not be destroyed and made again -->
+								<div class="rl-page rl-page-mods" id="rl_page_mods" data-visible="page == 'mods'">
+									<div class="rl-tpl"><template src="config-menu__mods"/></div>
 								</div>
 
 								<!-- About -->

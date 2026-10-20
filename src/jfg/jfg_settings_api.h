@@ -28,4 +28,5 @@ namespace jfg::settings {
     void set_texture_pack(const std::string& folder);
     int texture_pack_count();              // textures loaded from the current pack, -1 if none
     int dumped_texture_files();
+    void open_texture_packs_folder();      // in the file manager
 }
