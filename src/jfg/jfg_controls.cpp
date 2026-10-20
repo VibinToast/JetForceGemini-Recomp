@@ -128,6 +128,16 @@ extern "C" void jfg_mouse_wheel(int notches) {
 }
 
 extern "C" void jfg_mouse_motion(int dx, int dy) {
+    {
+        // JFG_DEBUG_MOUSE=1: every mouse report, with the time since the one before (does the mouse arrive in bursts?).
+        static const bool log_reports = std::getenv("JFG_DEBUG_MOUSE") != nullptr;
+        if (log_reports) {
+            static auto last = std::chrono::steady_clock::now();
+            const auto now = std::chrono::steady_clock::now();
+            std::fprintf(stderr, "[report] %.2f ms dx %d dy %d\n", std::chrono::duration<double, std::milli>(now - last).count(), dx, dy);
+            last = now;
+        }
+    }
     if (dino::input::game_input_disabled()) return; // a menu is open: the mouse belongs to it, the camera and aim stay still
     g_mouse_dx.fetch_add(dx, std::memory_order_relaxed);
     g_mouse_dy.fetch_add(dy, std::memory_order_relaxed);
@@ -461,6 +471,14 @@ void jfg_camera_controls(recomp_context* ctx) {
     {
         // Mouse movement for this tick (always taken, so nothing piles up in menus).
         const int mx = g_mouse_dx.exchange(0, std::memory_order_relaxed), my = g_mouse_dy.exchange(0, std::memory_order_relaxed);
+        // JFG_DEBUG_MOUSE=1 logs each tick's mouse movement and the time since the tick before (smoothness tests).
+        static const bool log_mouse = std::getenv("JFG_DEBUG_MOUSE") != nullptr;
+        if (log_mouse) {
+            static auto last = std::chrono::steady_clock::now();
+            const auto now = std::chrono::steady_clock::now();
+            std::fprintf(stderr, "[mouse] %.2f ms dx %d dy %d\n", std::chrono::duration<double, std::milli>(now - last).count(), mx, my);
+            last = now;
+        }
         const bool mouse = jfg_mouse_keyboard_active() != 0 && !dino::input::game_input_disabled();
         const float cam = MOUSE_RADIANS_PER_COUNT * (float)g.mouse_camera_speed / 100.0f;
         const float aim = MOUSE_RADIANS_PER_COUNT * (32768.0f / PI_F) * (float)g.mouse_aim_speed / 100.0f;
