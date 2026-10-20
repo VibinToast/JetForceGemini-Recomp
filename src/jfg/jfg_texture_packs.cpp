@@ -62,7 +62,7 @@ static std::string pack_file_name(const std::string& folder) {
     return name;
 }
 
-// A pack's details: credits.json at its top level (version, variant, author, website, description, image), and the image
+// A pack's details: credits.json at its top level (id, variant, version, author, website, description, image), and the image
 // it names (pack_image.png by default). Read once per pack and kept until the file changes (checked by the list). The
 // pack's name is its file or folder name, not one in credits.json.
 struct PackMeta {
@@ -91,6 +91,7 @@ static void parse_pack_json(PackInfo& info, const std::vector<char>& text,
     nlohmann::json j = nlohmann::json::parse(text.begin(), text.end(), nullptr, false);
     if (!j.is_object()) return;
     info.has_json = true;
+    info.id = json_string(j, "id");
     info.variant = json_string(j, "variant");
     info.version = json_string(j, "version");
     info.author = json_string(j, "author");
@@ -227,7 +228,8 @@ void load_texture_pack_choice() {
     std::call_once(once, load_texture_pack_choice_now);
 }
 static void load_texture_pack_choice_now() {
-    join_split_packs(); // parts put in texture_packs since the last run
+    delete_replaced_packs(); // packs an update of the official pack replaced while they were open
+    join_split_packs();      // parts put in texture_packs since the last run
     std::string folder;
     if (std::FILE* f = std::fopen(PACK_CHOICE_FILE, "r")) {
         char line[512] = {};
@@ -353,7 +355,9 @@ static std::mutex g_join_mutex;
 static bool g_join_running = false;
 static std::string g_join_text;       // what the Textures page shows: progress, the result or why it failed
 static int g_join_finished = 0;        // joins done, so the menus know to list the new pack
-static std::set<std::string> g_join_given_up; // "<part 1>|<size of the parts>|<time of the newest>" that did not join
+// Parts that did not make a whole pack (missing or damaged), with why: "<part 1>|<size of the parts>|<time of the newest>".
+// Not tried again until they change. (A pack already there, or too little disk space, is looked at again every time.)
+static std::map<std::string, std::string> g_join_given_up;
 
 static void set_join_text(const std::string& text) { std::lock_guard lock(g_join_mutex); g_join_text = text; }
 
@@ -433,7 +437,7 @@ static void join_thread(std::filesystem::path pack, std::vector<std::filesystem:
     if (!failure.empty()) {
         std::filesystem::remove(temp, ec);
         std::lock_guard lock(g_join_mutex);
-        g_join_given_up.insert(key);
+        g_join_given_up[key] = failure;
         g_join_text = failure;
         g_join_running = false;
         return;
@@ -462,6 +466,7 @@ void join_split_packs() {
     {
         std::lock_guard lock(g_join_mutex);
         if (g_join_running) return;
+        g_join_text.clear(); // a note from an earlier look is only shown again if it still applies
     }
     std::error_code ec;
     for (std::filesystem::directory_iterator it("texture_packs", ec), end; !ec && it != end; it.increment(ec)) {
@@ -488,16 +493,17 @@ void join_split_packs() {
         if (empty_part) continue; // a placeholder: still downloading
         const std::string key = file + "|" + std::to_string(total) + "|" + std::to_string(newest.time_since_epoch().count());
         std::lock_guard lock(g_join_mutex);
-        if (g_join_given_up.count(key) != 0) continue;
+        if (auto given_up = g_join_given_up.find(key); given_up != g_join_given_up.end()) {
+            g_join_text = given_up->second; // still not whole: say so again
+            continue;
+        }
         const std::string name = pack_display_name("texture_packs/" + u8_name(pack));
         if (std::filesystem::exists(pack, e)) {
-            g_join_given_up.insert(key);
             g_join_text = name + " is already in texture_packs, so its parts were not joined. Remove one or the other.";
             continue;
         }
         const std::filesystem::space_info space = std::filesystem::space("texture_packs", e);
         if (!e && space.available < total + (64u << 20)) {
-            g_join_given_up.insert(key);
             g_join_text = "Not enough disk space to join " + name + " from its parts (" + std::to_string((total + (1u << 29)) >> 30) + " GB needed).";
             continue;
         }
@@ -506,6 +512,11 @@ void join_split_packs() {
         std::thread(join_thread, pack, std::move(parts), total, key).detach();
         return;
     }
+}
+
+bool pack_join_running() {
+    std::lock_guard lock(g_join_mutex);
+    return g_join_running;
 }
 
 std::string pack_join_text(int& finished) {

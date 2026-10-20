@@ -32,6 +32,8 @@ GENERAL = [
      "<b>On</b>: the game starts straight away with your ROM, without the launcher. In the game, the launcher button next to Quit in this menu still takes you back to it. Saved in jfg_launcher.txt next to the game."),
     ("bool", "check_for_updates", "Check for Updates", None,
      "<b>On</b>: when the game starts it asks GitHub whether a newer release exists, and the launcher and a note in the game show one. <b>Off</b>: it never contacts GitHub. Turning it on checks straight away. Saved in jfg_launcher.txt next to the game."),
+    ("bool", "show_official_pack", "Official HD Texture Pack", None,
+     "<b>On</b>: the launcher's Texture Packs page shows the official HD texture pack, to download or update with one click (with Check for Updates on). <b>Off</b>: hidden, and GitHub is not asked about it. Saved in jfg_launcher.txt next to the game."),
 ]
 
 GAMEPLAY = [
@@ -262,16 +264,19 @@ def options_tab(name, items, tab_id, extra_markup="", before_markup="", desc_mar
 # shows its details on the right (PACK_DETAILS).
 TEXTURE_PACKS = '''                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Texture Pack</label></div>
                     <div class="config-option jfg-option" style="flex: 0 0 auto;">
-                        <label class="config-option__title">{{pack_status}}</label>
+                        <label class="config-option__title jfg-pack-status">{{pack_status}}<span class="jfg-pack__variant" data-if="pack_status_variant != ''">{{pack_status_variant}}</span>{{pack_status_count}}</label>
                         <div class="jfg-note jfg-pack-join" data-if="pack_join_text != ''">{{pack_join_text}}</div>
                         <div class="jfg-pack-list">
                             <button class="button jfg-pack" data-for="p : packs" data-attr-id="'jfg_pack_' + it_index" data-style-nav-left="it_index == 0 ? '#tab_jfg_textures' : 'auto'" data-style-nav-up="it_index == 0 ? '#tab_jfg_textures' : 'auto'" data-event-click="set_pack(p.folder)" data-event-focus="view_pack(it_index)" data-event-mouseover="view_pack(it_index)" data-class-jfg-selected="p.selected">
                                 <div class="jfg-pack__thumb" data-style-decorator="p.image != '' ? 'image(' + p.image + ' contain)' : 'none'"></div>
                                 <div class="jfg-pack__text">
-                                    <div class="jfg-pack__name">{{p.label}}</div>
-                                    <div class="jfg-pack__meta">{{p.version}} {{p.author}}</div>
+                                    <div class="jfg-pack__name">{{p.label}}<span class="jfg-pack__variant" data-if="p.variant != ''">{{p.variant}}</span></div>
+                                    <div class="jfg-pack__meta">{{p.version}} {{p.author}}<span class="jfg-pack__size" data-if="p.size != ''">{{p.size}}</span></div>
                                 </div>
-                                <div class="jfg-pack__kind" data-if="p.kind != ''">{{p.kind}}</div>
+                                <div class="jfg-pack__tags">
+                                    <div class="jfg-pack__update" data-if="p.update">Update available</div>
+                                    <div class="jfg-pack__kind" data-if="p.kind != ''">{{p.kind}}</div>
+                                </div>
                             </button>
                         </div>
                         <div style="display: block; width: 100%;">
@@ -286,8 +291,8 @@ TEXTURE_PACKS = '''                    <div class="config-option" style="margin:
 PACK_DETAILS = '''                    <div data-if="cur_config_index == -1"><div data-for="p : packs"><div data-if="it_index == pack_view">
                         <div class="jfg-pack-detail__image" data-if="p.image != ''" data-style-decorator="p.image != '' ? 'image(' + p.image + ' contain)' : 'none'"></div>
                         <div class="jfg-desc__card">
-                            <div class="jfg-desc__title">{{p.label}}</div>
-                            <div class="jfg-pack-detail__meta" data-if="p.version != '' || p.author != ''">{{p.version}} {{p.author}}</div>
+                            <div class="jfg-desc__title">{{p.label}}<span class="jfg-pack__variant" data-if="p.variant != ''">{{p.variant}}</span></div>
+                            <div class="jfg-pack-detail__meta" data-if="p.version != '' || p.author != '' || p.size != ''">{{p.version}} {{p.author}}<span class="jfg-pack__size" data-if="p.size != ''">{{p.size}}</span></div>
                             <p data-if="p.description != ''">{{p.description}}</p>
                             <p data-if="p.no_details">This pack has no credits.json with its details.</p>
                             <button class="button jfg-pack-detail__site" data-if="p.website != ''" data-event-click="open_pack_website()">{{p.website}}</button>
