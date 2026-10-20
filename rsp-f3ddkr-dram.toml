@@ -1,0 +1,9 @@
+text_offset = 0xD96F0
+# The task bootloader copies one 4 KiB IMEM image. The retail symbol extends
+# beyond that boundary, but those trailing bytes are not part of executable IMEM.
+text_size = 0x1000
+text_address = 0x04001000
+rom_file_path = "baserom.us.v80.z64"
+output_file_path = "rsp/f3ddkr_dram.cpp"
+output_function_name = "f3ddkr_dram"
+extra_indirect_branch_targets = []

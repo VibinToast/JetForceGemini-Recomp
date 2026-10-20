@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Diddy Kong Racing: Recompiled
+Comment=Native recompilation of Diddy Kong Racing for user-supplied game data
+Categories=Game;
+Icon=io.github.cyscott.dkrrecomp
+Exec=DiddyKongRacingRecompiled
+Terminal=false

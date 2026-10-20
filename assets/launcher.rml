@@ -1,0 +1,107 @@
+<rml>
+	<head>
+		<title>Launcher</title>
+		<link type="text/rcss" href="rml.rcss"/>
+		<link type="text/rcss" href="recomp.rcss"/>
+		<style>
+			body
+			{
+				width: 100%;
+				height: 100%;
+			}
+				.dkr-wordmark { font-family: LatoLatin; font-weight: bold; text-align: center; color: #ffd83d; }
+			.dkr-wordmark__top { font-size: 44dp; line-height: 44dp; letter-spacing: 1dp; }
+			.dkr-wordmark__racing { color: #61d7ff; font-size: 56dp; line-height: 56dp; margin-top: -6dp; }
+			.dkr-wordmark__recompiled { color: #ffffff; font-size: 16dp; line-height: 16dp; letter-spacing: 4dp; margin-top: 8dp; }
+		</style>
+	</head>
+	<body>
+		<div id="window" data-model="launcher_model">
+			<div class="launcher">
+				<svg src="images/background-gradient.svg" class="launcher-background" />
+
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--big" style="left: 81%; top: 58%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--medium launcher-star--delay1" style="left: 69%; top: 46%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--small" style="left: 74%; top: 69%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--tiny" style="left: 90%; top: 24%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--far" style="left: 93%; top: 50%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--far" style="left: 98%; top: 64%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--far" style="left: 72%; top: 89%" />
+				<svg src="images/star-blu.svg" class="launcher-star launcher-star--small launcher-star--delay1" style="left: 79%; top: 20%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--medium" style="left: 55%; top: 94%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--tiny" style="left: 41%; top: 87%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--far" style="left: 32%; top: 90%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--far" style="left: 23%; top: 86%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--tiny" style="left: 8%; top: 93%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--small" style="left: 1%; top: 71%" />
+				<svg src="images/star-blu.svg" class="launcher-star launcher-star--big launcher-star--delay2" style="left: 28%; top: 69%" />
+				<svg src="images/star-blu.svg" class="launcher-star launcher-star--tiny" style="left: 15%; top: 61%" />
+				<svg src="images/star-blu.svg" class="launcher-star launcher-star--tiny" style="left: 29%; top: 50%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--far" style="left: 9%; top: 59%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--far" style="left: 0.5%; top: 51%" />
+				<svg src="images/star-blu.svg" class="launcher-star launcher-star--small" style="left: 17%; top: 48%" />
+				<svg src="images/star-blu.svg" class="launcher-star launcher-star--small launcher-star--delay1" style="left: 13%; top: 48.5%" />
+				<svg src="images/star-red.svg" class="launcher-star launcher-star--far" style="left: 18%; top: 36%" />
+				<svg src="images/star-blu.svg" class="launcher-star launcher-star--far" style="left: 3%; top: 37%" />
+
+				<div class="launcher__vertical-split">
+					<div class="launcher__title-quadrant">
+						<div class="dkr-wordmark">
+							<div class="dkr-wordmark__top">DIDDY KONG</div>
+							<div class="dkr-wordmark__racing">RACING</div>
+							<div class="dkr-wordmark__recompiled">RECOMPILED</div>
+						</div>
+					</div>
+					<div class="launcher__content-quadrant"></div>
+				</div>
+				<div class="launcher__vertical-split launcher__vertical-split--right">
+					<div class="launcher__background-wrapper">
+
+					</div>
+					<div class="launcher__title-quadrant launcher__title-quadrant--right">
+						<div class="subtitle-title subtitle-title--right">
+
+						</div>
+					</div>
+					<div class="launcher__content-quadrant">
+						<button id="launcher_select_rom" data-if="!rom_valid" onclick="select_rom" class="menu-list-item menu-list-item--right" autofocus
+							style="nav-up: #launcher_exit; nav-down: #launcher_controls;">
+							<div class="menu-list-item__bullet">•</div>
+							<div class="menu-list-item__label">Select ROM</div>
+						</button>
+						<button id="launcher_start" data-if="rom_valid" onclick="start_game" class="menu-list-item menu-list-item--right" autofocus
+							style="nav-up: #launcher_exit; nav-down: #launcher_controls;">
+							<div class="menu-list-item__bullet">•</div>
+							<div class="menu-list-item__label">Start game</div>
+						</button>
+						<button id="launcher_controls" onclick="open_controls" class="menu-list-item menu-list-item--right"
+							data-style-nav-up="rom_valid ? '#launcher_start' : '#launcher_select_rom'"
+							style="nav-down: #launcher_settings;">
+							<div class="menu-list-item__bullet">•</div>
+							<div class="menu-list-item__label">Setup controls</div>
+						</button>
+						<button id="launcher_settings" onclick="open_settings" class="menu-list-item menu-list-item--right"
+							style="nav-up: #launcher_controls; nav-down: #launcher_mods;">
+							<div class="menu-list-item__bullet">•</div>
+							<div class="menu-list-item__label">Settings</div>
+						</button>
+						<button id="launcher_mods" onclick="open_mods" class="menu-list-item menu-list-item--right"
+							style="nav-up: #launcher_settings; nav-down: #launcher_exit;">
+							<div class="menu-list-item__bullet">•</div>
+							<div class="menu-list-item__label">Mods</div>
+						</button>
+						<button id="launcher_exit" onclick="exit_game" class="menu-list-item menu-list-item--right"
+							data-style-nav-down="rom_valid ? '#launcher_start' : '#launcher_select_rom'"
+							style="nav-up: #launcher_mods;">
+							<div class="menu-list-item__bullet">•</div>
+							<div class="menu-list-item__label">Exit</div>
+						</button>
+					</div>
+				</div>
+				<div class="bottom-left">
+					<label>v{{version_number}}</label>
+				</div>
+			</div>
+		</div>
+	</body>
+</rml>

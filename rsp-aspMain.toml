@@ -1,0 +1,15 @@
+text_offset = 0xD8760
+text_size = 0xEC0
+text_address = 0x04001080
+rom_file_path = "baserom.us.v80.z64"
+output_file_path = "rsp/aspMain.cpp"
+output_function_name = "aspMain"
+# DKR's ABI3 command handlers are selected through a halfword jump table in
+# the audio microcode data segment. These targets are data-driven and cannot
+# all be discovered by RSPRecomp's static control-flow pass.
+extra_indirect_branch_targets = [
+    0x10B4, 0x1118, 0x11EC, 0x11F0, 0x123C,
+    0x1270, 0x12A4, 0x12D4, 0x12F0, 0x132C,
+    0x1338, 0x1390, 0x1428, 0x1480, 0x148C,
+    0x14A4, 0x1758, 0x18D4, 0x1BA0, 0x1E3C,
+]
