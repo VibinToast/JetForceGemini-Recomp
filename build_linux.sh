@@ -49,7 +49,7 @@ cmake --build "$OUT/build-tools" --parallel --target N64RecompCLI RSPRecomp
 # a rebuild after a change in src/ or lib/ compiles only that. JFG_REGENERATE=1 generates it again anyway.
 STAMP=RecompiledFuncs/.inputs_hash
 inputs_hash() { python3 tools/recomp_inputs_hash.py "$ROM" jfg.us.toml JFGRecompSyms/jfg.us.syms.toml rsp-aspMain.jfg.toml tools/*.py \
-  tools/jfg.us.dynamic_relocs.json "$OUT/build-tools/N64Recomp" "$OUT/build-tools/RSPRecomp"; }
+  tools/jfg.us.dynamic_relocs.json tools/wrapped_funcs.txt "$OUT/build-tools/N64Recomp" "$OUT/build-tools/RSPRecomp"; }
 if [ -z "${JFG_REGENERATE:-}" ] && [ -f "$STAMP" ] && [ -f rsp/aspMain.cpp ] && [ "$(cat "$STAMP")" = "$(inputs_hash)" ]; then
   say "game code is up to date (ROM, recompiler configs and tools unchanged): not generated again"
 else
@@ -63,6 +63,7 @@ else
   python3 tools/merge_gen_anim_data.py RecompiledFuncs
   python3 tools/fix_dynamic_relocs.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json baserom.us.recomp.z64 JFGRecompSyms/jfg.us.syms.toml
   python3 tools/refuse_mod_hooks.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json JFGRecompSyms/jfg.us.syms.toml jfg.us.toml
+  python3 tools/wrap_functions.py RecompiledFuncs tools/wrapped_funcs.txt
   inputs_hash > "$STAMP"   # last, so a run that stopped half-way generates again next time
 fi
 

@@ -302,8 +302,12 @@ extern "C" void jfg_mods_alias_overlays(void) {
 extern "C" void jfg_register_asset_mods(void); // jfg_assets.cpp
 
 // Called from src/main.cpp before the runtime starts.
+// RecompiledFuncs/jfg_wrapped.c (tools/wrap_functions.py): every game function the port wraps, with its original.
+extern "C" void jfg_register_wrapped(void (*reg)(recomp_func_t* wrapped, recomp_func_t* original));
+
 extern "C" void jfg_register_mod_exports(void) {
     recomp::overlays::register_base_export("recomp_printf", jfg_recomp_printf);
+    jfg_register_wrapped(recomp::overlays::register_base_wrapper); // mods patch and hook the originals, not the wrappers
     jfg_register_asset_mods(); // mods that replace game data (jfg_assets.json)
 }
 
