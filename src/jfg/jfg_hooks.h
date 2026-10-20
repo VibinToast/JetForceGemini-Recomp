@@ -112,6 +112,6 @@ void jfg_on_init(uint8_t* rdram, recomp_context* ctx);                 // jfg_gl
 void jfg_settings_menu_open(int open);                                 // jfg_camera.cpp, every UI frame
 void jfg_tools_ui_frame(void);                                         // jfg_ui_tools.cpp, every UI frame (F10's tools)
 // src/debug_ui/backend.cpp
-void jfg_tools_key(int scancode, int down, int repeat);                // jfg_ui_tools.cpp, F10 and Alt (SDL event filter)
+void jfg_tools_key(int scancode, int down, int repeat);                // jfg_ui_tools.cpp, F10, Alt, End, F8 (SDL event filter)
 
 } // extern "C"
