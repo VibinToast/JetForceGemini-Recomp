@@ -42,6 +42,11 @@ namespace jfg::settings {
         std::vector<char> image; // the image file's bytes
     };
     TexturePackDetails texture_pack_details(const std::string& folder);
+    // Split packs (.rtz.001, .002, ...) in texture_packs: poll (Reload Pack; start-up does its own) looks for them and
+    // starts joining a whole set; the text is
+    // its progress or result ("" = none), finished counts the joins done (a new pack to list).
+    void texture_pack_join_poll();
+    std::string texture_pack_join_text(int& finished);
     std::string texture_pack();
     void set_texture_pack(const std::string& folder);
     int texture_pack_count();              // textures loaded from the current pack, -1 if none

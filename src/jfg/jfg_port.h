@@ -40,6 +40,9 @@ std::string pack_display_name(const std::string& folder); // the folder / .rtz n
 void set_texture_pack(const std::string& folder); // saves the choice and makes the renderer (re)load it
 void load_texture_pack_choice();
 void next_texture_pack();                         // F6
+// Split packs (<pack>.rtz.001, .002, ...) in texture_packs: joined into <pack>.rtz on a thread of their own.
+void join_split_packs();                          // looks for parts and starts joining a whole set
+std::string pack_join_text(int& finished);        // progress / result for the Textures page; finished: joins done
 void update_dump_folder();                        // texture dumping, "One folder per level", and the scene tag of draw_trace.txt
 
 // --- jfg_frame_rate.cpp ------------------------------------------------------------------------------------------

@@ -141,11 +141,12 @@ writes `<id>-<variant>_v<version>.rtz` next to the pack you dragged, from the `i
 **Splitting a large pack.** GitHub does not accept files of 2 GB or more. Drag a `.rtz` onto
 `tools/textures/split_rtz.bat` to split it into two parts (more if two would still be too big): `<pack>.rtz.001`,
 `<pack>.rtz.002`, next to the pack, plus `<pack>.rtz.sha256` with the checksum of the whole pack and of each part.
-To join the parts back into the pack:
 
-```
-copy /b 4K-Toasty-HD.rtz.001 + 4K-Toasty-HD.rtz.002 4K-Toasty-HD.rtz
-```
+Players put all the parts in `texture_packs`. When the game (or the launcher) starts, or when **Reload Pack** is
+pressed on the Textures page, it joins them into `<pack>.rtz` by itself, shows the progress on the Textures page,
+checks that the result is a whole pack, and deletes the parts. If a part is missing or not fully downloaded, the parts
+are left as they are and the Textures page says so; Reload Pack tries again once they have changed. If `<pack>.rtz` is
+already there, the parts are left alone.
 
 ## Sharing a pack
 

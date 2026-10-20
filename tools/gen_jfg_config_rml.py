@@ -263,6 +263,7 @@ def options_tab(name, items, tab_id, extra_markup="", before_markup="", desc_mar
 TEXTURE_PACKS = '''                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Texture Pack</label></div>
                     <div class="config-option jfg-option" style="flex: 0 0 auto;">
                         <label class="config-option__title">{{pack_status}}</label>
+                        <div class="jfg-note jfg-pack-join" data-if="pack_join_text != ''">{{pack_join_text}}</div>
                         <div class="jfg-pack-list">
                             <button class="button jfg-pack" data-for="p : packs" data-attr-id="'jfg_pack_' + it_index" data-style-nav-left="it_index == 0 ? '#tab_jfg_textures' : 'auto'" data-style-nav-up="it_index == 0 ? '#tab_jfg_textures' : 'auto'" data-event-click="set_pack(p.folder)" data-event-focus="view_pack(it_index)" data-event-mouseover="view_pack(it_index)" data-class-jfg-selected="p.selected">
                                 <div class="jfg-pack__thumb" data-style-decorator="p.image != '' ? 'image(' + p.image + ' contain)' : 'none'"></div>

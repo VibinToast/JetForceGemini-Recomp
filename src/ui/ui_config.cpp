@@ -10,6 +10,7 @@
 #include "ultramodern/config.hpp"
 #include "ultramodern/ultramodern.hpp"
 #include "RmlUi/Core.h"
+#include <chrono>
 #include <map>
 
 #include "core/ui_context.h"
@@ -47,6 +48,7 @@ static std::vector<JfgProfileEntry> jfg_profile_entries;
 static std::vector<JfgPackEntry> jfg_pack_entries;
 static Rml::String jfg_new_profile_name;
 static Rml::String jfg_pack_status, jfg_dump_status;
+static Rml::String jfg_pack_join_text; // joining a split pack: progress or result (jfg_config_pack_join_tick)
 static int jfg_pack_view = 0; // the pack whose details the Textures tab shows (the focused one, at first the one in use)
 // The packs' images given to the UI: folder -> (details serial, image src).
 static std::map<std::string, std::pair<int, std::string>> jfg_pack_images;
@@ -186,6 +188,27 @@ static int scanned_binding_index = -1;
 static int scanned_input_index = -1;
 static int focused_input_index = -1;
 static int focused_config_option_index = -1;
+
+// Every UI frame (ui_state.cpp): while a split pack (.rtz.001, ...) is being joined, shows the progress on the Textures
+// page; when it is joined, the list is made again to show it. (Parts are looked for at start-up and by Reload Pack.)
+void jfg_config_pack_join_tick() {
+    using clock = std::chrono::steady_clock;
+    static clock::time_point next_look{};
+    static int finished_seen = 0;
+    const clock::time_point now = clock::now();
+    if (now < next_look) return;
+    next_look = now + std::chrono::milliseconds(500);
+    int finished = 0;
+    const std::string text = jfg::settings::texture_pack_join_text(finished);
+    if (text != jfg_pack_join_text) {
+        jfg_pack_join_text = text;
+        if (jfg_textures_model_handle) jfg_textures_model_handle.DirtyVariable("pack_join_text");
+    }
+    if (finished != finished_seen) {
+        finished_seen = finished;
+        jfg_config_menu_refresh();
+    }
+}
 
 // No option's description: a new launcher page starts with none, not one from the page before (the focused option's
 // number is shared by the pages).
@@ -1301,6 +1324,7 @@ public:
             constructor.Bind("packs", &jfg_pack_entries);
             constructor.Bind("pack_status", &jfg_pack_status);
             constructor.Bind("dump_status", &jfg_dump_status);
+            constructor.Bind("pack_join_text", &jfg_pack_join_text);
             constructor.Bind("pack_view", &jfg_pack_view);
             // A pack button got focus or the mouse: its details on the right (they stay while the focus moves on to
             // the website button).
@@ -1321,6 +1345,7 @@ public:
                 jfg_config_menu_refresh();
             });
             constructor.BindEventCallback("reload_pack", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+                jfg::settings::texture_pack_join_poll(); // split packs put in texture_packs since the start
                 jfg::settings::set_texture_pack(jfg::settings::texture_pack());
                 jfg_config_menu_refresh();
             });

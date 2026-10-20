@@ -9,7 +9,10 @@
 #include <functional>
 #include <map>
 #include <mutex>
+#include <fstream>
+#include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "json/json.hpp"
@@ -224,6 +227,7 @@ void load_texture_pack_choice() {
     std::call_once(once, load_texture_pack_choice_now);
 }
 static void load_texture_pack_choice_now() {
+    join_split_packs(); // parts put in texture_packs since the last run
     std::string folder;
     if (std::FILE* f = std::fopen(PACK_CHOICE_FILE, "r")) {
         char line[512] = {};
@@ -337,6 +341,177 @@ extern "C" int jfg_texture_pack_current(char* buf, int size) {
     std::lock_guard lock(g_pack_mutex);
     std::snprintf(buf, (size_t)size, "%s", g_pack_folder.c_str());
     return g_pack_generation.load();
+}
+
+// ---- Split packs ------------------------------------------------------------------------------------------------------
+// A pack too big for one GitHub file comes as parts (tools/textures/split_rtz.ps1): <pack>.rtz.001, .002, ... Dropped in
+// texture_packs, they are joined into <pack>.rtz on a thread of their own, one pack at a time (looked for at start-up and
+// by Reload Pack, not all the time): written to
+// <pack>.rtz.joining, checked as a zip (every file's header in place, so no part is missing or cut short), then renamed
+// and the parts deleted. Parts that do not make a whole pack are left as they are and not tried again until they change.
+static std::mutex g_join_mutex;
+static bool g_join_running = false;
+static std::string g_join_text;       // what the Textures page shows: progress, the result or why it failed
+static int g_join_finished = 0;        // joins done, so the menus know to list the new pack
+static std::set<std::string> g_join_given_up; // "<part 1>|<size of the parts>|<time of the newest>" that did not join
+
+static void set_join_text(const std::string& text) { std::lock_guard lock(g_join_mutex); g_join_text = text; }
+
+static bool ends_with_nocase(const std::string& s, const std::string& end) {
+    if (s.size() < end.size()) return false;
+    for (size_t i = 0; i < end.size(); i++) {
+        if (std::tolower((unsigned char)s[s.size() - end.size() + i]) != std::tolower((unsigned char)end[i])) return false;
+    }
+    return true;
+}
+
+static std::string u8_name(const std::filesystem::path& p) {
+    const auto u8 = p.filename().u8string();
+    return std::string(u8.begin(), u8.end());
+}
+
+static std::filesystem::path part_path(const std::filesystem::path& pack, int index) {
+    char ext[8];
+    std::snprintf(ext, sizeof(ext), ".%03d", index);
+    std::filesystem::path p = pack;
+    p += ext;
+    return p;
+}
+
+static bool zip_is_whole(const std::filesystem::path& file) {
+#ifdef _WIN32
+    std::FILE* f = _wfopen(file.c_str(), L"rb");
+#else
+    std::FILE* f = std::fopen(file.c_str(), "rb");
+#endif
+    if (f == nullptr) return false;
+    mz_zip_archive zip = {};
+    bool ok = mz_zip_reader_init_cfile(&zip, f, 0, 0) != 0;
+    if (ok) {
+        ok = mz_zip_validate_archive(&zip, MZ_ZIP_FLAG_VALIDATE_HEADERS_ONLY) != 0;
+        mz_zip_reader_end(&zip);
+    }
+    std::fclose(f);
+    return ok;
+}
+
+static void join_thread(std::filesystem::path pack, std::vector<std::filesystem::path> parts, uint64_t total, std::string key) {
+    const std::string name = pack_display_name("texture_packs/" + u8_name(pack));
+    std::filesystem::path temp = pack;
+    temp += ".joining";
+    std::string failure;
+    {
+        std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+        std::vector<char> buffer(8u << 20);
+        uint64_t done = 0;
+        int shown = -1;
+        if (!out) failure = "Could not write " + name + " in texture_packs.";
+        for (size_t i = 0; failure.empty() && i < parts.size(); i++) {
+            std::ifstream in(parts[i], std::ios::binary);
+            if (!in) { failure = "Could not read a part of " + name + "."; break; }
+            while (in) {
+                in.read(buffer.data(), (std::streamsize)buffer.size());
+                const std::streamsize got = in.gcount();
+                if (got <= 0) break;
+                out.write(buffer.data(), got);
+                if (!out) { failure = "Could not write " + name + ": is the disk full?"; break; }
+                done += (uint64_t)got;
+                const int percent = total > 0 ? (int)(done * 95 / total) : 0;
+                if (percent != shown) { shown = percent; set_join_text("Joining " + name + " from its parts: " + std::to_string(percent) + "%"); }
+            }
+        }
+    }
+    if (failure.empty()) {
+        set_join_text("Joining " + name + " from its parts: checking...");
+        if (!zip_is_whole(temp)) failure = name + " could not be joined: a part is missing or not fully downloaded.";
+    }
+    std::error_code ec;
+    if (failure.empty()) {
+        std::filesystem::rename(temp, pack, ec);
+        if (ec) failure = "Could not rename the joined " + name + ".";
+    }
+    if (!failure.empty()) {
+        std::filesystem::remove(temp, ec);
+        std::lock_guard lock(g_join_mutex);
+        g_join_given_up.insert(key);
+        g_join_text = failure;
+        g_join_running = false;
+        return;
+    }
+    for (const std::filesystem::path& part : parts) std::filesystem::remove(part, ec);
+    // The saved choice is this pack (it was Off at start-up while only its parts were there): use it now.
+    const std::string folder = "texture_packs/" + u8_name(pack);
+    if (std::FILE* f = std::fopen(PACK_CHOICE_FILE, "r")) {
+        char line[512] = {};
+        std::string saved = std::fgets(line, sizeof(line), f) ? line : "";
+        std::fclose(f);
+        while (!saved.empty() && (saved.back() == '\n' || saved.back() == '\r')) saved.pop_back();
+        if (saved == folder) {
+            { std::lock_guard pack_lock(g_pack_mutex); g_pack_folder = folder; }
+            g_pack_generation++;
+        }
+    }
+    std::lock_guard lock(g_join_mutex);
+    g_join_text = "Joined " + name + " from its parts.";
+    g_join_finished++;
+    g_join_running = false;
+}
+
+// Looks for parts in texture_packs and starts joining the first whole set: at start-up and by Reload Pack.
+void join_split_packs() {
+    {
+        std::lock_guard lock(g_join_mutex);
+        if (g_join_running) return;
+    }
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it("texture_packs", ec), end; !ec && it != end; it.increment(ec)) {
+        const std::string file = u8_name(it->path());
+        std::error_code e;
+        // Left by a join this run did not finish (the game was closed): no join is running now.
+        if (ends_with_nocase(file, ".rtz.joining")) { std::filesystem::remove(it->path(), e); continue; }
+        if (!ends_with_nocase(file, ".rtz.001") || !it->is_regular_file(e)) continue;
+        std::filesystem::path pack = it->path();
+        pack.replace_extension(); // <pack>.rtz
+        std::vector<std::filesystem::path> parts;
+        uint64_t total = 0;
+        std::filesystem::file_time_type newest{};
+        bool empty_part = false;
+        for (int i = 1; i < 1000; i++) {
+            const std::filesystem::path part = part_path(pack, i);
+            if (!std::filesystem::is_regular_file(part, e)) break;
+            const uint64_t size = std::filesystem::file_size(part, e);
+            if (size == 0) empty_part = true; // a browser's placeholder while it downloads
+            total += size;
+            newest = std::max(newest, std::filesystem::last_write_time(part, e));
+            parts.push_back(part);
+        }
+        if (empty_part) continue; // a placeholder: still downloading
+        const std::string key = file + "|" + std::to_string(total) + "|" + std::to_string(newest.time_since_epoch().count());
+        std::lock_guard lock(g_join_mutex);
+        if (g_join_given_up.count(key) != 0) continue;
+        const std::string name = pack_display_name("texture_packs/" + u8_name(pack));
+        if (std::filesystem::exists(pack, e)) {
+            g_join_given_up.insert(key);
+            g_join_text = name + " is already in texture_packs, so its parts were not joined. Remove one or the other.";
+            continue;
+        }
+        const std::filesystem::space_info space = std::filesystem::space("texture_packs", e);
+        if (!e && space.available < total + (64u << 20)) {
+            g_join_given_up.insert(key);
+            g_join_text = "Not enough disk space to join " + name + " from its parts (" + std::to_string((total + (1u << 29)) >> 30) + " GB needed).";
+            continue;
+        }
+        g_join_running = true;
+        g_join_text = "Joining " + name + " from its parts...";
+        std::thread(join_thread, pack, std::move(parts), total, key).detach();
+        return;
+    }
+}
+
+std::string pack_join_text(int& finished) {
+    std::lock_guard lock(g_join_mutex);
+    finished = g_join_finished;
+    return g_join_text;
 }
 
 } // namespace jfg

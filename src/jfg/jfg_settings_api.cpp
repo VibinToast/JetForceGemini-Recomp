@@ -135,6 +135,8 @@ std::vector<std::string> texture_packs() {
     return out;
 }
 std::string texture_pack_name(const std::string& folder) { return pack_display_name(folder); }
+void texture_pack_join_poll() { join_split_packs(); }
+std::string texture_pack_join_text(int& finished) { return pack_join_text(finished); }
 TexturePackDetails texture_pack_details(const std::string& folder) {
     PackInfo info = texture_pack_info(folder);
     return { info.has_json, info.serial, info.version, info.variant, info.author, info.website, info.description, std::move(info.image) };
