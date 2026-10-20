@@ -101,11 +101,8 @@ try {
         $started = Get-Date
         $env:JFG_NO_PAUSE = "1"
         $env:JFG_ROM = $rom
-        # The release folder uses your build folder, so only what changed is rebuilt.
-        if (-not $env:JFG_PORT_DIR) { $env:JFG_PORT_DIR = Join-Path $root "build"; $setPortDir = $true }
         & cmd.exe /c ('"' + (Join-Path $src "build_windows.bat") + '"')
         Remove-Item Env:JFG_NO_PAUSE -ErrorAction SilentlyContinue
-        if ($setPortDir) { Remove-Item Env:JFG_PORT_DIR -ErrorAction SilentlyContinue }
         $exe = Join-Path $bin "JetForceGeminiRecompiled.exe"
         if (-not (Test-Path $exe) -or (Get-Item $exe).LastWriteTime -lt $started) { throw "The build did not produce a new $exe. See $(Join-Path $src 'build_windows.log')." }
     }

@@ -1,0 +1,7 @@
+text_offset = 0xDBAE0
+text_size = 0x1000
+text_address = 0x04001000
+rom_file_path = "baserom.us.v80.z64"
+output_file_path = "rsp/f3ddkr_xbus.cpp"
+output_function_name = "f3ddkr_xbus"
+extra_indirect_branch_targets = []

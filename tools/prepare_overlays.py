@@ -181,7 +181,7 @@ def main(rom_path, elf_path, out_rom, out_syms, out_dyn):
         toml.append("]\n")
     open(out_rom, "wb").write(lk.out)
     if funcs is not None: open(out_syms, "w").write("\n".join(toml) + "\n")
-    json.dump(dyn, open(out_dyn, "w"), indent=0)
+    json.dump(dyn, open(out_dyn, "w", newline="\n"), indent=0)   # LF on every OS: this file is committed (tools/)
     n_dyn = sum(len(o["sites"]) for o in dyn["overlays"].values())
     print("overlays with code: %d; self relocs: %d; dynamic sites: main %d, overlays %d" %
           (len(dyn["overlays"]), sum(t.count("R_MIPS_") for t in toml), len(dyn["main"]["sites"]), n_dyn))

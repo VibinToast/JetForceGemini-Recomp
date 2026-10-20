@@ -95,7 +95,7 @@ mkdir -p "$OUT"
 if [ "$NATIVE" = 1 ]; then
   if [ "$SKIP_BUILD" = 0 ]; then
     [ -f "$ROM" ] || die "ROM not found: $ROM (or set JFG_ROM)"
-    JFG_PORT_DIR="${JFG_PORT_DIR:-$ROOT/build}" bash "$SRC/build_linux.sh" "$ROM"
+    bash "$SRC/build_linux.sh" "$ROM"
   fi
   bash "$SRC/tools/linux-build/package.sh" "$SRC" "$VERSION" "$OUT"
 else
@@ -109,7 +109,7 @@ else
     say "making the build container $IMAGE (once; a few minutes)"
     "$ENGINE" build -t "$IMAGE" -f "$DOCKERFILE" "$SRC/tools/linux-build"
   fi
-  # Its own build folder: CMake's files hold the container's paths, so it cannot share ./build with a native build.
+  # Its own CMake folders: their files hold the container's paths, so they cannot be shared with a native build.
   BUILD="${JFG_CONTAINER_BUILD_DIR:-$ROOT/build-container}"
   mkdir -p "$BUILD"
   user=(--user "$(id -u):$(id -g)")
@@ -117,11 +117,12 @@ else
   steps="bash /src/tools/linux-build/package.sh /src $VERSION /out"
   if [ "$SKIP_BUILD" = 0 ]; then
     [ -f "$ROM" ] || die "ROM not found: $ROM (or set JFG_ROM)"
-    steps="bash /src/build_linux.sh /rom/baserom.us.z64 && $steps"
+    # The source folder is owned by your user, not the container's: let git use it (and its submodules).
+    steps="git config --global --add safe.directory '*' && bash /src/build_linux.sh /rom/baserom.us.z64 && $steps"
   fi
   rom_mount=()
   [ -f "$ROM" ] && rom_mount=(-v "$ROM:/rom/baserom.us.z64:ro,z")
-  "$ENGINE" run --rm "${user[@]}" -e HOME=/tmp -e JFG_PORT_DIR=/work \
+  "$ENGINE" run --rm "${user[@]}" -e HOME=/tmp -e JFG_BUILD_DIR=/work \
     -v "$SRC:/src:z" -v "$BUILD:/work:z" -v "$OUT:/out:z" "${rom_mount[@]}" \
     -w /src "$IMAGE" bash -c "$steps"
 fi

@@ -1,0 +1,208 @@
+
+// TODO: Affect all elements with launcher fade-in
+// @keyframes fade-launcher-in {
+// 	0% {
+// 		opacity: 0;
+// 	}
+// 	to { 
+// 		opacity: 1;
+// 	}
+// }
+
+.launcher {
+    display: block;
+    position: relative;
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+    height: 100%;
+    //background-color: $color-background-1;
+}
+
+.launcher__vertical-split {
+    display: flex;
+    position: absolute;
+    top: 0;
+    right: 50%;
+    bottom: 0;
+    left: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+
+    &--right {
+        right: 0;
+        left: 50%;
+        align-items: flex-end;  
+    }
+}
+
+@keyframes background-anim {
+    0% {
+        left: -25%;
+        right: 25%;
+        width: 150%;
+        height: 150%;
+    }
+	100% {
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 100%;
+	}
+}
+
+.launcher-background {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 100%;
+    animation: 2s sine-out background-anim;
+}
+
+@keyframes pulse-anim {
+	100% {
+        transform: scale(1.25);
+	}
+}
+
+.launcher-star {
+    position: fixed;
+
+    &--small, &--medium, &--big {
+        animation: 4s back-in-out infinite alternate pulse-anim;
+
+        &.launcher-star--delay1 {
+            animation: 4s 2.2s back-in-out infinite alternate pulse-anim;
+        }
+
+        &.launcher-star--delay2 {
+            animation: 4s 1.6s back-in-out infinite alternate pulse-anim;
+        }
+    }
+
+    &--far {
+        width: 8px;
+        height: 8px;
+        opacity: 0.5;
+    }
+
+    &--tiny {
+        width: 10px;
+        height: 10px;
+    } 
+    
+    &--small {
+        width: 15px;
+        height: 15px;
+    }
+
+    &--medium {
+        width: 20px;
+        height: 20px;
+    }
+
+    &--big {
+        width: 30px;
+        height: 30px;
+    }
+}
+
+@keyframes fade-logo-in {
+	0% {
+		opacity: 0;
+	}
+    70% {
+		opacity: 0;
+	}
+	100% { 
+		opacity: 1;
+	}
+}
+
+.game-logo {
+    width: 60%;
+    max-width: 800px;
+
+    animation: 2.75s cubic-in fade-logo-in;
+}
+
+.game-logo-subtitle {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+}
+
+@keyframes slide-mm-bg-over {
+	0% {
+		transform: translateX(space(100));
+	}
+
+	100% { 
+		transform: translateX(space(0));
+	}
+}
+
+.launcher__background-wrapper {
+    display: flex;
+    position: absolute;
+    top: -55vw;
+    right: -100%;
+    bottom: -50vw;
+    left: -70vw;
+    align-items: center;
+    justify-content: flex-start;
+    transform: translateX(space(0));
+    animation: 25s cubic-out 1 slide-mm-bg-over;
+}
+
+@keyframes fade-mm-in {
+	0% {
+		opacity: 0;
+	}
+
+	100% { 
+		opacity: 0.1;
+	}
+}
+
+.launcher__background-mm {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    height: 100%;
+    animation: 2.5s cubic-in-out 1 fade-mm-in;
+    opacity: 0.1;
+}
+
+.launcher__title-quadrant {
+    flex: 1 1 auto;
+    width: auto;
+    height: auto;
+    padding-top: space(64);
+    padding-left: space(64);
+
+    &--right {
+        padding-right: space(64);
+        padding-left: 0;
+    }
+}
+
+.launcher__content-quadrant {
+    display: flex;
+    position: relative;
+    flex: 1 1 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-end;
+    width: 100%;
+    height: auto;
+    padding: space(32);
+}

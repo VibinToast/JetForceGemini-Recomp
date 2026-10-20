@@ -1,0 +1,427 @@
+<rml>
+	<head>
+		<title>Launcher</title>
+		<link type="text/rcss" href="rml.rcss"/>
+		<link type="text/rcss" href="recomp.rcss"/>
+		<!-- JFG PORT: VibinToast-style launcher in Jet Force Gemini colours, with the settings pages built in (src/ui/ui_launcher.cpp). The settings
+		     pages are the Select / Esc menu's own templates and data models, restyled here. -->
+		<link type="text/rcss" href="jfg_launcher/vibintoast.rcss"/>
+		<link type="text/template" href="config_menu/general.rml" />
+		<link type="text/template" href="config_menu/controls.rml" />
+		<link type="text/template" href="config_menu/graphics.rml" />
+		<link type="text/template" href="config_menu/sound.rml" />
+		<link type="text/template" href="config_menu/jfg_gameplay.rml" />
+		<link type="text/template" href="config_menu/jfg_visuals.rml" />
+		<link type="text/template" href="config_menu/jfg_textures.rml" />
+		<link type="text/template" href="config_menu/jfg_profiles.rml" />
+		<style>
+			/* Colours (Jet Force Gemini): "Gemini" cyan #3CC8FF, hover #1E90E8, "Jet Force" red #E8202A, emblem gold #FFB21A,
+			   text #E8F3FF, muted #8199BF, space navy background #050B1C, panels #0B1733, borders #1F3D73, hard shadows #0A2660. */
+			body { width: 100%; height: 100%; font-family: "JetBrains Mono"; font-weight: normal; color: #E8F3FF; }
+			#window { width: 100%; height: 100%; }
+			.rl { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background-color: #050B1C; }
+			.rl-scanlines { position: absolute; top: 0; right: 0; bottom: 0; left: 0; decorator: image(/jfg_scanlines repeat); pointer-events: none; z-index: 10; }
+			.rl-pixel { font-family: "Press Start 2P"; font-weight: normal; letter-spacing: 0dp; }
+
+			/* Hard offset shadows: the shadow is the outer box, the panel inside is shifted up-left onto it. */
+			.rl-shadow { position: absolute; background-color: #0A2660; }
+			.rl-card { position: absolute; top: -6dp; right: 6dp; bottom: 6dp; left: -6dp; background-color: #0B1733; border-width: 2dp; border-color: #1F3D73; }
+			.rl-block-shadow { display: block; position: relative; margin: 6dp 0dp 0dp 6dp; background-color: #0A2660; }
+			.rl-block { display: block; position: relative; top: -6dp; left: -6dp; background-color: #0B1733; border-width: 2dp; border-color: #1F3D73; padding: 22dp 26dp; }
+
+			/* Sidebar */
+			.rl-sidebar { top: 34dp; bottom: 46dp; left: 40dp; width: 440dp; }
+			.rl-sidebar-inner { position: absolute; top: 0; right: 0; bottom: 0; left: 0; padding: 24dp 26dp; }
+			.rl-logo { display: block; height: 196dp; text-align: center; }
+			.rl-logo-image { display: block; width: 100%; height: 180dp; margin-top: -8dp; } /* JFG PORT: equal gaps above the logo and below it (Play button) */
+			.rl-wordmark { padding-top: 20dp; }
+			.rl-wordmark__top { display: block; font-size: 26dp; line-height: 34dp; color: #E8202A; }
+			.rl-wordmark__main { display: block; font-size: 44dp; line-height: 56dp; color: #3CC8FF; }
+			.rl-wordmark__sub { display: block; font-size: 14dp; line-height: 24dp; color: #8199BF; margin-top: 8dp; }
+			.rl-btn-shadow { display: block; position: relative; height: 50dp; margin: 0dp 0dp 13dp 4dp; background-color: #0A2660; }
+			.rl-btn { display: block; position: relative; top: -4dp; left: -4dp; width: 100%; height: 50dp; box-sizing: border-box;
+				border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF;
+				font-family: "Press Start 2P"; font-size: 15dp; line-height: 46dp; text-align: center; text-transform: uppercase;
+				nav-up: auto; nav-down: auto; nav-left: none; nav-right: none; focus: auto; tab-index: auto; cursor: pointer;
+				transition: top left background-color color border-color 0.08s linear-in-out; }
+			/* The lift on hover is driven by the (stationary) shadow box, not the button itself: a button that moves out from under the
+			   cursor at its edge stops being hovered, moves back, and flickers. */
+			.rl-btn:hover { border-color: #E8F3FF; }
+			.rl-btn-shadow:hover .rl-btn { top: -6dp; left: -6dp; }
+			.rl-btn.rl-active { background-color: #3CC8FF; color: #050B1C; }
+			.rl-btn.rl-active:hover { background-color: #1E90E8; border-color: #1E90E8; }
+			#window:not([mouse-active]) .rl-btn:focus { top: -6dp; left: -6dp; border-color: #E8F3FF; }
+			.rl-btn--exit { border-color: #FF4A4A; color: #FF4A4A; }
+			.rl-btn--exit:hover, #window:not([mouse-active]) .rl-btn--exit:focus { background-color: #FF4A4A; border-color: #FF4A4A; color: #050B1C; }
+			.rl-separator { display: block; height: 2dp; margin: 6dp 0dp 18dp; background-color: #1F3D73; }
+			.rl-repo { display: inline-block; margin: 0dp; padding: 0dp 4dp; font-size: 15dp; font-family: "JetBrains Mono"; color: #FFB21A; background-color: transparent; border-width: 0dp; border-bottom-width: 2dp; border-color: #1F3D73; cursor: pointer; }
+			.rl-repo:hover { color: #E8F3FF; border-color: #3CC8FF; }
+			#window:not([mouse-active]) .rl-repo:focus { color: #E8F3FF; border-color: #3CC8FF; }
+			/* three columns: GitHub on the left, the version centred, an empty one on the right to balance */
+			.rl-version-side { display: block; flex: 1 1 0px; text-align: left; }
+			.rl-version-mid { display: block; flex: 0 0 auto; text-align: center; }
+			.rl-version { position: absolute; bottom: 14dp; left: 26dp; right: 26dp; font-size: 15dp; color: #8199BF; display: flex; flex-direction: row; align-items: center; }
+			/* A newer release exists (src/jfg/jfg_update_check.cpp): a warning triangle next to the version number. Hovering it says which
+			   version; a click opens the release page. */
+			.rl-update { display: none; position: relative; width: 22dp; height: 20dp; margin-left: 10dp; cursor: pointer; }
+			.rl-update.rl-on { display: inline-block; }
+			.rl-update-tri { position: absolute; top: 0dp; left: 0dp; width: 0dp; height: 0dp; border-left: 11dp #00000000; border-right: 11dp #00000000; border-bottom: 19dp #FFB21A; }
+			.rl-update:hover .rl-update-tri { border-bottom-color: #FFD36B; }
+			.rl-update-mark { position: absolute; top: 6dp; left: 0dp; width: 22dp; text-align: center; font-family: "Press Start 2P"; font-size: 11dp; line-height: 13dp; color: #050B1C; }
+			.rl-update-tip { display: none; position: absolute; bottom: 28dp; left: -120dp; width: 270dp; padding: 8dp 10dp; z-index: 20; text-align: left;
+				font-size: 13dp; line-height: 19dp; color: #E8F3FF; background-color: #0B1733; border-width: 2dp; border-color: #FFB21A; }
+			.rl-update:hover .rl-update-tip { display: block; }
+
+			/* Update dialog (opened by the triangle): what is new, the version it updates to, and a confirmation. */
+			.rl-modal { display: none; position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 30; background-color: #050B1CDD; }
+			.rl-modal.rl-on { display: block; }
+			.rl-modal-shadow { position: absolute; top: 56dp; right: 150dp; bottom: 56dp; left: 150dp; background-color: #0A2660; }
+			.rl-modal-box { position: absolute; top: -6dp; right: 6dp; bottom: 6dp; left: -6dp; background-color: #0B1733; border-width: 2dp; border-color: #FFB21A; }
+			.rl-modal-title { position: absolute; top: 22dp; left: 28dp; right: 28dp; font-family: "Press Start 2P"; font-size: 20dp; line-height: 28dp; color: #FFB21A; text-transform: uppercase; }
+			.rl-modal-sub { position: absolute; top: 62dp; left: 28dp; right: 28dp; font-size: 18dp; line-height: 26dp; color: #E8F3FF; }
+			.rl-modal-notes { position: absolute; top: 100dp; left: 28dp; right: 28dp; bottom: 214dp; padding: 12dp 14dp; overflow-y: auto;
+				font-size: 15dp; line-height: 22dp; color: #C8D8F0; background-color: #050B1C; border-width: 2dp; border-color: #1F3D73; }
+			/* Changelog entries (jfg_changelog_rml in src/jfg/jfg_update_check.cpp) */
+			.rl-cl-version { display: block; margin-top: 26dp; padding-bottom: 8dp; border-bottom-width: 2dp; border-color: #1F3D73; }
+			.rl-cl-version.rl-cl-first { margin-top: 4dp; }
+			.rl-cl-ver { font-family: "Press Start 2P"; font-size: 15dp; line-height: 26dp; color: #FFB21A; }
+			.rl-cl-date { margin-left: 16dp; font-size: 16dp; line-height: 26dp; color: #8199BF; }
+			.rl-cl-tag { display: inline-block; margin-left: 14dp; padding: 0dp 8dp; font-family: "Press Start 2P"; font-size: 10dp; line-height: 20dp; color: #050B1C; background-color: #3CC8FF; text-transform: uppercase; }
+			.rl-cl-tag.rl-cl-new { background-color: #FFB21A; }
+			.rl-cl-sub { display: block; margin-top: 12dp; font-size: 16dp; line-height: 24dp; font-weight: bold; color: #3CC8FF; }
+			.rl-cl-item { display: block; position: relative; margin-top: 8dp; padding-left: 24dp; font-size: 17dp; line-height: 25dp; color: #E0EAF8; }
+			.rl-cl-dot { position: absolute; left: 4dp; top: 0dp; color: #FFB21A; font-weight: bold; }
+			.rl-cl-note { display: block; margin-top: 8dp; font-size: 16dp; line-height: 24dp; color: #8199BF; }
+			.rl-changelogs { margin-top: 22dp; margin-bottom: 8dp; }
+			.rl-modal-notes.rl-modal-notes--tall { bottom: 100dp; }
+			.rl-modal-status { position: absolute; bottom: 150dp; left: 28dp; right: 28dp; font-size: 16dp; line-height: 24dp; color: #3CC8FF; }
+			.rl-modal-status.rl-error { color: #FF4A4A; }
+			.rl-progress { position: absolute; bottom: 128dp; left: 28dp; right: 28dp; height: 14dp; background-color: #050B1C; border-width: 2dp; border-color: #1F3D73; }
+			.rl-progress-bar { display: block; height: 100%; background-color: #3CC8FF; }
+			.rl-modal-ask { position: absolute; bottom: 92dp; left: 28dp; right: 28dp; font-size: 15dp; line-height: 22dp; color: #8199BF; }
+			.rl-modal-ask.rl-warn { color: #FFB21A; }
+			.rl-modal-buttons { position: absolute; bottom: 14dp; left: 24dp; right: 28dp; height: 70dp; }
+
+			/* Main panel */
+			.rl-main { top: 34dp; right: 46dp; bottom: 46dp; left: 524dp; }
+			.rl-main-inner { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; padding: 30dp 36dp 24dp; }
+			.rl-title { display: block; flex: 0 0 auto; text-transform: uppercase; font-size: 36dp; line-height: 46dp; color: #3CC8FF; }
+			.rl-cursor { color: #3CC8FF; animation: 1.1s linear-in-out infinite rl-blink; }
+			@keyframes rl-blink { 0% { opacity: 1; } 49% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
+			.rl-subtitle { display: block; flex: 0 0 auto; margin: 10dp 0dp 18dp; font-size: 19dp; line-height: 26dp; color: #8199BF; }
+			.rl-content { display: block; position: relative; flex: 1 1 100%; }
+			.rl-page { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; }
+			.rl-page-scroll { overflow-y: auto; display: block; }
+			.rl-tpl { display: flex; flex-direction: column; flex: 1 1 100%; width: 100%; height: 100%; }
+
+			/* Play page */
+			.rl-rom { display: flex; flex-direction: row; align-items: flex-start; }
+			.rl-leds { display: block; flex: 0 0 auto; width: 46dp; padding: 10dp 8dp; margin-right: 26dp; background-color: #03070F; border-width: 2dp; border-color: #1F3D73; }
+			.rl-led { display: block; width: 26dp; height: 26dp; margin: 4dp 0dp; background-color: #13213F; }
+			.rl-led--red.rl-on { background-color: #FF4A4A; }
+			.rl-led--amber.rl-on { background-color: #FFB21A; }
+			.rl-led--green.rl-on { background-color: #3CC8FF; }
+			.rl-rom-text { display: block; flex: 1 1 auto; }
+			.rl-rom-title { display: block; text-transform: uppercase; font-size: 22dp; line-height: 30dp; color: #FF4A4A; }
+			.rl-rom-title.rl-ok { color: #3CC8FF; }
+			.rl-text { display: block; font-size: 19dp; line-height: 28dp; color: #E8F3FF; margin-top: 10dp; }
+			.rl-muted { color: #8199BF; }
+			.rl-action-shadow { display: inline-block; position: relative; margin: 20dp 18dp 4dp 4dp; background-color: #0A2660; }
+			.rl-action { display: inline-block; position: relative; top: -4dp; left: -4dp; padding: 14dp 22dp; border-width: 2dp; border-color: #3CC8FF;
+				background-color: #3CC8FF; color: #050B1C; font-family: "Press Start 2P"; font-size: 15dp; line-height: 18dp; text-transform: uppercase;
+				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; focus: auto; tab-index: auto; cursor: pointer; }
+			.rl-action:hover { background-color: #1E90E8; border-color: #1E90E8; }
+			.rl-action-shadow:hover .rl-action { top: -6dp; left: -6dp; }
+			#window:not([mouse-active]) .rl-action:focus { top: -6dp; left: -6dp; border-color: #E8F3FF; }
+			.rl-action--outline { background-color: #050B1C; color: #3CC8FF; }
+			.rl-action--outline:hover { background-color: #0A2660; color: #3CC8FF; }
+			.rl-start-shadow { display: block; position: relative; margin: 30dp 0dp 0dp 6dp; background-color: #0A2660; }
+			.rl-start { display: block; position: relative; top: -6dp; left: -6dp; height: 96dp; border-width: 2dp; border-color: #1F3D73; background-color: #0B1733;
+				color: #2A4776; font-family: "Press Start 2P"; font-size: 24dp; line-height: 92dp; text-align: center; text-transform: uppercase;
+				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: none; focus: auto; tab-index: auto; }
+			.rl-start.rl-ready { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; cursor: pointer; }
+			.rl-start.rl-ready:hover { background-color: #1E90E8; border-color: #1E90E8; }
+			.rl-start-shadow:hover .rl-start.rl-ready { top: -8dp; left: -8dp; }
+			#window:not([mouse-active]) .rl-start.rl-ready:focus { top: -8dp; left: -8dp; border-color: #E8F3FF; }
+			.rl-start-note { display: block; margin-top: 12dp; font-size: 17dp; text-align: center; color: #8199BF; }
+			/* A newer release exists: a bar on the Play page, above the Start button, that opens the update dialog. */
+			.rl-banner-shadow { display: block; position: relative; margin: 26dp 0dp 0dp 6dp; background-color: #5A3A00; }
+			.rl-banner { display: block; position: relative; top: -6dp; left: -6dp; padding: 14dp 20dp; border-width: 2dp; border-color: #FFB21A;
+				background-color: #241600; text-align: left;
+				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: none; focus: auto; tab-index: auto; cursor: pointer; }
+			.rl-banner:hover { background-color: #3A2400; }
+			.rl-banner-shadow:hover .rl-banner { top: -8dp; left: -8dp; }
+			#window:not([mouse-active]) .rl-banner:focus { top: -8dp; left: -8dp; border-color: #E8F3FF; background-color: #3A2400; }
+			.rl-banner-title { display: block; font-family: "Press Start 2P"; font-size: 17dp; line-height: 26dp; color: #FFB21A; text-transform: uppercase; }
+			.rl-banner-text { display: block; margin-top: 6dp; font-size: 17dp; line-height: 24dp; color: #E8F3FF; }
+			.rl-keys { display: block; margin-top: 30dp; }
+			.rl-key-row { display: flex; flex-direction: row; font-size: 17dp; line-height: 30dp; }
+			.rl-key { display: block; flex: 0 0 auto; width: 210dp; color: #FFB21A; font-weight: bold; }
+			.rl-heading { display: block; font-family: "Press Start 2P"; font-size: 15dp; line-height: 22dp; color: #FFB21A; margin-bottom: 12dp; }
+
+			/* About page */
+			.rl-about { display: flex; flex-direction: row; align-items: flex-start; }
+			.rl-about-left { display: block; flex: 0 0 auto; width: 380dp; margin-right: 34dp; }
+			.rl-about-right { display: block; flex: 1 1 auto; }
+			.rl-about-card { text-align: center; padding: 26dp 20dp 24dp; }
+			.rl-toast { display: block; width: 256dp; height: 256dp; margin: 0dp auto 16dp; }
+			.rl-about-name { display: block; font-family: "Press Start 2P"; font-size: 24dp; line-height: 32dp; color: #3CC8FF; }
+			.rl-about-tag { display: block; margin-top: 10dp; font-size: 16dp; color: #8199BF; text-transform: uppercase; }
+			.rl-about-links { display: block; margin-top: 18dp; }
+			.rl-link { display: block; margin: 8dp auto 0dp; padding: 6dp 10dp; font-size: 17dp; line-height: 24dp; color: #FFB21A; background-color: transparent; border-width: 2dp; border-color: #1F3D73; border-radius: 0dp; font-family: "JetBrains Mono"; font-weight: bold; width: 100%;
+				nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; focus: auto; tab-index: auto; cursor: pointer; }
+			.rl-link:hover { color: #E8F3FF; background-color: #0A2660; border-color: #3CC8FF; }
+			#window:not([mouse-active]) .rl-link:focus { color: #E8F3FF; background-color: #0A2660; border-color: #3CC8FF; }
+			.rl-pack-note { display: block; flex: 0 0 auto; margin-bottom: 16dp; padding: 14dp 18dp; font-size: 18dp; line-height: 26dp; color: #E8F3FF; background-color: #0B1733; border-width: 2dp; border-color: #1F3D73; }
+			.rl-link--inline { display: inline-block; width: auto; margin: 8dp 0dp 0dp; }
+			.rl-list { display: block; margin-top: 6dp; }
+			.rl-list-item { display: block; font-size: 17dp; line-height: 27dp; padding-left: 26dp; }
+			.rl-gap { display: block; height: 22dp; }
+
+			/* The settings pages: the config menu's templates in the launcher colours (only inside the launcher). */
+			.rl-page .config__form { border-top-width: 0dp; }
+			.rl-page .config__wrapper { background-color: rgba(3, 8, 22, 0.78); border-radius: 0dp; border-width: 2dp; border-color: #1F3D73; }
+			.rl-page .config__hz-wrapper .config__wrapper + .config__wrapper { margin-left: 18dp; }
+			.rl-page .config-option__title { font-family: "JetBrains Mono"; font-weight: bold; font-size: 21dp; letter-spacing: 0.5dp; line-height: 26dp; color: #E8F3FF; }
+			.rl-page .config-group__title { font-family: "Press Start 2P"; font-weight: normal; font-size: 15dp; letter-spacing: 0dp; line-height: 22dp; color: #FFB21A; }
+			.rl-page .config-option__list .config-option__tab-label { font-family: "JetBrains Mono"; font-weight: bold; font-size: 17dp; letter-spacing: 1dp; color: #8199BF; }
+			.rl-page .config-option__list .config-option__tab-label:hover { color: #E8F3FF; }
+			.rl-page .config-option__list input.radio:not(:disabled):checked+.config-option__tab-label { border-bottom: 2dp; border-color: #3CC8FF; color: #3CC8FF; }
+			.rl-page .config-option__list input.radio:not(:disabled):hover+.config-option__tab-label { color: #E8F3FF; }
+			#window:not([mouse-active]) .rl-page .config-option__list input.radio:not(:disabled):focus+.config-option__tab-label { animation: none; color: #050B1C; background-color: #3CC8FF; border-color: #E8F3FF; }
+			.rl-page .config-option__list input.range slidertrack { background-color: #1F3D73; height: 4dp; margin-top: 7dp; }
+			.rl-page .config-option__list input.range sliderbar { background-color: #3CC8FF; border-radius: 0dp; }
+			.rl-page .config-option__list input.range sliderbar:hover { background-color: #E8F3FF; }
+			#window:not([mouse-active]) .rl-page .config-option__list input.range sliderbar:focus { animation: none; background-color: #E8F3FF; border-width: 2dp; border-color: #3CC8FF; }
+			.rl-page .config-option__range-label { font-family: "JetBrains Mono"; font-weight: bold; font-size: 17dp; color: #3CC8FF; }
+			.rl-page .config-option__details { color: #3CC8FF; }
+			.rl-page .jfg-note { color: #3CC8FF; }
+			.rl-page .config__wrapper p { font-family: "JetBrains Mono"; font-size: 18dp; line-height: 27dp; color: #E8F3FF; }
+			.rl-page .config__wrapper p b, .rl-page .config__wrapper p i { color: #3CC8FF; }
+			/* The Graphics page's info text (config__wrapper_scroll) is position: fixed in the game's own menu, which here floated it to
+			   the top right of the window over the options: make it a box beside the options like the other pages. */
+			.rl-page .config__wrapper_scroll, .rl-page .config__wrapper_scroll:last-child { position: relative; margin-left: 18dp; margin-right: 0dp; width: auto; flex: 1 1 100%; height: auto; padding: 16dp; overflow-y: auto; background-color: rgba(3, 8, 22, 0.78); border-radius: 0dp; border-width: 2dp; border-color: #1F3D73; text-align: left; }
+			.rl-page .config__wrapper_scroll p { font-family: "JetBrains Mono"; font-size: 18dp; line-height: 27dp; color: #E8F3FF; }
+			.rl-page .config__wrapper_scroll p b, .rl-page .config__wrapper_scroll p i { color: #3CC8FF; }
+			.rl-page .button { border-radius: 0dp; border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF;
+				font-family: "JetBrains Mono"; font-weight: bold; font-size: 19dp; letter-spacing: 1dp; padding: 16dp 20dp; }
+			.rl-page .button:hover, .rl-page .button:focus { background-color: #0A2660; border-color: #E8F3FF; color: #E8F3FF; }
+			.rl-page .button.jfg-selected { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; }
+			.rl-page .button.jfg-selected:hover, .rl-page .button.jfg-selected:focus { background-color: #1E90E8; border-color: #E8F3FF; color: #050B1C; }
+			.rl-page input.text { border-radius: 0dp; }
+			.rl-page scrollbarvertical slidertrack { background: #1F3D73; opacity: 0.6; }
+			.rl-page scrollbarvertical sliderbar { background: #3CC8FF; opacity: 0.8; border-radius: 0dp; }
+			/* Left from an option row's first choice goes back to the sidebar (the base menu stops there). */
+			#rl_page_gameplay .config-option__list input:first-of-type { nav-left: #tab_jfg_gameplay; }
+			#rl_page_visuals .config-option__list input:first-of-type { nav-left: #tab_jfg_visuals; }
+			#rl_page_textures .config-option__list input:first-of-type { nav-left: #tab_jfg_textures; }
+			#rl_page_graphics .config-option__list input:first-of-type { nav-left: #tab_graphics; }
+			#rl_page_sound .config-option__list input:first-of-type { nav-left: #tab_sound; }
+			#rl_page_general .config-option__list input:first-of-type { nav-left: #tab_general; }
+		</style>
+	</head>
+	<body>
+		<div id="window" data-model="launcher_model" onkeydown="launcher_keydown">
+			<div class="rl">
+				<!-- Sidebar -->
+				<div class="rl-shadow rl-sidebar">
+					<div class="rl-card">
+						<div class="rl-sidebar-inner">
+							<!-- Logo: assets/jfg_launcher/logo.png when it exists, else the wordmark -->
+							<div class="rl-logo">
+								<div class="rl-logo-image" data-if="logo_available" data-style-decorator="logo_available ? 'image(/jfg_logo contain)' : 'none'"></div>
+								<div class="rl-wordmark rl-pixel" data-if="!logo_available">
+									<div class="rl-wordmark__top">JET FORCE</div>
+									<div class="rl-wordmark__main">GEMINI</div>
+									<div class="rl-wordmark__sub">RECOMPILED<span class="rl-cursor">_</span></div>
+								</div>
+							</div>
+							<div class="rl-btn-shadow"><button id="nav_play" class="rl-btn" autofocus data-class-rl-active="page == 'play'"
+								data-event-focus="set_page('play')" data-style-nav-right="rom_valid ? '#rl_start' : '#rl_browse'"
+								style="nav-up: #nav_exit; nav-down: #tab_jfg_profiles;">Play</button></div>
+							<div class="rl-btn-shadow"><button id="tab_jfg_profiles" class="rl-btn" data-class-rl-active="page == 'profiles'"
+								data-event-focus="set_page('profiles')" style="nav-up: #nav_play; nav-down: #tab_jfg_gameplay; nav-right: auto;">Profiles</button></div>
+							<div class="rl-btn-shadow"><button id="tab_jfg_gameplay" class="rl-btn" data-class-rl-active="page == 'gameplay'"
+								data-event-focus="set_page('gameplay')" style="nav-up: #tab_jfg_profiles; nav-down: #tab_jfg_visuals; nav-right: #jfg_no_blood_on;">Gameplay</button></div>
+							<div class="rl-btn-shadow"><button id="tab_jfg_visuals" class="rl-btn" data-class-rl-active="page == 'visuals'"
+								data-event-focus="set_page('visuals')" style="nav-up: #tab_jfg_gameplay; nav-down: #tab_graphics; nav-right: #jfg_widescreen_on;">Visuals</button></div>
+							<div class="rl-btn-shadow"><button id="tab_graphics" class="rl-btn" data-class-rl-active="page == 'graphics'"
+								data-event-focus="set_page('graphics')" style="nav-up: #tab_jfg_visuals; nav-down: #tab_sound; nav-right: #res_original;">Graphics</button></div>
+							<div class="rl-btn-shadow"><button id="tab_sound" class="rl-btn" data-class-rl-active="page == 'sound'"
+								data-event-focus="set_page('sound')" style="nav-up: #tab_graphics; nav-down: #tab_controls; nav-right: #main_volume_input;">Sound</button></div>
+							<div class="rl-btn-shadow"><button id="tab_controls" class="rl-btn" data-class-rl-active="page == 'controls'"
+								data-event-focus="set_page('controls')" style="nav-up: #tab_sound; nav-down: #tab_general; nav-right: #cont_kb_toggle;">Controls</button></div>
+							<div class="rl-btn-shadow"><button id="tab_general" class="rl-btn" data-class-rl-active="page == 'general'"
+								data-event-focus="set_page('general')" style="nav-up: #tab_controls; nav-down: #tab_jfg_textures; nav-right: #joystick_deadzone_input;">Stick &amp; Rumble</button></div>
+							<div class="rl-btn-shadow"><button id="tab_jfg_textures" class="rl-btn" data-class-rl-active="page == 'textures'"
+								data-event-focus="set_page('textures')" style="nav-up: #tab_general; nav-down: #nav_about; nav-right: #jfg_pack_0;">Texture Packs</button></div>
+							<div class="rl-btn-shadow"><button id="nav_about" class="rl-btn" data-class-rl-active="page == 'about'"
+								data-event-focus="set_page('about')" style="nav-up: #tab_jfg_textures; nav-down: #nav_exit;">About</button></div>
+							<div class="rl-separator"></div>
+							<div class="rl-btn-shadow"><button id="nav_exit" class="rl-btn rl-btn--exit" onclick="exit_game"
+								style="nav-up: #nav_about; nav-down: #nav_play;">Exit</button></div>
+							<div class="rl-version"><div class="rl-version-side"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp')">GitHub</button></div><div class="rl-version-mid">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click (or use the banner on the Play page) to see what is new and update.</div></div></div><div class="rl-version-side"></div></div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Main panel -->
+				<div class="rl-shadow rl-main">
+					<div class="rl-card">
+						<div class="rl-main-inner">
+							<div class="rl-title rl-pixel">{{page_title}}<span class="rl-cursor">_</span></div>
+							<div class="rl-subtitle">{{page_subtitle}}</div>
+							<div class="rl-content">
+
+								<!-- Play -->
+								<div class="rl-page rl-page-scroll" id="rl_page_play" data-if="page == 'play'">
+									<div class="rl-block-shadow"><div class="rl-block">
+										<div class="rl-rom">
+											<div class="rl-leds">
+												<div class="rl-led rl-led--red" data-class-rl-on="!rom_valid"></div>
+												<div class="rl-led rl-led--amber" data-class-rl-on="!rom_valid"></div>
+												<div class="rl-led rl-led--green" data-class-rl-on="rom_valid"></div>
+											</div>
+											<div class="rl-rom-text">
+												<div class="rl-rom-title rl-pixel" data-if="!rom_valid">ROM not loaded</div>
+												<div class="rl-rom-title rl-pixel rl-ok" data-if="rom_valid">ROM ready</div>
+												<div class="rl-text" data-if="!rom_valid">Choose your own unmodified Jet Force Gemini (US) ROM to continue.</div>
+												<div class="rl-text" data-if="rom_valid">Your Jet Force Gemini (US) ROM is installed.</div>
+												<div class="rl-text rl-muted">The ROM stays on your computer and is never bundled with the game.</div>
+												<div class="rl-action-shadow"><button id="rl_browse" class="rl-action" data-class-rl-action--outline="rom_valid"
+													data-event-click="browse_rom()" style="nav-left: #nav_play; nav-up: none;">{{browse_label}}</button></div>
+											</div>
+										</div>
+									</div></div>
+									<div class="rl-banner-shadow" data-if="update_available">
+										<button id="rl_update_banner" class="rl-banner" data-event-click="show_update()"
+											style="nav-left: #nav_play; nav-up: #rl_browse; nav-down: #rl_start;">
+											<span class="rl-banner-title">Update available: v{{update_version}}</span>
+											<span class="rl-banner-text">See what is new and update. Your saves and settings are kept.</span>
+										</button>
+									</div>
+									<div class="rl-start-shadow">
+										<button id="rl_start" class="rl-start" data-class-rl-ready="rom_valid" data-event-click="start_game()"
+											data-style-nav-up="update_available ? '#rl_update_banner' : '#rl_browse'"
+											style="nav-left: #nav_play;">Start Jet Force Gemini</button>
+									</div>
+									<div class="rl-start-note" data-if="!rom_valid">Load a ROM to start.</div>
+									<div class="rl-keys">
+										<div class="rl-heading">While playing</div>
+										<div class="rl-key-row"><div class="rl-key">Select / Esc</div><div>This settings menu (Profiles, Gameplay, Visuals, Textures and the rest)</div></div>
+										<div class="rl-key-row"><div class="rl-key">F10</div><div>Tools bar: cheats, level warp, items, weapons, texture packs (Alt: back to the game)</div></div>
+										<div class="rl-key-row"><div class="rl-key">F9</div><div>The original all-in-one debug window</div></div>
+										<div class="rl-key-row"><div class="rl-key">F5 / F6</div><div>Back to the title screen / next texture pack</div></div>
+										<div class="rl-key-row"><div class="rl-key">F7</div><div>Fly camera for screenshots (Visuals has its settings)</div></div>
+										<div class="rl-key-row"><div class="rl-key">F11 / Alt+Enter</div><div>Fullscreen</div></div>
+									</div>
+									<div class="rl-action-shadow rl-changelogs"><button id="rl_changelogs" class="rl-action rl-action--outline" data-event-click="show_changelog()" style="nav-left: #nav_play;">Changelogs</button></div>
+								</div>
+
+								<!-- Settings pages: the Select / Esc menu's tabs -->
+								<div class="rl-page" id="rl_page_profiles" data-if="page == 'profiles'">
+									<div class="rl-tpl" data-model="jfg_profiles_model"><template src="config-menu__jfg_profiles"/></div>
+								</div>
+								<div class="rl-page" id="rl_page_gameplay" data-if="page == 'gameplay'">
+									<div class="rl-tpl" data-model="jfg_gameplay_model"><template src="config-menu__jfg_gameplay"/></div>
+								</div>
+								<div class="rl-page" id="rl_page_visuals" data-if="page == 'visuals'">
+									<div class="rl-tpl" data-model="jfg_visuals_model"><template src="config-menu__jfg_visuals"/></div>
+								</div>
+								<div class="rl-page" id="rl_page_textures" data-if="page == 'textures'">
+									<div class="rl-pack-note">
+										<span>The JFG 4K texture pack is a separate download.</span>
+										<button class="rl-link rl-link--inline" data-event-click="open_url('https://vibintoast.com/projects/jfg-4k')" style="nav-left: #tab_jfg_textures; nav-up: none; nav-down: #jfg_pack_0;">More info: vibintoast.com/content/textures/jfg-4k.html</button>
+									</div>
+									<div class="rl-tpl" data-model="jfg_textures_model"><template src="config-menu__jfg_textures"/></div>
+								</div>
+								<div class="rl-page" id="rl_page_graphics" data-if="page == 'graphics'">
+									<div class="rl-tpl" data-model="graphics_model"><template src="config-menu__graphics"/></div>
+								</div>
+								<div class="rl-page" id="rl_page_sound" data-if="page == 'sound'">
+									<div class="rl-tpl" data-model="sound_options_model"><template src="config-menu__sound"/></div>
+								</div>
+								<div class="rl-page" id="rl_page_controls" data-if="page == 'controls'">
+									<div class="rl-tpl" data-model="controls_model"><template src="config-menu__controls"/></div>
+								</div>
+								<div class="rl-page" id="rl_page_general" data-if="page == 'general'">
+									<div class="rl-tpl" data-model="general_model"><template src="config-menu__general"/></div>
+								</div>
+
+								<!-- About -->
+								<div class="rl-page rl-page-scroll" id="rl_page_about" data-if="page == 'about'">
+									<div class="rl-about">
+										<div class="rl-about-left">
+											<div class="rl-block-shadow"><div class="rl-block rl-about-card">
+												<img class="rl-toast" sprite="toast0" data-attr-sprite="'toast' + toast_frame"/>
+												<div class="rl-about-name">VibinToast</div>
+												<div class="rl-about-tag">Recomp, Decomp &amp; Texture Packs</div>
+												<div class="rl-about-links">
+													<button class="rl-link" data-event-click="open_url('https://vibintoast.com/')">VibinToast.com</button>
+													<button class="rl-link" data-event-click="open_url('https://github.com/VibinToast')">GitHub</button>
+													<button class="rl-link" data-event-click="open_url('https://www.youtube.com/@VibinToast')">YouTube</button>
+													<button class="rl-link" data-event-click="open_url('https://bsky.app/profile/VibinToast.bsky.social')">Bluesky</button>
+												</div>
+											</div></div>
+										</div>
+										<div class="rl-about-right">
+											<div class="rl-block-shadow"><div class="rl-block">
+												<div class="rl-heading">Jet Force Gemini: Recompiled</div>
+												<div class="rl-text">A native PC port of Jet Force Gemini (US), made by static recompilation of the original game, with modern controls, widescreen, high frame rates, ambient occlusion, bloom and texture packs. Made by VibinToast.</div>
+												<div class="rl-text rl-muted">You need your own unmodified ROM; none of the game's data is included.</div>
+											</div></div>
+											<div class="rl-gap"></div>
+											<div class="rl-block-shadow"><div class="rl-block">
+												<div class="rl-heading">Built with</div>
+												<div class="rl-list">
+													<div class="rl-list-item">&gt; N64Recomp and N64ModernRuntime: the static recompiler and its runtime</div>
+													<div class="rl-list-item">&gt; RT64: the renderer</div>
+													<div class="rl-list-item">&gt; dkr-recomp: the app this port is built on</div>
+													<div class="rl-list-item">&gt; The Jet Force Gemini decompilation project</div>
+													<div class="rl-list-item">&gt; RmlUi, SDL2, Dear ImGui</div>
+													<div class="rl-list-item">&gt; Press Start 2P and JetBrains Mono fonts (SIL Open Font License)</div>
+												</div>
+											</div></div>
+											<div class="rl-gap"></div>
+											<div class="rl-block-shadow"><div class="rl-block">
+												<div class="rl-text rl-muted" style="margin-top: 0dp;">Jet Force Gemini is a trademark of its owners. This is a fan project, not affiliated with or endorsed by Rare, Nintendo or Microsoft. Version {{version_number}}.</div>
+											</div></div>
+										</div>
+									</div>
+								</div>
+
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="rl-modal" data-class-rl-on="update_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
+					<div class="rl-modal-title">Update available</div>
+					<div class="rl-modal-sub">v{{version_number}} &gt; v{{update_version}}. What is new:</div>
+					<div class="rl-modal-notes" id="rl_update_notes" data-rml="update_changelog"></div>
+					<div class="rl-modal-status" data-if="update_stage != 0" data-class-rl-error="update_stage == 2">{{update_status}}</div>
+					<div class="rl-progress" data-if="update_stage == 1"><div class="rl-progress-bar" data-style-width="update_percent + '%'"></div></div>
+					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install">Update to v{{update_version}}? The game restarts when it is done. Your saves and settings are kept.</div>
+					<div class="rl-modal-ask rl-warn" data-if="update_stage == 0 &amp;&amp; !update_can_install">{{update_unavailable}}</div>
+					<div class="rl-modal-buttons">
+						<div class="rl-action-shadow" data-if="update_stage == 0"><button id="rl_update_go" class="rl-action" data-event-click="update_install()"
+							style="nav-up: none; nav-down: none; nav-left: none; nav-right: #rl_update_later;">Update now</button></div>
+						<div class="rl-action-shadow" data-if="update_stage != 1 &amp;&amp; update_stage != 3"><button id="rl_update_later" class="rl-action rl-action--outline" data-event-click="update_close()"
+							data-style-nav-left="update_stage == 0 ? '#rl_update_go' : 'none'" data-style-nav-right="'#rl_update_page'"
+							style="nav-up: none; nav-down: none;">{{update_stage == 2 ? 'Close' : 'Later'}}</button></div>
+						<div class="rl-action-shadow" data-if="update_stage == 0 || update_stage == 2"><button id="rl_update_page" class="rl-action rl-action--outline" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp/releases/latest')"
+							style="nav-up: none; nav-down: none; nav-left: #rl_update_later; nav-right: none;">Release page</button></div>
+					</div>
+				</div></div></div>
+				<div class="rl-modal" data-class-rl-on="changelog_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
+					<div class="rl-modal-title">Changelogs</div>
+					<div class="rl-modal-sub">You have v{{version_number}}. Newest first. Up/Down or the mouse wheel scrolls.</div>
+					<div class="rl-modal-notes rl-modal-notes--tall" id="rl_changelog_notes" data-rml="changelog_text"></div>
+					<div class="rl-modal-buttons">
+						<div class="rl-action-shadow"><button id="rl_changelog_close" class="rl-action" data-event-click="changelog_close()" style="nav-up: none; nav-down: none; nav-left: none; nav-right: none;">Close</button></div>
+					</div>
+				</div></div></div>
+				<div class="rl-scanlines"></div>
+			</div>
+		</div>
+	</body>
+</rml>
