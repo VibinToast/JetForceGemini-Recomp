@@ -77,6 +77,12 @@ float g_sign_move = -1.0f, g_sign_cam = -1.0f;
 
 bool control_mods_blocked() { return in_cutscene() || rd8(ADDR_robotMission) != 0; } // see ADDR_robotMission
 
+// Sprint (src/input/controls.cpp): the sprint button as last read by the input thread. With the option off the left
+// stick click keeps its crouch in the dual-stick layout.
+std::atomic<bool> g_sprint_held{ false };
+extern "C" int jfg_sprint_enabled(void) { return g.sprint ? 1 : 0; }
+extern "C" void jfg_sprint_input(int held) { g_sprint_held.store(held != 0, std::memory_order_relaxed); }
+
 // Levels played with the game's own controls even with dual stick / mouse and keyboard on: the Mizar race (the ship
 // steers with the stick, which the dual-stick camera and movement would take over) and the multiplayer races.
 bool level_uses_original_controls(int level) {
@@ -197,7 +203,6 @@ static bool aim_state(uint32_t obj) {
 
 static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
     constexpr uint16_t BTN_R = 0x0010, C_UP = 0x0008;
-    constexpr int STATE_JUMP = 3;
     static int phase = 0, ticks = 0;
     static bool jump_was_held = false;
     const bool jump_held = g_jump_button.load(std::memory_order_relaxed);
@@ -229,7 +234,7 @@ static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
     const uint32_t data = rd32(obj + 0x68);
     const int state = valid_ptr(data) ? rd8(data + PD_STATE) : -1;
     ticks++;
-    if ((state != STATE_JUMP && ticks > 2) || ticks > 300) { finish(); return; }
+    if ((state != PD_STATE_JUMP && ticks > 2) || ticks > 300) { finish(); return; }
     wr16(pad, (uint16_t)(cur & ~BTN_R));
     wr16(pressed, (uint16_t)(down & ~BTN_R));
 }
@@ -475,6 +480,23 @@ void jfg_camera_controls(recomp_context* ctx) {
     apply_damage_taken(obj);
     debug_player_log(obj);
     g_cam.move_factor = (float)g.move_speed / 100.0f;
+    g_cam.sprint_factor = 1.0f;
+    static const bool sprint_test = std::getenv("JFG_DEBUG_SPRINT") != nullptr; // tests: sprint on and held
+    if (((g.sprint && g_sprint_held.load(std::memory_order_relaxed)) || sprint_test) && obj != 0 && !dino::input::game_input_disabled()) {
+        // On foot, and while aiming (the aim walk) only with "Sprint while aiming". Swimming (Vela, state 4: in the
+        // water she is always in it, at the surface and below) has its own option and speed; jfg_move_scale applies
+        // it to the whole 3D step, as it does the Dive speed.
+        const uint32_t data = rd32(obj + 0x68);
+        constexpr uint8_t STATE_SWIM = 4;
+        const int state = valid_ptr(data) ? rd8(data + PD_STATE) : -1;
+        if (state == STATE_SWIM) {
+            if (g.sprint_swimming) g_cam.sprint_factor = (float)g.sprint_swim_speed / 100.0f;
+        }
+        else if (state >= 0 && (state != PD_STATE_AIMING || g.sprint_aiming)) {
+            g_cam.sprint_factor = (float)g.sprint_speed / 100.0f;
+            g_cam.move_factor *= g_cam.sprint_factor;
+        }
+    }
     {
         // Mouse wheel: each notch is one press of the game's own weapon buttons (N64 A: next, B: previous - what RB /
         // LB give in the dual-stick layout), so the switch has its sound and the weapon list scrolls on screen. The
@@ -612,13 +634,6 @@ void jfg_camera_controls(recomp_context* ctx) {
     const float deflection = std::min(1.0f, std::sqrt(lx * lx + ly * ly));
     int stick_x = 0, stick_y = 0;
     if (deflection > 0.12f) {
-        if (g.diagonal_boost) {
-            // Forward and sideways parts as the original's "stick forward + C button" would give them: the larger one
-            // counts in full, so straight is 1, a full diagonal is the square root of 2 at 100%.
-            const float larger = std::max(std::fabs(lx), std::fabs(ly));
-            const float forward = ly / larger, sideways = lx / larger * (float)g.strafe_speed / 100.0f;
-            g_cam.move_factor *= std::sqrt(forward * forward + sideways * sideways);
-        }
         const float wanted = g_cam.heading + g_sign_move * std::atan2(lx, ly); // world heading to run along
         const float relative = wrap_angle(wanted - game_heading);
         stick_x = (int)std::lround(std::sin(relative) * deflection * 78.0f * g_sign_move);
@@ -641,13 +656,29 @@ extern "C" void jfg_move_scale(uint8_t* rdram_, recomp_context* ctx) {
     if (busy || g_platform_move || g_cam.player == 0 || (uint32_t)ctx->r4 != g_cam.player) return;
     const uint32_t obj = g_cam.player, data = rd32(obj + 0x68);
     if (!valid_ptr(data)) return;
-    // Underwater (character state 4, Vela's swimming) the "Dive speed" option scales the whole 3D step, up and down too.
+    // Underwater (character state 4, Vela's swimming) the "Dive speed" option, and swim sprinting, scale the whole 3D
+    // step, up and down too. (On foot sprint_factor is already part of move_factor.)
     constexpr uint8_t STATE_SWIM = 4;
     const bool swim = rd8(data + PD_STATE) == STATE_SWIM;
-    const float dive = swim ? (float)g.dive_speed / 100.0f : 1.0f;
-    const float factor_xz = g_cam.move_factor * dive, factor_y = dive;
-    if (factor_xz == 1.0f && factor_y == 1.0f) return;
+    const float dive = swim ? (float)g.dive_speed / 100.0f * g_cam.sprint_factor : 1.0f;
     auto as_float = [](gpr reg) { const uint32_t bits = (uint32_t)reg; float f; std::memcpy(&f, &bits, 4); return f; };
+    // "Normalize diagonal speed": running while sidestepping (C-left / C-right, also what the left stick gives while
+    // aiming) adds the two speeds together. The step is split into its forward and sideways parts (relative to the way
+    // the character faces) and shortened to the larger part alone, so a diagonal is as fast as either direction.
+    float normalize = 1.0f;
+    if (g.normalize_diagonal && !swim) {
+        constexpr uint16_t C_LEFT = 0x0002, C_RIGHT = 0x0001;
+        const uint32_t pad = ADDR_sControllerCurrData + 6u * (rd8(ADDR_sPlayerID) & 3u);
+        if ((rd16(pad) & (C_LEFT | C_RIGHT)) != 0) {
+            const float heading = angle_from_s16(rd16(obj)) + PI_F; // the way the character runs
+            const float sx = as_float(ctx->r5), sz = as_float(ctx->r7);
+            const float forward = sx * std::sin(heading) + sz * std::cos(heading), sideways = sx * std::cos(heading) - sz * std::sin(heading);
+            const float length = std::sqrt(forward * forward + sideways * sideways);
+            if (length > 0.0f) normalize = std::max(std::fabs(forward), std::fabs(sideways)) / length;
+        }
+    }
+    const float factor_xz = g_cam.move_factor * dive * normalize, factor_y = dive;
+    if (factor_xz == 1.0f && factor_y == 1.0f) return;
     auto as_bits = [](float f) { uint32_t bits; std::memcpy(&bits, &f, 4); return bits; };
     const float dx = as_float(ctx->r5) * (factor_xz - 1.0f), dz = as_float(ctx->r7) * (factor_xz - 1.0f);
     const float dy = swim ? as_float(ctx->r6) * (factor_y - 1.0f) : 0.0f;

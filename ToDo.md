@@ -1,5 +1,6 @@
 ## Things to add
-- Change opacity of red screen when hit by enemy projectile (0 for disabled)
+
+- Mod Support
 - Load/Save State
     - Or at least for testing level warping with coordinates
 - Add better tools for test
@@ -7,15 +8,15 @@
     - Start with all weapons
     - option to start with invincibility
 - FPS (frames) Slider (30, 60, 144, 240, etc)
-- Debug menu only uses imgui, toolbar and its windows should use something else (the built in rml ui).
 - Linux Builds
-- Mod support
-- Change character models
+- Steam Deck and similar device support
+- Change character models (Think Multiplayer)
 - Coop Multiplayer for story mode (Not counting one player playing as floyd) (Mod)
 - Minimap on screen similar to Legend of Zelda: Ocarina of time (Mod?)
 - Randomizer
 - Rogue-like mechanic? (Mod)
 - Multiplayer
 - LOD disabled still see ants in cutscenes using low poly
-- Autosave (remembers last room)
-- unlimited continues
+- Better Weapon Switching Menu
+- Minimap
+- Gyro Aim

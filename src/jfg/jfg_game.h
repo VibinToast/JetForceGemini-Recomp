@@ -33,6 +33,7 @@ void mmFlushFreeStack(uint8_t* rdram, recomp_context* ctx);
 void mathBreakPoint(uint8_t* rdram, recomp_context* ctx);
 void mainGetGameFlag(uint8_t* rdram, recomp_context* ctx);
 void mainSetGameFlag(uint8_t* rdram, recomp_context* ctx);
+void mainSaveGame(uint8_t* rdram, recomp_context* ctx);
 void frontGetMode(uint8_t* rdram, recomp_context* ctx);
 void objGetPlayerlist(uint8_t* rdram, recomp_context* ctx);
 void objGetObjList(uint8_t* rdram, recomp_context* ctx);
@@ -53,6 +54,7 @@ constexpr uint32_t ADDR_gameplay             = 0x800FD7D4; // Game*
 constexpr uint32_t ADDR_mainGameMode         = 0x800FD7C4; // s32
 constexpr uint32_t ADDR_currentLevel         = 0x800A323C; // s16, mainGetCurrentLevel()
 constexpr uint32_t ADDR_currentCharacter     = 0x800A3240; // s16, mainGetPlayerCharacter() in single player
+constexpr uint32_t ADDR_currentEntrance      = 0x800A3244; // s16, the entrance the level was entered by (copied from 0x800A3258, mainChangeLevel's third argument, as the level loads)
 constexpr uint32_t ADDR_nextLevel            = 0x800A3250; // s16, mainGetNextLevel()
 constexpr uint32_t ADDR_allLevelCheat        = 0x800A5068; // u8
 constexpr uint32_t ADDR_invulnerabilityCheat = 0x800A5070; // u8
@@ -65,6 +67,7 @@ constexpr uint32_t ADDR_tribaltable = 0x800FD7B8; // pointer to s8[]: tribals pe
 constexpr uint32_t ADDR_cloneTaskActive = 0x800A35E8, ADDR_refractTaskActive = 0x800A360C, ADDR_blurTaskActive = 0x800A3630; // s32
 constexpr uint32_t ADDR_sResolutionIndex     = 0x800FECA8; // s8, bit 0 = letterboxed ("widescreen") VI mode
 constexpr uint32_t ADDR_pauseMode = 0x800FD7BD;          // s8, what mainGetPauseMode() returns
+constexpr uint32_t ADDR_continues = 0x800A3280;          // s16: continues left in the region (2 on entering one)
 constexpr uint32_t ADDR_runInOneFrame        = 0x800FECCC; // s32, viFrameSync waits for one retrace only
 constexpr uint32_t ADDR_buttonsPressed       = 0x800FB0F0; // u16 gControllerButtonsPressed[4]
 constexpr uint32_t ADDR_sPlayerID            = 0x800FB100; // u8 sPlayerID[4]

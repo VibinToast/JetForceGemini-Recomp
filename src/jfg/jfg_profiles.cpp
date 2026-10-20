@@ -27,19 +27,22 @@ constexpr const char* PROFILE_DIR = "profiles";
 constexpr const char* PROFILE_CHOICE_FILE = "jfg_profile.txt";
 
 const BuiltinProfile BUILTIN_PROFILES[] = {
-    { "Default", "The original game, as it played on the N64.", "start_skips_cutscenes=0\n" },
+    // Every profile starts from State's defaults (jfg_options.h): Auto Save on, Keep Area Progress and Permanent Tribal
+    // Saves off, so the other profiles and the player's own (also ones saved before these options existed) auto save.
+    // Default is the original game: no auto save.
+    { "Default", "The original game, as it played on the N64.", "start_skips_cutscenes=0\nauto_save=0\n" },
     { "Modern", "Modern controls and visuals at 60 fps, with the original weapons and gameplay.",
       "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nframe_rate=1\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
       "no_lod=1\nfar_objects=1\nssao=1\nssao_strength=30\nssao_radius=139\nbloom=1\nbloom_intensity=40\nbloom_threshold=19\n"
       "bloom_radius=6\ndual_stick=1\ninvert_aim_y=0\nswap_triggers=0\ndual_layout=1\ninvert_aim_normal=0\ninvert_camera_y=0\naim_from_character=0\n"
-      "move_speed=110\ndiagonal_boost=0\nstrafe_speed=100\ncamera_speed_h=134\ncamera_speed_v=107\naim_shoulder=1\naim_centered=1\naim_speed=100\n"
+      "move_speed=110\ncamera_speed_h=134\ncamera_speed_v=107\naim_shoulder=1\naim_centered=1\naim_speed=100\n"
       "aim_jump=1\nmouse_keyboard=1\nmouse_camera_speed=100\nmouse_aim_speed=100\ninvert_mouse_y=0\nrefuel_speed=482\nsniper_fixed_zoom=1\nsniper_zoom=365\n"
       "damage_taken=100\ndive_speed=100\nfly_speed=100\nfly_freeze=1\nfly_hide_hud=1\n" },
     { "Modern and Balanced", "Modern, plus rebalanced weapons. The balance changes are subjective.",
       "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nframe_rate=1\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
       "no_lod=1\nfar_objects=1\nssao=1\nssao_strength=30\nssao_radius=139\nbloom=1\nbloom_intensity=40\nbloom_threshold=19\n"
       "bloom_radius=6\ndual_stick=1\ninvert_aim_y=0\nswap_triggers=0\ndual_layout=1\ninvert_aim_normal=0\ninvert_camera_y=0\naim_from_character=0\n"
-      "move_speed=110\ndiagonal_boost=0\nstrafe_speed=100\ncamera_speed_h=134\ncamera_speed_v=107\naim_shoulder=1\naim_centered=1\naim_speed=100\n"
+      "move_speed=110\ncamera_speed_h=134\ncamera_speed_v=107\naim_shoulder=1\naim_centered=1\naim_speed=100\n"
       "aim_jump=1\nmouse_keyboard=1\nmouse_camera_speed=100\nmouse_aim_speed=100\ninvert_mouse_y=0\nrefuel_speed=482\nsniper_fixed_zoom=1\nsniper_zoom=365\n"
       "damage_taken=100\ndive_speed=100\nfly_speed=100\nfly_freeze=1\nfly_hide_hud=1\n"
       "weapon.0.modify=1\nweapon.0.damage=1\nweapon.0.delay=12\nweapon.0.throw_delay=0\nweapon.0.lifetime=30\nweapon.0.spread_x=16\nweapon.0.spread_y=16\nweapon.0.speed_x100=12080\nweapon.0.size=105\nweapon.0.charge=100\nweapon.0.mines=8\nweapon.0.no_heat=0\n"
@@ -62,7 +65,7 @@ const BuiltinProfile BUILTIN_PROFILES[] = {
       "start_skips_cutscenes=1\nframe_rate=1\nwidescreen=1\nno_lod=1\nfar_objects=1\n"
       "ssao=1\nssao_strength=44\nssao_radius=143\nbloom=1\nbloom_intensity=52\nbloom_threshold=34\nbloom_radius=6\n"
       "dual_stick=1\ndual_layout=1\nmouse_keyboard=1\naim_shoulder=1\naim_centered=1\naim_jump=1\n"
-      "move_speed=200\ndiagonal_boost=1\nstrafe_speed=150\ncamera_speed_h=150\ncamera_speed_v=150\naim_speed=150\n"
+      "move_speed=200\ncamera_speed_h=150\ncamera_speed_v=150\naim_speed=150\n"
       "mouse_camera_speed=150\nmouse_aim_speed=150\n"
       // Pistol: rapid, strong, big bolts, no overheating.
       "weapon.0.modify=1\nweapon.0.damage=10\nweapon.0.delay=4\nweapon.0.speed_x100=20000\nweapon.0.size=250\nweapon.0.no_heat=1\n"

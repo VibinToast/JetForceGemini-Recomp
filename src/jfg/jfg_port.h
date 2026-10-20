@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -36,6 +37,7 @@ void update_dump_folder();                        // texture dumping, "One folde
 // --- jfg_frame_rate.cpp ------------------------------------------------------------------------------------------
 extern std::atomic<float> g_fps;        // game frames per second, for the "Show FPS" option
 extern std::atomic<float> g_screen_fps; // frames the renderer presented per second
+void frame_step_key(bool step);         // End (freeze, unfreeze) or F8 (one frame) for frame step
 
 // --- jfg_cutscene_skip.cpp ---------------------------------------------------------------------------------------
 bool in_cutscene();
@@ -50,6 +52,8 @@ struct CameraControl {
     float elevation = 0;        // added to the game's own camera elevation, radians
     uint32_t player = 0;        // the character's object this tick, for jfg_move_scale
     float move_factor = 1.0f;   // ground speed multiplier this tick
+    float sprint_factor = 1.0f; // the part of it that is sprinting, or the swim sprint (also speeds up the character's
+                                // animation, not the jump's)
     bool shoulder = false;      // aiming with the over-the-shoulder option this tick
     float shoulder_blend = 0;   // 0..1: how far the view has moved from the game's camera to the shoulder
     bool overridden = false;    // the camera in RDRAM currently holds our values; saved[] holds the game's
@@ -81,9 +85,9 @@ void jfg_camera_controls(recomp_context* ctx); // game thread, right after joyRe
 // Aiming. The character control data (object + 0x68) holds, as 16-bit angles: the direction the body faces (+0x11C,
 // copy +0x106, and the object's yaw) and the view pitch (+0x1E2, limited to 60 degrees); the reticle's offset from
 // them (yaw +0x1CE, copies +0x1DC and +0x246; pitch +0x1E0); and their sums, the aim direction (yaw +0x1C6/+0x1CA;
-// pitch +0x1C8/+0x1CC/+0x1D0/+0x1DE). The byte at +0x568 is 0x0B while the character is in its aiming state.
+// pitch +0x1C8/+0x1CC/+0x1D0/+0x1DE). The byte at +0x568 is the character's state: 0x0B aiming, 3 jumping (and falling).
 constexpr uint32_t PD_BODY_YAW = 0x11C, PD_BODY_YAW_COPY = 0x106, PD_VIEW_PITCH = 0x1E2, PD_RETICLE_YAW = 0x1CE, PD_RETICLE_PITCH = 0x1E0, PD_STATE = 0x568;
-constexpr uint8_t PD_STATE_AIMING = 0x0B;
+constexpr uint8_t PD_STATE_AIMING = 0x0B, PD_STATE_JUMP = 3;
 
 // --- jfg_camera.cpp ----------------------------------------------------------------------------------------------
 // Fly camera (F7 / F10 > Tools): a free camera for screenshots. While it is on, the sticks / WASD and the mouse fly
@@ -102,6 +106,29 @@ void jfg_camera_restore();                   // start of the tick: the game gets
 
 // --- jfg_gameplay.cpp --------------------------------------------------------------------------------------------
 void apply_damage_taken(uint32_t obj); // "Damage taken %"
+void gameplay_tick();                  // game thread, start of the tick: "Unlimited continues"
+
+// --- jfg_auto_save.cpp -------------------------------------------------------------------------------------------
+extern std::chrono::steady_clock::time_point g_save_toast; // when the last auto save was made (on-screen note)
+void auto_save_tick(recomp_context* ctx);                  // game thread, start of the tick (before joyRead)
+void auto_save_forget_file();                              // a warp from outside gameplay: no file is in play
+bool auto_save_file_in_play();                             // a file was chosen or saved (not a port warp from the title)
+
+// --- jfg_area_progress.cpp ---------------------------------------------------------------------------------------
+// "Keep Area Progress": what was done in an unfinished region is kept with each save and restored on loading.
+void area_progress_arm();             // a file was chosen: its first region entry may be restored
+void area_progress_disarm();          // a port warp from outside gameplay
+void area_progress_forget(int slot);  // the game deletes a file (-1: all files)
+void area_progress_on_save(int slot); // a save to slot is carried out this tick (before joyRead)
+void area_progress_tick();            // start of the tick
+
+// --- jfg_tribal_saves.cpp ----------------------------------------------------------------------------------------
+// "Permanent Tribal Saves": rescued Tribals stay rescued after leaving their area, a game over or loading.
+void tribal_saves_file_chosen();      // a file was chosen: what was saved for it counts
+void tribal_saves_on_save(int slot);  // a save to slot is carried out this tick
+void tribal_saves_forget(int slot);   // the game deletes a file (-1: all files)
+void tribal_saves_tick();             // start of the tick: notices rescues
+void tribal_saves_region_reset();     // end of mainResetRegion: puts the region's rescues back
 
 // --- jfg_visuals.cpp ---------------------------------------------------------------------------------------------
 void apply_no_lod(recomp_context* ctx); // "Disable LOD", "Draw distant objects"
@@ -116,7 +143,9 @@ void reset_weapons();                      // every weapon back to its original 
 std::string weapons_text(const char* prefix);
 void save_weapons();
 void apply_weapons();                      // game thread, every tick
-void draw_weapons();                       // the Weapons tab / window
+void draw_weapons();                       // the Weapons tab (F9)
+struct ToolField;
+std::vector<ToolField> weapon_fields();    // the Weapons window (F10)
 
 // --- jfg_profiles.cpp --------------------------------------------------------------------------------------------
 struct BuiltinProfile { const char* name; const char* description; const char* text; };
@@ -141,14 +170,29 @@ void debug_profile_tick();                 // JFG_DEBUG_PROFILE
 // --- jfg_ui_window.cpp -------------------------------------------------------------------------------------------
 void draw_cheats();
 void draw_warp();
-void draw_debug_window(recomp_context* ctx); // F9
+void draw_debug_window(recomp_context* ctx); // F9 (Dear ImGui)
+
+// --- what F10's windows show and edit (jfg_ui_tools.cpp draws them) ----------------------------------------------
+// One row of a window. get / set / text run on the game thread (jfg_debug_frame), so they may read and write the game
+// and call its functions. Toggle: get returns 0 / 1. Number: lo..hi, changed by step / big_step. Action: a button,
+// set(ctx, 1). Heading and Note: text only (text, when given, replaces the label with what it returns each refresh).
+struct ToolField {
+    enum Kind { Heading, Note, Toggle, Number, Action } kind = Note;
+    std::string label;
+    int lo = 0, hi = 1, step = 1, big_step = 10;
+    std::function<int(recomp_context*)> get;
+    std::function<void(recomp_context*, int)> set;
+    std::function<std::string(recomp_context*)> text;
+};
 
 // --- jfg_ui_items.cpp --------------------------------------------------------------------------------------------
-void draw_inventory(recomp_context* ctx);  // the Items tab / window
+void draw_inventory(recomp_context* ctx);  // the Items tab (F9)
+std::vector<ToolField> item_fields();      // the Items window (F10), for the character in g.edit_character
 
-// --- jfg_ui_toolbar.cpp ------------------------------------------------------------------------------------------
-// Height of F10's toolbar while it is open (0 otherwise), measured when drawn: the corner overlays start below it.
-extern float g_toolbar_height;
-void draw_toolbar(recomp_context* ctx);    // F10
+// --- jfg_ui_tools.cpp --------------------------------------------------------------------------------------------
+// F10: the tools bar and its windows (RmlUi). Height of the bar in pixels while it is shown (0 otherwise): the corner
+// overlays start below it.
+extern std::atomic<float> g_toolbar_height;
+void tools_game_tick(recomp_context* ctx); // game thread, every tick: carries out what the bar asked for, refreshes values
 
 } // namespace jfg
