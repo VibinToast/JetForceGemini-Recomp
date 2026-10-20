@@ -143,6 +143,63 @@ static void set_launcher_page(const std::string& page) {
     model_handle.DirtyVariable("page_subtitle");
 }
 
+// ---- controller (ui_state.cpp, while the launcher is shown; D-pad / left stick / A / Select already work as keys) ------
+// LB / RB: the page before / after in the sidebar (focusing its button opens the page), wrapping round.
+void jfg_launcher_step_page(int dir) {
+    if (update_dialog || changelog_dialog) return;
+    Rml::ElementDocument* doc = launcher_document();
+    if (doc == nullptr) return;
+    constexpr int n = (int)(sizeof(LAUNCHER_PAGES) / sizeof(LAUNCHER_PAGES[0]));
+    int cur = 0;
+    for (int i = 0; i < n; i++) if (launcher_page == LAUNCHER_PAGES[i].id) cur = i;
+    const int next = ((cur + dir) % n + n) % n;
+    if (Rml::Element* button = doc->GetElementById(LAUNCHER_PAGES[next].nav_id)) button->Focus(true);
+}
+
+// Start: the Play page, on its Start button (or Browse while no ROM is loaded).
+void jfg_launcher_start_pressed() {
+    if (update_dialog || changelog_dialog) return;
+    Rml::ElementDocument* doc = launcher_document();
+    if (doc == nullptr) return;
+    if (Rml::Element* button = doc->GetElementById("nav_play")) button->Focus(true);
+    focus_soon(rom_valid ? "rl_start" : "rl_browse");
+}
+
+// The element of `root` (itself or the first one inside it) that can scroll vertically.
+static Rml::Element* find_scroller(Rml::Element* root) {
+    if (root == nullptr) return nullptr;
+    if (root->GetScrollHeight() > root->GetClientHeight() + 1.0f) return root;
+    for (int i = 0; i < root->GetNumChildren(); i++) {
+        if (Rml::Element* found = find_scroller(root->GetChild(i))) return found;
+    }
+    return nullptr;
+}
+
+// Right stick: scrolls by `pixels` (positive = down) the open dialog's notes, else what holds the focus on the page
+// (the nearest scrolling box round it), else the page's first scrolling box.
+void jfg_launcher_scroll(float pixels) {
+    Rml::ElementDocument* doc = launcher_document();
+    if (doc == nullptr) return;
+    Rml::Element* scroller = nullptr;
+    if (changelog_dialog || update_dialog) {
+        scroller = doc->GetElementById(changelog_dialog ? "rl_changelog_notes" : "rl_update_notes");
+    }
+    else {
+        Rml::Element* page = doc->GetElementById("rl_page_" + launcher_page);
+        if (page == nullptr) return;
+        // Only when the focus is inside the page (not in the sidebar): the nearest scrolling box between it and the page.
+        bool in_page = false;
+        for (Rml::Element* e = doc->GetFocusLeafNode(); e != nullptr && !in_page; e = e->GetParentNode()) in_page = e == page;
+        if (in_page) {
+            for (Rml::Element* e = doc->GetFocusLeafNode(); e != nullptr && e != page && scroller == nullptr; e = e->GetParentNode()) {
+                if (e->GetScrollHeight() > e->GetClientHeight() + 1.0f) scroller = e;
+            }
+        }
+        if (scroller == nullptr) scroller = find_scroller(page);
+    }
+    if (scroller != nullptr) scroller->SetScrollTop(scroller->GetScrollTop() + pixels);
+}
+
 // Called every UI frame (ui_state.cpp): steps the VibinToast icon while the About page is shown.
 void jfg_launcher_ui_tick() {
     if (!pending_focus_id.empty() && --pending_focus_frames <= 0) {

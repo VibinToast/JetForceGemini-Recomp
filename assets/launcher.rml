@@ -197,6 +197,7 @@
 			.rl-page .config-option__range-label { font-family: "JetBrains Mono"; font-weight: bold; font-size: 17dp; color: #3CC8FF; }
 			.rl-page .config-option__details { color: #3CC8FF; }
 			.rl-page .jfg-note { color: #3CC8FF; }
+			.rl-page .jfg-keys-note { display: none; } /* the General page's note about F10 / F9: those are for the game */
 			.rl-page .config__wrapper p { font-family: "JetBrains Mono"; font-size: 18dp; line-height: 27dp; color: #E8F3FF; }
 			.rl-page .config__wrapper p b, .rl-page .config__wrapper p i { color: #3CC8FF; }
 			/* The focused option's description (generated pages): the option's name as a heading, larger text, a cyan bar. */
@@ -248,7 +249,7 @@
 								data-event-focus="set_page('play')" data-style-nav-right="rom_valid ? '#rl_start' : '#rl_browse'"
 								style="nav-up: #nav_exit; nav-down: #tab_jfg_profiles;">Play</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_profiles" class="rl-btn" data-class-rl-active="page == 'profiles'"
-								data-event-focus="set_page('profiles')" style="nav-up: #nav_play; nav-down: #tab_jfg_general; nav-right: auto;">Profiles</button></div>
+								data-event-focus="set_page('profiles')" style="nav-up: #nav_play; nav-down: #tab_jfg_general; nav-right: #jfg_profile_0;">Profiles</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_general" class="rl-btn" data-class-rl-active="page == 'general'"
 								data-event-focus="set_page('general')" style="nav-up: #tab_jfg_profiles; nav-down: #tab_jfg_gameplay; nav-right: #jfg_main_volume_input;">General</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_gameplay" class="rl-btn" data-class-rl-active="page == 'gameplay'"
