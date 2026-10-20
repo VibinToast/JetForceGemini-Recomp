@@ -129,8 +129,8 @@ ConfigOptionRadio::ConfigOptionRadio(Element *parent, uint32_t value, const std:
 // ConfigSubMenu
 
 void ConfigSubMenu::back_button_pressed() {
-    // Hide the config sub menu and show the config menu.
-    ContextId config_context = recompui::get_config_context_id();
+    // Hide the config sub menu and show the config menu (JFG PORT: or the launcher, whichever mod menu opened it).
+    ContextId config_context = recompui::get_config_sub_menu_parent_context();
     ContextId sub_menu_context = recompui::get_config_sub_menu_context_id();
 
     recompui::hide_context(sub_menu_context);

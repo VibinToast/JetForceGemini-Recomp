@@ -43,6 +43,10 @@
 #include <bcrypt.h>
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "bcrypt.lib")
+#elif defined(__linux__)
+#include <spawn.h>
+#include <unistd.h>
+extern char** environ;
 #endif
 
 namespace fs = std::filesystem;
@@ -284,6 +288,18 @@ void commits_thread() {
 
 // ---- finding releases ---------------------------------------------------------------------------------------------------
 void check_thread(std::string current) {
+    // Test: JFG_DEBUG_FAKE_UPDATE=<version> (Recomp-Docs/REFERENCE.md) reports that version as available without
+    // asking GitHub, with made-up notes; it cannot be installed (the dialog says why), so nothing is downloaded.
+    if (const char* fake = std::getenv("JFG_DEBUG_FAKE_UPDATE"); fake != nullptr && *fake != '\0') {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_info.version = strip_v(fake);
+        g_info.changelog = "## v" + g_info.version + " (test)\n- This update is not real: JFG_DEBUG_FAKE_UPDATE is set.\n"
+            "- It shows what the launcher and the in-game notice look like when a newer release exists.\n";
+        g_info.can_install = false;
+        g_info.unavailable = "This is a test update (JFG_DEBUG_FAKE_UPDATE), so there is nothing to install.";
+        g_found = true;
+        return;
+    }
     std::string body;
     if (!http_get_string(RELEASES_URL, body)) return;
     const nlohmann::json list = nlohmann::json::parse(body, nullptr, false);
@@ -587,28 +603,51 @@ void cleanup_thread() {
 // ---- the launcher's settings (bin\jfg_launcher.txt) -----------------------------------------------------------------------
 namespace {
 bool g_check_updates = true;
+bool g_skip_launcher = false;
+std::string g_current_version;          // this build, for a check started later (jfg_launcher_set_check_updates)
+std::atomic<bool> g_check_started{ false };
 std::string g_config_rom;
+fs::path g_config_folder;
 constexpr const char* LAUNCHER_CONFIG_FILE = "jfg_launcher.txt";
+#define SKIP_LAUNCHER_COMMENT \
+    "# 1: the game starts straight away with the ROM you loaded in the launcher (the launcher's Play page sets this).\n" \
+    "# 0: the launcher opens first. Starting the game with --launcher opens it anyway.\n"
+#define CHECK_UPDATES_COMMENT \
+    "# 1: the game looks for a newer release on GitHub when it starts (the launcher's Play page and a note in the game\n" \
+    "# show one). 0: it never contacts GitHub (no update check, no list of recent changes). The General settings set this.\n"
 constexpr const char* LAUNCHER_CONFIG_TEMPLATE =
     "# Jet Force Gemini: Recompiled - launcher settings. Lines starting with # are ignored.\n"
     "\n"
-    "# 1: the launcher looks for a newer release on GitHub when it opens (a banner on the Play page shows one).\n"
-    "# 0: it never contacts GitHub (no update check, no list of recent changes).\n"
+    CHECK_UPDATES_COMMENT
     "check_for_updates=1\n"
     "\n"
     "# Path to your Jet Force Gemini (US) ROM, e.g. rom=C:\\Games\\jfg.z64 (a path without a drive is relative to this\n"
     "# folder). When it is set and the ROM checks out, the game starts straight away without the launcher. Leave it\n"
     "# empty to use the launcher. Start the game with --launcher to get the launcher anyway. The first seconds of play can\n"
     "# stutter a little, since the launcher otherwise gives the renderer time to prepare its shaders.\n"
-    "rom=\n";
+    "rom=\n"
+    "\n"
+    SKIP_LAUNCHER_COMMENT
+    "skip_launcher=0\n";
 
 std::string trim(const std::string& s) {
     const size_t a = s.find_first_not_of(" \t\r\n"), b = s.find_last_not_of(" \t\r\n");
     return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
 }
+
+// The release check and the recent-changes list, on background threads, at most once per run.
+void start_check_threads() {
+    if (g_check_started.exchange(true)) return;
+    try {
+        std::thread(check_thread, g_current_version).detach();
+        std::thread(commits_thread).detach();
+    }
+    catch (...) {}
+}
 } // namespace
 
 void jfg_launcher_config_load(const fs::path& app_folder) {
+    g_config_folder = app_folder;
     const fs::path file = app_folder / LAUNCHER_CONFIG_FILE;
     std::ifstream in(file, std::ios::binary);
     if (!in) {
@@ -626,6 +665,7 @@ void jfg_launcher_config_load(const fs::path& app_folder) {
         std::string value = trim(line.substr(eq + 1));
         if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size() - 2);
         if (key == "check_for_updates") g_check_updates = value != "0" && value != "false" && value != "no";
+        else if (key == "skip_launcher") g_skip_launcher = value == "1" || value == "true" || value == "yes";
         else if (key == "rom" && !value.empty()) {
             fs::path rom{ std::u8string(value.begin(), value.end()) };
             if (rom.is_relative()) rom = app_folder / rom;
@@ -637,18 +677,66 @@ void jfg_launcher_config_load(const fs::path& app_folder) {
     }
 }
 bool jfg_launcher_check_updates() { return g_check_updates; }
+bool jfg_launcher_skip() { return g_skip_launcher; }
+
+// Writes key=value into the file: the existing line is replaced (the rest of the file, comments included, is kept), or
+// the setting is added at the end with its explanation (`comment`).
+static void write_launcher_setting(const std::string& key, const std::string& value, const char* comment) {
+    const fs::path file = g_config_folder / LAUNCHER_CONFIG_FILE;
+    std::string text;
+    {
+        std::ifstream in(file, std::ios::binary);
+        text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    const std::string line = key + "=" + value;
+    bool replaced = false;
+    std::string out;
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t end = text.find('\n', pos);
+        if (end == std::string::npos) end = text.size();
+        std::string cur = text.substr(pos, end - pos);
+        const std::string t = trim(cur);
+        if (!replaced && t.rfind(key, 0) == 0 && t.find('=') != std::string::npos && trim(t.substr(0, t.find('='))) == key) {
+            cur = line + (!cur.empty() && cur.back() == '\r' ? "\r" : "");
+            replaced = true;
+        }
+        out += cur;
+        if (end < text.size()) out += '\n';
+        pos = end + 1;
+    }
+    if (!replaced) {
+        if (!out.empty() && out.back() != '\n') out += '\n';
+        out += std::string("\n") + comment + line + "\n";
+    }
+    std::ofstream o(file, std::ios::binary | std::ios::trunc);
+    o << out;
+}
+
+void jfg_launcher_set_skip(bool skip) {
+    g_skip_launcher = skip;
+    write_launcher_setting("skip_launcher", skip ? "1" : "0", SKIP_LAUNCHER_COMMENT);
+}
+
+// The check itself runs once, at start-up: turning it on takes effect the next time the game starts; turning it off
+// also stops the in-game notice of an update already found this run (jfg_tick.cpp asks jfg_launcher_check_updates).
+void jfg_launcher_set_check_updates(bool check) {
+    g_check_updates = check;
+    write_launcher_setting("check_for_updates", check ? "1" : "0", CHECK_UPDATES_COMMENT);
+    // Turned on in a run that started with it off: check now rather than at the next start.
+    if (check && !g_current_version.empty()) start_check_threads();
+}
 std::string jfg_launcher_config_rom() { return g_config_rom; }
 
 void jfg_update_check_start(const std::string& current) {
     static bool started = false;
     if (started) return;
     started = true;
+    g_current_version = current;
     try {
-        // check_for_updates=0: no requests to GitHub at all. Finishing an installed update (removing the old files) still runs.
-        if (g_check_updates) {
-            std::thread(check_thread, current).detach();
-            std::thread(commits_thread).detach();
-        }
+        // check_for_updates=0: no requests to GitHub at all (turning the setting on later starts the check then:
+        // jfg_launcher_set_check_updates). Finishing an installed update (removing the old files) still runs.
+        if (g_check_updates) start_check_threads();
 #ifdef _WIN32
         std::thread(cleanup_thread).detach();
 #endif
@@ -816,5 +904,34 @@ void jfg_update_restart() {
         CloseHandle(process.hProcess);
         CloseHandle(process.hThread);
     }
+#endif
+}
+
+// The settings menu's "Return to Launcher": the runtime cannot go back from the game to the launcher, so this starts the
+// game again with the same arguments plus --launcher (which opens the launcher even with skip_launcher=1 or a rom=
+// path). The caller then quits this run, as after an update.
+bool jfg_restart_into_launcher() {
+#ifdef _WIN32
+    const fs::path exe = exe_folder() / L"JetForceGeminiRecompiled.exe";
+    std::wstring command_line = std::wstring(GetCommandLineW()) + L" --launcher";
+    STARTUPINFOW startup = {};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process = {};
+    const std::wstring folder = exe_folder().wstring();
+    if (!CreateProcessW(exe.c_str(), command_line.data(), nullptr, nullptr, FALSE, 0, nullptr, folder.c_str(), &startup, &process)) return false;
+    CloseHandle(process.hProcess);
+    CloseHandle(process.hThread);
+    return true;
+#elif defined(__linux__)
+    std::error_code ec;
+    const fs::path exe = fs::read_symlink("/proc/self/exe", ec);
+    if (ec) return false;
+    const std::string path = exe.string();
+    char launcher_arg[] = "--launcher";
+    char* argv[] = { const_cast<char*>(path.c_str()), launcher_arg, nullptr };
+    pid_t pid = 0;
+    return posix_spawn(&pid, path.c_str(), nullptr, nullptr, argv, environ) == 0;
+#else
+    return false; // macOS: not yet (the button then only says so)
 #endif
 }

@@ -17,6 +17,13 @@ namespace jfg::settings {
     bool active_profile_is_builtin();
     bool profile_changed();                // settings differ from the built-in profile as chosen
     void choose_profile(const std::string& name);
+    std::string profile_preview(const std::string& name); // what choosing it changes, as prompt text; "" = nothing
+    bool keep_controls();                  // Keep My Controls: profiles leave the Controls tab as it is
+    void set_keep_controls(bool keep);
+    // The Bindings tab: during play the built-in dual-stick layout takes the place of the controller bindings /
+    // mouse and keyboard controls have the keyboard's own layout in place of the keyboard bindings.
+    bool controller_bindings_unused();
+    bool keyboard_bindings_unused();
     bool save_profile(const std::string& name); // from the current settings; false if the name is not allowed
     void delete_active_profile();
     std::string profile_message();
@@ -28,4 +35,5 @@ namespace jfg::settings {
     void set_texture_pack(const std::string& folder);
     int texture_pack_count();              // textures loaded from the current pack, -1 if none
     int dumped_texture_files();
+    void open_texture_packs_folder();      // in the file manager
 }

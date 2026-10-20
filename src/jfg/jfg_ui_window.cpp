@@ -200,8 +200,8 @@ void draw_options() {
                 changed |= ImGui::Checkbox("Camera collision", &g.camera_collision);
                 options_help("Keeps the camera from going through walls and floors when it is swung round the character, using the "
                              "game's own wall check. With it off the camera can end up outside the level.");
-                changed |= options_slider("Camera left/right %", &g.camera_speed_h, 25, 300);
-                changed |= options_slider("Camera up/down %", &g.camera_speed_v, 25, 300);
+                changed |= options_slider("Camera left/right %", &g.camera_speed_h, 10, 400);
+                changed |= options_slider("Camera up/down %", &g.camera_speed_v, 10, 400);
                 ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
                 changed |= ImGui::Checkbox("Built-in button layout", &g.dual_layout);
                 options_help("LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. "
@@ -227,7 +227,7 @@ void draw_options() {
         }
         if (ImGui::BeginTabItem("Move & Aim")) {
             options_section("Movement (any control layout)");
-            changed |= options_slider("Movement speed %", &g.move_speed, 50, 300);
+            changed |= options_slider("Movement speed %", &g.move_speed, 25, 400);
             changed |= ImGui::Checkbox("Sprint", &g.sprint);
             options_help("Hold the left stick click (controller) or Left Shift (mouse and keyboard) to run faster. In the "
                          "built-in dual-stick layout the left stick click then sprints instead of crouching (B still crouches).");
@@ -250,7 +250,7 @@ void draw_options() {
                          "like a normal jump, and it aims again on landing if the aim button is still held. Moving the left "
                          "stick forward while aiming still just walks. The sniper scope zooms with the D-pad (dual stick) or "
                          "1 / 3 (mouse and keyboard); on the original layout C-up jumps instead of zooming.");
-            changed |= options_slider("Aim speed %", &g.aim_speed, 20, 200);
+            changed |= options_slider("Aim speed %", &g.aim_speed, 10, 300);
             changed |= ImGui::Checkbox("Sniper rifle: fixed zoom", &g.sniper_fixed_zoom);
             changed |= options_slider("Sniper zoom %", &g.sniper_zoom, 100, 500);
             options_help("With the fixed zoom the zoom buttons do nothing, so walking forward and back while aiming the "
@@ -272,9 +272,9 @@ void draw_options() {
         }
         if (ImGui::BeginTabItem("Textures")) {
             options_section("Textures");
-            ImGui::Checkbox("Dump textures to bin\\texture_dump", &g.texture_dump);
+            ImGui::Checkbox("Dump textures to the texture_dump folder", &g.texture_dump);
             changed |= ImGui::Checkbox("One folder per level", &g.dump_by_level);
-            options_help("Dumps into bin\\texture_dump\\<level number> <level name> instead. Each level starts its own set, so "
+            options_help("Dumps into texture_dump\\<level number> <level name> instead. Each level starts its own set, so "
                          "textures used in several levels are saved in each of them.");
             options_help("Saves every texture the game draws, the first time it appears, as <hash>.png. Leave it on while you "
                          "play through the areas you want; it is off again at the next start. Upscale the files without "
@@ -288,7 +288,7 @@ void draw_options() {
                     }
                     dumped = ec ? -1 : n;
                 }
-                if (dumped >= 0) ImGui::TextDisabled("bin\\texture_dump: %d files", dumped);
+                if (dumped >= 0) ImGui::TextDisabled("texture_dump folder: %d files", dumped);
             }
             {
                 static std::vector<std::string> packs;
@@ -309,7 +309,7 @@ void draw_options() {
                 const int n = g_texture_pack_count.load();
                 if (!current.empty() && n >= 0) ImGui::TextDisabled("%s: %d replacement textures loaded", current.c_str(), n);
             }
-            options_help("Put each pack in its own folder (bin\\texture_packs\\<name>) or as a packed .rtz file (bin\\texture_packs\\<name>.rtz). Images named like the dumps replace "
+            options_help("Put each pack in its own folder (texture_packs\\<name>, next to the game) or as a packed .rtz file (texture_packs\\<name>.rtz). Images named like the dumps replace "
                          "those textures, at any size; a suffix after the name (as Upscayl adds) is fine. F6 switches to the "
                          "next pack (and to Off) while playing, to compare. Reload after adding or changing files.");
             ImGui::EndTabItem();

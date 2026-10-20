@@ -22,6 +22,7 @@
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
+#include "jfg_update_check.h"
 
 namespace jfg {
 
@@ -157,7 +158,19 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     const bool pack_toast = g_pack_toast.time_since_epoch().count() != 0 && pack_toast_t < 3.0f;
     const float save_toast_t = std::chrono::duration<float>(std::chrono::steady_clock::now() - g_save_toast).count();
     const bool save_toast = g.save_notification && g_save_toast.time_since_epoch().count() != 0 && save_toast_t < 2.5f;
-    dino::debug_ui::backend::set_overlay(hint_active || g.show_fps || g.show_level || g.show_pack || pack_toast || save_toast);
+    // A newer release (src/jfg/jfg_update_check.cpp): shown once per run in the game too, for players who skip the
+    // launcher, where it is otherwise only shown. Polled once a second; shown from 3 s after start, for 10 s.
+    static std::chrono::steady_clock::time_point update_seen{}, update_poll{};
+    static std::string update_version;
+    if (update_version.empty() && std::chrono::steady_clock::now() >= update_poll) {
+        update_poll = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+        JfgUpdateInfo info;
+        if (jfg_update_available(info)) { update_version = info.version; update_seen = std::chrono::steady_clock::now(); }
+    }
+    const float update_t = update_version.empty() ? -1.0f
+        : std::chrono::duration<float>(std::chrono::steady_clock::now() - std::max(update_seen, hint_start + std::chrono::seconds(3))).count();
+    const bool update_toast = update_t >= 0.0f && update_t < 10.0f && jfg_launcher_check_updates(); // not once turned off
+    dino::debug_ui::backend::set_overlay(hint_active || g.show_fps || g.show_level || g.show_pack || pack_toast || save_toast || update_toast);
 
     dino::debug_ui::ui_frame_begin();
     if (hint_active && dino::debug_ui::backend::in_ui_frame()) {
@@ -166,7 +179,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         if (t < 0.5f) alpha = t / 0.5f;
         else if (t > HINT_HOLD) alpha = std::max(0.0f, 1.0f - (t - HINT_HOLD) / HINT_FADE);
         const ImVec2 size = ImGui::GetIO().DisplaySize;
-        const char* text = "Settings: Select / Esc  -  Tools: F10  -  Debug window: F9";
+        const char* text = "Settings: Select / Esc  -  Tools: F10"; // F9 (debug window) is named in the settings menu instead
         ImFont* font = ImGui::GetFont();
         const float font_size = std::max(18.0f, size.y / 32.0f);
         const ImVec2 extent = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, text);
@@ -195,6 +208,27 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         dl->AddRectFilled(ImVec2(pos.x - pad, pos.y - pad * 0.5f), ImVec2(pos.x + extent.x + pad, pos.y + extent.y + pad * 0.5f),
             ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.6f * alpha)), pad * 0.5f);
         dl->AddText(font, font_size, pos, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, alpha)), text.c_str());
+    }
+    if (update_toast && dino::debug_ui::backend::in_ui_frame()) {
+        // Top middle, out of the way of the start-up key hint at the bottom: two lines in the launcher's gold.
+        const std::string line1 = "Update v" + update_version + " is available";
+        const char* line2 = "Select / Esc, then the launcher button next to Quit, to install it";
+        const ImVec2 size = ImGui::GetIO().DisplaySize;
+        ImFont* font = ImGui::GetFont();
+        const float font_size = std::max(18.0f, size.y / 34.0f), small = font_size * 0.75f;
+        const ImVec2 e1 = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, line1.c_str());
+        const ImVec2 e2 = font->CalcTextSizeA(small, FLT_MAX, 0.0f, line2);
+        const float pad = font_size * 0.5f, width = std::max(e1.x, e2.x), height = e1.y + pad * 0.3f + e2.y;
+        const ImVec2 box0(size.x * 0.5f - width * 0.5f - pad, size.y * 0.05f), box1(size.x * 0.5f + width * 0.5f + pad, size.y * 0.05f + height + pad * 2.0f);
+        float alpha = update_t > 9.0f ? 10.0f - update_t : 1.0f;
+        if (update_t < 0.3f) alpha = update_t / 0.3f;
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+        dl->AddRectFilled(box0, box1, ImGui::GetColorU32(ImVec4(5 / 255.0f, 11 / 255.0f, 28 / 255.0f, 0.85f * alpha)), pad * 0.4f);
+        dl->AddRect(box0, box1, ImGui::GetColorU32(ImVec4(1.0f, 178 / 255.0f, 26 / 255.0f, alpha)), pad * 0.4f, 0, 2.0f);
+        dl->AddText(font, font_size, ImVec2(size.x * 0.5f - e1.x * 0.5f, box0.y + pad),
+            ImGui::GetColorU32(ImVec4(1.0f, 178 / 255.0f, 26 / 255.0f, alpha)), line1.c_str());
+        dl->AddText(font, small, ImVec2(size.x * 0.5f - e2.x * 0.5f, box0.y + pad + e1.y + pad * 0.3f),
+            ImGui::GetColorU32(ImVec4(232 / 255.0f, 243 / 255.0f, 1.0f, alpha)), line2);
     }
     if (save_toast && dino::debug_ui::backend::in_ui_frame()) {
         // Auto save: a small note in the bottom right corner, out of the way of the HUD's middle.

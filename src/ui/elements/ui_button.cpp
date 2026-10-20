@@ -20,12 +20,12 @@ namespace recompui {
         set_font_style(FontStyle::Normal);
         set_font_weight(700);
         set_cursor(Cursor::Pointer);
-        set_color(Color{ 204, 204, 204, 255 });
+        set_color(Color{ 169, 190, 221, 255 });
         set_tab_index(TabIndex::Auto);
-        hover_style.set_color(Color{ 242, 242, 242, 255 });
-        focus_style.set_color(Color{ 242, 242, 242, 255 });
-        disabled_style.set_color(Color{ 204, 204, 204, 128 });
-        hover_disabled_style.set_color(Color{ 242, 242, 242, 128 });
+        hover_style.set_color(Color{ 232, 243, 255, 255 });
+        focus_style.set_color(Color{ 232, 243, 255, 255 });
+        disabled_style.set_color(Color{ 169, 190, 221, 128 });
+        hover_disabled_style.set_color(Color{ 232, 243, 255, 128 });
 
         const uint8_t border_opacity = 204;
         const uint8_t background_opacity = 13;
@@ -33,29 +33,29 @@ namespace recompui {
         const uint8_t background_hover_opacity = 76;
         switch (style) {
         case ButtonStyle::Primary: {
-            set_border_color({ 233, 205, 53, border_opacity });
-            set_background_color({ 233, 205, 53, background_opacity });
-            hover_style.set_border_color({ 233, 205, 53, border_hover_opacity });
-            hover_style.set_background_color({ 233, 205, 53, background_hover_opacity });
-            focus_style.set_border_color({ 233, 205, 53, border_hover_opacity });
-            focus_style.set_background_color({ 233, 205, 53, background_hover_opacity });
-            disabled_style.set_border_color({ 233, 205, 53, border_opacity / 4 });
-            disabled_style.set_background_color({ 233, 205, 53, background_opacity / 4 });
-            hover_disabled_style.set_border_color({ 233, 205, 53, border_hover_opacity / 4 });
-            hover_disabled_style.set_background_color({ 233, 205, 53, background_hover_opacity / 4 });
+            set_border_color({ 60, 200, 255, border_opacity });
+            set_background_color({ 60, 200, 255, background_opacity });
+            hover_style.set_border_color({ 60, 200, 255, border_hover_opacity });
+            hover_style.set_background_color({ 60, 200, 255, background_hover_opacity });
+            focus_style.set_border_color({ 60, 200, 255, border_hover_opacity });
+            focus_style.set_background_color({ 60, 200, 255, background_hover_opacity });
+            disabled_style.set_border_color({ 60, 200, 255, border_opacity / 4 });
+            disabled_style.set_background_color({ 60, 200, 255, background_opacity / 4 });
+            hover_disabled_style.set_border_color({ 60, 200, 255, border_hover_opacity / 4 });
+            hover_disabled_style.set_background_color({ 60, 200, 255, background_hover_opacity / 4 });
             break;
         }
         case ButtonStyle::Secondary: {
-            set_border_color({ 233, 176, 53, border_opacity });
-            set_background_color({ 233, 176, 53, background_opacity });
-            hover_style.set_border_color({ 233, 176, 53, border_hover_opacity });
-            hover_style.set_background_color({ 233, 176, 53, background_hover_opacity });
-            focus_style.set_border_color({ 233, 176, 53, border_hover_opacity });
-            focus_style.set_background_color({ 233, 176, 53, background_hover_opacity });
-            disabled_style.set_border_color({ 233, 176, 53, border_opacity / 4 });
-            disabled_style.set_background_color({ 233, 176, 53, background_opacity / 4 });
-            hover_disabled_style.set_border_color({ 233, 176, 53, border_hover_opacity / 4 });
-            hover_disabled_style.set_background_color({ 233, 176, 53, background_hover_opacity / 4 });
+            set_border_color({ 255, 178, 26, border_opacity });
+            set_background_color({ 255, 178, 26, background_opacity });
+            hover_style.set_border_color({ 255, 178, 26, border_hover_opacity });
+            hover_style.set_background_color({ 255, 178, 26, background_hover_opacity });
+            focus_style.set_border_color({ 255, 178, 26, border_hover_opacity });
+            focus_style.set_background_color({ 255, 178, 26, background_hover_opacity });
+            disabled_style.set_border_color({ 255, 178, 26, border_opacity / 4 });
+            disabled_style.set_background_color({ 255, 178, 26, background_opacity / 4 });
+            hover_disabled_style.set_border_color({ 255, 178, 26, border_hover_opacity / 4 });
+            hover_disabled_style.set_background_color({ 255, 178, 26, background_hover_opacity / 4 });
             break;
         }
         default:

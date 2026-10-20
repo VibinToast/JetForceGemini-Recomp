@@ -28,14 +28,16 @@ static bool is_mod_enabled_or_auto(const std::string &mod_id) {
 }
 
 // ModEntryView
-#define COL_TEXT_DEFAULT 242, 242, 242
-#define COL_TEXT_DIM 204, 204, 204
-#define COL_SECONDARY 233, 176, 53
+#define COL_TEXT_DEFAULT 232, 243, 255
+#define COL_TEXT_DIM 169, 190, 221
+#define COL_SECONDARY 255, 178, 26
 constexpr float modEntryHeight = 120.0f;
 constexpr float modEntryPadding = 4.0f;
 
 extern const std::string mod_tab_id;
-const std::string mod_tab_id = "#tab_mods";
+const std::string mod_tab_id = "#tab_mods"; // JFG PORT: the launcher's Mods button has this id too
+
+static void mark_other_mod_menus_dirty(ModMenu* changed);
 
 ModEntryView::ModEntryView(Element *parent) : Element(parent, Events(EventType::Update)) {
     ContextId context = get_current_context();
@@ -56,7 +58,7 @@ ModEntryView::ModEntryView(Element *parent) : Element(parent, Events(EventType::
     checked_style.set_background_color(Color{ 26, 24, 32, 255 });
     hover_style.set_border_color(Color{ COL_TEXT_DEFAULT, 64 });
     checked_hover_style.set_border_color(Color{ COL_TEXT_DEFAULT, 255 });
-    pulsing_style.set_border_color(Color{ 233, 176, 53, 244 });
+    pulsing_style.set_border_color(Color{ 255, 178, 26, 244 });
 
     {
         thumbnail_image = context.create_element<Image>(this, "");
@@ -300,6 +302,7 @@ void ModMenu::mod_toggled(bool enabled) {
         for (size_t i = 0; i < mod_entry_buttons.size(); i++) {
             mod_entry_buttons[i]->set_mod_enabled(is_mod_enabled_or_auto(mod_details[i].mod_id));
         }
+        mark_other_mod_menus_dirty(this); // JFG PORT
     }
 }
 
@@ -436,6 +439,7 @@ void ModMenu::mod_dragged(uint32_t mod_index, EventDrag drag) {
 
         mod_entry_buttons[mod_drag_target_index]->set_selected(true);
         active_mod_index = mod_drag_target_index;
+        mark_other_mod_menus_dirty(this); // JFG PORT
 
         break;
     }
@@ -449,6 +453,30 @@ ContextId sub_menu_context;
 
 ContextId get_config_sub_menu_context_id() {
     return sub_menu_context;
+}
+
+// JFG PORT: there is a mod menu in the config menu and one in the launcher. They share the sub menu (a mod's options);
+// sub_menu_owner is the one that opened it, so Back returns there.
+static std::vector<ModMenu*> mod_menus;
+static ConfigSubMenu* shared_config_sub_menu = nullptr;
+static ModMenu* sub_menu_owner = nullptr;
+
+ContextId get_config_sub_menu_parent_context() {
+    return sub_menu_owner != nullptr ? sub_menu_owner->get_owner_context() : get_config_context_id();
+}
+
+// After a change made in one mod menu (enabled, order, rescan), the others read the mod list again.
+static void mark_other_mod_menus_dirty(ModMenu* changed) {
+    for (ModMenu* menu : mod_menus) {
+        if (menu == changed) continue;
+        ContextId menu_context = menu->get_owner_context();
+        bool opened = menu_context.open_if_not_already();
+        menu->set_mods_dirty(false);
+        menu->queue_update();
+        if (opened) {
+            menu_context.close();
+        }
+    }
 }
 
 bool ModMenu::handle_special_config_options(const recomp::mods::ConfigOption& option, const recomp::mods::ConfigValueVariant& config_value) {
@@ -518,8 +546,9 @@ void ModMenu::mod_configure_requested() {
         // Reopen the context that was open when this function was called.
         prev_context.open();
         
-        // Hide the config menu and show the sub menu.
-        recompui::hide_context(recompui::get_config_context_id());
+        // Hide the config menu (JFG PORT: or the launcher) and show the sub menu.
+        sub_menu_owner = this;
+        recompui::hide_context(owner_context);
         recompui::show_context(sub_menu_context, "");
     }
 }
@@ -637,6 +666,7 @@ ModMenu::ModMenu(Element *parent) : Element(parent) {
     game_mod_id = "dino-planet";
 
     ContextId context = get_current_context();
+    owner_context = context;
 
     set_display(Display::Flex);
     set_flex(1.0f, 1.0f, 100.0f);
@@ -673,7 +703,7 @@ ModMenu::ModMenu(Element *parent) : Element(parent) {
         body_empty_container->set_display(Display::None);
         {
             context.create_element<Element>(body_empty_container);
-            context.create_element<Label>(body_empty_container, "You have no mods. Go get some!", LabelStyle::Large);
+            context.create_element<Label>(body_empty_container, "You have no mods.", LabelStyle::Large);
             context.create_element<Element>(body_empty_container);
         } // body_empty_container
 
@@ -696,7 +726,7 @@ ModMenu::ModMenu(Element *parent) : Element(parent) {
             footer_spacer->set_flex(1.0f, 0.0f);
 
             refresh_button = context.create_element<Button>(footer_container, "Refresh", recompui::ButtonStyle::Primary);
-            refresh_button->add_pressed_callback([this](){ refresh_mods(true); });
+            refresh_button->add_pressed_callback([this](){ refresh_mods(true); mark_other_mod_menus_dirty(this); });
             refresh_button->set_nav_manual(NavDirection::Up, mod_tab_id);
 
             mods_folder_button = context.create_element<Button>(footer_container, "Open Mods Folder", recompui::ButtonStyle::Primary);
@@ -713,13 +743,17 @@ ModMenu::ModMenu(Element *parent) : Element(parent) {
 
     context.close();
 
-    sub_menu_context = recompui::create_context(dino::runtime::get_asset_path("config_sub_menu.rml"));
-    sub_menu_context.open();
-    Rml::ElementDocument* sub_menu_doc = sub_menu_context.get_document();
-    Rml::Element* config_sub_menu_generic = sub_menu_doc->GetElementById("config_sub_menu");
-    ElementConfigSubMenu* config_sub_menu_element = rmlui_dynamic_cast<ElementConfigSubMenu*>(config_sub_menu_generic);
-    config_sub_menu = config_sub_menu_element->get_config_sub_menu_element();
-    sub_menu_context.close();
+    // JFG PORT: made once, for every mod menu.
+    if (shared_config_sub_menu == nullptr) {
+        sub_menu_context = recompui::create_context(dino::runtime::get_asset_path("config_sub_menu.rml"));
+        sub_menu_context.open();
+        Rml::ElementDocument* sub_menu_doc = sub_menu_context.get_document();
+        Rml::Element* config_sub_menu_generic = sub_menu_doc->GetElementById("config_sub_menu");
+        ElementConfigSubMenu* config_sub_menu_element = rmlui_dynamic_cast<ElementConfigSubMenu*>(config_sub_menu_generic);
+        shared_config_sub_menu = config_sub_menu_element->get_config_sub_menu_element();
+        sub_menu_context.close();
+    }
+    config_sub_menu = shared_config_sub_menu;
 
     context.open();
 }
@@ -729,15 +763,23 @@ ModMenu::~ModMenu() {
 
 // Placeholder class until the rest of the UI refactor is finished.
 
-recompui::ModMenu* mod_menu;
+// JFG PORT: the config menu's mod menu (the launcher has another, see mod_menus).
+static recompui::ModMenu* config_mod_menu() {
+    for (ModMenu* menu : mod_menus) {
+        if (menu->get_owner_context() == recompui::get_config_context_id()) return menu;
+    }
+    return nullptr;
+}
 
 void update_mod_list(bool scan_mods) {
-    if (mod_menu) {
-        recompui::ContextId ui_context = recompui::get_config_context_id();
+    // JFG PORT: every mod menu (config menu and launcher). Each scans the mods folder on its own update, so neither
+    // can read the list before the scan.
+    for (ModMenu* menu : mod_menus) {
+        recompui::ContextId ui_context = menu->get_owner_context();
         bool opened = ui_context.open_if_not_already();
 
-        mod_menu->set_mods_dirty(scan_mods);
-        mod_menu->queue_update();
+        menu->set_mods_dirty(scan_mods);
+        menu->queue_update();
 
         if (opened) {
             ui_context.close();
@@ -746,11 +788,11 @@ void update_mod_list(bool scan_mods) {
 }
 
 void process_game_started() {
-    if (mod_menu) {
-        recompui::ContextId ui_context = recompui::get_config_context_id();
+    for (ModMenu* menu : mod_menus) {
+        recompui::ContextId ui_context = menu->get_owner_context();
         bool opened = ui_context.open_if_not_already();
 
-        mod_menu->queue_update();
+        menu->queue_update();
 
         if (opened) {
             ui_context.close();
@@ -759,7 +801,7 @@ void process_game_started() {
 }
 
 void set_config_tabset_mod_nav() {
-    if (mod_menu) {
+    if (ModMenu* mod_menu = config_mod_menu()) {
         Rml::ElementTabSet* tabset = recompui::get_config_tabset();
         Rml::Element* tabs = recompui::get_child_by_tag(tabset, "tabs");
         if (tabs != nullptr) {
@@ -781,6 +823,8 @@ void set_config_tabset_mod_nav() {
 }
 
 void focus_mod_configure_button() {
+    ModMenu* mod_menu = sub_menu_owner != nullptr ? sub_menu_owner : config_mod_menu();
+    if (mod_menu == nullptr) return;
     Element* configure_button = mod_menu->get_mod_configure_button();
     if (configure_button) {
         configure_button->focus();
@@ -793,7 +837,7 @@ ElementModMenu::ElementModMenu(const Rml::String &tag) : Rml::Element(tag) {
 
     recompui::Element this_compat(this);
     recompui::ContextId context = get_current_context();
-    mod_menu = context.create_element<ModMenu>(&this_compat);
+    mod_menus.push_back(context.create_element<ModMenu>(&this_compat));
 }
 
 ElementModMenu::~ElementModMenu() {

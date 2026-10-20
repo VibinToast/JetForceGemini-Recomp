@@ -75,15 +75,11 @@ extern "C" int jfg_sched_task_ready(void) {
     return 1;
 }
 
-// Read by the renderer thread (src/renderer/renderer.cpp) for the "Frame rate" option: -1 = keep the Graphics menu's
-// Framerate setting, 0 = Original (the frames the game draws), 1 = Display (RT64 adds in-between frames up to the
-// monitor's refresh rate).
+// Read by the renderer thread (src/renderer/renderer.cpp) for the "Frame rate" option: 0 = Original (the frames the
+// game draws), 1 = Display (RT64 adds in-between frames up to the monitor's refresh rate). It is the only frame rate
+// setting in the menus: the recomp's own Framerate (rr_option, -1 here) is no longer shown.
 extern "C" int jfg_refresh_override(void) {
-    switch (g.frame_rate) {
-        case 1: return 0;
-        case 2: return 1;
-        default: return -1;
-    }
+    return g.frame_rate == 2 ? 1 : 0;
 }
 
 // --- 60 fps: the squad system at the game's own 30 fps cadence --------------------------------------------------------

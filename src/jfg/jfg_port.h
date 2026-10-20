@@ -164,6 +164,18 @@ void write_user_profile(const std::string& name);
 void choose_profile(const std::string& name);
 bool valid_profile_name(const std::string& name);
 void profile_autosave();                   // changes made while a player profile is active are written to it
+// What choosing a profile would change, shown before it is applied (issue #7: a profile's dual-stick layout silently
+// took the place of the player's own bindings).
+struct ProfilePreview {
+    std::vector<std::string> controls; // "Name: Off to On" for each Controls-tab setting that changes, in menu order
+    int other_changes = 0;             // settings on the other tabs that change
+    bool weapons = false;              // the weapon settings change (to the profile's, or back to the original)
+    bool replaces_bindings = false;    // afterwards the built-in dual-stick layout takes the place of the controller bindings
+};
+extern bool g_profile_keep_controls;       // Keep My Controls (saved in jfg_profile.txt)
+void set_profile_keep_controls(bool keep);
+ProfilePreview preview_profile(const std::string& name);
+std::string profile_preview_text(const std::string& name); // as lines for a prompt; "" when nothing would change
 void draw_profiles();                      // the Profiles tab
 void debug_profile_tick();                 // JFG_DEBUG_PROFILE
 
