@@ -84,6 +84,12 @@ extern "C" int jfg_refresh_override(void) {
     }
 }
 
+// Read with it for "60 + Interpolated": the "Interpolation Limit" option, the most frames a second RT64 makes
+// (0 = up to the monitor's refresh rate). RT64 never goes above the monitor's rate either way.
+extern "C" int jfg_interp_limit(void) {
+    return g.frame_rate == 2 ? g.interp_limit : 0;
+}
+
 // --- 60 fps: the squad system at the game's own 30 fps cadence --------------------------------------------------------
 // Enemies, tribals and the other squad members (overlay 3: SquaddieControl per member, SquadronControl per group,
 // squadsModuleTick once a tick) are passed the video frames a tick covers, but much of what they do is still per tick:
