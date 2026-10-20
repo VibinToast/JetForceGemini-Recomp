@@ -53,6 +53,7 @@ void jfg_config_menu_refresh() {
         if (*handle) handle->DirtyAllVariables();
     }
     if (jfg_profiles_model_handle) jfg_profiles_model_handle.DirtyAllVariables();
+    if (controls_model_handle) controls_model_handle.DirtyVariable("jfg_bindings_unused");
 }
 
 // True if controller config menu is open, false if keyboard config menu is open, undefined otherwise
@@ -710,6 +711,7 @@ public:
                     : dino::input::InputDevice::Controller;
                 controls_model_handle.DirtyVariable("input_device_is_keyboard");
                 controls_model_handle.DirtyVariable("inputs");
+                controls_model_handle.DirtyVariable("jfg_bindings_unused"); // JFG PORT
             });
     }
 
@@ -840,6 +842,15 @@ public:
 
         constructor.BindFunc("input_count", [](Rml::Variant& out) { out = static_cast<uint64_t>(dino::input::get_num_inputs()); } );
         constructor.BindFunc("input_device_is_keyboard", [](Rml::Variant& out) { out = cur_device == dino::input::InputDevice::Keyboard; } );
+        // JFG PORT: a note at the top when the bindings shown are not what plays (the built-in dual-stick layout, or
+        // mouse and keyboard controls' own keyboard layout), with a button that hands the controller back to them.
+        constructor.BindFunc("jfg_bindings_unused", [](Rml::Variant& out) {
+            out = cur_device == dino::input::InputDevice::Keyboard ? jfg::settings::keyboard_bindings_unused() : jfg::settings::controller_bindings_unused();
+        });
+        constructor.BindEventCallback("jfg_use_my_bindings", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            jfg::settings::set("dual_layout", 0);
+            jfg_config_menu_refresh();
+        });
 
         constructor.RegisterTransformFunc("get_input_name", [](const Rml::VariantList& inputs) {
             return Rml::Variant{dino::input::get_input_name(static_cast<dino::input::GameInput>(inputs.at(0).Get<size_t>()))};
@@ -1175,12 +1186,24 @@ public:
                 out = !jfg::settings::active_profile().empty() && !jfg::settings::active_profile_is_builtin();
             });
             constructor.BindFunc("profile_message", [](Rml::Variant& out) { out = jfg::settings::profile_message(); });
+            constructor.BindFunc("keep_controls",
+                [](Rml::Variant& out) { out = jfg::settings::keep_controls() ? 1 : 0; },
+                [](const Rml::Variant& in) { jfg::settings::set_keep_controls(in.Get<int>() != 0); jfg_config_menu_refresh(); });
+            // What the profile changes is shown first (issue #7); it is applied on Apply.
             constructor.BindEventCallback("choose_profile", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
-                if (!args.empty()) {
-                    const std::string name = args[0].Get<Rml::String>();
-                    if (!name.empty() && name[0] != '(') jfg::settings::choose_profile(name);
+                if (args.empty()) return;
+                const std::string name = args[0].Get<Rml::String>();
+                if (name.empty() || name[0] == '(') return;
+                const std::string changes = jfg::settings::profile_preview(name);
+                if (changes.empty()) {
+                    jfg::settings::choose_profile(name);
+                    jfg_config_menu_refresh();
+                    return;
                 }
-                jfg_config_menu_refresh();
+                recompui::open_choice_prompt("Apply the \"" + name + "\" profile?", changes, "Apply", "Cancel",
+                    [name]() { jfg::settings::choose_profile(name); jfg_config_menu_refresh(); },
+                    []() {},
+                    recompui::ButtonVariant::Success, recompui::ButtonVariant::Tertiary, false);
             });
             constructor.BindEventCallback("save_profile", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
                 if (jfg::settings::save_profile(jfg_new_profile_name)) jfg_new_profile_name.clear();

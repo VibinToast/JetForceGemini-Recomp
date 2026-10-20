@@ -280,6 +280,16 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
                         <div style="display: block; width: 100%; margin-top: 18dp;">
                             <button class="button" style="display: inline-block; margin: 0dp 16dp 16dp 0dp; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto;" data-for="p : profiles" data-style-nav-left="it_index == 0 ? '#tab_jfg_profiles' : 'auto'" data-event-click="choose_profile(p.name)" data-class-jfg-selected="p.selected">{{p.name}}</button>
                         </div>
+                        <div class="config-option jfg-option" style="margin: 8dp 0dp 0dp; padding: 0dp;">
+                            <label class="config-option__title">Keep My Controls</label>
+                            <div class="config-option__list">
+                                <input type="radio" name="jfg_keep_controls" data-checked="keep_controls" value="1" id="jfg_keep_controls_on" style="nav-up: auto; nav-down: auto; nav-left: #tab_jfg_profiles;"/>
+                                <label class="config-option__tab-label" for="jfg_keep_controls_on">On</label>
+                                <input type="radio" name="jfg_keep_controls" data-checked="keep_controls" value="0" id="jfg_keep_controls_off" style="nav-up: auto; nav-down: auto;"/>
+                                <label class="config-option__tab-label" for="jfg_keep_controls_off">Off</label>
+                            </div>
+                        </div>
+                        <div class="jfg-note" style="display: block; margin-top: 8dp; font-size: 18dp; line-height: 26dp;">On: choosing a profile leaves the Controls tab as it is (dual stick, button layout, mouse and keyboard, aiming).</div>
                     </div>
                     <!-- data-if hides with an inline display: none, so it is on an element without its own display style -->
                     <div data-if="profile_changed">
@@ -299,8 +309,8 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
                     </div>
                 </div>
                 <div class="config__wrapper">
-                    <p>A profile is a whole set of the port's settings (the General, Gameplay, Controls and Graphics tabs, and the weapon settings of the F10 tools). Choosing one first puts every setting back to the original game, then applies the profile.</p>
-                    <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and visuals at 60 fps. <b>Modern and Balanced</b>: Modern with rebalanced weapons (a subjective take on the balance). <b>Extreme</b>: everything turned up, just for fun.</p>
+                    <p>A profile is a whole set of the port's settings (the General, Gameplay, Controls and Graphics tabs, and the weapon settings of the F10 tools). Choosing one first puts every setting back to the original game, then applies the profile. Before it is applied you are shown what it changes.</p>
+                    <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and visuals at 60 fps. Modern, Modern and Balanced and Extreme turn on dual-stick controls with the Built-in Button Layout, which takes the place of your controller bindings during play; turn on Keep My Controls first to keep your own. <b>Modern and Balanced</b>: Modern with rebalanced weapons (a subjective take on the balance). <b>Extreme</b>: everything turned up, just for fun.</p>
                     <p>Your own profiles are kept in the profiles folder next to the game; changes made while one is active are saved to it. Not part of profiles: cheats, the Textures tab (texture pack, dumping), the volume, the Controller settings, the window, resolution, downsampling and anti-aliasing, and the button bindings.</p>
                     <p>Controller: Up/Down and Left/Right move between buttons, A chooses.</p>
                 </div>
@@ -341,6 +351,17 @@ def main():
         f.write("static const JfgTabFirst jfg_tab_first_ids[] = {\n")
         for name, items, _, before in OPTION_TABS:
             f.write(f'    {{ "tab_{name}", "{"jfg_pack_0" if before else first_id(items)}" }},\n')
+        f.write("};\n")
+        # Each option's name and how its value reads, for the list of what choosing a profile changes
+        # (jfg_profiles.cpp). kind: 'b' On/Off, 'r' a number with suffix, 'c' one of choices ("value:label|...").
+        f.write("struct JfgOptionTitle { const char* key; const char* title; char kind; const char* suffix; const char* choices; };\n")
+        f.write("static const JfgOptionTitle jfg_option_titles[] = {\n")
+        for _, items, _, _ in OPTION_TABS:
+            for kind, key, title, extra, _ in items:
+                if kind == "group": continue
+                suffix = extra[2] if kind == "range" else ""
+                choices = "|".join(f"{v}:{label}" for v, label in extra) if kind == "choice" else ""
+                f.write(f'    {{ "{key}", "{title}", \'{kind[0]}\', "{suffix}", "{choices}" }},\n')
         f.write("};\n")
 
 if __name__ == "__main__":

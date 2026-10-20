@@ -80,6 +80,13 @@ void choose_profile(const std::string& name) {
     jfg::choose_profile(name);
 }
 
+std::string profile_preview(const std::string& name) { load_options(); return profile_preview_text(name); }
+bool keep_controls() { load_profile_choice(); return g_profile_keep_controls; }
+void set_keep_controls(bool keep) { set_profile_keep_controls(keep); }
+
+bool controller_bindings_unused() { load_options(); return (g.dual_stick || g.mouse_keyboard) && g.dual_layout; }
+bool keyboard_bindings_unused() { load_options(); return g.mouse_keyboard; }
+
 bool save_profile(const std::string& name) {
     load_profile_choice();
     if (!valid_profile_name(name) || builtin_profile(name) != nullptr) {

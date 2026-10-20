@@ -30,6 +30,21 @@
                     </button>
                 </div>
             </div>
+            <!-- JFG PORT: these bindings are not what plays (jfg::settings::controller_bindings_unused /
+                 keyboard_bindings_unused). data-if goes on a wrapper without its own display style. -->
+            <div data-if="jfg_bindings_unused">
+                <div style="display: flex; flex-direction: row; align-items: center; padding: 12dp 20dp; background-color: rgba(233,205,53,0.12); border-bottom-width: 1.1dp; border-bottom-color: rgba(233,205,53,0.5);">
+                    <div style="flex: 1 1 auto; font-size: 18dp; line-height: 26dp; color: #f2f2f2;">
+                        <span data-if="!input_device_is_keyboard">The Built-in Button Layout is on (Controls tab), so during play the controller uses it instead of these bindings: A jump, B crouch, LT aim, RT fire, RB / Y and LB / X change weapon. Menus, cutscenes and Floyd missions still use these.</span>
+                        <span data-if="input_device_is_keyboard">Mouse and Keyboard Controls is on (Controls tab), so during play the keyboard has its own layout instead of these bindings: WASD run, Space jump, Left Ctrl or C crouch, the mouse aims and fires. Menus still use these.</span>
+                    </div>
+                    <div data-if="!input_device_is_keyboard">
+                        <button class="button" style="margin: 0dp 0dp 0dp 16dp;" data-event-click="jfg_use_my_bindings">
+                            <div class="button__label">Use My Bindings</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
             <div class="config__wrapper input-config">
                 <div class="input-config__horizontal-split">
                     <div class="input-config__mappings" data-event-mouseout="set_input_row_focus(-1)">
