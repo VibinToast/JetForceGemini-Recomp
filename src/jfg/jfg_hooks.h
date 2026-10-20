@@ -43,12 +43,25 @@ int jfg_freeze_world(void);                                            // func_8
 // jfg_visuals.cpp
 float jfg_fov(uint8_t* rdram, float fov, uint32_t zoomed);             // camSetFOV
 void jfg_game_fog(uint8_t* rdram, uint32_t sp);                        // func_8001BF9C, right after trackGetFog
+uint32_t jfg_hit_flash(uint32_t color);                                // entry of frontFlashScreen
+void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // entry of sidekickControl
+int jfg_hide_object(uint8_t* rdram, recomp_context* ctx);              // entry of objPrintObject
+void jfg_hide_shadow(uint8_t* rdram, recomp_context* ctx);             // shadowGenerate, per object
+void jfg_floyd_done(void);                                             // return of sidekickControl
+int jfg_floyd_mute(uint32_t id);                                       // entry of amSndPlay
 // jfg_gameplay.cpp
 int jfg_no_blood(void);                                                // entry of bloodSpurtAdd, bloodHitSpriteAdd
 int jfg_refuel_amount(int amount);                                     // refuelControl
 float jfg_sniper_zoom(float zoom);                                     // controlGetManualAim
 int jfg_sniper_walk(int weapon);                                       // the characters' aim control (overlays 15-17)
 int jfg_flag_override(int flag);                                       // entry of mainGetGameFlag
+// jfg_gore.cpp
+void jfg_blood_more(uint8_t* rdram, recomp_context* ctx);              // entry of bloodSpurtAdd (after jfg_no_blood)
+void jfg_gore_splat(uint8_t* rdram, recomp_context* ctx);              // bloodSpurtUpdateAll, a splat's life countdown
+void jfg_gore_limb(uint8_t* rdram, recomp_context* ctx);               // entry of severedLimbControl
+// jfg_area_progress.cpp
+void jfg_region_reset_begin(uint8_t* rdram, recomp_context* ctx);      // entry of mainResetRegion
+void jfg_region_reset_end(uint8_t* rdram, recomp_context* ctx);        // mainResetRegion, before it returns
 // jfg_weapons.cpp
 uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_bits); // entry of objAnimDframe
 void jfg_mine_init(uint8_t* rdram, recomp_context* ctx);               // end of mineInit
@@ -80,6 +93,8 @@ void jfg_mouse_motion(int dx, int dy);
 int jfg_invert_aim_normal(uint16_t buttons);
 void jfg_dual_stick(uint16_t* buttons, float* x, float* y, float right_x, float right_y);
 void jfg_dual_stick_release(void);
+int jfg_sprint_enabled(void);
+void jfg_sprint_input(int held);
 // src/renderer/renderer.cpp
 int jfg_texture_dump_active(void);                                     // jfg_texture_packs.cpp
 void jfg_texture_pack_set_count(int count);                            // jfg_texture_packs.cpp
@@ -95,6 +110,11 @@ int jfg_skip_render_active(void);                                      // jfg_cu
 void jfg_on_init(uint8_t* rdram, recomp_context* ctx);                 // jfg_glue.cpp
 void jfg_register_mod_exports(void);                                   // jfg_mods.cpp: functions mods import ("*")
 void jfg_apply_asset_mods(void);                                       // jfg_assets.cpp: data replaced by mods
+// src/ui/ui_state.cpp
+void jfg_settings_menu_open(int open);                                 // jfg_camera.cpp, every UI frame
+void jfg_tools_ui_frame(void);                                         // jfg_ui_tools.cpp, every UI frame (F10's tools)
+// src/debug_ui/backend.cpp
+void jfg_tools_key(int scancode, int down, int repeat);                // jfg_ui_tools.cpp, F10, Alt, End, F8 (SDL event filter)
 // jfg_mods.cpp (jfg_register_mod_exports)
 void jfg_register_asset_mods(void);                                    // jfg_assets.cpp: the jfg_assets.json content type
 // jfg_glue.cpp (jfg_on_init)

@@ -25,6 +25,9 @@ struct State {
     bool pending_warp = false;
     // options
     bool no_blood = false;
+    bool gore_keep_blood = false;  // blood splats stay on the ground and walls (jfg_gore.cpp)
+    bool gore_keep_limbs = false;  // severed body parts stay (jfg_gore.cpp)
+    int  blood_amount = 100;       // blood drops per spurt, percent (jfg_blood_more)
     bool show_fps = false;         // frame rate in the top right corner
     bool show_level = false;       // level number and name in the top right corner
     bool show_pack = false;        // texture pack in use in the top right corner
@@ -42,7 +45,9 @@ struct State {
     int  frame_rate = 0;           // 0: the game's own pacing (30, dropping to 20), 1: 60 (runInOneFrame), 2: 60 + interpolated up to the monitor's rate
     bool widescreen = false;       // render the 3D view to the full window width, see jfg_widescreen_active()
     int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
-    bool vignette = false;         // darker screen edges in RT64 (src/shaders/VignettePS.hlsl), see push_render_options()
+    int  hit_flash = 100;          // red screen when the character is hit: strength, percent (jfg_hit_flash)
+    bool hide_floyd = false;       // Floyd is not drawn while he follows the character (jfg_hide_object)
+    bool vignette = false;        // darker screen edges in RT64 (src/shaders/VignettePS.hlsl), see push_render_options()
     int  vignette_strength = 40;   // vignette: how dark the corners get, percent
     int  vignette_size = 45;       // vignette: how far from the centre the darkening starts, percent of the way to the corners
     int  level_fog_distance = 100; // the game's own fog: how far away it is, percent (jfg_game_fog)
@@ -55,11 +60,21 @@ struct State {
     int  texture_filter = 0;       // 0: the N64's three-point texture filter, 1: bilinear (RT64 threePointFiltering)
     int  output_filter = 0;        // picture scaling to the window: 0 anti-aliased pixel scaling, 1 linear, 2 nearest
     bool start_skips_cutscenes = true;
+    bool pause_in_menu = true;     // the game stands still while the Select / Esc settings menu is open (jfg_freeze_world)
+    bool auto_save = true;         // save to the file in play on arriving in a level and every few minutes (jfg_auto_save.cpp); on in every profile but Default
+    int  auto_save_minutes = 5;    // auto save: minutes of play between saves, 0 = only on arriving in a level
+    bool save_notification = true; // auto save: "Game saved" in the bottom right corner
+    bool keep_area_progress = false; // saves keep an unfinished region's progress and room (jfg_area_progress.cpp)
+    bool permanent_tribals = false; // rescued Tribals stay rescued when their region is entered again (jfg_tribal_saves.cpp)
     bool dual_stick = false;       // modern twin-stick layout, see jfg_dual_stick()
     bool invert_aim_y = false;     // dual stick: right stick up aims down (the game's original behaviour)
     int  move_speed = 100;         // how fast the character moves over the ground, percent (any layout)
-    bool diagonal_boost = false;   // dual stick: faster when the left stick is pushed diagonally, as running + sidestepping was
-    int  strafe_speed = 100;       // dual stick: weight of the sideways part in that boost, percent
+    bool sprint = false;           // hold left-stick click / Left Shift to run faster (jfg_camera_controls)
+    int  sprint_speed = 160;       // sprint: ground speed while it is held, percent
+    bool sprint_aiming = false;    // sprint also works while aiming (the aim walk)
+    bool sprint_swimming = false;  // sprint also works while swimming (Vela, at the surface and diving)
+    int  sprint_swim_speed = 160;  // swim sprint: swimming speed while it is held, percent (on top of the Dive speed)
+    bool normalize_diagonal = false; // running while sidestepping is no faster than running alone (jfg_move_scale)
     bool camera_collision = true;  // dual stick: the camera stays inside the level (the game's own wall check)
     bool aim_from_character = false; // dual stick: on aiming, the view turns to the character instead of the character to the view
     bool dual_layout = true;       // dual stick: built-in controller layout instead of the controller bindings
@@ -80,6 +95,7 @@ struct State {
     bool sniper_fixed_zoom = false; // sniper rifle: the zoom stays at sniper_zoom, the zoom buttons do nothing
     int  sniper_zoom = 250;        // sniper rifle: fixed zoom, percent of the unzoomed view (100..500, the game's range)
     int  damage_taken = 100;       // damage the player takes, percent (apply_damage_taken)
+    bool unlimited_continues = false; // continues never run out (gameplay_tick)
     int  dive_speed = 100;         // Vela underwater: swimming speed, percent (jfg_move_scale)
     int  fly_speed = 100;          // fly camera: movement speed, percent
     bool fly_freeze = true;        // fly camera: the game stands still while flying

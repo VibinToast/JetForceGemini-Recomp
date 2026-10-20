@@ -45,6 +45,9 @@ void push_render_options() {
 // Sets one option from its saved form (the options file, profiles).
 void apply_option(const char* key, int value) {
     if (std::strcmp(key, "no_blood") == 0) g.no_blood = value != 0;
+    else if (std::strcmp(key, "gore_keep_blood") == 0) g.gore_keep_blood = value != 0;
+    else if (std::strcmp(key, "gore_keep_limbs") == 0) g.gore_keep_limbs = value != 0;
+    else if (std::strcmp(key, "blood_amount") == 0) g.blood_amount = std::clamp(value, 100, 400);
     else if (std::strcmp(key, "show_fps") == 0) g.show_fps = value != 0;
     else if (std::strcmp(key, "show_level") == 0) g.show_level = value != 0;
     else if (std::strcmp(key, "show_pack") == 0) g.show_pack = value != 0;
@@ -61,6 +64,8 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "frame_rate") == 0) g.frame_rate = FRAME_RATE_OPTION ? std::clamp(value, 0, 2) : 0;
     else if (std::strcmp(key, "widescreen") == 0) g.widescreen = value != 0;
     else if (std::strcmp(key, "fov") == 0) g.fov = std::clamp(value, 75, 140);
+    else if (std::strcmp(key, "hit_flash") == 0) g.hit_flash = std::clamp(value, 0, 100);
+    else if (std::strcmp(key, "hide_floyd") == 0) g.hide_floyd = value != 0;
     else if (std::strcmp(key, "vignette") == 0) g.vignette = value != 0;
     else if (std::strcmp(key, "vignette_strength") == 0) g.vignette_strength = std::clamp(value, 0, 100);
     else if (std::strcmp(key, "vignette_size") == 0) g.vignette_size = std::clamp(value, 0, 90);
@@ -74,6 +79,12 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "texture_filter") == 0) g.texture_filter = std::clamp(value, 0, 1);
     else if (std::strcmp(key, "output_filter") == 0) g.output_filter = std::clamp(value, 0, 2);
     else if (std::strcmp(key, "start_skips_cutscenes") == 0) g.start_skips_cutscenes = value != 0;
+    else if (std::strcmp(key, "pause_in_menu") == 0) g.pause_in_menu = value != 0;
+    else if (std::strcmp(key, "auto_save") == 0) g.auto_save = value != 0;
+    else if (std::strcmp(key, "auto_save_minutes") == 0) g.auto_save_minutes = std::clamp(value, 0, 30);
+    else if (std::strcmp(key, "save_notification") == 0) g.save_notification = value != 0;
+    else if (std::strcmp(key, "keep_area_progress") == 0) g.keep_area_progress = value != 0;
+    else if (std::strcmp(key, "permanent_tribals") == 0) g.permanent_tribals = value != 0;
     else if (std::strcmp(key, "dual_stick") == 0) g.dual_stick = value != 0;
     else if (std::strcmp(key, "invert_aim_y") == 0) g.invert_aim_y = value != 0;
     else if (std::strcmp(key, "swap_triggers") == 0) g.swap_triggers = value != 0;
@@ -81,8 +92,12 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "aim_from_character") == 0) g.aim_from_character = value != 0;
     else if (std::strcmp(key, "camera_collision") == 0) g.camera_collision = value != 0;
     else if (std::strcmp(key, "move_speed") == 0) g.move_speed = std::clamp(value, 25, 400);
-    else if (std::strcmp(key, "diagonal_boost") == 0) g.diagonal_boost = value != 0;
-    else if (std::strcmp(key, "strafe_speed") == 0) g.strafe_speed = std::clamp(value, 0, 300);
+    else if (std::strcmp(key, "sprint") == 0) g.sprint = value != 0;
+    else if (std::strcmp(key, "sprint_speed") == 0) g.sprint_speed = std::clamp(value, 100, 300);
+    else if (std::strcmp(key, "sprint_aiming") == 0) g.sprint_aiming = value != 0;
+    else if (std::strcmp(key, "sprint_swimming") == 0) g.sprint_swimming = value != 0;
+    else if (std::strcmp(key, "sprint_swim_speed") == 0) g.sprint_swim_speed = std::clamp(value, 100, 300);
+    else if (std::strcmp(key, "normalize_diagonal") == 0) g.normalize_diagonal = value != 0;
     else if (std::strcmp(key, "invert_aim_normal") == 0) g.invert_aim_normal = value != 0;
     else if (std::strcmp(key, "invert_camera_y") == 0) g.invert_camera_y = value != 0;
     else if (std::strcmp(key, "camera_speed_h") == 0) g.camera_speed_h = std::clamp(value, 10, 400);
@@ -99,6 +114,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "sniper_fixed_zoom") == 0) g.sniper_fixed_zoom = value != 0;
     else if (std::strcmp(key, "sniper_zoom") == 0) g.sniper_zoom = std::clamp(value, 100, 500);
     else if (std::strcmp(key, "damage_taken") == 0) g.damage_taken = std::clamp(value, 0, 400);
+    else if (std::strcmp(key, "unlimited_continues") == 0) g.unlimited_continues = value != 0;
     else if (std::strcmp(key, "dive_speed") == 0) g.dive_speed = std::clamp(value, 50, 400);
     else if (std::strcmp(key, "fly_speed") == 0) g.fly_speed = std::clamp(value, 10, 1000);
     else if (std::strcmp(key, "fly_freeze") == 0) g.fly_freeze = value != 0;
@@ -122,8 +138,9 @@ std::string options_text(const State& s) {
     std::string out;
     char buf[512];
     std::snprintf(buf, sizeof(buf), "no_blood=%d\nstart_skips_cutscenes=%d\n", s.no_blood ? 1 : 0, s.start_skips_cutscenes ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "auto_save=%d\nauto_save_minutes=%d\nsave_notification=%d\nkeep_area_progress=%d\n", s.auto_save ? 1 : 0, s.auto_save_minutes, s.save_notification ? 1 : 0, s.keep_area_progress ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "show_fps=%d\nwidescreen=%d\nframe_rate=%d\n", s.show_fps ? 1 : 0, s.widescreen ? 1 : 0, s.frame_rate); out += buf;
-    std::snprintf(buf, sizeof(buf), "fov=%d\n", s.fov); out += buf;
+    std::snprintf(buf, sizeof(buf), "fov=%d\nhit_flash=%d\nhide_floyd=%d\n", s.fov, s.hit_flash, s.hide_floyd ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "vignette=%d\nvignette_strength=%d\nvignette_size=%d\n", s.vignette ? 1 : 0, s.vignette_strength, s.vignette_size); out += buf;
     std::snprintf(buf, sizeof(buf), "level_fog_distance=%d\nno_level_fog=%d\n", s.level_fog_distance, s.no_level_fog ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "depth_fog=%d\nfog_start=%d\nfog_end=%d\nfog_density=%d\nfog_color=%d\n", s.depth_fog ? 1 : 0, s.fog_start, s.fog_end, s.fog_density, s.fog_color); out += buf;
@@ -135,12 +152,17 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "dual_stick=%d\ninvert_aim_y=%d\nswap_triggers=%d\ndual_layout=%d\n", s.dual_stick ? 1 : 0, s.invert_aim_y ? 1 : 0, s.swap_triggers ? 1 : 0, s.dual_layout ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "invert_aim_normal=%d\ninvert_camera_y=%d\naim_from_character=%d\n", s.invert_aim_normal ? 1 : 0, s.invert_camera_y ? 1 : 0, s.aim_from_character ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "camera_collision=%d\n", s.camera_collision ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "move_speed=%d\ndiagonal_boost=%d\nstrafe_speed=%d\n", s.move_speed, s.diagonal_boost ? 1 : 0, s.strafe_speed); out += buf;
+    std::snprintf(buf, sizeof(buf), "move_speed=%d\nnormalize_diagonal=%d\n", s.move_speed, s.normalize_diagonal ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "camera_speed_h=%d\ncamera_speed_v=%d\naim_shoulder=%d\naim_centered=%d\naim_speed=%d\n", s.camera_speed_h, s.camera_speed_v, s.aim_shoulder ? 1 : 0, s.aim_centered ? 1 : 0, s.aim_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "aim_jump=%d\n", s.aim_jump ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "mouse_keyboard=%d\nmouse_camera_speed=%d\nmouse_aim_speed=%d\ninvert_mouse_y=%d\n", s.mouse_keyboard ? 1 : 0, s.mouse_camera_speed, s.mouse_aim_speed, s.invert_mouse_y ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "refuel_speed=%d\nsniper_fixed_zoom=%d\nsniper_zoom=%d\ndamage_taken=%d\ndive_speed=%d\n", s.refuel_speed, s.sniper_fixed_zoom ? 1 : 0, s.sniper_zoom, s.damage_taken, s.dive_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "fly_speed=%d\nfly_freeze=%d\nfly_hide_hud=%d\n", s.fly_speed, s.fly_freeze ? 1 : 0, s.fly_hide_hud ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "unlimited_continues=%d\npermanent_tribals=%d\n", s.unlimited_continues ? 1 : 0, s.permanent_tribals ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "sprint=%d\nsprint_speed=%d\nsprint_aiming=%d\n", s.sprint ? 1 : 0, s.sprint_speed, s.sprint_aiming ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "sprint_swimming=%d\nsprint_swim_speed=%d\n", s.sprint_swimming ? 1 : 0, s.sprint_swim_speed); out += buf;
+    std::snprintf(buf, sizeof(buf), "pause_in_menu=%d\n", s.pause_in_menu ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "gore_keep_blood=%d\ngore_keep_limbs=%d\nblood_amount=%d\n", s.gore_keep_blood ? 1 : 0, s.gore_keep_limbs ? 1 : 0, s.blood_amount); out += buf;
     return out;
 }
 

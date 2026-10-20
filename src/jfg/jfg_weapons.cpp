@@ -261,14 +261,20 @@ void apply_weapons() {
     }
 }
 
-// Hook at the entry of objAnimDframe(object, speed, frames): the player's throw animation runs faster (see above).
+// Hook at the entry of objAnimDframe(object, speed, frames): the player's throw animation runs faster (see above), and
+// the player's animations keep up with the ground while sprinting (jfg_camera_controls). Not the jump: it is timed to
+// the jump's arc, and sped up it ran out early and left the character in its landing crouch in mid-air.
 // The speed arrives as the bits of a float in a1 (o32: the first argument is not a float).
 extern "C" uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_bits) {
-    if (g_throw_factor <= 1.0f || obj == 0 || obj != g_cam.player) return speed_bits;
+    if ((g_throw_factor <= 1.0f && g_cam.sprint_factor == 1.0f) || obj == 0 || obj != g_cam.player) return speed_bits;
     g_rdram = rdram;
-    if (!is_throw_anim(obj)) return speed_bits;
+    const bool throwing = g_throw_factor > 1.0f && is_throw_anim(obj);
+    if (!throwing) {
+        const uint32_t data = rd32(obj + 0x68);
+        if (g_cam.sprint_factor == 1.0f || !valid_ptr(data) || rd8(data + PD_STATE) == PD_STATE_JUMP) return speed_bits;
+    }
     float speed; std::memcpy(&speed, &speed_bits, 4);
-    speed *= g_throw_factor;
+    speed *= throwing ? g_throw_factor : g_cam.sprint_factor;
     std::memcpy(&speed_bits, &speed, 4);
     return speed_bits;
 }
@@ -376,6 +382,82 @@ void draw_weapons() {
         ImGui::PopID();
     }
     if (changed) save_weapons();
+}
+
+// The same as the Weapons tab, as rows for F10's Weapons window (jfg_ui_tools.cpp).
+std::vector<ToolField> weapon_fields() {
+    using F = ToolField;
+    std::vector<F> out;
+    out.push_back({ F::Note, "", 0, 1, 1, 1, nullptr, nullptr, [](recomp_context*) {
+        return std::string(g_weapon_orig_read ? "Turn \"Modify\" on to change a weapon; off puts it back to its original values. Changes apply "
+                                                "from the next shot, to every character, and are saved in jfg_weapons.txt."
+                                              : "Not available yet: start a game first.");
+    } });
+    // A value of weapon w: read and written under the weapon lock, saved on every change.
+    auto number = [&](int w, const char* label, int lo, int hi, int step, int big, std::function<int&(WeaponMod&)> ref) {
+        out.push_back({ F::Number, std::string("    ") + label, lo, hi, step, big,
+            [w, ref](recomp_context*) { std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex); return ref(g_weapon_mod[w]); },
+            [w, ref, lo, hi](recomp_context*, int v) {
+                std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex);
+                if (!g_weapon_orig_read || !g_weapon_mod[w].on) return;
+                ref(g_weapon_mod[w]) = std::clamp(v, lo, hi);
+                save_weapons();
+            } });
+    };
+    for (int w = 0; w < WEAPON_COUNT; w++) {
+        const WeaponInfo& info = WEAPON_INFO[w];
+        const uint32_t f = info.fields;
+        out.push_back({ F::Heading, info.name });
+        out.push_back({ F::Toggle, "    Modify", 0, 1, 1, 1,
+            [w](recomp_context*) { std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex); return g_weapon_mod[w].on ? 1 : 0; },
+            [w](recomp_context*, int v) {
+                std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex);
+                if (!g_weapon_orig_read) return;
+                g_weapon_mod[w].on = v != 0;
+                save_weapons();
+            } });
+        if (f & WF_DAMAGE) number(w, "Damage", 1, 100, 1, 10, [](WeaponMod& m) -> int& { return m.s.damage; });
+        if (f & WF_DELAY) number(w, "Shot delay (frames, 60 = 1 s)", 0, 120, 1, 10, [](WeaponMod& m) -> int& { return m.s.delay; });
+        if (f & WF_THROW) number(w, "Throw delay (frames)", 1, 60, 1, 5, [](WeaponMod& m) -> int& { return m.s.throw_delay; });
+        if (f & WF_SPEED) {
+            out.push_back({ F::Number, info.bolt ? "    Speed" : "    Speed / throw", 1, 2000, 5, 50,
+                [w](recomp_context*) { std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex); return (int)std::lround(g_weapon_mod[w].s.speed); },
+                [w](recomp_context*, int v) {
+                    std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex);
+                    if (!g_weapon_orig_read || !g_weapon_mod[w].on) return;
+                    g_weapon_mod[w].s.speed = (float)std::clamp(v, 1, 2000);
+                    save_weapons();
+                } });
+        }
+        if (f & WF_LIFE) number(w, info.bolt ? "Lifetime (x0.1 s)" : "Lifetime / fuse", 1, 255, 1, 10, [](WeaponMod& m) -> int& { return m.s.life; });
+        if (f & WF_SPREAD) {
+            number(w, "Spread sideways", 0, 4096, 16, 256, [](WeaponMod& m) -> int& { return m.s.spread_x; });
+            number(w, "Spread up/down", 0, 4096, 16, 256, [](WeaponMod& m) -> int& { return m.s.spread_y; });
+        }
+        if (f & WF_SIZE) number(w, "Bolt size (%)", 25, 400, 5, 50, [](WeaponMod& m) -> int& { return m.size; });
+        if (f & WF_CHARGE) number(w, "Charge speed (%)", 25, 800, 5, 50, [](WeaponMod& m) -> int& { return m.charge; });
+        if (f & WF_MINES) number(w, "Mines at once (both kinds)", 1, 8, 1, 1, [](WeaponMod& m) -> int& { return m.mines; });
+        if (f & WF_HEAT) {
+            out.push_back({ F::Toggle, "    No rapid-fire limit", 0, 1, 1, 1,
+                [w](recomp_context*) { std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex); return g_weapon_mod[w].no_heat ? 1 : 0; },
+                [w](recomp_context*, int v) {
+                    std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex);
+                    if (!g_weapon_orig_read || !g_weapon_mod[w].on) return;
+                    g_weapon_mod[w].no_heat = v != 0;
+                    save_weapons();
+                } });
+        }
+        out.push_back({ F::Action, "    Reset to default", 0, 1, 1, 1, nullptr, [w](recomp_context*, int) {
+            std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex);
+            if (!g_weapon_orig_read) return;
+            const bool on = g_weapon_mod[w].on;
+            g_weapon_mod[w] = WeaponMod();
+            g_weapon_mod[w].on = on;
+            g_weapon_mod[w].s = g_weapon_orig[w];
+            save_weapons();
+        } });
+    }
+    return out;
 }
 
 } // namespace jfg

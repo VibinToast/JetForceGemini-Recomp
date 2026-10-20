@@ -1,0 +1,85 @@
+# Releasing
+
+Releases start by themselves when something is merged into `main`. GitHub works out the version, writes the changelog
+and makes a **draft** release. The builds are made on your own PC, because they need your ROM and the ROM never goes to
+GitHub. Players don't see a draft, and the launcher's update check skips it, until every file is on it.
+
+## Which number goes up
+
+| Merged into `main` from | Version | Example |
+|---|---|---|
+| `dev` | minor | 1.1.8 → 1.2.0 |
+| `hotfix/<name>` | patch | 1.1.8 → 1.1.9 |
+| `rt64-update`, `milestone/<name>` | major | 1.1.8 → 2.0.0 |
+
+To make an exception, put a label on the pull request: `release:major`, `release:minor`, `release:patch`, or
+`release:none` (no release, for example a docs-only merge). Create these four labels once under Issues → Labels.
+
+If you push to `main` without a pull request, there is only a release when the commit message contains `[major]`,
+`[minor]` or `[patch]`, or when it's a local `Merge branch 'dev'` commit. `[no release]` in a message skips the release.
+
+You can also start a release by hand: Actions → Release → Run workflow on `main`, then choose a bump or type an exact
+version.
+
+## Day to day
+
+- **Normal release:** open a pull request from `dev` into `main` and merge it.
+- **Hotfix:** run `git switch -c hotfix/<what> main`, fix the problem, push, then open a pull request into `main` and
+  merge it. Only the fix ships. Unfinished work on `dev` stays out.
+- **RT64:** open a pull request from `rt64-update` into `main` and merge it. That makes 2.0.0.
+
+After a release, the workflow merges `main` back into `dev` and `rt64-update`. That brings over the release commit
+(`CHANGELOG.md`, `version.txt`) and any hotfix, so the next merge has no conflicts. If that merge itself conflicts, the
+workflow run shows a warning and you merge by hand (`git switch dev && git merge origin/main`). The list of branches is
+`BACK_MERGE` in `.github/workflows/release.yml`.
+
+Only one release can wait at a time. While a draft is waiting for its builds, a new merge into `main` gets no release.
+Build and publish the draft first, then start the workflow by hand.
+
+## Building the draft
+
+When the workflow finishes, its summary says which draft is waiting. Then:
+
+- **Windows:** double-click `tools\package_release.bat`.
+- **Linux:** run `tools/package_release.sh`, in WSL or on a Linux PC.
+
+Each one finds the draft by itself. It builds that release's exact commit in `dist/src-vX.Y.Z` (your own checkout,
+uncommitted changes and `bin` folder are left alone), then uploads its files. The second one to finish **publishes**
+the release. To publish with only one platform's files, use `package_release.bat -Publish` or
+`tools/package_release.sh --publish`.
+
+| File | For |
+|---|---|
+| `JFG-X.Y.Z-windows-x64-portable.zip` | Windows. The launcher's updater downloads this one. |
+| `JFG-X.Y.Z-linux-x86_64.AppImage` | Linux, and the main file for SteamOS/Steam Deck: make it executable, then "Add a Non-Steam Game". Settings and saves go to `~/.local/share/JetForceGeminiRecompiled` (set `JFG_GAME_DIR` to change that). |
+| `JFG-X.Y.Z-linux-x86_64-portable.tar.gz` | Linux, as a folder, like the Windows zip. Settings and saves stay in the folder. |
+
+Each file has a `.sha256` next to it. The release isn't published until all six files are there (or you force it).
+
+### One-time setup
+
+- **Both:** install the [GitHub CLI](https://cli.github.com) and sign in with `gh auth login`. Keep `baserom.us.z64` next
+  to the build scripts, or set `JFG_ROM` to wherever it is.
+- **Windows:** the same tools as a normal `build_windows.bat` build. The release build reuses your build folders, so it
+  only rebuilds what changed.
+- **Linux:** Docker or Podman. The build runs in a container made from `tools/linux-build/Dockerfile` (Ubuntu 22.04
+  with clang 18), which is set up automatically the first time. On Windows, use WSL2 with Docker Desktop's WSL
+  integration, and clone the repository inside WSL (for example `~/JetForceGemini-Recomp`). Building from `/mnt/r/...`
+  works but is very slow. The container keeps its own build folder, `build-container` (about 15 GB).
+
+### Why Ubuntu 22.04
+
+A Linux program built on a system runs on that system and on newer ones, but not on older ones. That's the glibc
+version. Building on Ubuntu 22.04 (glibc 2.35) gives one file that runs on:
+
+- **SteamOS 3** (Steam Deck): its system files are read-only and players can't install packages, so the AppImage is
+  the one to use there.
+- **Fedora** (current releases).
+- **Ubuntu** 22.04 and later, and distros based on it (Mint, Pop!_OS).
+
+SDL2 is packed in with the game. Vulkan, the GPU drivers, GTK and the C/C++ runtime always come from the player's
+system. `tools/package_release.sh --native` builds without the container, but the result only runs on systems as new
+as the one that built it.
+
+The quickest check before announcing a release: start the AppImage once on the Steam Deck (Desktop Mode and Game Mode)
+and once in a Fedora live session or VM.

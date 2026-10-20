@@ -1,5 +1,5 @@
 // Jet Force Gemini port: gameplay options for the game hooks - no blood, damage taken, jetpack refuelling, the sniper
-// rifle and the Tribal check.
+// rifle, unlimited continues and the Tribal check.
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -37,6 +37,15 @@ void apply_damage_taken(uint32_t obj) {
     last_health = health;
 }
 
+// --- unlimited continues --------------------------------------------------------------------------------------------
+// `continues` is set to 2 on entering a region and mainRestartAfterDeath takes one for each death there; with none left
+// a death restarts the whole region from its entrance. With the option it is topped back up every tick, so the region
+// title card after a death still shows 2.
+void gameplay_tick() {
+    if (!g.unlimited_continues || !valid_ptr(rd32(ADDR_gameplay)) || rd32(ADDR_mainGameMode) != 0) return;
+    if ((int16_t)rd16(ADDR_continues) < 2) wr16(ADDR_continues, 2);
+}
+
 // --- jetpack refuelling ----------------------------------------------------------------------------------------------
 // Hook in refuelControl (overlay 100): the fuel a pad adds this tick.
 extern "C" int jfg_refuel_amount(int amount) {
@@ -60,7 +69,8 @@ extern "C" int jfg_sniper_walk(int weapon) {
 // --- skip the Tribal check -------------------------------------------------------------------------------------------
 // Hook at the entry of mainGetGameFlag: 1 = report the flag as set.
 extern "C" int jfg_flag_override(int flag) {
-    return g.skip_tribal_check && flag == 88 ? 1 : 0;
+    static const bool floyd = std::getenv("JFG_DEBUG_FLOYD") != nullptr; // tests: Floyd (game flag 3) has joined
+    return (g.skip_tribal_check && flag == 88) || (floyd && flag == 3) ? 1 : 0;
 }
 
 } // namespace jfg
