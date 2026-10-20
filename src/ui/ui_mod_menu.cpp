@@ -28,9 +28,9 @@ static bool is_mod_enabled_or_auto(const std::string &mod_id) {
 }
 
 // ModEntryView
-#define COL_TEXT_DEFAULT 242, 242, 242
-#define COL_TEXT_DIM 204, 204, 204
-#define COL_SECONDARY 233, 176, 53
+#define COL_TEXT_DEFAULT 232, 243, 255
+#define COL_TEXT_DIM 169, 190, 221
+#define COL_SECONDARY 255, 178, 26
 constexpr float modEntryHeight = 120.0f;
 constexpr float modEntryPadding = 4.0f;
 
@@ -58,7 +58,7 @@ ModEntryView::ModEntryView(Element *parent) : Element(parent, Events(EventType::
     checked_style.set_background_color(Color{ 26, 24, 32, 255 });
     hover_style.set_border_color(Color{ COL_TEXT_DEFAULT, 64 });
     checked_hover_style.set_border_color(Color{ COL_TEXT_DEFAULT, 255 });
-    pulsing_style.set_border_color(Color{ 233, 176, 53, 244 });
+    pulsing_style.set_border_color(Color{ 255, 178, 26, 244 });
 
     {
         thumbnail_image = context.create_element<Image>(this, "");
