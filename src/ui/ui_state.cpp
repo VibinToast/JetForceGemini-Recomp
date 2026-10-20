@@ -255,7 +255,10 @@ public:
                 {"LatoLatin-BoldItalic.ttf", false},
                 {"NotoEmoji-Regular.ttf", true},
                 {"promptfont/promptfont.ttf", false},
-                // JFG PORT: the launcher's fonts (assets/jfg_launcher, SIL Open Font License).
+                // JFG PORT: the launcher's fonts (assets/jfg_launcher): JFG (family "JFG", regular and bold; the titles
+                // and buttons use the bold), and under the SIL Open Font License Press Start 2P and JetBrains Mono.
+                {"jfg_launcher/JFG-Regular.ttf", false},
+                {"jfg_launcher/JFG-Bold.ttf", false},
                 {"jfg_launcher/PressStart2P-Regular.ttf", false},
                 {"jfg_launcher/JetBrainsMono-Regular.ttf", false},
                 {"jfg_launcher/JetBrainsMono-Bold.ttf", false},
