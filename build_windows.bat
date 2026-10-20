@@ -13,7 +13,7 @@ rem    2. downloads the libraries (git submodules: the port's forks of N64Recomp
 rem       N64ModernRuntime and RT64, each pinned to a commit on its jfg branch,
 rem       and the base project's other libraries)
 rem    3. builds the recompiler tools and translates the game code from YOUR
-rem       ROM to C
+rem       ROM to C (skipped when nothing it is made from changed)
 rem    4. builds the executable and puts the finished game in the "bin" folder
 rem       next to this file (saves and settings are kept there too)
 rem
@@ -22,6 +22,7 @@ rem  RecompiledFuncs; none of it is committed).
 rem  Override the ROM location with:  set JFG_ROM=D:\path\to\rom.z64
 rem  Leave lib\ as it is (no checkout to the pinned commits, for work inside a
 rem  library) with:                   set JFG_KEEP_LIBS=1
+rem  Generate the game code even if nothing changed: set JFG_REGENERATE=1
 rem  Nothing here pushes or uploads anything. Git is used for downloads only.
 rem ============================================================================
 setlocal EnableExtensions EnableDelayedExpansion
@@ -138,7 +139,6 @@ if errorlevel 1 ( echo [jfg] ERROR: submodule download failed & exit /b 1 )
 :libs_ready
 
 rem ---- 3. game code ----------------------------------------------------------
-if exist "%WORK%\RecompiledFuncs" rmdir /s /q "%WORK%\RecompiledFuncs"
 if exist "%PORT_DIR%generated\RecompiledFuncs.tgz" goto use_pregenerated
 
 echo [jfg] building the recompiler tools...
@@ -146,6 +146,17 @@ cmake -S "%WORK%\lib\N64Recomp" -B "%WORK%\build-tools" -G Ninja -DCMAKE_BUILD_T
 if errorlevel 1 ( echo [jfg] ERROR: configuring the recompiler tools failed & exit /b 1 )
 cmake --build "%WORK%\build-tools" --parallel --target N64RecompCLI RSPRecomp
 if errorlevel 1 ( echo [jfg] ERROR: building the recompiler tools failed & exit /b 1 )
+rem The game code is generated again only when something it is made from changed (the hash below, saved with it), so
+rem a rebuild after a change in src or lib compiles only that.
+set "STAMP=%WORK%\RecompiledFuncs\.inputs_hash"
+call :inputs_hash || exit /b 1
+set "OLD_HASH="
+if exist "%STAMP%" set /p OLD_HASH=<"%STAMP%"
+if not defined JFG_REGENERATE if defined OLD_HASH if exist "%WORK%\rsp\aspMain.cpp" if "%OLD_HASH%"=="%INPUTS_HASH%" (
+    echo [jfg] game code is up to date ^(ROM, recompiler configs and tools unchanged^): not generated again
+    goto build
+)
+if exist "%WORK%\RecompiledFuncs" rmdir /s /q "%WORK%\RecompiledFuncs"
 echo [jfg] translating the game code ^(your ROM -^> C^)...
 if /i not "%JFG_ROM%"=="%PORT_DIR%baserom.us.z64" copy /y "%JFG_ROM%" "%WORK%\baserom.us.z64" >nul || ( echo [jfg] ERROR: copying the ROM failed & exit /b 1 )
 pushd "%WORK%"
@@ -162,11 +173,15 @@ if errorlevel 1 ( popd & echo [jfg] ERROR: merge_gen_anim_data.py failed & exit 
 %PY% tools\fix_dynamic_relocs.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json baserom.us.recomp.z64 jfg.us.syms.toml
 if errorlevel 1 ( popd & echo [jfg] ERROR: fix_dynamic_relocs.py failed & exit /b 1 )
 popd
+rem Saved last, so a run that stopped half-way generates the code again next time.
+call :inputs_hash || exit /b 1
+>"%STAMP%" echo %INPUTS_HASH%
 goto build
 
 :use_pregenerated
 rem Local shortcut, not part of the published project: game code generated earlier on another machine.
 echo [jfg] unpacking generated\RecompiledFuncs.tgz ^(delete that file to generate from the ROM instead^)...
+if exist "%WORK%\RecompiledFuncs" rmdir /s /q "%WORK%\RecompiledFuncs"
 tar -xzf "%PORT_DIR%generated\RecompiledFuncs.tgz" -C "%WORK%"
 if errorlevel 1 ( echo [jfg] ERROR: unpacking generated code failed & exit /b 1 )
 
@@ -197,4 +212,11 @@ if not exist "%BIN%\texture_packs" mkdir "%BIN%\texture_packs"
 echo [jfg] BUILD OK: %BIN%\JetForceGeminiRecompiled.exe
 echo [jfg] next: double-click run_windows.bat
 echo [jfg] build finished %DATE% %TIME%
+exit /b 0
+
+:inputs_hash
+rem One hash of everything the game code is made from (tools\recomp_inputs_hash.py), in INPUTS_HASH.
+set "INPUTS_HASH="
+for /f "usebackq delims=" %%h in (`%PY% "%WORK%\tools\recomp_inputs_hash.py" "%JFG_ROM%" "%WORK%\jfg.us.toml" "%WORK%\jfg.us.syms.toml" "%WORK%\rsp-aspMain.jfg.toml" "%WORK%\tools\*.py" "%WORK%\tools\jfg.us.dynamic_relocs.json" "%WORK%\build-tools\N64Recomp.exe" "%WORK%\build-tools\RSPRecomp.exe"`) do set "INPUTS_HASH=%%h"
+if not defined INPUTS_HASH ( echo [jfg] ERROR: recomp_inputs_hash.py failed & exit /b 1 )
 exit /b 0
