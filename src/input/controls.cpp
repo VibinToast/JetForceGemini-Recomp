@@ -1,6 +1,21 @@
 #include "controls.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cstdlib>
+
+#include "SDL.h"
+
+// Dual-stick controls for Jet Force Gemini (src/jfg/jfg_controls.cpp).
+extern "C" int jfg_dual_stick_active(void);
+extern "C" int jfg_invert_aim_normal(uint16_t buttons);
+extern "C" int jfg_dual_stick_layout(void);
+extern "C" void jfg_dual_stick(uint16_t* buttons, float* x, float* y, float right_x, float right_y);
+extern "C" int jfg_mouse_keyboard_active(void);
+extern "C" int jfg_floyd_mouse_active(void);
+extern "C" void jfg_dual_stick_release(void);
+extern "C" int jfg_sprint_enabled(void);
+extern "C" void jfg_sprint_input(int held);
 
 namespace dino::input {
 
@@ -85,10 +100,70 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
     }
 
     if (!game_input_disabled()) {
+        const bool dual_stick = jfg_dual_stick_active() != 0;
+        const bool dual_layout = dual_stick && jfg_dual_stick_layout() != 0;
+        // Mouse and keyboard (JFG option): during gameplay the keyboard has its own layout below instead of the
+        // keyboard bindings, the mouse buttons aim and fire, and src/jfg turns mouse movement into camera and aim and
+        // the wheel into weapon changes. In a Floyd mission (dual stick off) the keyboard has a Floyd layout and the
+        // mouse steers Floyd (jfg_floyd_steer).
+        const bool floyd = !dual_stick && jfg_floyd_mouse_active() != 0;
+        const bool mouse_keyboard = (dual_stick || floyd) && jfg_mouse_keyboard_active() != 0;
         for (size_t i = 0; i < n64_button_values.size(); i++) {
             size_t input_index = (size_t)GameInput::N64_BUTTON_START + i;
-            cur_buttons |= get_input_digital(keyboard_input_mappings[input_index]) ? n64_button_values[i] : 0;
-            cur_buttons |= get_input_digital(controller_input_mappings[input_index]) ? n64_button_values[i] : 0;
+            if (!mouse_keyboard) {
+                cur_buttons |= get_input_digital(keyboard_input_mappings[input_index]) ? n64_button_values[i] : 0;
+            }
+            if (!dual_stick) {
+                cur_buttons |= get_input_digital(controller_input_mappings[input_index]) ? n64_button_values[i] : 0;
+            }
+            else if (dual_layout) {
+                // The built-in layout below replaces the controller bindings.
+            }
+            else {
+                // The right stick is an analog stick in this mode: bindings of N64 buttons to it (by default the
+                // C buttons) are ignored.
+                for (const InputField& field : controller_input_mappings[input_index]) {
+                    if (field.input_type == 4) { // InputType::ControllerAnalog (input.cpp)
+                        const int axis = abs(field.input_id) - 1;
+                        if (axis == SDL_CONTROLLER_AXIS_RIGHTX || axis == SDL_CONTROLLER_AXIS_RIGHTY) continue;
+                    }
+                    cur_buttons |= get_input_digital(field) ? n64_button_values[i] : 0;
+                }
+            }
+        }
+
+        if (dual_layout) {
+            // Dual-stick mode's own layout for a modern (Xbox-style) controller, used during gameplay only. The game's
+            // actions sit on N64 buttons: C-up jumps (and zooms in / walks forward while aiming), C-down crouches (zooms
+            // out / walks back), A and B change weapon, R aims, Z fires. jfg_dual_stick() finishes the job (D-pad up/down
+            // as zoom while aiming, the optional trigger swap).
+            constexpr uint32_t digital = 3, analog = 4; // InputType::ControllerDigital / ControllerAnalog (input.cpp)
+            struct LayoutEntry { uint32_t type; int32_t id; uint16_t n64; };
+            static const LayoutEntry layout[] = {
+                { analog,  SDL_CONTROLLER_AXIS_TRIGGERLEFT + 1,  0x0010 }, // LT: aim (R)
+                { analog,  SDL_CONTROLLER_AXIS_TRIGGERRIGHT + 1, 0x2000 }, // RT: fire (Z)
+                { digital, SDL_CONTROLLER_BUTTON_A,              0x0008 }, // A: jump (C-up)
+                { digital, SDL_CONTROLLER_BUTTON_B,              0x0004 }, // B: crouch (C-down)
+                { digital, SDL_CONTROLLER_BUTTON_LEFTSTICK,      0x0004 }, // left stick click: crouch (C-down)
+                { digital, SDL_CONTROLLER_BUTTON_Y,              0x8000 }, // Y: N64 A (next weapon)
+                { digital, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER,  0x8000 }, // RB: N64 A (next weapon)
+                { digital, SDL_CONTROLLER_BUTTON_X,              0x4000 }, // X: N64 B (previous weapon)
+                { digital, SDL_CONTROLLER_BUTTON_LEFTSHOULDER,   0x4000 }, // LB: N64 B (previous weapon)
+                { digital, SDL_CONTROLLER_BUTTON_RIGHTSTICK,     0x0020 }, // right stick click: N64 L
+                { digital, SDL_CONTROLLER_BUTTON_BACK,           0x0020 }, // View/Back: N64 L
+                { digital, SDL_CONTROLLER_BUTTON_START,          0x1000 }, // Menu/Start: START
+                { digital, SDL_CONTROLLER_BUTTON_DPAD_UP,        0x0800 }, // D-pad: the N64 D-pad (weapon select);
+                { digital, SDL_CONTROLLER_BUTTON_DPAD_DOWN,      0x0400 }, //   up/down zoom while aiming
+                { digital, SDL_CONTROLLER_BUTTON_DPAD_LEFT,      0x0200 },
+                { digital, SDL_CONTROLLER_BUTTON_DPAD_RIGHT,     0x0100 },
+            };
+            const bool sprint = jfg_sprint_enabled() != 0;
+            for (const LayoutEntry& entry : layout) {
+                if (sprint && entry.type == digital && entry.id == SDL_CONTROLLER_BUTTON_LEFTSTICK) continue; // sprints instead (B still crouches)
+                if (get_input_digital(InputField{ entry.type, entry.id })) {
+                    cur_buttons |= entry.n64;
+                }
+            }
         }
 
         float joystick_x = get_input_analog(controller_input_mappings[(size_t)GameInput::X_AXIS_POS])
@@ -99,16 +174,98 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
 
         apply_joystick_deadzone(joystick_x, joystick_y, &joystick_x, &joystick_y);
 
-        cur_x = get_input_analog(keyboard_input_mappings[(size_t)GameInput::X_AXIS_POS])
-                - get_input_analog(keyboard_input_mappings[(size_t)GameInput::X_AXIS_NEG]) + joystick_x;
+        if (mouse_keyboard && floyd) {
+            // Floyd: W thrust (N64 A), S brake (N64 B), A / D turn (the stick), left mouse button fires (Z); the mouse
+            // turns and pitches Floyd itself (src/jfg).
+            constexpr uint32_t keyboard = 1; // InputType::Keyboard (input.cpp)
+            auto key = [](SDL_Scancode code) { return get_input_digital(InputField{ keyboard, (int32_t)code }); };
+            struct KeyEntry { SDL_Scancode key; uint16_t n64; };
+            static const KeyEntry keys[] = {
+                { SDL_SCANCODE_W,      0x8000 }, // thrust (N64 A)
+                { SDL_SCANCODE_SPACE,  0x8000 },
+                { SDL_SCANCODE_S,      0x4000 }, // brake (N64 B)
+                { SDL_SCANCODE_LSHIFT, 0x4000 },
+                { SDL_SCANCODE_RETURN, 0x1000 }, // START
+                { SDL_SCANCODE_TAB,    0x0020 }, // N64 L
+            };
+            for (const KeyEntry& entry : keys) {
+                if (key(entry.key)) cur_buttons |= entry.n64;
+            }
+            const uint32_t mouse_buttons = SDL_GetMouseState(nullptr, nullptr);
+            if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) cur_buttons |= 0x2000;  // fire (Z)
+            if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) cur_buttons |= 0x0010; // N64 R
+            const float kx = (key(SDL_SCANCODE_D) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_A) ? 1.0f : 0.0f);
+            joystick_x = std::clamp(joystick_x + kx, -1.0f, 1.0f);
+        }
+        else if (mouse_keyboard) {
+            constexpr uint32_t keyboard = 1; // InputType::Keyboard (input.cpp)
+            auto key = [](SDL_Scancode code) { return get_input_digital(InputField{ keyboard, (int32_t)code }); };
+            struct KeyEntry { SDL_Scancode key; uint16_t n64; };
+            static const KeyEntry keys[] = {
+                { SDL_SCANCODE_SPACE,  0x0008 }, // jump (C-up)
+                { SDL_SCANCODE_LCTRL,  0x0004 }, // crouch (C-down)
+                { SDL_SCANCODE_C,      0x0004 },
+                { SDL_SCANCODE_E,      0x8000 }, // next weapon (N64 A)
+                { SDL_SCANCODE_Q,      0x4000 }, // previous weapon (N64 B)
+                { SDL_SCANCODE_RETURN, 0x1000 }, // START
+                { SDL_SCANCODE_TAB,    0x0020 }, // N64 L
+                { SDL_SCANCODE_1,      0x0800 }, // D-pad up (zoom in while aiming)
+                { SDL_SCANCODE_2,      0x0100 }, // D-pad right
+                { SDL_SCANCODE_3,      0x0400 }, // D-pad down (zoom out while aiming)
+                { SDL_SCANCODE_4,      0x0200 }, // D-pad left
+            };
+            for (const KeyEntry& entry : keys) {
+                if (key(entry.key)) cur_buttons |= entry.n64;
+            }
+            const uint32_t mouse_buttons = SDL_GetMouseState(nullptr, nullptr);
+            if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) cur_buttons |= 0x0010; // aim (R)
+            if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) cur_buttons |= 0x2000;  // fire (Z)
 
-        cur_y = get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_POS])
-                - get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_NEG]) + joystick_y;
+            // WASD as the left stick.
+            float kx = (key(SDL_SCANCODE_D) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_A) ? 1.0f : 0.0f);
+            float ky = (key(SDL_SCANCODE_W) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_S) ? 1.0f : 0.0f);
+            if (kx != 0.0f && ky != 0.0f) { kx *= 0.7071f; ky *= 0.7071f; }
+            joystick_x = std::clamp(joystick_x + kx, -1.0f, 1.0f);
+            joystick_y = std::clamp(joystick_y + ky, -1.0f, 1.0f);
+        }
+
+        // Sprint (JFG option): left-stick click on a controller, Left Shift with mouse and keyboard (not in a Floyd
+        // mission, where it brakes).
+        {
+            constexpr uint32_t keyboard = 1, controller_digital = 3; // InputType::Keyboard / ControllerDigital (input.cpp)
+            bool held = get_input_digital(InputField{ controller_digital, SDL_CONTROLLER_BUTTON_LEFTSTICK });
+            if (mouse_keyboard && !floyd) held = held || get_input_digital(InputField{ keyboard, SDL_SCANCODE_LSHIFT });
+            jfg_sprint_input(held ? 1 : 0);
+        }
+
+        if (dual_stick) {
+            float right_x = 0.0f, right_y = 0.0f;
+            get_right_analog(&right_x, &right_y);
+            jfg_dual_stick(&cur_buttons, &joystick_x, &joystick_y, right_x, -right_y); // SDL: down is positive
+        }
+
+        cur_x = joystick_x;
+        cur_y = joystick_y;
+        if (!mouse_keyboard) {
+            cur_x += get_input_analog(keyboard_input_mappings[(size_t)GameInput::X_AXIS_POS])
+                   - get_input_analog(keyboard_input_mappings[(size_t)GameInput::X_AXIS_NEG]);
+            cur_y += get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_POS])
+                   - get_input_analog(keyboard_input_mappings[(size_t)GameInput::Y_AXIS_NEG]);
+        }
+
+        if (!dual_stick && jfg_invert_aim_normal(cur_buttons) != 0) {
+            cur_y = -cur_y; // option: flip up/down while aiming with the normal controls
+        }
 
         float joystick_range = get_joystick_range() / 100.0f;
         
         cur_x *= joystick_range;
         cur_y *= joystick_range;
+    }
+
+    else {
+        jfg_dual_stick_release(); // a menu has the input: let go of the sticks the game logic remembers
+        jfg_sprint_input(0);
     }
 
     *buttons_out = cur_buttons;

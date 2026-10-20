@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(DKRRecomp VERSION 0.1.18 LANGUAGES C CXX)
+project(JFGRecomp VERSION 1.0.0 LANGUAGES C CXX)
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -101,50 +101,50 @@ add_custom_target(MakeRecompControllerDB
     DEPENDS ${RECOMP_CONTROLLER_DB_TXT})
 
 # Main executable
-add_executable(DiddyKongRacingRecompiled)
-add_dependencies(DiddyKongRacingRecompiled MakeRecompControllerDB)
+add_executable(JetForceGeminiRecompiled)
+add_dependencies(JetForceGeminiRecompiled MakeRecompControllerDB)
 
 if (APPLE)
-    set_target_properties(DiddyKongRacingRecompiled PROPERTIES
+    set_target_properties(JetForceGeminiRecompiled PROPERTIES
         MACOSX_BUNDLE TRUE
-        OUTPUT_NAME "Diddy Kong Racing Recompiled"
-        MACOSX_BUNDLE_BUNDLE_NAME "Diddy Kong Racing Recompiled"
-        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.cyscott.dkrrecomp"
+        OUTPUT_NAME "Jet Force Gemini Recompiled"
+        MACOSX_BUNDLE_BUNDLE_NAME "Jet Force Gemini Recompiled"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.jfgrecomp"
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
-        MACOSX_BUNDLE_COPYRIGHT "Diddy Kong Racing game data is supplied by the user."
+        MACOSX_BUNDLE_COPYRIGHT "Jet Force Gemini game data is supplied by the user."
     )
 
-    add_custom_command(TARGET DiddyKongRacingRecompiled POST_BUILD
+    add_custom_command(TARGET JetForceGeminiRecompiled POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources"
+            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_SOURCE_DIR}/assets"
-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources/assets"
+            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources/assets"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${RECOMP_CONTROLLER_DB_TXT}"
-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources/recompcontrollerdb.txt"
+            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources/recompcontrollerdb.txt"
         COMMAND "${CMAKE_SOURCE_DIR}/scripts/package-macos-dependencies.sh"
-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>"
-        COMMENT "Packaging the DKR macOS app resources"
+            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>"
+        COMMENT "Packaging the macOS app resources"
     )
 
     # Keep edited launcher/settings assets in sync even when no C++ file needs
     # relinking. POST_BUILD alone only runs after the executable is rebuilt.
-    file(GLOB_RECURSE DKR_MACOS_ASSETS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/assets/*")
-    add_custom_target(DKRMacResources ALL
+    file(GLOB_RECURSE JFG_MACOS_ASSETS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/assets/*")
+    add_custom_target(JFGMacResources ALL
         COMMAND ${CMAKE_COMMAND} -E make_directory
-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources"
+            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_SOURCE_DIR}/assets"
-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources/assets"
+            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources/assets"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${RECOMP_CONTROLLER_DB_TXT}"
-            "$<TARGET_BUNDLE_DIR:DiddyKongRacingRecompiled>/Contents/Resources/recompcontrollerdb.txt"
-        DEPENDS ${DKR_MACOS_ASSETS} ${RECOMP_CONTROLLER_DB_TXT}
-        COMMENT "Synchronizing the DKR macOS app resources"
+            "$<TARGET_BUNDLE_DIR:JetForceGeminiRecompiled>/Contents/Resources/recompcontrollerdb.txt"
+        DEPENDS ${JFG_MACOS_ASSETS} ${RECOMP_CONTROLLER_DB_TXT}
+        COMMENT "Synchronizing the macOS app resources"
     )
-    add_dependencies(DiddyKongRacingRecompiled DKRMacResources)
+    add_dependencies(JetForceGeminiRecompiled JFGMacResources)
 endif()
 
 file(GLOB SOURCES ${CMAKE_SOURCE_DIR}/src/*.cpp)
@@ -157,7 +157,7 @@ set (SOURCES_EXTRA
     ${CMAKE_SOURCE_DIR}/lib/RmlUi/Backends/RmlUi_Platform_SDL.cpp
 )
 
-target_include_directories(DiddyKongRacingRecompiled PRIVATE
+target_include_directories(JetForceGeminiRecompiled PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     #${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime/N64Recomp/include
     ${CMAKE_SOURCE_DIR}/lib/N64Recomp/include
@@ -184,13 +184,13 @@ target_include_directories(DiddyKongRacingRecompiled PRIVATE
 )
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
-    target_compile_options(DiddyKongRacingRecompiled PRIVATE
+    target_compile_options(JetForceGeminiRecompiled PRIVATE
         -march=nehalem
         -fno-strict-aliasing
         -fms-extensions
     )
 else()
-    target_compile_options(DiddyKongRacingRecompiled PRIVATE
+    target_compile_options(JetForceGeminiRecompiled PRIVATE
         -fno-strict-aliasing
         -fms-extensions
     )
@@ -211,7 +211,7 @@ endif()
 
 if (MSVC)
     # Disable identical code folding, since this breaks mod function patching as multiple functions can get merged into one.
-    target_link_options(DiddyKongRacingRecompiled PRIVATE /OPT:NOICF)
+    target_link_options(JetForceGeminiRecompiled PRIVATE /OPT:NOICF)
 endif()
 
 if (WIN32)
@@ -229,23 +229,23 @@ if (WIN32)
         URL https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-devel-${SDL2_VERSION}-VC.zip
     )
     FetchContent_MakeAvailable(sdl2)
-    target_include_directories(DiddyKongRacingRecompiled PRIVATE
+    target_include_directories(JetForceGeminiRecompiled PRIVATE
         ${sdl2_SOURCE_DIR}/include
     )
-    target_link_directories(DiddyKongRacingRecompiled PRIVATE
+    target_link_directories(JetForceGeminiRecompiled PRIVATE
         ${sdl2_SOURCE_DIR}/lib/x64
     )
 
     # Copy SDL2 and dxc DLLs to output folder as post build step
-    add_custom_command(TARGET DiddyKongRacingRecompiled POST_BUILD
+    add_custom_command(TARGET JetForceGeminiRecompiled POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${sdl2_SOURCE_DIR}/lib/x64/SDL2.dll"
             "${CMAKE_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxil.dll"
             "${CMAKE_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxcompiler.dll"
-            $<TARGET_FILE_DIR:DiddyKongRacingRecompiled>)
+            $<TARGET_FILE_DIR:JetForceGeminiRecompiled>)
 
     set_target_properties(
-        DiddyKongRacingRecompiled
+        JetForceGeminiRecompiled
         PROPERTIES
             LINK_FLAGS_DEBUG "/SUBSYSTEM:CONSOLE"
             LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
@@ -253,8 +253,8 @@ if (WIN32)
             LINK_FLAGS_MINSIZEREL "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
     )
 
-    target_sources(DiddyKongRacingRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/icons/app.rc)
-    target_link_libraries(DiddyKongRacingRecompiled PRIVATE SDL2 Winmm.lib)
+    target_sources(JetForceGeminiRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/icons/app.rc)
+    target_link_libraries(JetForceGeminiRecompiled PRIVATE SDL2 Winmm.lib)
 endif()
 
 if (CMAKE_SYSTEM_NAME MATCHES "Linux")
@@ -267,12 +267,12 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
        COMMAND file_to_c ${CMAKE_SOURCE_DIR}/icons/512.png icon_bytes ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.c ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.h
        DEPENDS ${CMAKE_SOURCE_DIR}/icons/512.png
     )
-    target_sources(DiddyKongRacingRecompiled PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.c)
+    target_sources(JetForceGeminiRecompiled PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.c)
 
     message(STATUS "SDL2_FOUND = ${SDL2_FOUND}")
     message(STATUS "SDL2_INCLUDE_DIRS = ${SDL2_INCLUDE_DIRS}")
 
-    target_include_directories(DiddyKongRacingRecompiled PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_include_directories(JetForceGeminiRecompiled PRIVATE ${SDL2_INCLUDE_DIRS})
 
     find_package(Freetype REQUIRED)
 
@@ -281,19 +281,19 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
     message(STATUS "FREETYPE_LIBRARIES = ${FREETYPE_LIBRARIES}")
 
     include_directories(${FREETYPE_LIBRARIES})
-    target_link_libraries(DiddyKongRacingRecompiled PRIVATE ${FREETYPE_LIBRARIES} SDL2::SDL2)
+    target_link_libraries(JetForceGeminiRecompiled PRIVATE ${FREETYPE_LIBRARIES} SDL2::SDL2)
 
     set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
     set(THREADS_PREFER_PTHREAD_FLAG TRUE)
     find_package(Threads REQUIRED)
 
-    target_link_libraries(DiddyKongRacingRecompiled PRIVATE "-latomic -static-libstdc++" ${CMAKE_DL_LIBS} Threads::Threads)
+    target_link_libraries(JetForceGeminiRecompiled PRIVATE "-latomic -static-libstdc++" ${CMAKE_DL_LIBS} Threads::Threads)
 
     # Export symbols to the dynamic symbol table so backtraces work (when symbols aren't stripped)
-    target_link_options(DiddyKongRacingRecompiled PRIVATE -Wl,-export-dynamic)
+    target_link_options(JetForceGeminiRecompiled PRIVATE -Wl,-export-dynamic)
 endif()
 
-target_link_libraries(DiddyKongRacingRecompiled PRIVATE
+target_link_libraries(JetForceGeminiRecompiled PRIVATE
     RecompiledFuncs
     librecomp
     ultramodern
@@ -339,9 +339,9 @@ else()
     endif()
 endif()
 
-build_vertex_shader(DiddyKongRacingRecompiled "shaders/InterfaceVS.hlsl" "shaders/InterfaceVS.hlsl")
-build_pixel_shader(DiddyKongRacingRecompiled "shaders/InterfacePS.hlsl" "shaders/InterfacePS.hlsl")
+build_vertex_shader(JetForceGeminiRecompiled "shaders/InterfaceVS.hlsl" "shaders/InterfaceVS.hlsl")
+build_pixel_shader(JetForceGeminiRecompiled "shaders/InterfacePS.hlsl" "shaders/InterfacePS.hlsl")
 
-target_sources(DiddyKongRacingRecompiled PRIVATE ${SOURCES} ${SOURCES_RECURSIVE} ${SOURCES_EXTRA})
+target_sources(JetForceGeminiRecompiled PRIVATE ${SOURCES} ${SOURCES_RECURSIVE} ${SOURCES_EXTRA})
 
-set_property(TARGET DiddyKongRacingRecompiled PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+set_property(TARGET JetForceGeminiRecompiled PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
