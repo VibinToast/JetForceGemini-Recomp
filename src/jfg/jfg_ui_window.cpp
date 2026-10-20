@@ -272,9 +272,9 @@ void draw_options() {
         }
         if (ImGui::BeginTabItem("Textures")) {
             options_section("Textures");
-            ImGui::Checkbox("Dump textures to bin\\texture_dump", &g.texture_dump);
+            ImGui::Checkbox("Dump textures to the texture_dump folder", &g.texture_dump);
             changed |= ImGui::Checkbox("One folder per level", &g.dump_by_level);
-            options_help("Dumps into bin\\texture_dump\\<level number> <level name> instead. Each level starts its own set, so "
+            options_help("Dumps into texture_dump\\<level number> <level name> instead. Each level starts its own set, so "
                          "textures used in several levels are saved in each of them.");
             options_help("Saves every texture the game draws, the first time it appears, as <hash>.png. Leave it on while you "
                          "play through the areas you want; it is off again at the next start. Upscale the files without "
@@ -288,7 +288,7 @@ void draw_options() {
                     }
                     dumped = ec ? -1 : n;
                 }
-                if (dumped >= 0) ImGui::TextDisabled("bin\\texture_dump: %d files", dumped);
+                if (dumped >= 0) ImGui::TextDisabled("texture_dump folder: %d files", dumped);
             }
             {
                 static std::vector<std::string> packs;
@@ -309,7 +309,7 @@ void draw_options() {
                 const int n = g_texture_pack_count.load();
                 if (!current.empty() && n >= 0) ImGui::TextDisabled("%s: %d replacement textures loaded", current.c_str(), n);
             }
-            options_help("Put each pack in its own folder (bin\\texture_packs\\<name>) or as a packed .rtz file (bin\\texture_packs\\<name>.rtz). Images named like the dumps replace "
+            options_help("Put each pack in its own folder (texture_packs\\<name>, next to the game) or as a packed .rtz file (texture_packs\\<name>.rtz). Images named like the dumps replace "
                          "those textures, at any size; a suffix after the name (as Upscayl adds) is fine. F6 switches to the "
                          "next pack (and to Off) while playing, to compare. Reload after adding or changing files.");
             ImGui::EndTabItem();
