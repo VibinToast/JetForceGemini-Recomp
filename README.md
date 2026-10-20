@@ -108,7 +108,8 @@ Do not attach your ROM, or anything else from `bin` beyond the files above.
 ## How it works
 
 The port uses [N64Recomp](https://github.com/N64Recomp/N64Recomp) to translate the game's code (configured by
-`jfg.us.toml` and `jfg.us.syms.toml`), [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime) in place
+`jfg.us.toml` and the symbol files in `JFGRecompSyms`, a submodule mods use too),
+[N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime) in place
 of the N64 operating system, and [RT64](https://github.com/rt64/rt64) for rendering. It is built on
 [cyscott/dkr-recomp](https://github.com/cyscott/dkr-recomp), whose history is merged into this repository: its files
 are edited here directly. The port's own code is in `src/jfg/`.
@@ -117,6 +118,10 @@ N64Recomp, N64ModernRuntime and RT64 (and RT64's plume) are git submodules in `l
 fork on its `jfg` branch: the base project's fixes and the port's own changes are commits there. To change one,
 commit on that fork's `jfg` branch and commit the new submodule commit here; the build scripts check out the
 commits this repository pins (set `JFG_KEEP_LIBS=1` to build with `lib/` as it is).
+
+The symbol files are the `JFGRecompSyms` submodule at the root, pinned the same way. To update them, regenerate them
+from a decomp build with `tools/gen_reference_syms.py`, commit them in JFGRecompSyms, then commit the new submodule
+commit here.
 
 ## AI disclosure
 

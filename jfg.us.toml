@@ -1,15 +1,17 @@
-# N64Recomp config for Jet Force Gemini (US) — MAIN SEGMENT ONLY (overlays are not recompiled yet).
+# N64Recomp config for Jet Force Gemini (US): the main segment and the 155 overlays.
 #
-# Input: the user's own ROM plus jfg.us.syms.toml (function symbols exported from the matching decomp ELF).
+# Input: the user's own ROM, pre-linked by tools/prepare_overlays.py (overlays at private addresses from 0x82000000),
+# plus JFGRecompSyms/jfg.us.syms.toml (function symbols from the matching decomp ELF; a submodule shared with mods).
 # After running N64Recomp, run tools/merge_gen_anim_data.py on the output directory.
 [input]
-symbols_file_path = "jfg.us.syms.toml"
+symbols_file_path = "JFGRecompSyms/jfg.us.syms.toml"
 rom_file_path = "baserom.us.recomp.z64"
 output_func_path = "RecompiledFuncs"
 
 [patches]
 # Entry points inside the gen_anim_data blob (0x80073E80-0x80074E50, recompiled as one function, see
-# jfg.us.syms.toml): not generated separately; tools/merge_gen_anim_data.py writes a wrapper for each entry point.
+# JFGRecompSyms/jfg.us.syms.toml): not generated separately; tools/merge_gen_anim_data.py writes a wrapper for each
+# entry point.
 # Only the two that have sized symbols need listing here; the other 13 are size-0 labels N64Recomp never sees.
 ignored = [
     # Anti-tamper: read words that the CIC-6105 IPL3 boot code leaves in RDRAM, through KSEG1 (0xA02FB1F4 and

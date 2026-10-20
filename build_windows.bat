@@ -170,9 +170,9 @@ build-tools\RSPRecomp.exe rsp-aspMain.jfg.toml
 if errorlevel 1 ( popd & echo [jfg] ERROR: RSPRecomp failed & exit /b 1 )
 %PY% tools\merge_gen_anim_data.py RecompiledFuncs
 if errorlevel 1 ( popd & echo [jfg] ERROR: merge_gen_anim_data.py failed & exit /b 1 )
-%PY% tools\fix_dynamic_relocs.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json baserom.us.recomp.z64 jfg.us.syms.toml
+%PY% tools\fix_dynamic_relocs.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json baserom.us.recomp.z64 JFGRecompSyms\jfg.us.syms.toml
 if errorlevel 1 ( popd & echo [jfg] ERROR: fix_dynamic_relocs.py failed & exit /b 1 )
-%PY% tools\refuse_mod_hooks.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json jfg.us.syms.toml jfg.us.toml
+%PY% tools\refuse_mod_hooks.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json JFGRecompSyms\jfg.us.syms.toml jfg.us.toml
 if errorlevel 1 ( popd & echo [jfg] ERROR: refuse_mod_hooks.py failed & exit /b 1 )
 popd
 rem Saved last, so a run that stopped half-way generates the code again next time.
@@ -219,6 +219,6 @@ exit /b 0
 :inputs_hash
 rem One hash of everything the game code is made from (tools\recomp_inputs_hash.py), in INPUTS_HASH.
 set "INPUTS_HASH="
-for /f "usebackq delims=" %%h in (`%PY% "%WORK%\tools\recomp_inputs_hash.py" "%JFG_ROM%" "%WORK%\jfg.us.toml" "%WORK%\jfg.us.syms.toml" "%WORK%\rsp-aspMain.jfg.toml" "%WORK%\tools\*.py" "%WORK%\tools\jfg.us.dynamic_relocs.json" "%WORK%\build-tools\N64Recomp.exe" "%WORK%\build-tools\RSPRecomp.exe"`) do set "INPUTS_HASH=%%h"
+for /f "usebackq delims=" %%h in (`%PY% "%WORK%\tools\recomp_inputs_hash.py" "%JFG_ROM%" "%WORK%\jfg.us.toml" "%WORK%\JFGRecompSyms\jfg.us.syms.toml" "%WORK%\rsp-aspMain.jfg.toml" "%WORK%\tools\*.py" "%WORK%\tools\jfg.us.dynamic_relocs.json" "%WORK%\build-tools\N64Recomp.exe" "%WORK%\build-tools\RSPRecomp.exe"`) do set "INPUTS_HASH=%%h"
 if not defined INPUTS_HASH ( echo [jfg] ERROR: recomp_inputs_hash.py failed & exit /b 1 )
 exit /b 0
