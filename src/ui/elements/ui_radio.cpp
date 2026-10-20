@@ -17,7 +17,7 @@ namespace recompui {
         set_line_height(20.0f);
         set_font_weight(400);
         set_font_style(FontStyle::Normal);
-        set_border_color(Color{ 242, 242, 242, 0 });
+        set_border_color(Color{ 232, 243, 255, 0 });
         set_border_bottom_width(1.0f);
         set_color(Color{ 255, 255, 255, 153 });
         set_padding_bottom(8.0f);
@@ -25,8 +25,8 @@ namespace recompui {
         set_height_auto();
         hover_style.set_color(Color{ 255, 255, 255, 204 });
         checked_style.set_color(Color{ 255, 255, 255, 255 });
-        checked_style.set_border_color(Color{ 242, 242, 242, 255 });
-        pulsing_style.set_border_color(Color{ 233, 176, 53, 244 });
+        checked_style.set_border_color(Color{ 232, 243, 255, 255 });
+        pulsing_style.set_border_color(Color{ 255, 178, 26, 244 });
 
         add_style(&hover_style, { hover_state });
         add_style(&checked_style, { checked_state });

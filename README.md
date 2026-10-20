@@ -1,18 +1,15 @@
-# Jet Force Gemini: Recompiled
-
 ![Recomp Banner](images/jfg-logo-recomp-transparent.png)
 
 A native 100% playable PC port of Jet Force Gemini (N64, US) for Windows and Linux, made by static recompilation. No emulator:
 the game's code is translated from your ROM and compiled for your PC.
 
-**Current Progress:** Got mostly everything I wanted, just quality of life stuff now.
+**Current Progress:** Quality of Life features & Mod support.
 
 **No game code or assets are included.** You need your own ROM.
 
 ## ROM
 
-Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630cf23a023`. Save it as
-`baserom.us.z64` in this folder.
+Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630cf23a023`.
 
 ## Features
 
@@ -60,6 +57,9 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 
 (Making a release instead: see [docs/RELEASING.md](docs/RELEASING.md).)
 
+ Save your rom as
+`baserom.us.z64` in this folder.
+
 **Windows** (10/11, Direct3D 12 GPU): install Visual Studio 2022 (Desktop development with C++, plus C++ Clang
 tools), Git and Python 3. Run `build_windows.bat` (the first build takes 10-40 minutes, about 15 GB), then
 `run_windows.bat`.
@@ -86,6 +86,24 @@ Keep `bin` private, because it holds a copy of the ROM.
 | F5 / F6 | Back to the title screen / next texture pack |
 | F7 | Fly camera |
 | F11 / Alt+Enter | Fullscreen |
+
+## Reporting bugs
+
+Report bugs on the [Issues page](https://github.com/VibinToast/JetForceGemini-Recomp/issues). Check first whether it
+is already reported there or listed in [KnownIssues.md](KnownIssues.md).
+
+Please include:
+- **What happened and what you expected.** Steps to make it happen again, if you know them.
+- **Where.** The level and roughly where in it (Settings > Visuals > Show Level puts the level on screen), or the
+  menu or cutscene.
+- **Your setup.** The release version or commit, Windows or Linux, your GPU, and your monitor's refresh rate.
+- **Your settings**, if they could matter: the profile, Frame Rate, Widescreen, and the Graphics menu's Framerate.
+  `jfg_port_options.txt` and `graphics.json` from the `bin` folder hold them.
+- **A screenshot or video**, for anything visual.
+- **Logs**, if the game crashed or stopped with an error: `crash.log`, `jfg_error.log` and `jfg_memory.log` from the
+  `bin` folder, whichever exist.
+
+Do not attach your ROM, or anything else from `bin` beyond the files above.
 
 ## How it works
 
