@@ -10,6 +10,7 @@
 #include "ultramodern/config.hpp"
 #include "ultramodern/ultramodern.hpp"
 #include "RmlUi/Core.h"
+#include <map>
 
 #include "core/ui_context.h"
 #include "jfg/jfg_settings_api.h" // JFG PORT
@@ -33,11 +34,53 @@ Rml::DataModelHandle jfg_graphics_model_handle;
 Rml::DataModelHandle jfg_textures_model_handle;
 Rml::DataModelHandle jfg_profiles_model_handle;
 struct JfgProfileEntry { Rml::String name; bool selected = false; };
-struct JfgPackEntry { Rml::String folder; Rml::String label; bool selected = false; };
+// A texture pack in the Textures tab's list: its credits.json details (if any) and its image (pack_image.png), loaded into
+// the UI as "jfg_pack_<n>" (image is its source in RML, "/jfg_pack_<n>", as for the launcher's logo; empty if none).
+struct JfgPackEntry {
+    Rml::String folder; Rml::String label; bool selected = false;
+    Rml::String version, author; // "Version 1.2", "by VibinToast" (empty if credits.json has none)
+    Rml::String website, description, image;
+    bool no_details = false; // a pack without credits.json
+    Rml::String kind;        // the label on its button: "Folder" or ".rtz" ("" for Off)
+};
 static std::vector<JfgProfileEntry> jfg_profile_entries;
 static std::vector<JfgPackEntry> jfg_pack_entries;
 static Rml::String jfg_new_profile_name;
 static Rml::String jfg_pack_status, jfg_dump_status;
+static int jfg_pack_view = 0; // the pack whose details the Textures tab shows (the focused one, at first the one in use)
+// The packs' images given to the UI: folder -> (details serial, image src).
+static std::map<std::string, std::pair<int, std::string>> jfg_pack_images;
+static int jfg_pack_image_count = 0;
+
+static void jfg_fill_pack_entry(JfgPackEntry& e) {
+    if (e.folder.empty()) {
+        e.description = "The game's own textures.";
+        return;
+    }
+    std::string ext = e.folder.size() > 4 ? e.folder.substr(e.folder.size() - 4) : std::string();
+    for (char& ch : ext) ch = (char)std::tolower((unsigned char)ch);
+    e.kind = ext == ".rtz" ? ".rtz" : "Folder";
+    jfg::settings::TexturePackDetails d = jfg::settings::texture_pack_details(e.folder);
+    if (!d.version.empty()) e.version = "Version " + d.version;
+    if (!d.author.empty()) e.author = (e.version.empty() ? "By " : "by ") + d.author;
+    e.website = d.website;
+    e.description = d.has_json ? d.description : std::string();
+    e.no_details = !d.has_json;
+    // The images wait for the next refresh while the UI is still being made (none can be queued yet).
+    if (!recompui::can_queue_images()) return;
+    auto it = jfg_pack_images.find(e.folder);
+    if (it != jfg_pack_images.end() && it->second.first != d.serial) {
+        recompui::release_image(it->second.second);
+        jfg_pack_images.erase(it);
+        it = jfg_pack_images.end();
+    }
+    if (it == jfg_pack_images.end() && !d.image.empty()) {
+        const std::string src = "jfg_pack_" + std::to_string(++jfg_pack_image_count);
+        recompui::queue_image_from_bytes_file(src, d.image);
+        it = jfg_pack_images.emplace(e.folder, std::make_pair(d.serial, src)).first;
+    }
+    if (it != jfg_pack_images.end()) e.image = "/" + it->second.second;
+}
 
 // Rebuilds the lists and marks every port value as changed (settings can also change from the F9 menu and profiles).
 void jfg_config_menu_refresh() {
@@ -46,7 +89,15 @@ void jfg_config_menu_refresh() {
     for (const std::string& n : jfg::settings::profiles()) jfg_profile_entries.push_back({ n, n == active });
     jfg_pack_entries.clear();
     const std::string pack = jfg::settings::texture_pack();
-    for (const std::string& f : jfg::settings::texture_packs()) jfg_pack_entries.push_back({ f, jfg::settings::texture_pack_name(f), f == pack });
+    for (const std::string& f : jfg::settings::texture_packs()) {
+        JfgPackEntry& e = jfg_pack_entries.emplace_back();
+        e.folder = f;
+        e.label = jfg::settings::texture_pack_name(f);
+        e.selected = f == pack;
+        jfg_fill_pack_entry(e);
+        if (e.selected) jfg_pack_view = (int)jfg_pack_entries.size() - 1;
+    }
+    if (jfg_pack_view >= (int)jfg_pack_entries.size()) jfg_pack_view = 0;
     const int count = jfg::settings::texture_pack_count();
     jfg_pack_status = "In use: " + jfg::settings::texture_pack_name(pack) + (pack.empty() || count < 0 ? std::string() : " (" + std::to_string(count) + " textures)");
     const int dumped = jfg::settings::dumped_texture_files();
@@ -1232,11 +1283,33 @@ public:
                 entry.RegisterMember("folder", &JfgPackEntry::folder);
                 entry.RegisterMember("label", &JfgPackEntry::label);
                 entry.RegisterMember("selected", &JfgPackEntry::selected);
+                entry.RegisterMember("version", &JfgPackEntry::version);
+                entry.RegisterMember("author", &JfgPackEntry::author);
+                entry.RegisterMember("website", &JfgPackEntry::website);
+                entry.RegisterMember("description", &JfgPackEntry::description);
+                entry.RegisterMember("image", &JfgPackEntry::image);
+                entry.RegisterMember("no_details", &JfgPackEntry::no_details);
+                entry.RegisterMember("kind", &JfgPackEntry::kind);
             }
             constructor.RegisterArray<std::vector<JfgPackEntry>>();
             constructor.Bind("packs", &jfg_pack_entries);
             constructor.Bind("pack_status", &jfg_pack_status);
             constructor.Bind("dump_status", &jfg_dump_status);
+            constructor.Bind("pack_view", &jfg_pack_view);
+            // A pack button got focus or the mouse: its details on the right (they stay while the focus moves on to
+            // the website button).
+            constructor.BindEventCallback("view_pack", [](Rml::DataModelHandle model, Rml::Event&, const Rml::VariantList& args) {
+                if (args.empty()) return;
+                jfg_pack_view = args[0].Get<int>();
+                focused_config_option_index = -1; // not a dumping option's description
+                model.DirtyVariable("pack_view");
+                model.DirtyVariable("cur_config_index");
+            });
+            constructor.BindEventCallback("open_pack_website", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+                if (jfg_pack_view < 0 || jfg_pack_view >= (int)jfg_pack_entries.size()) return;
+                const std::string& url = jfg_pack_entries[jfg_pack_view].website;
+                if (url.rfind("https://", 0) == 0 || url.rfind("http://", 0) == 0) SDL_OpenURL(url.c_str());
+            });
             constructor.BindEventCallback("set_pack", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
                 jfg::settings::set_texture_pack(args.empty() ? std::string() : args[0].Get<Rml::String>());
                 jfg_config_menu_refresh();

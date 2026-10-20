@@ -28,7 +28,15 @@ extern std::mutex g_pack_mutex;
 extern std::string g_pack_folder; // relative to the app folder, "" = none
 extern std::chrono::steady_clock::time_point g_pack_toast; // when F6 last switched packs (on-screen note)
 std::vector<std::string> list_texture_packs();
-std::string pack_display_name(const std::string& folder);
+// A pack's credits.json (at the top of its folder or .rtz) and the image it names; all empty if it has none.
+struct PackInfo {
+    bool has_json = false;
+    int serial = 0;          // a new number each time the details are read again (the files changed)
+    std::string name, version, author, website, description;
+    std::vector<char> image; // the image file's bytes (pack_image.png unless credits.json names another)
+};
+PackInfo texture_pack_info(const std::string& folder); // re-read when the pack's files change
+std::string pack_display_name(const std::string& folder); // credits.json's name, else the folder / .rtz name
 void set_texture_pack(const std::string& folder); // saves the choice and makes the renderer (re)load it
 void load_texture_pack_choice();
 void next_texture_pack();                         // F6

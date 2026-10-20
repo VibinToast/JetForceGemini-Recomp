@@ -229,7 +229,7 @@ def first_id(items):
     kind, key, _, extra, _ = next(i for i in items if i[0] != "group")
     return row_ids(kind, key, extra)[0]
 
-def options_tab(name, items, tab_id, extra_markup="", before_markup=""):
+def options_tab(name, items, tab_id, extra_markup="", before_markup="", desc_markup=""):
     # With markup before the options, that markup's first element goes up to the tab instead.
     body, helps, _ = option_markup(items, None if before_markup else "#" + tab_id)
     return "\n".join([
@@ -248,6 +248,7 @@ def options_tab(name, items, tab_id, extra_markup="", before_markup=""):
         '                <!-- Descriptions -->',
         '                <div class="config__wrapper jfg-desc">',
         *helps,
+        *([desc_markup] if desc_markup else []),
         '                </div>',
         '            </div>',
         '        </form>',
@@ -255,12 +256,22 @@ def options_tab(name, items, tab_id, extra_markup="", before_markup=""):
         '</template>',
         ''])
 
-# Pack buttons get ids (jfg_pack_0, ...) so the tabs / the launcher's sidebar can go down/right to the first one.
+# Pack buttons get ids (jfg_pack_0, ...) so the tabs / the launcher's sidebar can go down/right to the first one. Each
+# is a card: the pack's image (pack_image.png), its name, version and author (credits.json), and whether it is a folder
+# or an .rtz file. Focusing or pointing at one
+# shows its details on the right (PACK_DETAILS).
 TEXTURE_PACKS = '''                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Texture Pack</label></div>
                     <div class="config-option jfg-option" style="flex: 0 0 auto;">
                         <label class="config-option__title">{{pack_status}}</label>
-                        <div style="display: block; width: 100%;">
-                            <button class="button" style="display: inline-block; margin: 8dp; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto;" data-for="p : packs" data-attr-id="'jfg_pack_' + it_index" data-style-nav-left="it_index == 0 ? '#tab_jfg_textures' : 'auto'" data-style-nav-up="it_index == 0 ? '#tab_jfg_textures' : 'auto'" data-event-click="set_pack(p.folder)" data-class-jfg-selected="p.selected">{{p.label}}</button>
+                        <div class="jfg-pack-list">
+                            <button class="button jfg-pack" data-for="p : packs" data-attr-id="'jfg_pack_' + it_index" data-style-nav-left="it_index == 0 ? '#tab_jfg_textures' : 'auto'" data-style-nav-up="it_index == 0 ? '#tab_jfg_textures' : 'auto'" data-event-click="set_pack(p.folder)" data-event-focus="view_pack(it_index)" data-event-mouseover="view_pack(it_index)" data-class-jfg-selected="p.selected">
+                                <div class="jfg-pack__thumb" data-style-decorator="p.image != '' ? 'image(' + p.image + ' contain)' : 'none'"></div>
+                                <div class="jfg-pack__text">
+                                    <div class="jfg-pack__name">{{p.label}}</div>
+                                    <div class="jfg-pack__meta">{{p.version}} {{p.author}}</div>
+                                </div>
+                                <div class="jfg-pack__kind" data-if="p.kind != ''">{{p.kind}}</div>
+                            </button>
                         </div>
                         <div style="display: block; width: 100%;">
                             <button class="button" style="display: inline-block; margin: 8dp; nav-up: auto; nav-down: auto; nav-left: #tab_jfg_textures;" data-event-click="reload_pack()">Reload Pack</button>
@@ -268,6 +279,19 @@ TEXTURE_PACKS = '''                    <div class="config-option" style="margin:
                         </div>
                         <div class="jfg-note" style="display: block; margin: 8dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Packs are the folders (or .rtz files) in the texture_packs folder next to the game. F6 switches packs while playing. Reload after adding or changing files. {{dump_status}}</div>
                     </div>'''
+
+# The Textures tab's right side while no option is focused: the pack last focused (at first the one in use), with its
+# image, name, version, author, description and website (credits.json).
+PACK_DETAILS = '''                    <div data-if="cur_config_index == -1"><div data-for="p : packs"><div data-if="it_index == pack_view">
+                        <div class="jfg-pack-detail__image" data-if="p.image != ''" data-style-decorator="p.image != '' ? 'image(' + p.image + ' contain)' : 'none'"></div>
+                        <div class="jfg-desc__card">
+                            <div class="jfg-desc__title">{{p.label}}</div>
+                            <div class="jfg-pack-detail__meta" data-if="p.version != '' || p.author != ''">{{p.version}} {{p.author}}</div>
+                            <p data-if="p.description != ''">{{p.description}}</p>
+                            <p data-if="p.no_details">This pack has no credits.json with its details.</p>
+                            <button class="button jfg-pack-detail__site" data-if="p.website != ''" data-event-click="open_pack_website()">{{p.website}}</button>
+                        </div>
+                    </div></div></div>'''
 
 PROFILES = '''<template name="config-menu__jfg_profiles">
     <head>
@@ -346,7 +370,8 @@ def main():
     cm = os.path.join(root, "assets", "config_menu")
     for name, items, extra, before in OPTION_TABS:
         with open(os.path.join(cm, name + ".rml"), "w", newline="\n") as f:
-            f.write(options_tab(name, items, "tab_" + name, extra_markup=extra, before_markup=before))
+            f.write(options_tab(name, items, "tab_" + name, extra_markup=extra, before_markup=before,
+                                desc_markup=PACK_DETAILS if name == "jfg_textures" else ""))
     with open(os.path.join(cm, "jfg_profiles.rml"), "w", newline="\n") as f:
         f.write(PROFILES)
     with open(os.path.join(root, "src", "jfg", "jfg_config_keys.inc"), "w", newline="\n") as f:

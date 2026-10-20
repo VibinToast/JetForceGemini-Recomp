@@ -1157,6 +1157,11 @@ void recompui::queue_image_from_bytes_rgba32(const std::string &src, const std::
     ui_state->render_interface.queue_image_from_bytes_rgba32(src, bytes, width, height);
 }
 
+// JFG PORT: the config menu's first refresh runs inside UIState's constructor, before ui_state is set.
+bool recompui::can_queue_images() {
+    return ui_state != nullptr;
+}
+
 void recompui::release_image(const std::string &src) {
     Rml::ReleaseTexture(src);
 }

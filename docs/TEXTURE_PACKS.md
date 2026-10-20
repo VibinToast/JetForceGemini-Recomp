@@ -60,6 +60,28 @@ pack folder. Some notes:
 The game writes a file called `rt64.json` into the pack folder. It lists every image it found, and you need it for
 the packing steps below, so select the pack in the game at least once.
 
+## Give the pack a name, author and image
+
+Put a file called `credits.json` at the top of the pack folder, next to `rt64.json`:
+
+```json
+{
+  "name": "4K-Toasty-HD",
+  "version": "1.2",
+  "author": "VibinToast",
+  "website": "https://vibintoast.com/",
+  "description": "My official upscaled Textures for Jet Force Gemini.",
+  "image": "pack_image.png"
+}
+```
+
+Every field is optional. The **Textures** tab (and the launcher's Texture Packs page) lists the pack under `name`
+with its version and author, and shows the image, the description and a button for the website when the pack is
+selected or highlighted. `image` is a PNG at the top of the pack, `pack_image.png` if left out; it is shown square, so
+a square picture (64x64 or larger) fits best. Without `credits.json` the pack is listed by its folder or file name.
+
+`png_to_dds.bat` copies `credits.json` and the image into the `_dds` folder, and `make_rtz.bat` packs them into the `.rtz`.
+
 ## 4. Convert to DDS (optional)
 
 PNG packs work fine. DDS is the format graphics cards read directly, so a DDS pack needs less video memory and

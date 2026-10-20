@@ -14,6 +14,7 @@ extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_frame_rate.cpp: "Fra
 
 #include <array>
 #include <cctype>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <chrono>
@@ -918,8 +919,17 @@ void RT64Context::check_texture_pack_actions() {
                 if (zip_file != nullptr) {
                     mz_zip_archive zip = {};
                     if (mz_zip_reader_init_cfile(&zip, zip_file, 0, 0)) {
-                        count = mz_zip_reader_get_num_files(&zip);
-                        if (count > 0) count--; // rt64.json
+                        // The images named by a texture hash (not rt64.json, pack.json or the pack's image).
+                        const mz_uint files = mz_zip_reader_get_num_files(&zip);
+                        for (mz_uint i = 0; i < files; i++) {
+                            char name[512] = {};
+                            mz_zip_reader_get_filename(&zip, i, name, sizeof(name));
+                            const char* base = std::strrchr(name, '/');
+                            base = base != nullptr ? base + 1 : name;
+                            size_t hex = 0;
+                            while (hex < 16 && std::isxdigit((unsigned char)base[hex])) hex++;
+                            if (hex == 16) count++;
+                        }
                         mz_zip_reader_end(&zip);
                     }
                     std::fclose(zip_file);
