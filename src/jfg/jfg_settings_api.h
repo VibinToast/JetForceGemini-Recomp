@@ -9,6 +9,9 @@ namespace jfg::settings {
     // Options by their saved key (jfg_port_options.txt), plus "texture_dump" (this session only).
     int get(const std::string& key);
     void set(const std::string& key, int value);
+    // "Frame rate" applies from the next start: true once it was changed while the game runs.
+    bool frame_rate_needs_restart();
+    void restart_game();                   // starts the game again with the same arguments and quits this run
 
     // Profiles (Default, Modern, Modern and Balanced, Extreme, then the player's own).
     std::vector<std::string> profiles();

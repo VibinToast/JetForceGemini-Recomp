@@ -23,6 +23,8 @@
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
+#include "jfg_update_check.h"
+#include "ultramodern/ultramodern.hpp"
 
 namespace jfg::settings {
 int get(const std::string& key) {
@@ -47,6 +49,16 @@ void set(const std::string& key, int value) {
     apply_option(key.c_str(), value);
     push_render_options();
     save_options();
+}
+
+bool frame_rate_needs_restart() {
+    return jfg::frame_rate_needs_restart();
+}
+
+void restart_game() {
+    save_options();
+    jfg_update_restart(); // with no update waiting it only starts this exe again
+    ultramodern::quit();
 }
 
 std::vector<std::string> profiles() {
