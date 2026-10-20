@@ -413,8 +413,10 @@ public:
     void hide_context(recompui::ContextId context) {
         auto remove_it = std::remove_if(shown_contexts.begin(), shown_contexts.end(), [context](auto& c) { return c.context == context; });
         if (remove_it == shown_contexts.end()) {
-            recompui::message_box("Attemped to hide a context that isn't shown");
-            assert(false);
+            // JFG PORT: hiding something already hidden (a menu closed twice before it went) is harmless; it was a fatal
+            // error box that froze the game. Logged, so a real double close can still be traced.
+            fprintf(stderr, "[ui] Attempted to hide a context that isn't shown (ignored)\n");
+            return;
         }
         shown_contexts.erase(remove_it, shown_contexts.end());
 
@@ -680,9 +682,11 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                 it->second >= 2000 ? "pressed" : it->second >= 1000 ? "released" : "pressed and released");
             it = debug_ui_presses.erase(it);
         }
-        // every change of the launcher's focus, with what the element is
+        // every change of the focus, with what the element is (the launcher's, or the config menu's while that is shown)
         static Rml::Element* last_focus = nullptr;
-        if (Rml::ElementDocument* doc = recompui::is_context_shown(recompui::get_launcher_context_id()) ? recompui::get_launcher_context_id().get_document() : nullptr) {
+        Rml::ElementDocument* focus_doc = recompui::is_context_shown(recompui::get_launcher_context_id()) ? recompui::get_launcher_context_id().get_document()
+            : recompui::is_context_shown(recompui::get_config_context_id()) ? recompui::get_config_context_id().get_document() : nullptr;
+        if (Rml::ElementDocument* doc = focus_doc) {
             Rml::Element* focus = doc->GetFocusLeafNode();
             if (focus != last_focus) {
                 last_focus = focus;
@@ -692,7 +696,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                         (e->GetClassNames().empty() ? "" : "." + e->GetClassNames()) + ">" + (path.empty() ? "" : " " + path);
                     if (!e->GetId().empty()) break;
                 }
-                fprintf(stderr, "[ui-input] %.2f s: launcher focus %s\n", since, path.c_str());
+                fprintf(stderr, "[ui-input] %.2f s: focus %s\n", since, path.c_str());
             }
         }
         if (clock::now() >= debug_ui_next_log) {
@@ -701,9 +705,9 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                 if (!recompui::is_context_shown(id)) continue;
                 Rml::ElementDocument* doc = id.get_document();
                 Rml::Element* focus = doc != nullptr ? doc->GetFocusLeafNode() : nullptr;
-                fprintf(stderr, "[ui-input] %.1f s: %s shown, capturing input %d, focus <%s id=\"%s\"> visible %d\n", since, name,
+                fprintf(stderr, "[ui-input] %.1f s: %s shown, capturing input %d, focus <%s id=\"%s\"> visible %d, prompt open %d\n", since, name,
                     recompui::is_context_capturing_input() ? 1 : 0, focus ? focus->GetTagName().c_str() : "-",
-                    focus ? focus->GetId().c_str() : "", focus ? (focus->IsVisible(true) ? 1 : 0) : 0);
+                    focus ? focus->GetId().c_str() : "", focus ? (focus->IsVisible(true) ? 1 : 0) : 0, recompui::is_prompt_open() ? 1 : 0);
             }
         }
     }

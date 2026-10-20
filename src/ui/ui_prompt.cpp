@@ -20,6 +20,9 @@ struct {
 } prompt_state;
 
 void run_confirm_callback() {
+    // JFG PORT: a second press (A held: the menu's key repeat, or two quick presses) can reach the button after the
+    // prompt has closed; hiding it again was a fatal "context isn't shown" error and ran the action twice.
+    if (!recompui::is_context_shown(prompt_state.ui_context)) return;
     recompui::hide_context(prompt_state.ui_context);
 
     std::function<void()> confirm_action;
@@ -36,6 +39,7 @@ void run_confirm_callback() {
 }
 
 void run_cancel_callback() {
+    if (!recompui::is_context_shown(prompt_state.ui_context)) return; // JFG PORT: as in run_confirm_callback
     recompui::hide_context(prompt_state.ui_context);
     
     std::function<void()> cancel_action;
