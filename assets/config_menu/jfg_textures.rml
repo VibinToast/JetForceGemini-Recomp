@@ -17,32 +17,22 @@
                         </div>
                         <div class="jfg-note" style="display: block; margin: 8dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Packs are the folders in bin\texture_packs. F6 switches packs while playing. Reload after adding or changing files. {{dump_status}}</div>
                     </div>
-                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">On Screen</label></div>
-                    <div class="config-option" data-event-mouseover="set_cur_config_index(0)">
-                        <label class="config-option__title">Show Texture Pack</label>
-                        <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_show_pack" data-checked="show_pack" value="1" id="jfg_show_pack_on" style="nav-down: #jfg_texture_dump_on;"/>
-                            <label class="config-option__tab-label" for="jfg_show_pack_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_show_pack" data-checked="show_pack" value="0" id="jfg_show_pack_off" style="nav-down: #jfg_texture_dump_off;"/>
-                            <label class="config-option__tab-label" for="jfg_show_pack_off">Off</label>
-                        </div>
-                    </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Texture Dumping</label></div>
-                    <div class="config-option" data-event-mouseover="set_cur_config_index(1)">
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(0)">
                         <label class="config-option__title">Dump Textures</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(1)" name="jfg_texture_dump" data-checked="texture_dump" value="1" id="jfg_texture_dump_on" style="nav-up: #jfg_show_pack_on; nav-down: #jfg_dump_by_level_on;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_texture_dump" data-checked="texture_dump" value="1" id="jfg_texture_dump_on" style="nav-down: #jfg_dump_by_level_on;"/>
                             <label class="config-option__tab-label" for="jfg_texture_dump_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(1)" name="jfg_texture_dump" data-checked="texture_dump" value="0" id="jfg_texture_dump_off" style="nav-up: #jfg_show_pack_off; nav-down: #jfg_dump_by_level_off;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_texture_dump" data-checked="texture_dump" value="0" id="jfg_texture_dump_off" style="nav-down: #jfg_dump_by_level_off;"/>
                             <label class="config-option__tab-label" for="jfg_texture_dump_off">Off</label>
                         </div>
                     </div>
-                    <div class="config-option" data-event-mouseover="set_cur_config_index(2)">
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(1)">
                         <label class="config-option__title">One Folder per Level</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_dump_by_level" data-checked="dump_by_level" value="1" id="jfg_dump_by_level_on" style="nav-up: #jfg_texture_dump_on; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(1)" name="jfg_dump_by_level" data-checked="dump_by_level" value="1" id="jfg_dump_by_level_on" style="nav-up: #jfg_texture_dump_on; nav-down: none;"/>
                             <label class="config-option__tab-label" for="jfg_dump_by_level_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(2)" name="jfg_dump_by_level" data-checked="dump_by_level" value="0" id="jfg_dump_by_level_off" style="nav-up: #jfg_texture_dump_off; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(1)" name="jfg_dump_by_level" data-checked="dump_by_level" value="0" id="jfg_dump_by_level_off" style="nav-up: #jfg_texture_dump_off; nav-down: none;"/>
                             <label class="config-option__tab-label" for="jfg_dump_by_level_off">Off</label>
                         </div>
                     </div>
@@ -50,9 +40,8 @@
                 </div>
                 <!-- Descriptions -->
                 <div class="config__wrapper">
-                    <p data-if="cur_config_index == 0">The texture pack in use in the top right corner.</p>
-                    <p data-if="cur_config_index == 1">Saves every texture the game draws, the first time it appears, to bin\texture_dump as &lt;hash&gt;.png. Off again at the next start. Upscale the files without renaming them and put them in a pack folder (bin\texture_packs\&lt;name&gt;).</p>
-                    <p data-if="cur_config_index == 2">Dumps into bin\texture_dump\&lt;level number&gt; &lt;level name&gt; instead.</p>
+                    <p data-if="cur_config_index == 0">Saves every texture the game draws, the first time it appears, to bin\texture_dump as &lt;hash&gt;.png. Off again at the next start. Upscale the files without renaming them and put them in a pack folder (bin\texture_packs\&lt;name&gt;).</p>
+                    <p data-if="cur_config_index == 1">Dumps into bin\texture_dump\&lt;level number&gt; &lt;level name&gt; instead.</p>
                 </div>
             </div>
         </form>

@@ -215,8 +215,8 @@ void draw_options() {
                 changed |= ImGui::Checkbox("Camera collision", &g.camera_collision);
                 options_help("Keeps the camera from going through walls and floors when it is swung round the character, using the "
                              "game's own wall check. With it off the camera can end up outside the level.");
-                changed |= options_slider("Camera left/right %", &g.camera_speed_h, 25, 300);
-                changed |= options_slider("Camera up/down %", &g.camera_speed_v, 25, 300);
+                changed |= options_slider("Camera left/right %", &g.camera_speed_h, 10, 400);
+                changed |= options_slider("Camera up/down %", &g.camera_speed_v, 10, 400);
                 ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
                 changed |= ImGui::Checkbox("Built-in button layout", &g.dual_layout);
                 options_help("LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. "
@@ -242,7 +242,7 @@ void draw_options() {
         }
         if (ImGui::BeginTabItem("Move & Aim")) {
             options_section("Movement (any control layout)");
-            changed |= options_slider("Movement speed %", &g.move_speed, 50, 300);
+            changed |= options_slider("Movement speed %", &g.move_speed, 25, 400);
             changed |= ImGui::Checkbox("Sprint", &g.sprint);
             options_help("Hold the left stick click (controller) or Left Shift (mouse and keyboard) to run faster. In the "
                          "built-in dual-stick layout the left stick click then sprints instead of crouching (B still crouches).");
@@ -265,7 +265,7 @@ void draw_options() {
                          "like a normal jump, and it aims again on landing if the aim button is still held. Moving the left "
                          "stick forward while aiming still just walks. The sniper scope zooms with the D-pad (dual stick) or "
                          "1 / 3 (mouse and keyboard); on the original layout C-up jumps instead of zooming.");
-            changed |= options_slider("Aim speed %", &g.aim_speed, 20, 200);
+            changed |= options_slider("Aim speed %", &g.aim_speed, 10, 300);
             changed |= ImGui::Checkbox("Sniper rifle: fixed zoom", &g.sniper_fixed_zoom);
             changed |= options_slider("Sniper zoom %", &g.sniper_zoom, 100, 500);
             options_help("With the fixed zoom the zoom buttons do nothing, so walking forward and back while aiming the "
