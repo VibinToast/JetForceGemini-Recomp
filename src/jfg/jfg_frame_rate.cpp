@@ -24,9 +24,12 @@ namespace jfg {
 // main loop) and the renderer's interpolation are set up for one frame rate, and switching while the game runs left
 // them out of step. The value is taken the first time the game asks for it; until then (the launcher) it follows the
 // option. Changing the option later only saves it; the menus offer a restart (frame_rate_needs_restart).
+// Off for now (owner's frame rate tests): the option applies at once again and no restart is offered.
+constexpr bool FRAME_RATE_NEEDS_RESTART = false;
 static std::atomic<int> g_running_frame_rate{ -1 };
 
 int game_frame_rate() {
+    if (!FRAME_RATE_NEEDS_RESTART) return g.frame_rate;
     int rate = g_running_frame_rate.load(std::memory_order_acquire);
     if (rate < 0) {
         int expected = -1;
@@ -99,11 +102,15 @@ extern "C" int jfg_sched_task_ready(void) {
     return 1;
 }
 
-// Read by the renderer thread (src/renderer/renderer.cpp) for the "Frame rate" option: 0 = Original (the frames the
-// game draws), 1 = Display (RT64 adds in-between frames up to the monitor's refresh rate). It is the only frame rate
-// setting in the menus: the recomp's own Framerate (rr_option, -1 here) is no longer shown.
+// Read by the renderer thread (src/renderer/renderer.cpp) for the "Frame rate" option: -1 = Original, which leaves it to
+// the Graphics tab's Renderer Framerate (rr_option: Original, Display or Manual), 0 = 60 (the frames the game draws),
+// 1 = 60 + Interpolated (RT64 adds in-between frames up to the monitor's refresh rate or the Interpolation Limit).
 extern "C" int jfg_refresh_override(void) {
-    return running_frame_rate() == 2 ? 1 : 0;
+    switch (running_frame_rate()) {
+        case 1: return 0;
+        case 2: return 1;
+        default: return -1;
+    }
 }
 
 // Read with it for "60 + Interpolated": the "Interpolation Limit" option, the most frames a second RT64 makes
