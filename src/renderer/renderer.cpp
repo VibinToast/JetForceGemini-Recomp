@@ -1,13 +1,31 @@
+extern "C" int jfg_skip_render_active(void); // src/jfg/jfg_cutscene_skip.cpp
+extern "C" int jfg_widescreen_active(void);  // src/jfg/jfg_visuals.cpp: the "Widescreen" option of the F9 menu
+extern "C" int jfg_texture_dump_active(void);
+extern "C" void jfg_texture_dump_scene(char* buf, int size); // src/jfg/jfg_texture_packs.cpp: the scene tag of draw_trace.txt
+extern "C" void jfg_texture_dump_folder(char* buf, int size); // src/jfg/jfg_texture_packs.cpp: "One folder per level"  // src/jfg/jfg_texture_packs.cpp: "Dump textures" (F9 -> Textures)
+extern "C" int jfg_texture_pack_current(char* buf, int size); // the chosen pack folder (relative, "" = none); returns a change counter
+extern "C" int jfg_texture_three_point(void); // src/jfg/jfg_visuals.cpp: "Texture filtering" (1 = the N64's three-point filter)
+extern "C" int jfg_output_filtering(void);    // src/jfg/jfg_visuals.cpp: "Picture scaling" (0 anti-aliased pixel scaling, 1 linear, 2 nearest)
+extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_frame_rate.cpp: "Frame rate" option; -1 = use the Graphics setting, 0 = Original, 1 = Display
 #define HLSL_CPU
 #include "hle/rt64_application.h"
 #include "renderer.hpp"
 
 #include <array>
+#include <cctype>
+#include <filesystem>
+#include <fstream>
 #include <chrono>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
+#include <unordered_set>
 #include <variant>
+#include <vector>
+
+#include <json/json.hpp>
 
 #include "ultramodern/config.hpp"
 
@@ -168,7 +186,11 @@ RT64::UserConfiguration::AspectRatio to_rt64(ultramodern::renderer::AspectRatio 
         case ultramodern::renderer::AspectRatio::Original:
             return RT64::UserConfiguration::AspectRatio::Original;
         case ultramodern::renderer::AspectRatio::Expand:
-            return RT64::UserConfiguration::AspectRatio::Expand;
+            // JFG PORT: "Expand" widens the render target and relies on widescreen patches in the game (the base
+            // project has them for Diddy Kong Racing; Jet Force Gemini has none). Without them only full-width
+            // rectangles (screen clears, fades, flashes) spill into the side borders, which shows up as the
+            // borders flickering. Treat it as Original until JFG gets real widescreen support.
+            return RT64::UserConfiguration::AspectRatio::Original;
         case ultramodern::renderer::AspectRatio::Manual:
             return RT64::UserConfiguration::AspectRatio::Manual;
         case ultramodern::renderer::AspectRatio::OptionCount:
@@ -217,6 +239,14 @@ RT64::UserConfiguration::InternalColorFormat to_rt64(ultramodern::renderer::High
     }
 }
 
+static RT64::UserConfiguration::Filtering jfg_rt64_filtering(int option) {
+    switch (option) {
+        case 1: return RT64::UserConfiguration::Filtering::Linear;
+        case 2: return RT64::UserConfiguration::Filtering::Nearest;
+        default: return RT64::UserConfiguration::Filtering::AntiAliasedPixelScaling;
+    }
+}
+
 void set_application_user_config(RT64::Application* application, const ultramodern::renderer::GraphicsConfig& config) {
     switch (config.res_option) {
         default:
@@ -250,13 +280,21 @@ void set_application_user_config(RT64::Application* application, const ultramode
             break;
     }
 
-    application->userConfig.aspectRatio = to_rt64(config.ar_option);
+    application->userConfig.aspectRatio = jfg_widescreen_active() ? RT64::UserConfiguration::AspectRatio::Expand : to_rt64(config.ar_option);
     application->userConfig.antialiasing = to_rt64(config.msaa_option);
     application->userConfig.refreshRate = to_rt64(config.rr_option);
     application->userConfig.refreshRateTarget = config.rr_manual_value;
+    // JFG PORT: the F9 menu's "Frame rate" option can override the Graphics menu's Framerate setting.
+    switch (jfg_refresh_override()) {
+        case 0: application->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Original; break;
+        case 1: application->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Display; break;
+        default: break;
+    }
     application->userConfig.internalColorFormat = to_rt64(config.hpfb_option);
     application->userConfig.displayBuffering = RT64::UserConfiguration::DisplayBuffering::Triple;
-    application->userConfig.filtering = RT64::UserConfiguration::Filtering::AntiAliasedPixelScaling;
+    // JFG PORT: the F9 / Visuals menu's filtering options (also switched while the game runs, see update_game_aspect_override).
+    application->userConfig.filtering = jfg_rt64_filtering(jfg_output_filtering());
+    application->userConfig.threePointFiltering = jfg_texture_three_point() != 0;
 }
 
 ultramodern::renderer::SetupResult map_setup_result(RT64::Application::SetupResult rt64_result) {
@@ -296,7 +334,7 @@ ultramodern::renderer::GraphicsApi map_graphics_api(RT64::UserConfiguration::Gra
 }
 
 RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool debug) {
-    fprintf(stderr, "[DKR] Initializing RT64 renderer\n");
+    fprintf(stderr, "[JFG] Initializing RT64 renderer\n");
     static unsigned char dummy_rom_header[0x40];
     recompui::set_render_hooks();
 #if !defined(__APPLE__)
@@ -392,7 +430,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
     thread_id = window_handle.thread_id;
 #endif
     const auto rt64_setup_result = app->setup(thread_id);
-    fprintf(stderr, "[DKR] RT64 setup result: %d, graphics API: %d\n",
+    fprintf(stderr, "[JFG] RT64 setup result: %d, graphics API: %d\n",
         static_cast<int>(rt64_setup_result), static_cast<int>(app->chosenGraphicsAPI));
     setup_result = map_setup_result(rt64_setup_result);
     // Get the API that RT64 chose.
@@ -412,7 +450,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
     if (dino::config::running_on_steam_deck()) {
         app->rasterShaderCache->setCompilationEnabled(false);
         app->workloadQueue->ubershadersOnly.store(true, std::memory_order_relaxed);
-        fprintf(stderr, "[DKR] Steam Deck runtime shader compilation disabled pending launcher preflight\n");
+        fprintf(stderr, "[JFG] Steam Deck runtime shader compilation disabled pending launcher preflight\n");
     }
 
     // Set the application's fullscreen state.
@@ -447,6 +485,9 @@ RT64Context::~RT64Context() {
 }
 
 void RT64Context::send_dl(const OSTask* task) {
+    // While a cutscene is being skipped the display lists of the skipped frames are dropped, so the skip runs at the
+    // speed of the game logic alone; the last picture stays up meanwhile.
+    if (jfg_skip_render_active()) return;
     check_texture_pack_actions();
     app->state->rsp->reset();
     constexpr uint32_t DkrRdramMask = 0x007FFFFFU;
@@ -458,12 +499,12 @@ void RT64Context::preload_common_shaders() {
     if ((app != nullptr) && (app->rasterShaderCache != nullptr) &&
         (app->rasterShaderCache->shaderUber != nullptr)) {
         const auto start = std::chrono::steady_clock::now();
-        fprintf(stderr, "[DKR] Finalizing RT64 common shader pipelines\n");
+        fprintf(stderr, "[JFG] Finalizing RT64 common shader pipelines\n");
         app->rasterShaderCache->shaderUber->waitForPipelineCreation();
 
         if (dino::config::running_on_steam_deck()) {
             const uint32_t shader_count_before = app->rasterShaderCache->shaderCount();
-            fprintf(stderr, "[DKR] Preloading %zu Steam Deck attract-scene shader pipelines\n",
+            fprintf(stderr, "[JFG] Preloading %zu Steam Deck attract-scene shader pipelines\n",
                 deck_attract_shader_preload.size());
 
             app->rasterShaderCache->setCompilationEnabled(true);
@@ -476,18 +517,65 @@ void RT64Context::preload_common_shaders() {
             const uint32_t shader_count_after = app->rasterShaderCache->shaderCount();
             app->workloadQueue->ubershadersOnly.store(false, std::memory_order_relaxed);
             fprintf(stderr,
-                "[DKR] Steam Deck specialized shader preflight ready (%u new); universal fallback retained\n",
+                "[JFG] Steam Deck specialized shader preflight ready (%u new); universal fallback retained\n",
                 shader_count_after - shader_count_before);
         }
 
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - start);
-        fprintf(stderr, "[DKR] RT64 common shader pipelines ready in %lld ms\n",
+        fprintf(stderr, "[JFG] RT64 common shader pipelines ready in %lld ms\n",
             static_cast<long long>(elapsed.count()));
     }
 }
 
 void RT64Context::update_game_aspect_override() {
+    // JFG PORT: everything below reads Diddy Kong Racing variables at fixed RDRAM addresses to switch the aspect
+    // ratio for some DKR menus. Those addresses hold unrelated data in Jet Force Gemini. Instead, follow the
+    // "Widescreen" option of the F9 menu (it can change while the game runs).
+    {
+        static int applied = -1;
+        const int want = jfg_widescreen_active();
+        if (want != applied) {
+            applied = want;
+            app->userConfig.aspectRatio = want ? RT64::UserConfiguration::AspectRatio::Expand : RT64::UserConfiguration::AspectRatio::Original;
+            app->updateUserConfig(false);
+        }
+        // RT64 only interpolates when the frame on screen is the one the last workload drew. In Console mode it
+        // shows what the VI points at, which with this game's buffering is the frame before, so interpolation
+        // stays off. Skip Buffering looks the drawn frame up instead. Console stays the default because it is the
+        // mode that was tested with the CPU-drawn reticles (they also show in Skip Buffering). Checked every
+        // update because enable_instant_present() sets the mode once at start-up.
+        if (std::getenv("JFG_PRESENT_MODE") == nullptr) {
+            const int r = jfg_refresh_override();
+            const bool interpolate = (r == 1) || ((r == -1) && (ultramodern::renderer::get_graphics_config().rr_option != ultramodern::renderer::RefreshRate::Original));
+            const auto wanted = interpolate ? RT64::EnhancementConfiguration::Presentation::Mode::SkipBuffering
+                                            : RT64::EnhancementConfiguration::Presentation::Mode::Console;
+            if (app->enhancementConfig.presentation.mode != wanted) {
+                app->enhancementConfig.presentation.mode = wanted;
+                app->updateEnhancementConfig();
+            }
+        }
+        // And the "Frame rate" option (Display = interpolate up to the monitor's refresh rate).
+        static int applied_rate = -2;
+        const int rate = jfg_refresh_override();
+        if (rate != applied_rate) {
+            applied_rate = rate;
+            const auto &config = ultramodern::renderer::get_graphics_config();
+            app->userConfig.refreshRate = (rate == 1) ? RT64::UserConfiguration::RefreshRate::Display
+                : (rate == 0) ? RT64::UserConfiguration::RefreshRate::Original : to_rt64(config.rr_option);
+            app->updateUserConfig(false);
+        }
+        // And the filtering options. Both are read by RT64 every frame, so no framebuffers need to be discarded.
+        const RT64::UserConfiguration::Filtering filtering = jfg_rt64_filtering(jfg_output_filtering());
+        const bool three_point = jfg_texture_three_point() != 0;
+        if ((app->userConfig.filtering != filtering) || (app->userConfig.threePointFiltering != three_point)) {
+            app->userConfig.filtering = filtering;
+            app->userConfig.threePointFiltering = three_point;
+            app->updateUserConfig(false);
+        }
+    }
+    return;
+
     // The track-select backdrop is an authored 320-pixel-wide scrolling page.
     // The post-race and results layouts likewise draw only a 4:3 page while the
     // race scene remains visible behind it. Expanding any of those projections
@@ -507,7 +595,7 @@ void RT64Context::update_game_aspect_override() {
     const bool postrace_active = rdram[DkrPostRaceViewportOffset ^ 3U] != 0;
     const int32_t game_mode = *reinterpret_cast<const int32_t *>(rdram + DkrGameModeOffset);
     const int32_t current_menu_id = *reinterpret_cast<const int32_t *>(rdram + DkrCurrentMenuIdOffset);
-    if (std::getenv("DKR_SCENE_TRACE") != nullptr) {
+    if (std::getenv("JFG_SCENE_TRACE") != nullptr) {
         static int32_t previous_game_mode = INT32_MIN;
         static int32_t previous_menu_id = INT32_MIN;
         if ((game_mode != previous_game_mode) || (current_menu_id != previous_menu_id)) {
@@ -534,7 +622,7 @@ void RT64Context::update_game_aspect_override() {
     }
 
     app->updateUserConfig(false);
-    fprintf(stderr, "[DKR] Authored 4:3 aspect override %s\n",
+    fprintf(stderr, "[JFG] Authored 4:3 aspect override %s\n",
         game_aspect_override ? "enabled" : "disabled");
 }
 
@@ -574,7 +662,14 @@ bool RT64Context::update_config(const ultramodern::renderer::GraphicsConfig& old
 
 void RT64Context::enable_instant_present() {
     // Enable the present early presentation mode for minimal latency.
-    app->enhancementConfig.presentation.mode = RT64::EnhancementConfiguration::Presentation::Mode::PresentEarly;
+    // JFG PORT: Jet Force Gemini draws some things with the CPU straight into the framebuffer after the RDP is
+    // done (mainCPUeffects -> fxOutputLines: the reticles of most weapons, digital read-outs, lines). RT64 only
+    // picks such changes up when it processes the VI update, which the PresentEarly mode skips entirely.
+    const char *mode_env = std::getenv("JFG_PRESENT_MODE"); // debug: early, skip, console
+    auto mode = RT64::EnhancementConfiguration::Presentation::Mode::Console;
+    if (mode_env != nullptr && mode_env[0] == 'e') mode = RT64::EnhancementConfiguration::Presentation::Mode::PresentEarly;
+    if (mode_env != nullptr && mode_env[0] == 's') mode = RT64::EnhancementConfiguration::Presentation::Mode::SkipBuffering;
+    app->enhancementConfig.presentation.mode = mode;
 
     app->updateEnhancementConfig();
 }
@@ -601,8 +696,147 @@ float RT64Context::get_resolution_scale() const {
     }
 }
 
+extern "C" void jfg_texture_pack_set_count(int count); // src/jfg/jfg_texture_packs.cpp: shown in Options -> Textures
+// JFG PORT: writes texture_pack/rt64.json listing every image whose name starts with a 16-digit RT64 texture hash
+// (as written by "Dump textures"), so a folder of upscaled dumps is a texture pack without any other tool.
+// An rt64.json already there is updated, not replaced: its "configuration" (a tool's "defaultShift": Toasty writes
+// "none", and without it RT64 samples every texture half a texel off) and each entry's own fields ("shift") stay.
+// Entries of textures added to the folder are added, entries whose file is gone are dropped; the file is only written
+// when that changes something. Returns the number of textures listed.
+static std::string jfg_pack_folder; // the folder pack in use, relative to the app folder ("" = none)
+static size_t jfg_write_pack_database(const std::filesystem::path& dir) {
+    std::vector<std::pair<std::string, std::string>> files; // (hash, path relative to dir), in folder order
+    std::unordered_map<std::string, std::string> file_of;   // hash -> the first file found for it
+    std::error_code ec;
+    for (std::filesystem::recursive_directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+        if (!it->is_regular_file()) continue;
+        std::string ext = it->path().extension().string();
+        for (char& c : ext) c = (char)std::tolower((unsigned char)c);
+        if (ext != ".png" && ext != ".dds") continue;
+        const std::string name = it->path().filename().string();
+        if (name.size() < 17) continue;
+        bool hex = true;
+        for (int i = 0; i < 16; i++) hex = hex && std::isxdigit((unsigned char)name[i]);
+        // <hash>.png, or with a suffix added by an upscaler (Upscayl writes <name>_upscayl_4x_<model>.png).
+        if (!hex || (name[16] != '.' && name[16] != '_' && name[16] != '-' && name[16] != ' ')) continue;
+        const auto rel_u8 = std::filesystem::relative(it->path(), dir, ec).generic_u8string();
+        const std::string rel(rel_u8.begin(), rel_u8.end());
+        std::string hash = name.substr(0, 16);
+        for (char& c : hash) c = (char)std::tolower((unsigned char)c);
+        if (file_of.emplace(hash, rel).second) files.emplace_back(hash, rel);
+    }
+
+    const std::filesystem::path db_path = dir / "rt64.json";
+    std::string old_text;
+    {
+        std::ifstream in(db_path, std::ios::binary);
+        if (in) old_text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    nlohmann::json config = { { "autoPath", "rt64" }, { "configurationVersion", 3 }, { "hashVersion", 5 } };
+    std::vector<nlohmann::json> entries;
+    std::unordered_set<std::string> listed; // hashes with an entry
+    if (!old_text.empty()) {
+        const nlohmann::json old = nlohmann::json::parse(old_text, nullptr, false);
+        if (old.is_discarded() || !old.is_object()) {
+            fprintf(stderr, "[JFG] %s could not be read, so a new one is written\n", db_path.string().c_str());
+        }
+        else {
+            const auto old_config = old.find("configuration");
+            if (old_config != old.end() && old_config->is_object()) config = *old_config;
+            const auto old_textures = old.find("textures");
+            if (old_textures != old.end() && old_textures->is_array()) {
+                for (const nlohmann::json& entry : *old_textures) {
+                    if (!entry.is_object()) continue;
+                    std::string hash;
+                    const auto hashes = entry.find("hashes");
+                    if (hashes != entry.end() && hashes->is_object()) {
+                        const auto rt64 = hashes->find("rt64");
+                        if (rt64 != hashes->end() && rt64->is_string()) hash = rt64->get<std::string>();
+                    }
+                    for (char& c : hash) c = (char)std::tolower((unsigned char)c);
+                    const auto path_it = entry.find("path");
+                    const std::string path = path_it != entry.end() && path_it->is_string() ? path_it->get<std::string>() : "";
+                    const auto file = file_of.find(hash);
+                    if (path.empty() || std::filesystem::is_regular_file(dir / std::filesystem::u8path(path), ec)) {
+                        entries.push_back(entry); // its file is there (or RT64 finds it by its hash): kept as it is
+                    }
+                    else if (file != file_of.end()) {
+                        nlohmann::json moved = entry; // the file has another name now (.png -> .dds)
+                        moved["path"] = file->second;
+                        entries.push_back(std::move(moved));
+                    }
+                    else {
+                        continue; // its file is gone
+                    }
+                    if (!hash.empty()) listed.insert(hash);
+                }
+            }
+        }
+    }
+    for (const auto& [hash, rel] : files) {
+        if (listed.insert(hash).second) {
+            entries.push_back({ { "path", rel }, { "hashes", { { "rt64", hash } } } });
+        }
+    }
+
+    std::string text = "{\n  \"configuration\": " + config.dump() + ",\n  \"textures\": [\n";
+    for (size_t i = 0; i < entries.size(); i++) {
+        text += "    " + entries[i].dump() + (i + 1 < entries.size() ? ",\n" : "\n");
+    }
+    text += "  ]\n}\n";
+    if (text != old_text) {
+        std::ofstream out(db_path, std::ios::binary);
+        out << text;
+    }
+    return files.size();
+}
+
 void RT64Context::check_texture_pack_actions() {
     bool packs_changed = false;
+
+    // JFG PORT: texture dumping and the folder pack (F9 -> Textures). Done here, on the thread that draws, because
+    // RT64 dumps while it processes display lists.
+    {
+        const bool dump = jfg_texture_dump_active() != 0;
+        // With "One folder per level" the folder follows the level: a sub-folder named after it, with its own record of
+        // what has been dumped (so a texture is saved again in every level that uses it).
+        char sub[256];
+        jfg_texture_dump_folder(sub, sizeof(sub));
+        static std::string dump_sub;
+        if (dump != app->state->dumpingTexturesPng || (dump && dump_sub != sub)) {
+            if (dump) {
+                dump_sub = sub;
+                std::filesystem::path dir = dino::config::get_app_folder_path() / "texture_dump";
+                if (!dump_sub.empty()) dir /= std::filesystem::u8path(dump_sub);
+                std::error_code ec;
+                std::filesystem::create_directories(dir, ec);
+                app->state->dumpingTexturesDirectory = dir;
+                // Textures already in the folder (an earlier session) are not written again; JFG_DEBUG_DUMP_ALL=1 keeps
+                // dumping textures the game redraws on most frames (dynamic_sources.txt) instead of moving them to _dynamic.
+                app->state->textureManager.resetDump(dir);
+                app->state->dumpingTexturesSkipDynamic = std::getenv("JFG_DEBUG_DUMP_ALL") == nullptr;
+                fprintf(stderr, "[JFG] dumping textures to %s\n", dir.string().c_str());
+            }
+            else {
+                app->state->dumpingTexturesDirectory.clear();
+            }
+            app->state->dumpingTexturesPng = dump;
+        }
+        if (dump) {
+            // The level or screen this display list draws, stamped on each line of draw_trace.txt.
+            char scene[64];
+            jfg_texture_dump_scene(scene, sizeof(scene));
+            app->state->traceScene = scene;
+        }
+        static int pack_generation = -1;
+        char rel[512];
+        const int generation = jfg_texture_pack_current(rel, sizeof(rel));
+        if (generation != pack_generation) {
+            pack_generation = generation;
+            jfg_pack_folder = rel;
+            packs_changed = true;
+        }
+    }
     TexturePackAction cur_action;
     while (texture_pack_action_queue.try_dequeue(cur_action)) {
         std::visit(overloaded{
@@ -647,9 +881,44 @@ void RT64Context::check_texture_pack_actions() {
 
         // Build the path list from the sorted mod list.
         std::vector<RT64::ReplacementDirectory> replacement_directories;
-        replacement_directories.reserve(enabled_texture_packs.size());
+        replacement_directories.reserve(enabled_texture_packs.size() + 1);
         for (const std::string &mod_id : sorted_texture_packs) {
             replacement_directories.emplace_back(RT64::ReplacementDirectory(recomp::mods::get_mod_filename(mod_id)));
+        }
+
+        // JFG PORT: the folder pack chosen in Options -> Textures (or with F6), after the installed packs (earlier
+        // entries win).
+        const std::filesystem::path pack_dir = dino::config::get_app_folder_path() / std::filesystem::u8path(jfg_pack_folder);
+        std::error_code pack_ec;
+        jfg_texture_pack_set_count(-1);
+        const bool pack_is_rtz = !jfg_pack_folder.empty() && pack_dir.extension() == ".rtz" && std::filesystem::is_regular_file(pack_dir, pack_ec);
+        if (!jfg_pack_folder.empty() && (pack_is_rtz || std::filesystem::is_directory(pack_dir, pack_ec))) {
+            size_t count = 0;
+            if (pack_is_rtz) {
+                // A packed pack (.rtz: a zip with rt64.json at its root) is used as it is; only its textures are counted.
+#ifdef _WIN32
+                std::FILE* zip_file = _wfopen(pack_dir.c_str(), L"rb");
+#else
+                std::FILE* zip_file = std::fopen(pack_dir.c_str(), "rb");
+#endif
+                if (zip_file != nullptr) {
+                    mz_zip_archive zip = {};
+                    if (mz_zip_reader_init_cfile(&zip, zip_file, 0, 0)) {
+                        count = mz_zip_reader_get_num_files(&zip);
+                        if (count > 0) count--; // rt64.json
+                        mz_zip_reader_end(&zip);
+                    }
+                    std::fclose(zip_file);
+                }
+            }
+            else {
+                count = jfg_write_pack_database(pack_dir);
+            }
+            fprintf(stderr, "[JFG] texture pack %s: %zu textures\n", jfg_pack_folder.c_str(), count);
+            jfg_texture_pack_set_count((int)count);
+            if (count > 0) {
+                replacement_directories.emplace_back(RT64::ReplacementDirectory(pack_dir));
+            }
         }
 
         if (!replacement_directories.empty()) {

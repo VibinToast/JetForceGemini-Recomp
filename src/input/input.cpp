@@ -14,6 +14,11 @@
 
 #include "controls.hpp"
 
+// Mouse and keyboard controls for Jet Force Gemini (src/jfg/jfg_controls.cpp).
+extern "C" int jfg_mouse_keyboard_active(void);
+extern "C" void jfg_mouse_motion(int dx, int dy);
+extern "C" void jfg_mouse_wheel(int notches);
+
 constexpr float axis_threshold = 0.5f;
 
 struct ControllerState {
@@ -225,6 +230,7 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
         {
             SDL_MouseWheelEvent* wheel_event = &event->wheel;
             InputState.mouse_wheel_pos.fetch_add(wheel_event->y * (wheel_event->direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1));
+            jfg_mouse_wheel(wheel_event->y * (wheel_event->direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1));
         }
         queue_if_enabled(event);
         break;
@@ -342,6 +348,9 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
             InputState.pending_mouse_delta[0] += motion_event->xrel;
             InputState.pending_mouse_delta[1] += motion_event->yrel;
         }
+        if (jfg_mouse_keyboard_active()) {
+            jfg_mouse_motion(event->motion.xrel, event->motion.yrel);
+        }
         queue_if_enabled(event);
         break;
     case SDL_EventType::SDL_DROPBEGIN:
@@ -374,6 +383,8 @@ void dino::input::handle_events() {
 
         // Lock the cursor if all three conditions are true: mouse aiming is enabled, game input is not disabled, and the game has been started.
         bool cursor_locked = (dino::input::get_mouse_sensitivity() != 0) && !dino::input::game_input_disabled() && ultramodern::is_game_started();
+        // JFG: mouse and keyboard controls capture the mouse during gameplay.
+        cursor_locked = cursor_locked || (jfg_mouse_keyboard_active() != 0 && !dino::input::game_input_disabled());
 
         // Hide the cursor based on its enable state, but override visibility to false if the cursor is locked.
         bool cursor_visible = cursor_enabled;
@@ -401,7 +412,7 @@ void dino::input::handle_events() {
         }
 
         // If the debug UI is open, let ImGui have control over the cursor.
-        if (!dino::debug_ui::is_open()) {
+        if (dino::debug_ui::game_has_input()) { // JFG PORT
             SDL_ShowCursor(cursor_visible ? SDL_ENABLE : SDL_DISABLE);
         }
         SDL_SetRelativeMouseMode(cursor_locked ? SDL_TRUE : SDL_FALSE);
@@ -597,6 +608,11 @@ void dino::input::poll_inputs() {
 
 void dino::input::set_rumble(int controller_num, bool on) {
     if (controller_num == 0) {
+        // JFG PORT: JFG_DEBUG_RUMBLE=1 logs every change of the motor state (for testing without a controller).
+        static const bool log = std::getenv("JFG_DEBUG_RUMBLE") != nullptr;
+        if (log && InputState.rumble_active != on) {
+            fprintf(stderr, "[JFG] rumble %s\n", on ? "on" : "off");
+        }
         InputState.rumble_active = on;
     }
 }

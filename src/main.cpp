@@ -3,6 +3,9 @@
 #include <cstdlib>
 #include <thread>
 #include <vector>
+#include <filesystem>
+#include <string>
+#include <system_error>
 
 #include "nfd.h"
 #include "ultramodern/ultramodern.hpp"
@@ -23,6 +26,7 @@
 #include "recomp_api/recomp_data_api.hpp"
 #include "common/sdl.hpp"
 #include "ui/recomp_ui.h"
+#include "jfg/jfg_update_check.h"
 
 #include "runtime/audio.hpp"
 #include "runtime/crash.hpp"
@@ -48,24 +52,42 @@ static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
     recomp_entrypoint(rdram, ctx);
 }
 
+// JFG port: boot-time globals the runtime's IPL3 emulation leaves unset (src/jfg/jfg_glue.cpp).
+extern "C" void jfg_on_init(uint8_t* rdram, recomp_context* ctx);
+
+// JFG PORT: Jet Force Gemini's modified osCreateThread (libultra/src/os/createthread.c, JFGDIFFS) starts every
+// thread with SR_FR set, i.e. 64-bit FPU registers where odd-numbered registers are independent, and clears it
+// only for threads created with a negative id (the audio thread, whose libultra code needs FR = 0).
+// The runtime replaces osCreateThread, so reproduce that rule here; game code that uses odd FPU registers
+// (camera, collision and matrix maths) computes garbage otherwise.
 static void custom_thread_create_callback(uint8_t* rdram, recomp_context* ctx) {
     dino::runtime::crash_register_thread_context(ctx);
+
+    PTR(OSThread) self = ultramodern::this_thread();
+    const bool fr = (self == NULLPTR) || (TO_PTR(OSThread, self)->id >= 0);
+    if (fr) {
+        ctx->f_odd = &ctx->f1.u32l;
+        ctx->mips3_float_mode = true;
+        ctx->status_reg |= 0x04000000u; // SR_FR
+    }
 }
 
 // array of supported GameEntry objects
 std::vector<recomp::GameEntry> supported_games = {
     {
-        .rom_hash = 0xB55D4348B9AB07F5,
-        .internal_name = "Diddy Kong Racing   ",
-        .game_id = u8"dkr-us-v80",
-        .mod_game_id = "diddy-kong-racing",
-        .save_type = recomp::SaveType::Eep16k,
+        // XXH3-64 of the US ROM (sha1 493ced9008dbe932d6e91179b68e8630cf23a023)
+        .rom_hash = 0x44830C263C2DE108,
+        .internal_name = "JET FORCE GEMINI    ",
+        .game_id = u8"jfg-us",
+        .mod_game_id = "jet-force-gemini",
+        .save_type = recomp::SaveType::Flashram,
         .is_enabled = true,
         .decompression_routine = nullptr,
         .has_compressed_code = false,
         .entrypoint_address = get_entrypoint_address(),
         .entrypoint = custom_recomp_entrypoint,
         .thread_create_callback = custom_thread_create_callback,
+        .on_init_callback = jfg_on_init,
     },
 };
 
@@ -73,6 +95,7 @@ struct CliArgs {
     bool skip_launcher = false;
     bool force_launcher = false;
     bool show_console = false;
+    const char* rom_path = nullptr; // JFG port: --rom <path> selects/validates the ROM without the launcher UI
     int window_width = 1600;
     int window_height = 960;
 };
@@ -91,6 +114,16 @@ int main(int argc, char** argv) {
         char *arg = argv[i];
         if (strcmp(arg, "--skip-launcher") == 0) {
             cli_args.skip_launcher = true;
+        } else if (strcmp(arg, "--rom") == 0) {
+            i++;
+            if (i < argc) {
+                // Made absolute here: the working directory changes below.
+                static std::string rom_path_absolute;
+                std::error_code ec;
+                const std::filesystem::path absolute = std::filesystem::absolute(argv[i], ec);
+                rom_path_absolute = ec ? std::string{argv[i]} : absolute.string();
+                cli_args.rom_path = rom_path_absolute.c_str();
+            }
         } else if (strcmp(arg, "--launcher") == 0) {
             cli_args.force_launcher = true;
         } else if (strcmp(argv[i], "--show-console") == 0) {
@@ -116,6 +149,15 @@ int main(int argc, char** argv) {
             }
         }
     }
+
+#if !defined(__APPLE__)
+    // JFG port: run from the folder the executable is in, whatever folder it was started from. Assets, the controller
+    // database, saves, settings and the options file are all found relative to it.
+    {
+        std::error_code ec;
+        std::filesystem::current_path(dino::config::get_executable_folder_path(), ec);
+    }
+#endif
 
     // Load project version
     recomp::Version project_version{};
@@ -196,6 +238,20 @@ int main(int argc, char** argv) {
     // The runtime performs this check again during startup; doing it here lets
     // an already configured Mac app launch straight into DKR.
     recomp::check_all_stored_roms();
+    // JFG PORT: bin\jfg_launcher.txt (src/jfg/jfg_update_check.cpp). A ROM path there starts the game straight away, as
+    // --rom <path> --skip-launcher would, unless --rom or --launcher was given. It also holds check_for_updates.
+    jfg_launcher_config_load(dino::config::get_app_folder_path());
+    static std::string config_rom;
+    if (cli_args.rom_path == nullptr && !cli_args.force_launcher && !jfg_launcher_config_rom().empty()) {
+        config_rom = jfg_launcher_config_rom();
+        cli_args.rom_path = config_rom.c_str();
+        cli_args.skip_launcher = true;
+    }
+    if (cli_args.rom_path != nullptr) {
+        recomp::RomValidationError rom_error = recomp::select_rom(cli_args.rom_path, supported_games[0].game_id);
+        fprintf(stderr, "[jfg] --rom %s: %s\n", cli_args.rom_path,
+            rom_error == recomp::RomValidationError::Good ? "accepted" : "REJECTED (wrong or modified ROM)");
+    }
 
     recompui::register_ui_exports();
     dino::runtime::register_overlays();
@@ -264,7 +320,14 @@ int main(int argc, char** argv) {
         .gfx_callbacks = gfx_callbacks,
         .events_callbacks = events_callbacks,
         .error_handling_callbacks = error_handling_callbacks,
-        .threads_callbacks = threads_callbacks
+        .threads_callbacks = threads_callbacks,
+        // JFG PORT: a controller (SI) message for a full queue is dropped, as on the N64 (events are sent with
+        // OS_MESG_NOBLOCK), instead of being put back in the runtime's external queue. The game's controller queue holds
+        // one message and every one is the same; with re-queuing, one surplus message (after a level load, say) kept
+        // the idle thread taking it out and putting it back for the whole of every frame, and the video retrace
+        // messages waiting behind it reached the game a frame late: two at a time, 30 times a second, so 60 fps
+        // ran at 30-45 and looked like 30.
+        .message_queue_control = { .requeue_si = false }
     };
 
     recomp::start(config);

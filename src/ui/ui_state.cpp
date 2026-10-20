@@ -33,6 +33,11 @@
 #include "ui_mod_menu.h"
 #include "ui_mod_installer.h"
 #include "ui_renderer.h"
+void jfg_config_menu_refresh(); // JFG PORT: src/ui/ui_config.cpp
+void jfg_config_step_tab(int dir); // JFG PORT: src/ui/ui_config.cpp
+void jfg_launcher_ui_tick(); // JFG PORT: src/ui/ui_launcher.cpp
+extern "C" void jfg_settings_menu_open(int open); // JFG PORT: src/jfg/jfg_camera.cpp (pauses the game)
+extern "C" void jfg_tools_ui_frame(void); // JFG PORT: src/jfg/jfg_ui_tools.cpp
 
 static std::vector<char> read_file(const std::filesystem::path& filepath) {
     std::vector<char> ret{};
@@ -248,6 +253,10 @@ public:
                 {"LatoLatin-BoldItalic.ttf", false},
                 {"NotoEmoji-Regular.ttf", true},
                 {"promptfont/promptfont.ttf", false},
+                // JFG PORT: the launcher's fonts (assets/jfg_launcher, SIL Open Font License).
+                {"jfg_launcher/PressStart2P-Regular.ttf", false},
+                {"jfg_launcher/JetBrainsMono-Regular.ttf", false},
+                {"jfg_launcher/JetBrainsMono-Bold.ttf", false},
             };
 
             for (const FontFace& face : font_faces) {
@@ -594,6 +603,8 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
     bool kb_interacted = false;
 
     bool config_was_open = recompui::is_context_shown(recompui::get_config_context_id()) || recompui::is_context_shown(recompui::get_config_sub_menu_context_id());
+    jfg_settings_menu_open(config_was_open ? 1 : 0); // JFG PORT
+    jfg_tools_ui_frame(); // JFG PORT: F10's tools (src/jfg/jfg_ui_tools.cpp)
 
     using clock = std::chrono::system_clock;
 
@@ -650,6 +661,15 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                 break;
 
             case SDL_EventType::SDL_CONTROLLERBUTTONDOWN: {
+                // JFG PORT: in the config menu the bumpers switch tabs, LB left and RB right (src/ui/ui_config.cpp).
+                const uint8_t button = cur_event.cbutton.button;
+                if ((button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER || button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) && context_capturing_input &&
+                    recompui::is_context_shown(recompui::get_config_context_id()) && !recompui::is_context_shown(recompui::get_config_sub_menu_context_id())) {
+                    ::jfg_config_step_tab(button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1 : -1);
+                    non_mouse_interacted = true;
+                    cont_interacted = true;
+                    break;
+                }
                 int sdl_key = cont_button_to_key(cur_event.cbutton);
                 if (context_capturing_input && sdl_key) {
                     ui_state->context->ProcessKeyDown(RmlSDL::ConvertKey(sdl_key), 0);
@@ -747,6 +767,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
             }
 
             if (open_config) {
+                ::jfg_config_menu_refresh(); // JFG PORT
                 recompui::show_context(recompui::get_config_context_id(), "");
             }
         }
@@ -794,6 +815,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
         prev_width = width;
         prev_height = height;
 
+        jfg_launcher_ui_tick(); // JFG PORT: animates the launcher's About page
         ui_state->context->Update();
         ui_state->context->Render();
         ui_state->render_interface.end(command_list, swap_chain_framebuffer);
@@ -946,7 +968,8 @@ void recompui::drop_files(const std::list<std::filesystem::path> &file_list) {
     // If the config menu isn't open, open it in the mods tab.
     if (!recompui::is_context_shown(recompui::get_config_context_id())) {
         recompui::hide_all_contexts();
-        recompui::show_context(recompui::get_config_context_id(), "");
+        ::jfg_config_menu_refresh(); // JFG PORT
+                recompui::show_context(recompui::get_config_context_id(), "");
     }
 
     recompui::open_notification("Installing Mods", "Please Wait");

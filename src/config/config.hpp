@@ -8,8 +8,8 @@
 #include "input/input.hpp"
 
 namespace dino::config {
-    constexpr std::u8string_view program_id = u8"DiddyKongRacingRecompiled";
-    constexpr std::string_view program_name = "Diddy Kong Racing: Recompiled";
+    constexpr std::u8string_view program_id = u8"JetForceGeminiRecompiled";
+    constexpr std::string_view program_name = "Jet Force Gemini: Recompiled";
 
     void load_config();
     void save_config();
@@ -21,6 +21,7 @@ namespace dino::config {
     void reset_single_input_binding(dino::input::InputDevice device, dino::input::GameInput input);
 
     std::filesystem::path get_app_folder_path();
+    std::filesystem::path get_executable_folder_path();
 
     enum class AutosaveMode {
         On,

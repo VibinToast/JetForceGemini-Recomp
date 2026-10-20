@@ -1,6 +1,8 @@
 #include "config.hpp"
 
 #include <filesystem>
+#include <vector>
+#include <system_error>
 #include <fstream>
 #include <iomanip>
 
@@ -167,46 +169,52 @@ void input_field_from_json(const nlohmann::json& j, dino::input::InputField& fie
     j.at("input_id").get_to(field.input_id);
 }
 
-std::filesystem::path get_app_folder_path() {
-   // directly check for portable.txt (windows and native linux binary)
-   if (std::filesystem::exists("portable.txt")) {
-       return std::filesystem::current_path();
-   }
-
-   std::filesystem::path recomp_dir{};
-
+// JFG port: the folder the executable is in. Everything the program reads or writes at run time lives there.
+std::filesystem::path get_executable_folder_path() {
+    static std::filesystem::path cached;
+    if (!cached.empty()) {
+        return cached;
+    }
+    std::error_code ec;
 #if defined(_WIN32)
-   // Deduce local app data path.
-   PWSTR known_path = NULL;
-   HRESULT result = SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &known_path);
-   if (result == S_OK) {
-       recomp_dir = std::filesystem::path{known_path} / program_id;
-   }
-
-   CoTaskMemFree(known_path);
+    std::wstring buffer(32768, L'\0');
+    const DWORD length = GetModuleFileNameW(NULL, buffer.data(), (DWORD)buffer.size());
+    if (length > 0 && length < buffer.size()) {
+        buffer.resize(length);
+        cached = std::filesystem::path{buffer}.parent_path();
+    }
 #elif defined(__linux__)
+    const std::filesystem::path exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (!ec) {
+        cached = exe.parent_path();
+    }
+#endif
+    if (cached.empty()) {
+        cached = std::filesystem::current_path(ec);
+    }
+    return cached;
+}
+
+std::filesystem::path get_app_folder_path() {
+#if defined(__APPLE__)
+   const char *homedir = getenv("HOME");
+   if (homedir != nullptr) {
+       return std::filesystem::path{homedir} / "Library/Application Support" / std::u8string{program_id};
+   }
+   return {};
+#else
+#if defined(__linux__)
    // check for APP_FOLDER_PATH env var used by AppImage
    if (getenv("APP_FOLDER_PATH") != nullptr) {
        return std::filesystem::path{getenv("APP_FOLDER_PATH")};
    }
-
-   const char *homedir;
-
-   if ((homedir = getenv("HOME")) == nullptr) {
-       homedir = getpwuid(getuid())->pw_dir;
-   }
-
-   if (homedir != nullptr) {
-       recomp_dir = std::filesystem::path{homedir} / (std::u8string{u8".config/"} + std::u8string{program_id});
-   }
-#elif defined(__APPLE__)
-   const char *homedir = getenv("HOME");
-   if (homedir != nullptr) {
-       recomp_dir = std::filesystem::path{homedir} / "Library/Application Support" / std::u8string{program_id};
-   }
 #endif
 
-    return recomp_dir;
+    // JFG port: saves and settings are kept next to the executable, not in a per-user folder.
+    const std::filesystem::path app_dir = get_executable_folder_path();
+
+    return app_dir;
+#endif
 }
 
 bool read_json(std::ifstream input_file, nlohmann::json& json_out) {

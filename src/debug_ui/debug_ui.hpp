@@ -5,6 +5,8 @@
 namespace dino::debug_ui {
 
 bool is_open();
+// JFG PORT: the game gets the mouse and keyboard: the debug window (F9) is closed.
+bool game_has_input();
 
 bool want_capture_keyboard();
 

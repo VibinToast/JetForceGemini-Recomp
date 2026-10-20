@@ -1,5 +1,9 @@
 #include "backend.hpp"
 
+#include <atomic>
+
+extern "C" void jfg_tools_key(int scancode, int down, int repeat); // JFG PORT: src/jfg/jfg_ui_tools.cpp
+
 #ifdef _WIN32
 #include <SDL_video.h>
 #else
@@ -53,9 +57,18 @@ struct VulkanContext {
 ImGuiContext *dino_imgui_ctx;
 bool b_is_open = false;
 bool b_in_ui_frame = false;
+// JFG PORT: lets the game-side code draw a passive overlay (the "press F9" hint) while the debug UI is closed.
+static bool b_overlay = false;
+// JFG PORT: F5 asks the game to go back to the title screen (taken by take_reset_request() on the game thread).
+static std::atomic<bool> b_reset_requested{ false };
+// JFG PORT: F6 switches to the next texture pack (taken by take_next_pack_request()).
+static std::atomic<bool> b_next_pack_requested{ false };
+// JFG PORT: F7 switches the fly camera on / off (taken by take_fly_request()).
+static std::atomic<bool> b_fly_requested{ false };
 
 static ImGuiContext *prev_ctx;
 static std::unique_ptr<plume::RenderDescriptorSet> descriptor_set;
+static std::unique_ptr<plume::RenderCommandQueue> d3d12_upload_queue; // JFG PORT: ImGui's DX12 backend uploads its textures through a queue of its own
 static std::mutex frame_mutex;
 static moodycamel::ConcurrentQueue<SDL_Event> event_queue{};
 static std::unique_ptr<VulkanContext> vulkanContext;
@@ -88,6 +101,17 @@ static RT64::UserConfiguration::GraphicsAPI get_graphics_api() {
 
 bool is_open() { return b_is_open; }
 bool in_ui_frame() { return b_in_ui_frame; }
+void set_overlay(bool enabled) { b_overlay = enabled; }
+bool take_reset_request() { return b_reset_requested.exchange(false); }
+bool take_next_pack_request() { return b_next_pack_requested.exchange(false); }
+bool take_fly_request() { return b_fly_requested.exchange(false); }
+
+// JFG PORT: F9 (or `) opens / closes the debug window. F10's tools are RmlUi (src/jfg/jfg_ui_tools.cpp, jfg_tools_key).
+static void handle_toggle_key(const SDL_Event& event) {
+    if (event.type != SDL_KEYDOWN || event.key.repeat) return;
+    const SDL_Scancode code = event.key.keysym.scancode;
+    if (code == SDL_Scancode::SDL_SCANCODE_GRAVE || code == SDL_Scancode::SDL_SCANCODE_F9) b_is_open = !b_is_open;
+}
 
 void begin() {
     if (!dino_imgui_ctx->Initialized) return;
@@ -96,16 +120,11 @@ void begin() {
         // Still process the event queue but don't send any to ImGui
         SDL_Event event{};
         while (event_queue.try_dequeue(event)) {
-            if (event.type == SDL_KEYDOWN &&
-                    (event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_GRAVE ||
-                        event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F9) &&
-                    !event.key.repeat) {
-                b_is_open = !b_is_open;
-            }
+            handle_toggle_key(event);
         }
     }
 
-    if (!b_is_open) {
+    if (!b_is_open && !b_overlay) {
         // Still not open even after handling key events
         return;
     }
@@ -120,17 +139,15 @@ void begin() {
 
     SDL_Event event{};
     while (event_queue.try_dequeue(event)) {
-        if (event.type == SDL_KEYDOWN &&
-                (event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_GRAVE ||
-                    event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F9) &&
-                !event.key.repeat) {
-            b_is_open = !b_is_open;
-        }
-
+        handle_toggle_key(event);
         ImGui_ImplSDL2_ProcessEvent(&event);
     }
 
-    if (!b_is_open) {
+    // JFG PORT: an overlay-only frame must not take over the mouse cursor.
+    if (b_is_open) ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+    else ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+
+    if (!b_is_open && !b_overlay) {
         // Closed after handling key events
         b_in_ui_frame = false;
         ImGui::SetCurrentContext(prev_ctx);
@@ -176,6 +193,19 @@ void end() {
 }
 
 static int sdl_event_filter(void *userdata, SDL_Event *event) {
+    if (event->type == SDL_KEYDOWN && event->key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F5 && !event->key.repeat) {
+        b_reset_requested = true;
+    }
+    if (event->type == SDL_KEYDOWN && event->key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F6 && !event->key.repeat) {
+        b_next_pack_requested = true;
+    }
+    if (event->type == SDL_KEYDOWN && event->key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F7 && !event->key.repeat) {
+        b_fly_requested = true;
+    }
+    // JFG PORT: F10 (show / hide) and Alt (mouse and keyboard to the game and back) for F10's tools.
+    if (event->type == SDL_KEYDOWN || event->type == SDL_KEYUP) {
+        jfg_tools_key((int)event->key.keysym.scancode, event->type == SDL_KEYDOWN ? 1 : 0, event->key.repeat ? 1 : 0);
+    }
     event_queue.enqueue(*event);
 
     return 1;
@@ -187,20 +217,6 @@ static void checkVulkanResult(VkResult res) {
     }
 
     fprintf(stderr, "Debug UI ImGui Vulkan Backend failed with error code 0x%X.\n", res);
-}
-
-// TODO: why isn't this available in imgui_impl_vulkan.h? do we have an outdated version?
-static uint32_t ImGui_ImplVulkanH_SelectQueueFamilyIndex(VkPhysicalDevice physical_device)
-{
-    uint32_t count;
-    vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &count, nullptr);
-    ImVector<VkQueueFamilyProperties> queues_properties;
-    queues_properties.resize((int)count);
-    vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &count, queues_properties.Data);
-    for (uint32_t i = 0; i < count; i++)
-        if (queues_properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-            return i;
-    return (uint32_t)-1;
 }
 
 static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevice* device) {
@@ -226,7 +242,17 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
             plume::D3D12DescriptorSet *interface_descriptor_set = static_cast<plume::D3D12DescriptorSet *>(descriptor_set.get());
             const D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle = interface_device->viewHeapAllocator->getCPUHandleAt(interface_descriptor_set->viewAllocation.offset);
             const D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle = interface_device->viewHeapAllocator->getGPUHandleAt(interface_descriptor_set->viewAllocation.offset);
-            ImGui_ImplDX12_Init(interface_device->d3d, 2, DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM, interface_device->viewHeapAllocator->heap, cpu_handle, gpu_handle);
+            // JFG PORT: ImGui 1.92+ (upstream RT64's) takes an init struct and needs a command queue for texture uploads.
+            d3d12_upload_queue = interface_device->createCommandQueue(plume::RenderCommandListType::DIRECT);
+            ImGui_ImplDX12_InitInfo init_info;
+            init_info.Device = interface_device->d3d;
+            init_info.CommandQueue = static_cast<plume::D3D12CommandQueue *>(d3d12_upload_queue.get())->d3d;
+            init_info.NumFramesInFlight = 2;
+            init_info.RTVFormat = DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM;
+            init_info.SrvDescriptorHeap = interface_device->viewHeapAllocator->heap;
+            init_info.LegacySingleSrvCpuDescriptor = cpu_handle;
+            init_info.LegacySingleSrvGpuDescriptor = gpu_handle;
+            ImGui_ImplDX12_Init(&init_info);
 #else
             assert(false && "Unsupported Graphics API.");
             return;
@@ -235,7 +261,7 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
         }
         case RT64::UserConfiguration::GraphicsAPI::Vulkan: {
             plume::VulkanDevice *interfaceDevice = static_cast<plume::VulkanDevice *>(device);
-            ImGui_ImplVulkan_LoadFunctions([](const char *functionName, void *vulkanInstance) {
+            ImGui_ImplVulkan_LoadFunctions(VK_API_VERSION_1_2, [](const char *functionName, void *vulkanInstance) {
                 return vkGetInstanceProcAddr(*(reinterpret_cast<VkInstance *>(vulkanInstance)), functionName);
             }, &interfaceDevice->renderInterface->instance);
 
@@ -263,8 +289,9 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
             initInfo.QueueFamily = queueFamily;
             initInfo.Queue = queue;
             initInfo.DescriptorPool = vulkanContext->descriptorPool;
-            initInfo.RenderPass = vulkanContext->renderPass;
-            initInfo.Subpass = 0;
+            initInfo.DescriptorPoolSize = IMGUI_IMPL_VULKAN_MINIMUM_SAMPLED_IMAGE_POOL_SIZE; // JFG PORT: ImGui 1.92+ makes its own pool (more than one texture)
+            initInfo.PipelineInfoMain.RenderPass = vulkanContext->renderPass;
+            initInfo.PipelineInfoMain.Subpass = 0;
             initInfo.MinImageCount = 2;
             initInfo.ImageCount = 2;
             initInfo.CheckVkResultFn = &checkVulkanResult;
@@ -283,7 +310,7 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
 }
 
 static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
-    if (!b_is_open) return;
+    if (!b_is_open && !b_overlay) return;
 
     const std::lock_guard<std::mutex> frame_lock(frame_mutex);
 
@@ -330,6 +357,7 @@ static void rt64_deinit_hook() {
 #ifdef _WIN32
             ImGui_ImplDX12_Shutdown();
             descriptor_set.release();
+            d3d12_upload_queue.reset();
 #else
             assert(false && "Unsupported Graphics API.");
             return;
