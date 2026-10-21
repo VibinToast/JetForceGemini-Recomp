@@ -25,3 +25,4 @@ TrapDanglingJump
 FlowerBoltControl
 dAngle
 objAnimDframe
+objMoveXYZ

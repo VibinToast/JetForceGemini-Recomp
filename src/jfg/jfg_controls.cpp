@@ -712,3 +712,8 @@ extern "C" void jfg_move_scale(uint8_t* rdram_, recomp_context* ctx) {
 }
 
 } // namespace jfg
+
+JFG_WRAP(objMoveXYZ) {
+    jfg_move_scale(rdram, ctx);
+    objMoveXYZ_orig(rdram, ctx);
+}

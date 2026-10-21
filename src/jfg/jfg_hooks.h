@@ -32,7 +32,7 @@ int jfg_cadence_skip(void);                                            // frontP
 void jfg_squad_draw_begin(uint8_t* rdram);                             // func_80045F00, right before trackDraw
 void jfg_squad_draw_end(uint8_t* rdram);                               // func_80045F00, right after trackDraw
 // jfg_controls.cpp
-void jfg_move_scale(uint8_t* rdram, recomp_context* ctx);              // entry of objMoveXYZ
+void jfg_move_scale(uint8_t* rdram, recomp_context* ctx);              // objMoveXYZ's wrapper
 void jfg_boss_tick(uint8_t* rdram, recomp_context* ctx);               // jfg_on_boss_fight_control handler (jfg_api.cpp)
 void jfg_platform_move(int on);                                        // controlPlatform, around its objMoveXYZ call
 void jfg_floyd_steer(uint8_t* rdram, recomp_context* ctx, int phase);  // sidekickControl, around Floyd's roll easing
