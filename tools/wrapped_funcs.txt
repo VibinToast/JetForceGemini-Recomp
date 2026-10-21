@@ -86,3 +86,4 @@ objObjectsPauseTick
 trackDraw
 __scHandleRetrace
 frontPlayerTarget
+camSetFOV

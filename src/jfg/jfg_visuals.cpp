@@ -270,4 +270,25 @@ JFG_WRAP(shadowGenerate) {
     }
 }
 
+// camSetFOV(fov, force): the camera keeps the game's FOV (camera +0x2C); a zoomed scope divides it by its zoom. Unzoomed,
+// the FOV option scales what is applied (jfg_fov): the game's code runs with the scaled FOV and the camera's own value
+// is put back. Zoomed, nothing changes (jfg_fov only notes the FOV for the ambient occlusion pass).
+JFG_WRAP(camSetFOV) {
+    g_rdram = rdram;
+    const float fov = ctx->f12.fl;
+    const uint32_t cam = rd32(ADDR_cameraNo) & 3;
+    const uint32_t zoomed = rd8(0x800A3174u + cam);
+    float applied = fov;
+    if (zoomed != 0) applied *= 1.0f / ((0.25f * (rdf(0x800A317Cu + cam * 4) - 1.0f)) + 1.0f);
+    const float wanted = jfg_fov(rdram, applied, zoomed);
+    if (zoomed != 0 || wanted == applied) {
+        camSetFOV_orig(rdram, ctx);
+        return;
+    }
+    ctx->f12.fl = wanted;
+    camSetFOV_orig(rdram, ctx);
+    g_rdram = rdram;
+    wrf(ADDR_cameraActorArray + cam * CAMERA_SIZE + 0x2C, fov);
+}
+
 } // namespace jfg
