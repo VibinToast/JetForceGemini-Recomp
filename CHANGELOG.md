@@ -5,8 +5,6 @@ are written here by hand and become that version's notes when it is released.
 
 ## Unreleased
 
-<!-- DRAFT for 1.2, from the commit messages since v1.1.8. Edit freely. Lines like this one are notes for the owner: the release leaves them out. -->
-
 ### New options
 
 - Auto Save: the game saves itself a few seconds after you arrive in a level and every few minutes, so a crash no longer loses your progress. It is on in every profile except Default (the original game).
@@ -36,7 +34,7 @@ are written here by hand and become that version's notes when it is released.
 ### Settings menu
 
 - Everything is in one menu with 8 tabs: Profiles, General, Gameplay, Controls, Bindings, Graphics, Textures and Mods.
-- New Jet Force Gemini colours, bigger option descriptions with the option's name as a heading, and options grouped under headings.
+- New Jet Force Gemini colors, bigger option descriptions with the option's name as a heading, and options grouped under headings.
 - The bumpers switch tabs instead of the triggers, and a controller reaches every option.
 - Choosing a profile shows what it will change before it is applied, and warns you if it would replace your controller bindings. New Keep My Controls option.
 - The Bindings tab tells you when its bindings are not the ones in use, and its note no longer covers the list. The Profiles tab scrolls instead of running off the bottom of the menu.
@@ -57,6 +55,7 @@ are written here by hand and become that version's notes when it is released.
 - Texture packs keep their own settings (such as the texture shift) instead of having them reset when the pack loads.
 - Pack buttons are labelled Folder or .rtz, so two copies of the same pack can be told apart.
 - HUD numbers and text in HD texture packs sit where the original ones do.
+- Texture packs whose file ends in .RTZ (or any other mix of capitals) now load. Before, they were listed but the game ignored them.
 
 ### Graphics
 
@@ -68,6 +67,7 @@ are written here by hand and become that version's notes when it is released.
 ### Linux
 
 - Linux releases come as one AppImage that runs on SteamOS (Steam Deck), Fedora and Ubuntu, plus a portable folder.
+- On Linux, options that need a restart now start the game again instead of only closing it.
 
 ### Tools (F10)
 
@@ -211,7 +211,7 @@ are written here by hand and become that version's notes when it is released.
 - Show the Mods tab again
 - Update JFG 4K texture pack link in README
 - Document HD texture packs in the README
-- Add a launcher in Jet Force Gemini colours
+- Add a launcher in Jet Force Gemini colors
 - Document the features and keys in the README
 - Add automatic releases
 - Add the Gameplay, Visuals, Profiles and Textures tabs to the settings menu
