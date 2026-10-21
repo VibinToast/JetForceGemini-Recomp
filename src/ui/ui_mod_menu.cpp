@@ -74,8 +74,9 @@ ModEntryView::ModEntryView(Element *parent) : Element(parent, Events(EventType::
         body_container->set_margin_left(16.0f);
         body_container->set_padding_top(8.0f);
         body_container->set_padding_bottom(8.0f);
-        body_container->set_max_height(modEntryHeight);
-        body_container->set_overflow_y(Overflow::Hidden);
+        // JFG PORT: no height limit, so a name and short description that need more lines (the launcher's wider font)
+        // make the entry taller instead of being cut off.
+        body_container->set_flex(1.0f, 1.0f);
 
         {
             name_label = context.create_element<Label>(body_container, LabelStyle::Normal);
@@ -199,7 +200,7 @@ void ModEntrySpacer::check_height_distance() {
     constexpr float tolerance = 0.01f;
     if (abs(target_height - height) < tolerance) {
         height = target_height;
-        set_height(height, Unit::Dp);
+        set_height(height, Unit::Px); // JFG PORT: pixels, the height of the dragged entry (entries fit their text)
     }
     else {
         queue_update();
@@ -211,17 +212,17 @@ void ModEntrySpacer::process_event(const Event &e) {
     case EventType::Update: {
         std::chrono::high_resolution_clock::duration now = ultramodern::time_since_start();
         float delta_time = std::max(std::chrono::duration<float>(now - last_time).count(), 0.0f);
-        constexpr float dp_speed = 1000.0f;
+        constexpr float px_speed = 1000.0f;
         last_time = now;
 
         if (target_height < height) {
-            height += std::max(-dp_speed * delta_time, target_height - height);
+            height += std::max(-px_speed * delta_time, target_height - height);
         }
         else {
-            height += std::min(dp_speed * delta_time, target_height - height);
+            height += std::min(px_speed * delta_time, target_height - height);
         }
 
-        set_height(height, Unit::Dp);
+        set_height(height, Unit::Px);
         check_height_distance();
         break;
     }
@@ -355,7 +356,8 @@ void ModMenu::mod_selected(uint32_t mod_index) {
 }
 
 void ModMenu::mod_dragged(uint32_t mod_index, EventDrag drag) {
-    constexpr float spacer_height = modEntryHeight + modEntryPadding * 2.0f;
+    // JFG PORT: the gap left while dragging is as tall as the dragged entry (set at the start; entries fit their text).
+    float& spacer_height = mod_drag_spacer_height;
 
     switch (drag.phase) {
     case DragPhase::Start: {
@@ -368,6 +370,7 @@ void ModMenu::mod_dragged(uint32_t mod_index, EventDrag drag) {
         // long as the cursor is hovering over this slot.
         float width = mod_entry_buttons[mod_index]->get_client_width();
         float height = mod_entry_buttons[mod_index]->get_client_height();
+        spacer_height = height;
         float left = mod_entry_buttons[mod_index]->get_absolute_left() - get_absolute_left();
         float top = mod_entry_buttons[mod_index]->get_absolute_top() - (height / 2.0f); // TODO: Figure out why this adjustment is even necessary.
         mod_entry_buttons[mod_index]->set_display(Display::None);
@@ -657,8 +660,11 @@ void ModMenu::process_event(const Event &e) {
             mod_scan_queued = false;
         }
         if (ultramodern::is_game_started()) {
-            install_mods_button->set_enabled(false);
-            refresh_button->set_enabled(false);
+            // JFG PORT: mods load when the game starts, so installing and rescanning only work from the launcher. Hidden
+            // in game instead of greyed out, with a note saying where to do it.
+            install_mods_button->set_display(Display::None);
+            refresh_button->set_display(Display::None);
+            ingame_note->set_display(Display::Block);
         }
         if (active_mod_index != -1) {        
             bool auto_enabled = recomp::mods::is_mod_auto_enabled(mod_details[active_mod_index].mod_id);
@@ -729,6 +735,10 @@ ModMenu::ModMenu(Element *parent) : Element(parent) {
             Button* configure_button = mod_details_panel->get_configure_button();
             install_mods_button = context.create_element<Button>(footer_container, "Install Mods", recompui::ButtonStyle::Primary);
             install_mods_button->add_pressed_callback([this](){ open_install_dialog(); });
+
+            ingame_note = context.create_element<Label>(footer_container, "Mods can be installed and changed from the launcher.", LabelStyle::Small);
+            ingame_note->set_color(Color{ COL_TEXT_DIM, 255 });
+            ingame_note->set_display(Display::None);
 
             Element* footer_spacer = context.create_element<Element>(footer_container);
             footer_spacer->set_flex(1.0f, 0.0f);
