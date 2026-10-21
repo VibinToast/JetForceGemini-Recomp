@@ -2,13 +2,25 @@
 #
 # Input: the user's own ROM, pre-linked by tools/prepare_overlays.py (overlays at private addresses from 0x82000000),
 # plus JFGRecompSyms/jfg.us.syms.toml (function symbols from the matching decomp ELF; a submodule shared with mods).
-# After running N64Recomp, run tools/merge_gen_anim_data.py on the output directory.
+# Before running N64Recomp, run tools/refuse_mod_hooks.py; after it, tools/merge_gen_anim_data.py and
+# tools/fix_dynamic_relocs.py on the output directory (the build scripts do all of this).
 [input]
 symbols_file_path = "JFGRecompSyms/jfg.us.syms.toml"
 rom_file_path = "baserom.us.recomp.z64"
 output_func_path = "RecompiledFuncs"
 
+# Game functions the port wraps instead of changing them (the port's N64Recomp fork): each listed <name> is generated
+# as <name>_orig, and RecompiledFuncs/jfg_wrapped.c defines <name>, which calls jfg_wrap_<name> (src/jfg/), which calls
+# <name>_orig. jfg_register_wrapped() tells the runtime that mods' patches and hooks apply to <name>_orig.
+[wrappers]
+funcs_list = "tools/wrapped_funcs.txt"
+wrapper_prefix = "jfg_wrap_"
+register_func = "jfg_register_wrapped"
+output_file = "jfg_wrapped.c"
+
 [patches]
+# Functions mods can't hook (rom_size 0 in the function table): listed by tools/refuse_mod_hooks.py, run first.
+unhookable_funcs_list = "RecompiledFuncs/unhookable_funcs.txt"
 # Entry points inside the gen_anim_data blob (0x80073E80-0x80074E50, recompiled as one function, see
 # JFGRecompSyms/jfg.us.syms.toml): not generated separately; tools/merge_gen_anim_data.py writes a wrapper for each
 # entry point.

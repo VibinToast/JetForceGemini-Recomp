@@ -164,6 +164,8 @@ rem Recompiler input only: a copy of the ROM with the overlays pre-linked at pri
 %PY% tools\prepare_overlays.py baserom.us.z64 - baserom.us.recomp.z64 - tools\jfg.us.dynamic_relocs.json
 if errorlevel 1 ( popd & echo [jfg] ERROR: prepare_overlays.py failed & exit /b 1 )
 mkdir RecompiledFuncs
+%PY% tools\refuse_mod_hooks.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json JFGRecompSyms\jfg.us.syms.toml jfg.us.toml
+if errorlevel 1 ( popd & echo [jfg] ERROR: refuse_mod_hooks.py failed & exit /b 1 )
 build-tools\N64Recomp.exe jfg.us.toml > recomp.log 2>&1
 if errorlevel 1 ( popd & echo [jfg] ERROR: N64Recomp failed - see %WORK%\recomp.log & exit /b 1 )
 build-tools\RSPRecomp.exe rsp-aspMain.jfg.toml
@@ -172,10 +174,6 @@ if errorlevel 1 ( popd & echo [jfg] ERROR: RSPRecomp failed & exit /b 1 )
 if errorlevel 1 ( popd & echo [jfg] ERROR: merge_gen_anim_data.py failed & exit /b 1 )
 %PY% tools\fix_dynamic_relocs.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json baserom.us.recomp.z64 JFGRecompSyms\jfg.us.syms.toml
 if errorlevel 1 ( popd & echo [jfg] ERROR: fix_dynamic_relocs.py failed & exit /b 1 )
-%PY% tools\refuse_mod_hooks.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json JFGRecompSyms\jfg.us.syms.toml jfg.us.toml
-if errorlevel 1 ( popd & echo [jfg] ERROR: refuse_mod_hooks.py failed & exit /b 1 )
-%PY% tools\wrap_functions.py RecompiledFuncs tools\wrapped_funcs.txt
-if errorlevel 1 ( popd & echo [jfg] ERROR: wrap_functions.py failed & exit /b 1 )
 popd
 rem Saved last, so a run that stopped half-way generates the code again next time.
 call :inputs_hash || exit /b 1

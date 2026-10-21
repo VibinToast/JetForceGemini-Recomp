@@ -135,8 +135,8 @@ void jfg_recomp_printf(uint8_t* rdram, recomp_context* ctx);           // jfg_mo
 } // extern "C"
 
 // --- game functions the port wraps (tools/wrapped_funcs.txt) -------------------------------------------------------
-// The port never changes a game function itself: tools/wrap_functions.py renames the recompiled <name> to <name>_orig
-// and makes every call to <name> run jfg_wrap_<name>, defined with this macro. The wrapper runs the port's code and
+// The port never changes a game function itself: N64Recomp ([wrappers] in jfg.us.toml) generates the recompiled <name>
+// as <name>_orig and makes every call to <name> run jfg_wrap_<name>, defined with this macro. The wrapper runs the port's code and
 // calls <name>_orig; mods' patches and hooks apply to <name>_orig, so the wrapper keeps running around them.
 #define JFG_WRAP(name)                                                     \
     extern "C" void name##_orig(uint8_t* rdram, recomp_context* ctx);     \
