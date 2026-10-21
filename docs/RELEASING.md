@@ -8,7 +8,8 @@ GitHub. Players don't see a draft, and the launcher's update check skips it, unt
 
 | Merged into `main` from | Version | Example |
 |---|---|---|
-| `dev` | minor | 1.1.8 → 1.2.0 |
+| `release/<x.y>` | exactly x.y.0 | `release/1.2` → 1.2.0 |
+| `dev` (only if merged straight into `main`) | minor | 1.1.8 → 1.2.0 |
 | `hotfix/<name>` | patch | 1.1.8 → 1.1.9 |
 | `rt64-update`, `milestone/<name>` | major | 1.1.8 → 2.0.0 |
 
@@ -16,15 +17,26 @@ To make an exception, put a label on the pull request: `release:major`, `release
 `release:none` (no release, for example a docs-only merge). Create these four labels once under Issues → Labels.
 
 If you push to `main` without a pull request, there is only a release when the commit message contains `[major]`,
-`[minor]` or `[patch]`, or when it's a local `Merge branch 'dev'` commit. `[no release]` in a message skips the release.
+`[minor]` or `[patch]`, or when it's a local `Merge branch 'release/1.2'` (or `dev`, `hotfix/...`) commit. `[no release]` in a message skips the release.
 
 You can also start a release by hand: Actions → Release → Run workflow on `main`, then choose a bump or type an exact
 version.
 
+## Branches
+
+- `feature/<name>`: one piece of work, branched from `dev`, merged into `dev` when it's done and tested.
+- `dev`: what the next release will be.
+- `release/<x.y>`: cut from `dev` when a release goes into testing. Only bug fixes go on it, and each fix is merged back
+  into `dev` right away (`git switch dev && git merge release/<x.y>`). `dev` stays free for new work meanwhile.
+- `main`: only finished releases and hotfixes.
+- `hotfix/<x.y.z>`: an urgent fix for what players have, branched from `main`. It reaches `dev` through the workflow's
+  merge back (below).
+
 ## Day to day
 
-- **Normal release:** open a pull request from `dev` into `main` and merge it.
-- **Hotfix:** run `git switch -c hotfix/<what> main`, fix the problem, push, then open a pull request into `main` and
+- **Normal release:** run `git switch -c release/<x.y> dev` when the release goes into testing. Fix bugs there. When it
+  passes, open a pull request from `release/<x.y>` into `main` and merge it, then delete the release branch.
+- **Hotfix:** run `git switch -c hotfix/<x.y.z> main`, fix the problem, push, then open a pull request into `main` and
   merge it. Only the fix ships. Unfinished work on `dev` stays out.
 - **RT64:** open a pull request from `rt64-update` into `main` and merge it. That makes 2.0.0.
 
