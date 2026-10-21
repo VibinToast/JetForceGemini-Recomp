@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "recomp.h"
+#include "jfg_fields.h"
 #include "jfg_hooks.h"
 
 extern "C" int jfg_overlay_is_loaded(uint32_t ram); // jfg_glue.cpp
@@ -166,7 +167,7 @@ JFG_WRAP(func_overlay_3_000148C0_1EE9DA0) {
 JFG_WRAP(func_overlay_3_00014694_1EE9B74) {
     bool loop = false;
     if (g_squad_spawn >= 0) {
-        const bool first_member = !g_squad_first_seen && g_squad_spawn == 0 && MEM_W(0x58, ctx->r16) == 0;
+        const bool first_member = !g_squad_first_seen && g_squad_spawn == 0 && MEM_W(jfg::SquadronData::FirstMember::offset, ctx->r16) == 0;
         if (first_member) g_squad_first_seen = true;
         loop = !first_member;
         g_squad_spawn++;
@@ -187,7 +188,7 @@ static bool g_freeze_set = false;
 static void freeze_undo(uint8_t* rdram) {
     if (!g_freeze_set) return;
     g_freeze_set = false;
-    MEM_B(0, (gpr)(int32_t)0x800FD7BD) = 0;
+    MEM_B(0, (gpr)(int32_t)jfg::ADDR_pauseMode) = 0;
 }
 
 JFG_WRAP(func_80045F00_46B00) {
@@ -202,8 +203,8 @@ JFG_WRAP(objCutCameraActive) {
     const bool world = g_world.direct(ctx);
     objCutCameraActive_orig(rdram, ctx);
     if (!world) return;
-    if (jfg_freeze_world() && MEM_B(0, (gpr)(int32_t)0x800FD7BD) == 0) {
-        MEM_B(0, (gpr)(int32_t)0x800FD7BD) = 1;
+    if (jfg_freeze_world() && MEM_B(0, (gpr)(int32_t)jfg::ADDR_pauseMode) == 0) {
+        MEM_B(0, (gpr)(int32_t)jfg::ADDR_pauseMode) = 1;
         g_freeze_set = true;
     }
 }
