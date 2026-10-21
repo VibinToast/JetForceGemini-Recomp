@@ -26,7 +26,7 @@
 # It does not build the game: the game's code is translated from the owner's own ROM, which never goes to GitHub. The
 # builds are made on the owner's PC: tools\package_release.bat (Windows) and tools/package_release.sh (Linux) find the
 # draft by themselves, build its exact commit, upload the files and publish the release once every file is there.
-# See docs/RELEASING.md.
+# See RELEASING.md in the owner's Recomp-Docs notes.
 name: Release
 
 on:

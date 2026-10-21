@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the Linux release and uploads it to GitHub. The Linux side of tools\package_release.bat. Needs the GitHub CLI
 # (gh), signed in (gh auth login), for anything that talks to GitHub, and Docker or Podman for the build (see below).
-# See docs/RELEASING.md.
+# See RELEASING.md in the owner's Recomp-Docs notes.
 #
 #   tools/package_release.sh                   finds the draft release waiting for a Linux build (made by the Release
 #                                              workflow when something is merged into main), builds that release's exact
