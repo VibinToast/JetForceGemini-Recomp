@@ -40,14 +40,6 @@ stubs = [
 vram = 0x80074E2C
 func = "gen_anim_data"
 value = 0x00000000
-
-# --- Overlays: keep the runtime's function map in step with the game's own runtime linker (src/runLink.c) ----------
-# runlinkDownloadCode, at its osInvalICache call: the overlay has been allocated and copied; $fp = OverlayHeader*.
-[[patches.hook]]
-func = "runlinkDownloadCode"
-before_vram = 0x80052F30
-text = "{ void jfg_overlay_loaded(uint8_t*, recomp_context*); jfg_overlay_loaded(rdram, ctx); }"
-
 # runlinkResumeCode, at its romCopy of the text: a suspended overlay's code is being reloaded at its old address
 # ($fp = OverlayHeader*). It does not go through runlinkDownloadCode.
 [[patches.hook]]
