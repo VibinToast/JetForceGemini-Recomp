@@ -82,6 +82,9 @@ void unload_overlay_safely(uint32_t ram) {
 }
 }
 
+// 1 when an overlay is loaded at this address (jfg_engine_wrappers.cpp, mmFree's wrapper).
+extern "C" int jfg_overlay_is_loaded(uint32_t ram) {
+    return jfg_loaded_overlays.find(ram) != jfg_loaded_overlays.end() ? 1 : 0;
 }
 
 // Where the overlay with this ROM address is loaded now, or 0 (jfg_mods.cpp, TrapDanglingJump's wrapper).

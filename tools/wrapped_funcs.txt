@@ -64,4 +64,6 @@ func_8001BF9C_1CB9C
 trackGetFog
 runlinkDownloadCode
 runlinkResumeCode
+runlinkFreeCode
 romCopy
+mmFree

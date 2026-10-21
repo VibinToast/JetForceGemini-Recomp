@@ -44,11 +44,6 @@ value = 0x00000000
 # overlay's own exit function has been called through runlinkCallResumeFunction, which still needs the mapping.
 # (runlinkSuspendCode frees through runlinkFreeCode.)
 [[patches.hook]]
-func = "runlinkFreeCode"
-before_vram = 0x800534F4
-text = "{ void jfg_overlay_unloading(uint8_t*, recomp_context*); jfg_overlay_unloading(rdram, ctx); }"
-
-[[patches.hook]]
 func = "runlinkUnloadOverlay"
 before_vram = 0x800537D0
 text = "{ void jfg_overlay_unloading(uint8_t*, recomp_context*); jfg_overlay_unloading(rdram, ctx); }"
