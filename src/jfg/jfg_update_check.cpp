@@ -990,6 +990,28 @@ void jfg_update_restart() {
         CloseHandle(process.hProcess);
         CloseHandle(process.hThread);
     }
+#elif defined(__linux__)
+    // Nothing is installed from here on Linux (the dialog points to the release page), so this only starts the game
+    // again: this binary with the same arguments as this run (/proc/self/cmdline), in the same folder.
+    std::error_code ec;
+    const fs::path exe = fs::read_symlink("/proc/self/exe", ec);
+    if (ec) return;
+    const std::string path = exe.string();
+    std::vector<std::string> args;
+    if (std::FILE* f = std::fopen("/proc/self/cmdline", "rb")) {
+        std::string arg;
+        for (int c; (c = std::fgetc(f)) != EOF;) {
+            if (c != '\0') { arg += (char)c; continue; }
+            args.push_back(arg);
+            arg.clear();
+        }
+        std::fclose(f);
+    }
+    std::vector<char*> argv{ const_cast<char*>(path.c_str()) };
+    for (size_t i = 1; i < args.size(); i++) argv.push_back(args[i].data()); // [0] is this program as it was started
+    argv.push_back(nullptr);
+    pid_t pid = 0;
+    posix_spawn(&pid, path.c_str(), nullptr, nullptr, argv.data(), environ);
 #endif
 }
 
