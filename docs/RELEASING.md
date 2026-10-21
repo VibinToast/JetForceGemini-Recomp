@@ -34,8 +34,9 @@ version.
 
 ## Day to day
 
-- **Normal release:** run `git switch -c release/<x.y> dev` when the release goes into testing. Fix bugs there. When it
-  passes, open a pull request from `release/<x.y>` into `main` and merge it, then delete the release branch.
+- **Normal release:** run `git switch -c release/<x.y> dev` when the release goes into testing. Fix bugs there, and
+  write the release notes there too (see [Release notes](#release-notes)). When it passes, open a pull request from
+  `release/<x.y>` into `main` and merge it, then delete the release branch.
 - **Hotfix:** run `git switch -c hotfix/<x.y.z> main`, fix the problem, push, then open a pull request into `main` and
   merge it. Only the fix ships. Unfinished work on `dev` stays out.
 - **RT64:** open a pull request from `rt64-update` into `main` and merge it. That makes 2.0.0.
@@ -47,6 +48,42 @@ workflow run shows a warning and you merge by hand (`git switch dev && git merge
 
 Only one release can wait at a time. While a draft is waiting for its builds, a new merge into `main` gets no release.
 Build and publish the draft first, then start the workflow by hand.
+
+## Release notes
+
+The notes are written by hand, in an `## Unreleased` section at the top of `CHANGELOG.md` (above the newest version).
+Write them on the release branch while it's in testing, so they describe exactly what ships. When the release is made,
+the workflow renames the section to `## vX.Y.Z (date)` and uses the same text for the GitHub release, with a "Full
+changelog" link added at the end. The game and the launcher show `CHANGELOG.md` under Changelogs, and test builds of
+the release branch already show the Unreleased section.
+
+```markdown
+## Unreleased
+
+### New options
+
+- Auto Save: the game saves itself every few minutes, so a crash no longer loses your progress.
+
+### Fixes
+
+- Fixed a crash in the Lurg fight.
+```
+
+- Write for players: what changed in the game and what it means for them. No code, file or function names.
+- Group the notes by area under `### ` headings (New options, Frame rate, Launcher, Fixes and so on).
+- One `- ` line per change. Keep the list flat: the launcher shows nested bullets as ordinary ones, without
+  indenting them. Bold, code marks and links don't show in the launcher either.
+- Describe where things ended up, not each step on the way: if a setting was changed three times during testing,
+  only its final form goes in. Say plainly when something players had is gone.
+- Leave out changes players can't see (build, tools, refactoring, test switches).
+- A `<!-- ... -->` comment is left out of the release, so it's safe for notes to yourself. Keep each one on one line:
+  the in-game changelog of a test build shows it as a line of text.
+
+**Fallback:** if there's no Unreleased section, or it has only the heading (and comments), the notes are the commit
+messages since the last release instead: the first line of each, newest first. That's fine for a quick hotfix, so
+keep commit messages readable for players anyway. This list leaves out "WIP" commits, commits listed in
+`.github/changelog-skip.txt`, and commits that only change files players don't see (README, docs, `.github`, release
+tools).
 
 ## Building the draft
 
