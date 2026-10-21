@@ -198,6 +198,11 @@ echo [jfg] building ^(10-40 minutes the first time^)...
 rem -k 0: keep going after errors so one run reports all of them
 cmake --build "%WORK%\build-windows" --parallel -- -k 0
 if errorlevel 1 ( echo [jfg] ERROR: build failed - see the errors above & exit /b 1 )
+rem The game's overlay pre-linker (for mods' hooks) must give the bytes prepare_overlays.py gave the recompiler.
+if exist "%WORK%\baserom.us.recomp.z64" (
+    "%WORK%\build-windows\jfg_prelink_check.exe" "%JFG_ROM%" "%WORK%\baserom.us.recomp.z64"
+    if errorlevel 1 ( echo [jfg] ERROR: the two overlay pre-linkers differ - see above & exit /b 1 )
+) else echo [jfg] prelink check skipped: no baserom.us.recomp.z64 ^(pre-generated game code^)
 
 if not exist "%WORK%\build-windows\JetForceGeminiRecompiled.exe" ( echo [jfg] ERROR: build reported success but the executable is missing & exit /b 1 )
 

@@ -72,6 +72,12 @@ say "building (10-40 minutes the first time)"
 cmake -S . -B "$OUT/build-linux" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 cmake --build "$OUT/build-linux" --parallel
 [ -x "$OUT/build-linux/JetForceGeminiRecompiled" ] || die "build finished but the executable is missing"
+# The game's overlay pre-linker (for mods' hooks) must give the bytes prepare_overlays.py gave the recompiler.
+if [ -f baserom.us.recomp.z64 ]; then
+  "$OUT/build-linux/jfg_prelink_check" "$ROM" baserom.us.recomp.z64 || die "the two overlay pre-linkers differ - see above"
+else
+  say "prelink check skipped: no baserom.us.recomp.z64 (pre-generated game code)"
+fi
 
 # ---- 4. game folder --------------------------------------------------------
 # Everything the game needs to run, in one place. Saves and settings are written here as well.
