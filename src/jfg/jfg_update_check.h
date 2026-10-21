@@ -1,18 +1,23 @@
 // JFG PORT: update check and installer for the launcher (src/jfg/jfg_update_check.cpp, src/ui/ui_launcher.cpp).
 #pragma once
+#include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 
 // The launcher's own settings, bin\jfg_launcher.txt (written with explanations when it is missing):
 //   check_for_updates=1|0   0: the launcher makes no requests to GitHub (no update check, no list of recent changes);
 //   rom=<path>              a ROM to start the game with straight away, without the launcher (relative to bin);
-//   skip_launcher=0|1       1: start the game straight away with the ROM loaded in the launcher (its Play page sets it).
+//   skip_launcher=0|1       1: start the game straight away with the ROM loaded in the launcher (its Play page sets it);
+//   show_official_pack=1|0  0: the launcher's Texture Packs page hides the official HD pack (and does not ask GitHub).
 // Read once at start-up (src/main.cpp), before the launcher or the update check runs.
 void jfg_launcher_config_load(const std::filesystem::path& app_folder);
 bool jfg_launcher_check_updates();
 void jfg_launcher_set_check_updates(bool check); // and saves it to the file (the check itself runs at start-up)
 bool jfg_launcher_skip();
 void jfg_launcher_set_skip(bool skip); // and saves it to the file
+bool jfg_launcher_show_official_pack();
+void jfg_launcher_set_show_official_pack(bool show); // and saves it to the file
 std::string jfg_launcher_config_rom(); // an absolute path, or "" when none is set
 
 struct JfgUpdateInfo {
@@ -55,3 +60,13 @@ std::string jfg_changelog_commits();
 // Changelog markdown (the two above, JfgUpdateInfo::changelog) as RML for the launcher's dialogs, with the version
 // headings tagged Installed / New against `installed`.
 std::string jfg_changelog_rml(const std::string& markdown, const std::string& installed);
+
+// For the texture pack installer (jfg_pack_install.cpp), over https:
+// The text at url (a GitHub API answer), false when it could not be had.
+bool jfg_http_get_text(const std::string& url, std::string& out);
+// Downloads url into file, carrying on from what file already holds. progress(done, total) returns false to stop.
+// 1 = done, 0 = failed (what arrived is kept, to carry on from), -1 = stopped by progress.
+int jfg_http_download(const std::string& url, const std::filesystem::path& file, uint64_t expected_size,
+                      const std::function<bool(uint64_t done, uint64_t total)>& progress);
+// The SHA-256 of a file, as lower case hex.
+bool jfg_sha256_file(const std::filesystem::path& file, std::string& hex);

@@ -9,7 +9,10 @@
 #include <functional>
 #include <map>
 #include <mutex>
+#include <fstream>
+#include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "json/json.hpp"
@@ -59,9 +62,9 @@ static std::string pack_file_name(const std::string& folder) {
     return name;
 }
 
-// A pack's details: credits.json at its top level (name, version, author, website, description, image), and the image it
-// names (pack_image.png by default). Read once per pack and kept until the file changes (checked by the list, not by
-// pack_display_name, which runs every frame for the on-screen pack name).
+// A pack's details: credits.json at its top level (id, variant, version, author, website, description, image), and the image
+// it names (pack_image.png by default). Read once per pack and kept until the file changes (checked by the list). The
+// pack's name is its file or folder name, not one in credits.json.
 struct PackMeta {
     std::filesystem::file_time_type stamp{};
     uintmax_t size = 0;
@@ -88,7 +91,8 @@ static void parse_pack_json(PackInfo& info, const std::vector<char>& text,
     nlohmann::json j = nlohmann::json::parse(text.begin(), text.end(), nullptr, false);
     if (!j.is_object()) return;
     info.has_json = true;
-    info.name = json_string(j, "name");
+    info.id = json_string(j, "id");
+    info.variant = json_string(j, "variant");
     info.version = json_string(j, "version");
     info.author = json_string(j, "author");
     info.website = json_string(j, "website");
@@ -190,15 +194,20 @@ PackInfo texture_pack_info(const std::string& folder) {
     return info;
 }
 
+// The folder / file name without a version at its end: Official_Recomp_HD-2K_v1.1.0.rtz is Official_Recomp_HD-2K (the
+// version is shown from credits.json).
 std::string pack_display_name(const std::string& folder) {
     if (folder.empty()) return "Off (original textures)";
-    {
-        std::lock_guard lock(g_pack_meta_mutex);
-        auto it = g_pack_meta.find(folder);
-        if (it != g_pack_meta.end()) return it->second.info.name.empty() ? pack_file_name(folder) : it->second.info.name;
+    std::string name = pack_file_name(folder);
+    const size_t v = name.rfind("_v");
+    if (v != std::string::npos && v > 0 && v + 2 < name.size() && std::isdigit((unsigned char)name[v + 2])) {
+        bool version = true;
+        for (size_t i = v + 2; i < name.size(); i++) {
+            if (!std::isdigit((unsigned char)name[i]) && name[i] != '.') version = false;
+        }
+        if (version) name.resize(v);
     }
-    const PackInfo info = texture_pack_info(folder);
-    return info.name.empty() ? pack_file_name(folder) : info.name;
+    return name;
 }
 
 // Chooses a pack (or "" for none), saves the choice and makes the renderer (re)load it.
@@ -219,6 +228,8 @@ void load_texture_pack_choice() {
     std::call_once(once, load_texture_pack_choice_now);
 }
 static void load_texture_pack_choice_now() {
+    delete_replaced_packs(); // packs an update of the official pack replaced while they were open
+    join_split_packs();      // parts put in texture_packs since the last run
     std::string folder;
     if (std::FILE* f = std::fopen(PACK_CHOICE_FILE, "r")) {
         char line[512] = {};
@@ -230,6 +241,9 @@ static void load_texture_pack_choice_now() {
         std::error_code ec;
         if (std::filesystem::is_directory("texture_pack", ec)) folder = "texture_pack"; // as before packs had names
     }
+    // A saved pack that is no longer there (removed or renamed) is Off; the file keeps the choice for when it is back.
+    std::error_code ec;
+    if (!folder.empty() && !std::filesystem::exists(std::filesystem::u8path(folder), ec)) folder.clear();
     std::lock_guard lock(g_pack_mutex);
     g_pack_folder = folder;
     g_pack_generation++;
@@ -329,6 +343,186 @@ extern "C" int jfg_texture_pack_current(char* buf, int size) {
     std::lock_guard lock(g_pack_mutex);
     std::snprintf(buf, (size_t)size, "%s", g_pack_folder.c_str());
     return g_pack_generation.load();
+}
+
+// ---- Split packs ------------------------------------------------------------------------------------------------------
+// A pack too big for one GitHub file comes as parts (tools/textures/split_rtz.ps1): <pack>.rtz.001, .002, ... Dropped in
+// texture_packs, they are joined into <pack>.rtz on a thread of their own, one pack at a time (looked for at start-up and
+// by Reload Pack, not all the time): written to
+// <pack>.rtz.joining, checked as a zip (every file's header in place, so no part is missing or cut short), then renamed
+// and the parts deleted. Parts that do not make a whole pack are left as they are and not tried again until they change.
+static std::mutex g_join_mutex;
+static bool g_join_running = false;
+static std::string g_join_text;       // what the Textures page shows: progress, the result or why it failed
+static int g_join_finished = 0;        // joins done, so the menus know to list the new pack
+// Parts that did not make a whole pack (missing or damaged), with why: "<part 1>|<size of the parts>|<time of the newest>".
+// Not tried again until they change. (A pack already there, or too little disk space, is looked at again every time.)
+static std::map<std::string, std::string> g_join_given_up;
+
+static void set_join_text(const std::string& text) { std::lock_guard lock(g_join_mutex); g_join_text = text; }
+
+static bool ends_with_nocase(const std::string& s, const std::string& end) {
+    if (s.size() < end.size()) return false;
+    for (size_t i = 0; i < end.size(); i++) {
+        if (std::tolower((unsigned char)s[s.size() - end.size() + i]) != std::tolower((unsigned char)end[i])) return false;
+    }
+    return true;
+}
+
+static std::string u8_name(const std::filesystem::path& p) {
+    const auto u8 = p.filename().u8string();
+    return std::string(u8.begin(), u8.end());
+}
+
+static std::filesystem::path part_path(const std::filesystem::path& pack, int index) {
+    char ext[8];
+    std::snprintf(ext, sizeof(ext), ".%03d", index);
+    std::filesystem::path p = pack;
+    p += ext;
+    return p;
+}
+
+static bool zip_is_whole(const std::filesystem::path& file) {
+#ifdef _WIN32
+    std::FILE* f = _wfopen(file.c_str(), L"rb");
+#else
+    std::FILE* f = std::fopen(file.c_str(), "rb");
+#endif
+    if (f == nullptr) return false;
+    mz_zip_archive zip = {};
+    bool ok = mz_zip_reader_init_cfile(&zip, f, 0, 0) != 0;
+    if (ok) {
+        ok = mz_zip_validate_archive(&zip, MZ_ZIP_FLAG_VALIDATE_HEADERS_ONLY) != 0;
+        mz_zip_reader_end(&zip);
+    }
+    std::fclose(f);
+    return ok;
+}
+
+static void join_thread(std::filesystem::path pack, std::vector<std::filesystem::path> parts, uint64_t total, std::string key) {
+    const std::string name = pack_display_name("texture_packs/" + u8_name(pack));
+    std::filesystem::path temp = pack;
+    temp += ".joining";
+    std::string failure;
+    {
+        std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+        std::vector<char> buffer(8u << 20);
+        uint64_t done = 0;
+        int shown = -1;
+        if (!out) failure = "Could not write " + name + " in texture_packs.";
+        for (size_t i = 0; failure.empty() && i < parts.size(); i++) {
+            std::ifstream in(parts[i], std::ios::binary);
+            if (!in) { failure = "Could not read a part of " + name + "."; break; }
+            while (in) {
+                in.read(buffer.data(), (std::streamsize)buffer.size());
+                const std::streamsize got = in.gcount();
+                if (got <= 0) break;
+                out.write(buffer.data(), got);
+                if (!out) { failure = "Could not write " + name + ": is the disk full?"; break; }
+                done += (uint64_t)got;
+                const int percent = total > 0 ? (int)(done * 95 / total) : 0;
+                if (percent != shown) { shown = percent; set_join_text("Joining " + name + " from its parts: " + std::to_string(percent) + "%"); }
+            }
+        }
+    }
+    if (failure.empty()) {
+        set_join_text("Joining " + name + " from its parts: checking...");
+        if (!zip_is_whole(temp)) failure = name + " could not be joined: a part is missing or not fully downloaded.";
+    }
+    std::error_code ec;
+    if (failure.empty()) {
+        std::filesystem::rename(temp, pack, ec);
+        if (ec) failure = "Could not rename the joined " + name + ".";
+    }
+    if (!failure.empty()) {
+        std::filesystem::remove(temp, ec);
+        std::lock_guard lock(g_join_mutex);
+        g_join_given_up[key] = failure;
+        g_join_text = failure;
+        g_join_running = false;
+        return;
+    }
+    for (const std::filesystem::path& part : parts) std::filesystem::remove(part, ec);
+    // The saved choice is this pack (it was Off at start-up while only its parts were there): use it now.
+    const std::string folder = "texture_packs/" + u8_name(pack);
+    if (std::FILE* f = std::fopen(PACK_CHOICE_FILE, "r")) {
+        char line[512] = {};
+        std::string saved = std::fgets(line, sizeof(line), f) ? line : "";
+        std::fclose(f);
+        while (!saved.empty() && (saved.back() == '\n' || saved.back() == '\r')) saved.pop_back();
+        if (saved == folder) {
+            { std::lock_guard pack_lock(g_pack_mutex); g_pack_folder = folder; }
+            g_pack_generation++;
+        }
+    }
+    std::lock_guard lock(g_join_mutex);
+    g_join_text = "Joined " + name + " from its parts.";
+    g_join_finished++;
+    g_join_running = false;
+}
+
+// Looks for parts in texture_packs and starts joining the first whole set: at start-up and by Reload Pack.
+void join_split_packs() {
+    {
+        std::lock_guard lock(g_join_mutex);
+        if (g_join_running) return;
+        g_join_text.clear(); // a note from an earlier look is only shown again if it still applies
+    }
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it("texture_packs", ec), end; !ec && it != end; it.increment(ec)) {
+        const std::string file = u8_name(it->path());
+        std::error_code e;
+        // Left by a join this run did not finish (the game was closed): no join is running now.
+        if (ends_with_nocase(file, ".rtz.joining")) { std::filesystem::remove(it->path(), e); continue; }
+        if (!ends_with_nocase(file, ".rtz.001") || !it->is_regular_file(e)) continue;
+        std::filesystem::path pack = it->path();
+        pack.replace_extension(); // <pack>.rtz
+        std::vector<std::filesystem::path> parts;
+        uint64_t total = 0;
+        std::filesystem::file_time_type newest{};
+        bool empty_part = false;
+        for (int i = 1; i < 1000; i++) {
+            const std::filesystem::path part = part_path(pack, i);
+            if (!std::filesystem::is_regular_file(part, e)) break;
+            const uint64_t size = std::filesystem::file_size(part, e);
+            if (size == 0) empty_part = true; // a browser's placeholder while it downloads
+            total += size;
+            newest = std::max(newest, std::filesystem::last_write_time(part, e));
+            parts.push_back(part);
+        }
+        if (empty_part) continue; // a placeholder: still downloading
+        const std::string key = file + "|" + std::to_string(total) + "|" + std::to_string(newest.time_since_epoch().count());
+        std::lock_guard lock(g_join_mutex);
+        if (auto given_up = g_join_given_up.find(key); given_up != g_join_given_up.end()) {
+            g_join_text = given_up->second; // still not whole: say so again
+            continue;
+        }
+        const std::string name = pack_display_name("texture_packs/" + u8_name(pack));
+        if (std::filesystem::exists(pack, e)) {
+            g_join_text = name + " is already in texture_packs, so its parts were not joined. Remove one or the other.";
+            continue;
+        }
+        const std::filesystem::space_info space = std::filesystem::space("texture_packs", e);
+        if (!e && space.available < total + (64u << 20)) {
+            g_join_text = "Not enough disk space to join " + name + " from its parts (" + std::to_string((total + (1u << 29)) >> 30) + " GB needed).";
+            continue;
+        }
+        g_join_running = true;
+        g_join_text = "Joining " + name + " from its parts...";
+        std::thread(join_thread, pack, std::move(parts), total, key).detach();
+        return;
+    }
+}
+
+bool pack_join_running() {
+    std::lock_guard lock(g_join_mutex);
+    return g_join_running;
+}
+
+std::string pack_join_text(int& finished) {
+    std::lock_guard lock(g_join_mutex);
+    finished = g_join_finished;
+    return g_join_text;
 }
 
 } // namespace jfg

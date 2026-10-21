@@ -132,7 +132,10 @@ std::wstring widen(const std::string& s) {
     return w;
 }
 
-bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progress) {
+// range_from > 0 asks for the rest of the file from that byte (206); a server that sends the whole file instead (200)
+// is told to on_status, which is called with the status before the body.
+bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progress, uint64_t range_from = 0,
+              const std::function<void(DWORD status)>& on_status = nullptr) {
     wchar_t host[256] = {}, path[2048] = {}, extra[2048] = {};
     URL_COMPONENTS parts = {};
     parts.dwStructSize = sizeof(parts);
@@ -149,15 +152,18 @@ bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progre
     WinHttpSetTimeouts(session, 8000, 8000, 20000, 30000);
     HINTERNET connection = WinHttpConnect(session, host, parts.nPort, 0);
     HINTERNET request = connection == nullptr ? nullptr : WinHttpOpenRequest(connection, L"GET", target.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+    std::wstring headers = L"Accept: application/vnd.github+json, application/octet-stream\r\n";
+    if (range_from > 0) headers += L"Range: bytes=" + std::to_wstring(range_from) + L"-\r\n";
     if (request != nullptr &&
-        WinHttpSendRequest(request, L"Accept: application/vnd.github+json, application/octet-stream\r\n", (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+        WinHttpSendRequest(request, headers.c_str(), (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
         WinHttpReceiveResponse(request, nullptr)) {
         DWORD status = 0, size = sizeof(status);
         WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX);
         DWORD length = 0;
         size = sizeof(length);
         if (!WinHttpQueryHeaders(request, WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &length, &size, WINHTTP_NO_HEADER_INDEX)) length = 0;
-        if (status == 200) {
+        if (status == 200 || (status == 206 && range_from > 0)) {
+            if (on_status) on_status(status);
             ok = true;
             std::vector<char> buffer(64 * 1024);
             uint64_t done = 0;
@@ -600,10 +606,77 @@ void cleanup_thread() {
 #endif
 } // namespace
 
+// ---- shared with the texture pack installer (jfg_pack_install.cpp) ---------------------------------------------------------
+bool jfg_http_get_text(const std::string& url, std::string& out) { return http_get_string(url, out); }
+
+int jfg_http_download(const std::string& url, const fs::path& file, uint64_t expected_size,
+                      const std::function<bool(uint64_t done, uint64_t total)>& progress) {
+    std::error_code ec;
+    uint64_t have = fs::exists(file, ec) ? fs::file_size(file, ec) : 0;
+    if (ec || (expected_size > 0 && have > expected_size)) have = 0;
+    if (expected_size > 0 && have == expected_size) return 1; // already all there
+    bool cancelled = false, write_ok = true;
+#ifdef _WIN32
+    std::FILE* f = _wfopen(file.c_str(), have > 0 ? L"ab" : L"wb");
+    if (f == nullptr) return 0;
+    uint64_t start = have;
+    const bool ok = http_get(url,
+        [&](const char* data, size_t n) {
+            if (cancelled) return false;
+            if (std::fwrite(data, 1, n, f) != n) { write_ok = false; return false; }
+            return true;
+        },
+        [&](uint64_t done, uint64_t length) {
+            const uint64_t total = expected_size > 0 ? expected_size : start + length;
+            if (progress && !progress(start + done, total)) cancelled = true;
+        },
+        have,
+        [&](DWORD status) {
+            if (status == 200 && start > 0) { // the server sent the whole file: start again
+                f = _wfreopen(file.c_str(), L"wb", f);
+                start = 0;
+            }
+        });
+    if (f != nullptr) std::fclose(f);
+#else
+    // curl writes the rest of the file (-C -: from the size it already has) and reports nothing back; the size of the
+    // file is the progress.
+    if (url.rfind("https://", 0) != 0 || url.find('\'') != std::string::npos || file.string().find('\'') != std::string::npos) return 0;
+    const std::string command = "curl -fsSL -C - -o '" + file.string() + "' '" + url + "' 2>/dev/null";
+    std::atomic<int> result{ -1 };
+    std::thread worker([&] { result = std::system(command.c_str()); });
+    while (result.load() == -1) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        const uint64_t size = fs::exists(file, ec) ? fs::file_size(file, ec) : 0;
+        if (progress && !progress(size, expected_size)) cancelled = true; // noted; curl finishes the file
+    }
+    worker.join();
+    const bool ok = result.load() == 0;
+#endif
+    if (cancelled) return -1;
+    return ok && write_ok ? 1 : 0;
+}
+
+bool jfg_sha256_file(const fs::path& file, std::string& hex) {
+#ifdef _WIN32
+    return sha256_of_file(file, hex);
+#else
+    if (file.string().find('\'') != std::string::npos) return false;
+    FILE* pipe = popen(("sha256sum '" + file.string() + "' 2>/dev/null").c_str(), "r");
+    if (pipe == nullptr) return false;
+    char buffer[128] = {};
+    const size_t got = std::fread(buffer, 1, 64, pipe);
+    const bool ok = pclose(pipe) == 0 && got == 64;
+    if (ok) hex.assign(buffer, 64);
+    return ok;
+#endif
+}
+
 // ---- the launcher's settings (bin\jfg_launcher.txt) -----------------------------------------------------------------------
 namespace {
 bool g_check_updates = true;
 bool g_skip_launcher = false;
+bool g_show_official_pack = true;
 std::string g_current_version;          // this build, for a check started later (jfg_launcher_set_check_updates)
 std::atomic<bool> g_check_started{ false };
 std::string g_config_rom;
@@ -612,6 +685,9 @@ constexpr const char* LAUNCHER_CONFIG_FILE = "jfg_launcher.txt";
 #define SKIP_LAUNCHER_COMMENT \
     "# 1: the game starts straight away with the ROM you loaded in the launcher (the launcher's Play page sets this).\n" \
     "# 0: the launcher opens first. Starting the game with --launcher opens it anyway.\n"
+#define OFFICIAL_PACK_COMMENT \
+    "# 1: the launcher's Texture Packs page shows the official HD texture pack, to download or update (it asks GitHub\n" \
+    "# for its latest version, with check_for_updates=1). 0: hidden, and not asked for. The General settings set this.\n"
 #define CHECK_UPDATES_COMMENT \
     "# 1: the game looks for a newer release on GitHub when it starts (the launcher's Play page and a note in the game\n" \
     "# show one). 0: it never contacts GitHub (no update check, no list of recent changes). The General settings set this.\n"
@@ -628,7 +704,10 @@ constexpr const char* LAUNCHER_CONFIG_TEMPLATE =
     "rom=\n"
     "\n"
     SKIP_LAUNCHER_COMMENT
-    "skip_launcher=0\n";
+    "skip_launcher=0\n"
+    "\n"
+    OFFICIAL_PACK_COMMENT
+    "show_official_pack=1\n";
 
 std::string trim(const std::string& s) {
     const size_t a = s.find_first_not_of(" \t\r\n"), b = s.find_last_not_of(" \t\r\n");
@@ -666,6 +745,7 @@ void jfg_launcher_config_load(const fs::path& app_folder) {
         if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size() - 2);
         if (key == "check_for_updates") g_check_updates = value != "0" && value != "false" && value != "no";
         else if (key == "skip_launcher") g_skip_launcher = value == "1" || value == "true" || value == "yes";
+        else if (key == "show_official_pack") g_show_official_pack = value != "0" && value != "false" && value != "no";
         else if (key == "rom" && !value.empty()) {
             fs::path rom{ std::u8string(value.begin(), value.end()) };
             if (rom.is_relative()) rom = app_folder / rom;
@@ -678,6 +758,7 @@ void jfg_launcher_config_load(const fs::path& app_folder) {
 }
 bool jfg_launcher_check_updates() { return g_check_updates; }
 bool jfg_launcher_skip() { return g_skip_launcher; }
+bool jfg_launcher_show_official_pack() { return g_show_official_pack; }
 
 // Writes key=value into the file: the existing line is replaced (the rest of the file, comments included, is kept), or
 // the setting is added at the end with its explanation (`comment`).
@@ -720,6 +801,11 @@ void jfg_launcher_set_skip(bool skip) {
 
 // The check itself runs once, at start-up: turning it on takes effect the next time the game starts; turning it off
 // also stops the in-game notice of an update already found this run (jfg_tick.cpp asks jfg_launcher_check_updates).
+void jfg_launcher_set_show_official_pack(bool show) {
+    g_show_official_pack = show;
+    write_launcher_setting("show_official_pack", show ? "1" : "0", OFFICIAL_PACK_COMMENT);
+}
+
 void jfg_launcher_set_check_updates(bool check) {
     g_check_updates = check;
     write_launcher_setting("check_for_updates", check ? "1" : "0", CHECK_UPDATES_COMMENT);

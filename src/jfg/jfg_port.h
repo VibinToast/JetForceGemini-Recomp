@@ -32,14 +32,20 @@ std::vector<std::string> list_texture_packs();
 struct PackInfo {
     bool has_json = false;
     int serial = 0;          // a new number each time the details are read again (the files changed)
-    std::string name, version, author, website, description;
+    std::string id, version, variant, author, website, description; // id + variant: which pack and size (1K, 2K, 4K)
     std::vector<char> image; // the image file's bytes (pack_image.png unless credits.json names another)
 };
 PackInfo texture_pack_info(const std::string& folder); // re-read when the pack's files change
-std::string pack_display_name(const std::string& folder); // credits.json's name, else the folder / .rtz name
+std::string pack_display_name(const std::string& folder); // the folder / .rtz name, without .rtz or a _v1.1.0 at its end
 void set_texture_pack(const std::string& folder); // saves the choice and makes the renderer (re)load it
 void load_texture_pack_choice();
 void next_texture_pack();                         // F6
+// Split packs (<pack>.rtz.001, .002, ...) in texture_packs: joined into <pack>.rtz on a thread of their own.
+void join_split_packs();                          // looks for parts and starts joining a whole set
+std::string pack_join_text(int& finished);        // progress / result for the Textures page; finished: joins done
+bool pack_join_running();
+// --- jfg_pack_install.cpp ----------------------------------------------------------------------------------------
+void delete_replaced_packs();                     // at start-up: packs an update replaced while they were open
 void update_dump_folder();                        // texture dumping, "One folder per level", and the scene tag of draw_trace.txt
 
 // --- jfg_frame_rate.cpp ------------------------------------------------------------------------------------------

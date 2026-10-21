@@ -15,6 +15,7 @@
 
 static std::string version_string;
 #include "jfg/jfg_update_check.h"
+#include "jfg/jfg_pack_install.h"
 // A newer release exists (src/jfg/jfg_update_check.cpp): a banner on the Play page and a warning triangle next to the
 // version open the dialog with what is new and a confirmation, and the update is then downloaded and installed. The dialog
 // does not open by itself. bin\jfg_launcher.txt can turn the check off (check_for_updates=0).
@@ -37,6 +38,8 @@ static bool logo_available = false;   // assets/jfg_launcher/logo.png exists: sh
 static constexpr int TOAST_FRAMES = 180, TOAST_FPS = 30;
 void jfg_launcher_commit_settings();  // ui_config.cpp: applies pending graphics changes and saves the settings
 void jfg_config_menu_refresh();       // ui_config.cpp: refreshes the port's tabs (profiles, texture packs)
+void jfg_config_clear_option_focus(); // ui_config.cpp: no option's description shown
+void jfg_open_url_prompt(const std::string& url, const std::string& return_id); // ui_config.cpp: asks, then opens it
 
 struct LauncherPageInfo { const char* id; const char* title; const char* subtitle; const char* nav_id; };
 static const LauncherPageInfo LAUNCHER_PAGES[] = {
@@ -133,11 +136,77 @@ static bool queue_launcher_image(const char* name, const char* file) {
     return true;
 }
 
+// ---- the official HD texture pack (Texture Packs page; src/jfg/jfg_pack_install.cpp) -------------------------------------
+struct OfficialPackRow { Rml::String variant, size_text, action; bool installed = false; };
+static std::vector<OfficialPackRow> official_rows;    // one button per variant in the latest release
+static Rml::String official_status, official_text;    // "Latest version: 1.1.0"; the download's progress / result
+static Rml::String official_result;                   // how the last download ended (shown while none is running)
+static bool official_busy = false;
+static bool official_shown = true;                    // the General page's "Official HD Texture Pack" (show_official_pack)
+static int official_percent = 0, official_serial = -1;
+static bool official_update = false;                  // an installed official pack is older: the Play page's bar
+static Rml::String official_update_title, official_update_text, official_update_variant;
+
+static Rml::String official_size_text(uint64_t bytes) {
+    char text[32];
+    if (bytes >= (1ull << 30)) std::snprintf(text, sizeof(text), "%.1f GB", bytes / 1073741824.0);
+    else std::snprintf(text, sizeof(text), "%.0f MB", bytes / 1048576.0);
+    return text;
+}
+
+// Shows the state again. scan: also which packs are installed - when the page opens or a download or the check ends,
+// not every time (it reads texture_packs).
+static void refresh_official(bool scan) {
+    if (!model_handle) return;
+    const JfgOfficialState state = jfg_official_state(scan);
+    if (state.busy != official_busy) {
+        official_busy = state.busy;
+        model_handle.DirtyVariable("official_busy");
+        focus_soon(official_busy ? "rl_official_cancel" : "rl_official_0");
+    }
+    if (state.percent != official_percent) { official_percent = state.percent; model_handle.DirtyVariable("official_percent"); }
+    if (state.text != official_text) { official_text = state.text; model_handle.DirtyVariable("official_text"); }
+    const Rml::String result = state.busy ? Rml::String() : state.text;
+    if (result != official_result) { official_result = result; model_handle.DirtyVariable("official_result"); }
+    if (!scan) return;
+    // The Play page's bar: the first installed official pack with a newer version out.
+    const std::vector<JfgOfficialUpdate> updates = jfg_launcher_show_official_pack() ? jfg_official_updates() : std::vector<JfgOfficialUpdate>{};
+    const bool update = !updates.empty();
+    Rml::String title, text, variant;
+    if (update) {
+        title = "HD texture pack update: " + updates[0].latest;
+        text = "The " + updates[0].variant + " pack you have is " + updates[0].installed + ". Open Texture Packs to update it.";
+        variant = updates[0].variant;
+    }
+    if (update != official_update) { official_update = update; model_handle.DirtyVariable("official_update"); }
+    if (title != official_update_title) { official_update_title = title; model_handle.DirtyVariable("official_update_title"); }
+    if (text != official_update_text) { official_update_text = text; model_handle.DirtyVariable("official_update_text"); }
+    official_update_variant = variant;
+    if (jfg_launcher_show_official_pack() != official_shown) {
+        official_shown = jfg_launcher_show_official_pack();
+        model_handle.DirtyVariable("official_shown");
+    }
+    official_rows.clear();
+    for (const JfgOfficialPack& pack : state.packs) {
+        official_rows.push_back({ pack.variant, official_size_text(pack.size), pack.action, pack.action == "Installed" });
+    }
+    model_handle.DirtyVariable("official_rows");
+    Rml::String status;
+    if (!jfg_launcher_check_updates()) status = "Turn on Check for Updates (General page) to download it here.";
+    else if (state.stage <= 1) status = "Looking for the latest version...";
+    else if (state.stage == 3) status = "Could not reach GitHub to look for it.";
+    else if (state.packs.empty()) status = "The latest release has nothing to download yet.";
+    else status = "Latest version: " + state.latest;
+    if (status != official_status) { official_status = status; model_handle.DirtyVariable("official_status"); }
+}
+
 static void set_launcher_page(const std::string& page) {
     if (launcher_page == page) return;
     jfg_launcher_commit_settings(); // leaving a settings page keeps its changes
     launcher_page = page;
+    jfg_config_clear_option_focus();
     jfg_config_menu_refresh();
+    if (launcher_page == "textures") refresh_official(true);
     model_handle.DirtyVariable("page");
     model_handle.DirtyVariable("page_title");
     model_handle.DirtyVariable("page_subtitle");
@@ -246,6 +315,23 @@ void jfg_launcher_ui_tick() {
             jfg_launcher_commit_settings();
             jfg_update_restart();
             ultramodern::quit();
+        }
+    }
+    // The official pack: its download progress (Texture Packs page), the list again once a download or the check ends,
+    // and the Play page's bar.
+    if (model_handle) {
+        static std::chrono::steady_clock::time_point next_look{};
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= next_look) {
+            next_look = now + std::chrono::milliseconds(250);
+            jfg_official_check_start(); // nothing if it has been asked already, or Check for Updates is off
+            const int serial = jfg_official_state(false).serial;
+            const bool changed = serial != official_serial;
+            if (changed) {
+                official_serial = serial;
+                jfg_config_menu_refresh(); // a new pack to list
+            }
+            refresh_official(changed);
         }
     }
     if (!model_handle || launcher_page != "about") return;
@@ -458,6 +544,44 @@ public:
             model_handle.DirtyVariable("update_status");
         });
         jfg_update_check_start(version_string);
+        official_shown = jfg_launcher_show_official_pack();
+        jfg_official_check_start(); // the official HD texture pack's latest version (Texture Packs page)
+
+        // JFG PORT: the official HD texture pack (Texture Packs page).
+        if (auto row = constructor.RegisterStruct<OfficialPackRow>()) {
+            row.RegisterMember("variant", &OfficialPackRow::variant);
+            row.RegisterMember("size_text", &OfficialPackRow::size_text);
+            row.RegisterMember("action", &OfficialPackRow::action);
+            row.RegisterMember("installed", &OfficialPackRow::installed);
+        }
+        constructor.RegisterArray<std::vector<OfficialPackRow>>();
+        constructor.Bind("official_rows", &official_rows);
+        constructor.Bind("official_status", &official_status);
+        constructor.Bind("official_text", &official_text);
+        constructor.Bind("official_result", &official_result);
+        constructor.Bind("official_busy", &official_busy);
+        constructor.Bind("official_shown", &official_shown);
+        constructor.Bind("official_update", &official_update);
+        constructor.Bind("official_update_title", &official_update_title);
+        constructor.Bind("official_update_text", &official_update_text);
+        // The Play page's bar: to the Texture Packs page, on that pack's Update button.
+        constructor.BindEventCallback("official_show_update", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            set_launcher_page("textures");
+            for (size_t i = 0; i < official_rows.size(); i++) {
+                if (official_rows[i].variant == official_update_variant) focus_soon("rl_official_" + std::to_string(i));
+            }
+        });
+        constructor.Bind("official_percent", &official_percent);
+        constructor.BindEventCallback("official_install", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+            if (args.empty() || official_busy) return;
+            const Rml::String variant = args[0].Get<Rml::String>();
+            for (const OfficialPackRow& row : official_rows) {
+                if (row.variant == variant && !row.installed) { jfg_official_install(variant); refresh_official(false); }
+            }
+        });
+        constructor.BindEventCallback("official_cancel", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            jfg_official_cancel();
+        });
 
         // JFG PORT: the launcher's pages (see the top of this file).
         constructor.Bind("page", &launcher_page);
@@ -483,8 +607,9 @@ public:
             if (rom_valid) start_game_preflight();
         });
         // Links (About page, Texture Packs note): opened in the default browser.
-        constructor.BindEventCallback("open_url", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
-            if (!args.empty()) SDL_OpenURL(args[0].Get<Rml::String>().c_str());
+        constructor.BindEventCallback("open_url", [](Rml::DataModelHandle, Rml::Event& event, const Rml::VariantList& args) {
+            Rml::Element* button = event.GetCurrentElement();
+            if (!args.empty()) jfg_open_url_prompt(args[0].Get<Rml::String>(), button != nullptr ? button->GetId() : std::string());
         });
 
         model_handle = constructor.GetModelHandle();
