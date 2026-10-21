@@ -28,3 +28,8 @@ JFG_WRAP(n_alEvtqPostEvent) {
     if (jfg_evt_skip(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5)) return;
     n_alEvtqPostEvent_orig(rdram, ctx);
 }
+
+JFG_WRAP(n_alEvtqNextEvent) {
+    jfg_evt_next(rdram, ctx);
+    n_alEvtqNextEvent_orig(rdram, ctx);
+}
