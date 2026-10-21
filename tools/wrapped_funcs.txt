@@ -84,3 +84,4 @@ func_80045F00_46B00
 objCutCameraActive
 objObjectsPauseTick
 trackDraw
+__scHandleRetrace

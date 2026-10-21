@@ -126,27 +126,6 @@ func = "squadsFireWeapon"
 before_vram = 0x82028648
 text = "{ if ((uint32_t)ctx->r2 == 0) goto L_82029670; }"
 
-# 60 fps (F9 -> Options -> Display -> Frame rate). The scheduler holds back the "frame done" message of each frame
-# until 2 video retraces have passed since the last one (sc->frameCount at OSSched + 0x300, counted up here in
-# __scHandleRetrace; the decomp notes "if you want to make the game 60FPS, change this to 2"), which caps the game at
-# 30 fps whatever viFrameSync does. With 60 fps on, every retrace counts twice (jfg_sched_extra_frame returns 1).
-[[patches.hook]]
-func = "__scHandleRetrace"
-before_vram = 0x800506D8
-text = "{ int jfg_sched_extra_frame(void); ctx->r8 = (gpr)(int32_t)((int32_t)ctx->r8 + jfg_sched_extra_frame()); }"
-
-# 60 fps, second part: the scheduler only starts a frame's graphics task once the previous frame's buffer swap has
-# taken effect (__scTaskReady: VI current framebuffer != next framebuffer -> wait for the next retrace). With the
-# runtime's VI that check still sees the swap as pending at the retrace that applies it, which put every frame one more
-# retrace behind. (The third part, the main loop's own wait, is jfg_vi_skip in src/jfg.) Letting every task through
-# instead made RT64 draw the next frame into the buffer still on screen, which lost the CPU-drawn reticles. So at 60 fps
-# the task waits for one retrace since the swap was asked for, counted at the entry of __scHandleRetrace
-# (src/jfg/jfg_frame_rate.cpp, jfg_sched_task_ready); at the original rate the game's own check runs.
-[[patches.hook]]
-func = "__scHandleRetrace"
-before_vram = 0x80050154
-text = "{ void jfg_sched_retrace(void); jfg_sched_retrace(); }"
-
 # 60 fps: the squad system (enemies, tribals; overlay 3) at the game's 30 fps cadence (src/jfg/jfg_frame_rate.cpp,
 # jfg_squad_frames). Much of it works per tick whatever the frame count, so at 60 fps squad members moved, animated and
 # attacked about twice as fast. In 60 fps mode SquaddieControl(obj, frames), SquadronControl(obj, frames) and

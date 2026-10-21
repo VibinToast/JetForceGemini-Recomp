@@ -768,3 +768,20 @@ JFG_WRAP(FlowerBoltControl) {
     ctx->r5 = (gpr)r;
     FlowerBoltControl_orig(rdram, ctx);
 }
+
+// __scHandleRetrace(sc): the scheduler holds back each frame's "frame done" message until 2 retraces have passed since
+// the last one (sc->frameCount, OSSched +0x300; the decomp notes "if you want to make the game 60FPS, change this to
+// 2"), which caps the game at 30 fps whatever viFrameSync does. At 60 fps every retrace counts twice: the extra one
+// (jfg_sched_extra_frame) is added before the game counts its own. jfg_sched_retrace notes the retrace for
+// __scTaskReady's wrapper. One difference from adding it at the game's own increment: when the scheduler
+// recovers from a stalled RDP task it clears frameCount first, and then this retrace counts once.
+JFG_WRAP(__scHandleRetrace) {
+    jfg_sched_retrace();
+    const int extra = jfg_sched_extra_frame();
+    if (extra != 0) {
+        jfg::g_rdram = rdram;
+        const uint32_t sc = (uint32_t)ctx->r4;
+        jfg::wr32(sc + 0x300, jfg::rd32(sc + 0x300) + (uint32_t)extra);
+    }
+    __scHandleRetrace_orig(rdram, ctx);
+}
