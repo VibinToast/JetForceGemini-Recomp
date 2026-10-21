@@ -138,29 +138,6 @@ vram = 0x829B0010
 func = "osRamTest4_6105"
 value = 0x10000003 # beq t7, at, pass -> b pass
 
-# Per-tick entry point (src/jfg/jfg_tick.cpp): called once per game tick at the entry of the main loop tick.
-[[patches.hook]]
-func = "func_80044FAC_45BAC"
-before_vram = 0x80044FAC
-text = "{ void jfg_debug_frame(uint8_t*, recomp_context*); jfg_debug_frame(rdram, ctx); }"
-
-# Right after viFrameSync() returns in the main loop tick ($v0 = frames to simulate); 6 while a cutscene is skipped.
-[[patches.hook]]
-func = "func_80044FAC_45BAC"
-before_vram = 0x800457BC
-text = "{ uint32_t jfg_frame_sync(uint8_t*, uint32_t); ctx->r2 = (int32_t)jfg_frame_sync(rdram, (uint32_t)ctx->r2); }"
-
-# Cutscene skip (src/jfg/jfg_cutscene_skip.cpp, jfg_frame_rate.cpp): after joyRead() in the main loop tick, and at the entry of viFrameSync.
-[[patches.hook]]
-func = "func_80044FAC_45BAC"
-before_vram = 0x80045250
-text = "{ void jfg_after_joy(uint8_t*, recomp_context*); jfg_after_joy(rdram, ctx); }"
-
-[[patches.hook]]
-func = "viFrameSync"
-before_vram = 0x80054FBC
-text = "{ int jfg_vi_skip(uint8_t*, recomp_context*); if (jfg_vi_skip(rdram, ctx)) { recomp_exit_function(); return; } }"
-
 # Dual-stick camera (src/jfg/jfg_camera.cpp): right before the scene is drawn (the "jal trackDraw" in the game
 # tick), the active camera is moved to the angle the right stick has chosen. Then, at 60 fps, squad members are given
 # the in-between positions they are drawn at (src/jfg/jfg_frame_rate.cpp, jfg_squad_draw_begin).
