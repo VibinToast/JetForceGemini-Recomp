@@ -1,6 +1,6 @@
 # The Linux release build machine: Ubuntu 22.04 (glibc 2.35), so the game also runs on everything newer: SteamOS 3,
 # current Fedora and Ubuntu 22.04 and later. A game built on a newer system does not run on older ones.
-# Used by tools/package_release.sh (Docker or Podman). See docs/RELEASING.md.
+# Used by tools/package_release.sh (Docker or Podman). See RELEASING.md in the owner's Recomp-Docs notes.
 FROM ubuntu:22.04
 
 ARG LLVM=18

@@ -372,7 +372,7 @@ void close_config_menu() {
     // JFG PORT: a changed "Frame rate" applies after a restart (src/jfg/jfg_frame_rate.cpp). Asked once per value;
     // Later closes the menu as usual (with the graphics prompt below if needed).
     static int jfg_restart_asked_for = -1;
-    const int jfg_rate = jfg::settings::get("frame_rate");
+    const int jfg_rate = jfg::settings::get("frame_rate") * 100000 + (int)new_options.rr_option * 1000 + new_options.rr_manual_value;
     if (jfg::settings::frame_rate_needs_restart() && jfg_rate != jfg_restart_asked_for) {
         jfg_restart_asked_for = jfg_rate;
         recompui::open_choice_prompt(
@@ -662,6 +662,23 @@ static const UpstreamOption upstream_options[] = {
         [](int v) {
             if (new_options.res_option == ultramodern::renderer::Resolution::Auto || (v != 1 && v != 2 && v != 4)) return;
             new_options.ds_option = v;
+            set_graphics_now();
+        } },
+    // The recomp's own Framerate and its Manual target (used while the port's Frame Rate is Original).
+    // As one row of buttons, "rr_choice": 30 = Original (no in-between frames), 1 = Display (the monitor's rate),
+    // 60-240 = Manual at that rate. It is saved at once and used from the next start (renderer.cpp).
+    { "rr_choice",
+        [] {
+            using ultramodern::renderer::RefreshRate;
+            if (new_options.rr_option == RefreshRate::Display) return 1;
+            if (new_options.rr_option == RefreshRate::Manual) return new_options.rr_manual_value;
+            return 30;
+        },
+        [](int v) {
+            using ultramodern::renderer::RefreshRate;
+            if (v == 1) new_options.rr_option = RefreshRate::Display;
+            else if (v <= 30) new_options.rr_option = RefreshRate::Original;
+            else { new_options.rr_option = RefreshRate::Manual; new_options.rr_manual_value = std::clamp(v, 20, 360); }
             set_graphics_now();
         } },
     // A level the graphics card cannot do falls back to the next one down.

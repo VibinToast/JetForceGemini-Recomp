@@ -42,8 +42,11 @@ struct State {
     int  bloom_threshold = 70;     // bloom: brightness where glow starts, percent
     int  bloom_radius = 6;         // bloom: blur size (gaussian sigma in ~270-line bloom buffer pixels)
     bool texture_dump = false;     // write every texture drawn to bin/texture_dump as <hash>.png (not saved: off at start)
-    int  frame_rate = 0;           // 0: the game's own pacing (30, dropping to 20), 1: 60 (runInOneFrame), 2: 60 + interpolated up to the monitor's rate
-    int  interp_limit = 0;         // 60 + Interpolated: frames a second at most (0 = the monitor's refresh rate; one of interp_limit_values)
+    int  frame_rate = 0;           // "Game Frame Rate": 0 = the game's own pacing (30, dropping to 20), 1 = 60 (runInOneFrame). A saved 2
+                                   // (the old "60 + Interpolated") loads as 1 with Smooth Motion on
+    int  smooth_motion = 0;        // "Smooth Motion": in-between frames from RT64, for either game rate. 0 = off, 1 = up to the
+                                   // monitor's rate, else at most that many frames a second (one of smooth_motion_values)
+    int  interp_limit = 0;         // only read from older settings files: the old Interpolation Limit, carried over to Smooth Motion
     bool widescreen = false;       // render the 3D view to the full window width, see jfg_widescreen_active()
     int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
     int  hit_flash = 100;          // red screen when the character is hit: strength, percent (jfg_hit_flash)

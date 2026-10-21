@@ -1,27 +1,32 @@
 # Releases start by themselves when something is merged into main. The branch it came from picks the version:
 #
-#   dev                        -> minor   1.1.8 -> 1.2.0
+#   release/<x.y>              -> exactly x.y.0   release/1.2 -> 1.2.0
+#   dev                        -> minor   1.1.8 -> 1.2.0   (only if dev is merged straight into main; normally a release/x.y is)
 #   hotfix/<name>              -> patch   1.1.8 -> 1.1.9
 #   rt64-update, milestone/*   -> major   1.1.8 -> 2.0.0
 #
 # A label on the pull request wins over the branch: release:major, release:minor, release:patch, or release:none (no
 # release). A push straight to main (no pull request) is released only when its commit message says [major], [minor] or
-# [patch], or when it is a local "Merge branch 'dev'" commit. [no release] in the message skips the release.
+# [patch], or when it is a local "Merge branch 'release/1.2'" (or 'dev', 'hotfix/...') commit. [no release] in the
+# message skips the release.
 # By hand: GitHub -> Actions -> "Release" -> "Run workflow" on main, with a bump or an exact version.
 #
 # What it does:
-# - The release notes are the commit messages (first line of each, newest first) since the last release: nothing to write
-#   by hand, so write commit messages that read well to players. Commits that only change the README, .gitignore,
-#   .recomp.json, docs and other files players do not see are left out.
-# - Adds them to the top of CHANGELOG.md (the game shows that file under Changelogs), writes the version into version.txt
+# - The release notes are the "## Unreleased" section at the top of CHANGELOG.md, written by hand on the release branch
+#   while it is in testing; that section becomes "## vX.Y.Z (date)". Without one (a quick hotfix, say), the notes are
+#   the commit messages instead (first line of each, newest first) since the last release, so commit messages should
+#   still read well to players. That list leaves out commits that only change the README, .gitignore, .recomp.json,
+#   docs and other files players do not see, "WIP" commits and the commits listed in .github/changelog-skip.txt.
+# - Puts them at the top of CHANGELOG.md (the game shows that file under Changelogs), writes the version into version.txt
 #   (the launcher shows it), commits both to main and makes a DRAFT release vX.Y.Z on that commit. Players do not see a
 #   draft, and the launcher's update check skips it.
-# - Merges main back into dev and rt64-update, so the release commit and any hotfix are there too (BACK_MERGE below).
+# - Merges main back into dev, rt64-update and any open release/* branch, so the release commit, the release branch's
+#   fixes and any hotfix are there too (BACK_MERGE below). A hotfix made while a release is in testing reaches it this way.
 #
 # It does not build the game: the game's code is translated from the owner's own ROM, which never goes to GitHub. The
 # builds are made on the owner's PC: tools\package_release.bat (Windows) and tools/package_release.sh (Linux) find the
 # draft by themselves, build its exact commit, upload the files and publish the release once every file is there.
-# See docs/RELEASING.md.
+# See RELEASING.md in the owner's Recomp-Docs notes.
 name: Release
 
 on:
@@ -48,7 +53,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BACK_MERGE: dev rt64-update   # branches that get main merged back into them after a release (missing ones are skipped)
+  BACK_MERGE: dev rt64-update   # branches that get main merged back into them after a release (missing ones are skipped),
+                                # plus every release/* branch on GitHub
 
 jobs:
   release:
@@ -108,6 +114,13 @@ jobs:
             fi
             if [ -z "$bump" ]; then
               case "$head" in
+                release/*)
+                  if [[ "${head#release/}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+                    exact="${head#release/}.0"; bump=minor; why="merged from $head"
+                  else
+                    echo "A release branch is named release/<major>.<minor> (for example release/1.2), not '$head'." >&2
+                    exit 1
+                  fi ;;
                 dev)                          bump=minor; why="merged from dev" ;;
                 hotfix/*|hotfix-*)            bump=patch; why="merged from $head" ;;
                 rt64-update|milestone/*)      bump=major; why="merged from $head" ;;
@@ -116,7 +129,7 @@ jobs:
             [ -n "$number" ] && why="$why (pull request #$number)"
             if [ -z "$bump" ]; then
               bump=none
-              why="no pull request from dev, hotfix/* or rt64-update, no release:* label and no [major]/[minor]/[patch] in the commit message"
+              why="no pull request from release/*, dev, hotfix/* or rt64-update, no release:* label and no [major]/[minor]/[patch] in the commit message"
             fi
           fi
           echo "Bump: ${exact:-$bump} ($why)"
@@ -196,6 +209,14 @@ jobs:
                            ".recomp.json", "tools/package_release.ps1", "tools/package_release.bat",
                            "tools/package_release.sh", "tools/set_version.py"}
           IGNORED_FOLDERS = (".github/", "docs/", "images/", "tools/linux-build/")
+          # Commits listed in .github/changelog-skip.txt (a full hash at the start of a line) and "WIP" commits are left
+          # out too.
+          SKIPPED = set()
+          if os.path.exists(".github/changelog-skip.txt"):
+              for line in open(".github/changelog-skip.txt", encoding="utf-8"):
+                  word = line.split("#", 1)[0].split()
+                  if word:
+                      SKIPPED.add(word[0].lower())
           def ignored(path):
               return path in IGNORED_FILES or path.startswith(IGNORED_FOLDERS)
           log = subprocess.run(["git", "log", "--no-merges", "--format=%H%x09%s", os.environ["RANGE"]],
@@ -204,7 +225,8 @@ jobs:
           for entry in log.splitlines():
               sha, _, subject = entry.partition("\t")
               subject = subject.strip()
-              if not subject or subject.startswith("chore: release v") or subject in seen:
+              if (not subject or subject.startswith(("chore: release v", "WIP")) or subject in seen
+                      or sha.lower() in SKIPPED):
                   continue
               files = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", sha],
                                      capture_output=True, text=True, check=True).stdout.split()
@@ -219,9 +241,15 @@ jobs:
           version = os.environ["VERSION"]
           last = os.environ["LAST"]
           text = open("CHANGELOG.md", encoding="utf-8").read() if os.path.exists("CHANGELOG.md") else "# Changelog\n"
-          # A leftover hand-written "Unreleased" section is dropped: the notes come from the commits only.
-          text = re.sub(r"^## Unreleased[ \t]*\n.*?(?=^## |\Z)", "", text, flags=re.S | re.M)
-          body = open("commits.md", encoding="utf-8").read().strip() or "- Maintenance"
+          # The hand-written "## Unreleased" section is the release notes: it becomes this version's section. With no
+          # such section, or only the heading (and <!-- comments -->) in it, the notes are the commit list instead.
+          written = ""
+          m = re.search(r"^## Unreleased\b[^\n]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+          if m:
+              written = re.sub(r"<!--.*?-->", "", m.group(1), flags=re.S).strip()
+              text = text[:m.start()] + text[m.end():]
+          body = written or open("commits.md", encoding="utf-8").read().strip() or "- Maintenance"
+          print("Release notes from", "the Unreleased section of CHANGELOG.md" if written else "the commit messages")
           heading = "## v%s (%s)" % (version, datetime.date.today().isoformat())
           section = heading + "\n\n" + body + "\n\n"
           m = re.search(r"^## ", text, re.M)
@@ -267,7 +295,8 @@ jobs:
         if: ${{ steps.version.outputs.version != '' }}
         run: |
           main=$(git rev-parse HEAD)
-          for branch in $BACK_MERGE; do
+          releases=$(git ls-remote --heads origin 'release/*' | sed 's#.*refs/heads/##')
+          for branch in $BACK_MERGE $releases; do
             if ! git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
               echo "No branch $branch, skipped."
               continue
