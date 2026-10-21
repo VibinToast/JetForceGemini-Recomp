@@ -35,6 +35,8 @@ extern "C" void jfg_tools_key(int scancode, int down, int repeat); // JFG PORT: 
 #include "config/config.hpp"
 #include "runtime/gfx.hpp"
 
+namespace jfg { bool cpu_layer_build(ImDrawList* list); } // src/jfg/jfg_cpu_layer.cpp
+
 namespace dino::debug_ui::backend {
 
 struct VulkanContext {
@@ -309,7 +311,64 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
     ImGui::SetCurrentContext(prev_ctx);
 }
 
+static void render_draw_data(plume::RenderCommandList* command_list, ImDrawData* draw_data) {
+    switch (get_graphics_api()) {
+        case RT64::UserConfiguration::GraphicsAPI::D3D12: {
+#ifdef _WIN32
+            plume::D3D12CommandList *interface_command_list = static_cast<plume::D3D12CommandList *>(command_list);
+            interface_command_list->checkDescriptorHeaps();
+            ImGui_ImplDX12_RenderDrawData(draw_data, interface_command_list->d3d);
+#else
+            assert(false && "Unsupported Graphics API.");
+#endif
+            break;
+        }
+        case RT64::UserConfiguration::GraphicsAPI::Vulkan: {
+            plume::VulkanCommandList *interface_command_list = static_cast<plume::VulkanCommandList *>(command_list);
+            ImGui_ImplVulkan_RenderDrawData(draw_data, interface_command_list->vk);
+            break;
+        }
+        default:
+            assert(false && "Unknown Graphics API.");
+            break;
+    }
+}
+
+// JFG PORT: the game's CPU-drawn reticles while RT64 adds in-between frames (src/jfg/jfg_cpu_layer.cpp). Built here for
+// every presented frame, unlike the overlay, whose draw data is made once per game tick. Needs the font atlas only for
+// its white pixel, so nothing is drawn before the first overlay or debug window frame created it.
+static void draw_cpu_layer(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
+    if (dino_imgui_ctx == nullptr || !dino_imgui_ctx->Initialized) return;
+    ImGuiContext *prev_ctx = ImGui::GetCurrentContext();
+    ImGui::SetCurrentContext(dino_imgui_ctx);
+    ImGuiIO &io = ImGui::GetIO();
+    if (io.Fonts != nullptr && io.Fonts->TexRef.GetTexID() != ImTextureID_Invalid) {
+        static ImDrawList *list = nullptr;
+        if (list == nullptr) list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
+        const ImVec2 size((float)swap_chain_framebuffer->getWidth(), (float)swap_chain_framebuffer->getHeight());
+        list->_ResetForNewFrame();
+        list->PushClipRect(ImVec2(0.0f, 0.0f), size);
+        list->PushTexture(io.Fonts->TexRef);
+        if (jfg::cpu_layer_build(list)) {
+            ImDrawData draw_data;
+            draw_data.Valid = true;
+            draw_data.DisplayPos = ImVec2(0.0f, 0.0f);
+            draw_data.DisplaySize = size;
+            draw_data.FramebufferScale = ImVec2(1.0f, 1.0f);
+            draw_data.Textures = nullptr;
+            draw_data.AddDrawList(list);
+            render_draw_data(command_list, &draw_data);
+        }
+    }
+    ImGui::SetCurrentContext(prev_ctx);
+}
+
 static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
+    {
+        const std::lock_guard<std::mutex> frame_lock(frame_mutex);
+        draw_cpu_layer(command_list, swap_chain_framebuffer);
+    }
+
     if (!b_is_open && !b_overlay) return;
 
     const std::lock_guard<std::mutex> frame_lock(frame_mutex);
@@ -319,26 +378,7 @@ static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::Render
 
     ImDrawData *draw_data = ImGui::GetDrawData();
     if (draw_data != nullptr) {
-        switch (get_graphics_api()) {
-            case RT64::UserConfiguration::GraphicsAPI::D3D12: {
-#ifdef _WIN32
-                plume::D3D12CommandList *interface_command_list = static_cast<plume::D3D12CommandList *>(command_list);
-                interface_command_list->checkDescriptorHeaps();
-                ImGui_ImplDX12_RenderDrawData(draw_data, interface_command_list->d3d);
-#else
-                assert(false && "Unsupported Graphics API.");
-#endif
-                break;
-            }
-            case RT64::UserConfiguration::GraphicsAPI::Vulkan: {
-                plume::VulkanCommandList *interface_command_list = static_cast<plume::VulkanCommandList *>(command_list);
-                ImGui_ImplVulkan_RenderDrawData(draw_data, interface_command_list->vk);
-                break;
-            }
-            default:
-                assert(false && "Unknown Graphics API.");
-                break;
-        }
+        render_draw_data(command_list, draw_data);
     }
 
     ImGui::SetCurrentContext(prev_ctx);

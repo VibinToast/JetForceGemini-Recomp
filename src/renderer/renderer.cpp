@@ -266,6 +266,14 @@ static int jfg_rr_value(const ultramodern::renderer::GraphicsConfig& config) {
     return jfg_rr_option_used.load() >= 0 ? jfg_rr_value_used.load() : config.rr_manual_value;
 }
 
+// Read by src/jfg/jfg_cpu_layer.cpp (game and present threads): whether RT64 adds in-between frames to the game's own,
+// so the CPU-drawn reticles are drawn by the render hook instead.
+extern "C" int jfg_renderer_adds_frames(void) {
+    const int r = jfg_refresh_override();
+    if (r >= 0) return r;
+    return jfg_rr_option(ultramodern::renderer::get_graphics_config()) != ultramodern::renderer::RefreshRate::Original;
+}
+
 extern "C" int jfg_renderer_rate_needs_restart(void) {
     const int used = jfg_rr_option_used.load();
     if (used < 0) return 0;
