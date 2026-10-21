@@ -43,6 +43,9 @@ void push_render_options() {
 }
 
 // Sets one option from its saved form (the options file, profiles).
+// apply_option: the frame_rate just read was the old "60 + Interpolated" (2), see below.
+static bool g_old_interpolated = false;
+
 void apply_option(const char* key, int value) {
     if (std::strcmp(key, "no_blood") == 0) g.no_blood = value != 0;
     else if (std::strcmp(key, "gore_keep_blood") == 0) g.gore_keep_blood = value != 0;
@@ -61,12 +64,22 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "bloom_intensity") == 0) g.bloom_intensity = std::clamp(value, 0, 300);
     else if (std::strcmp(key, "bloom_threshold") == 0) g.bloom_threshold = std::clamp(value, 0, 100);
     else if (std::strcmp(key, "bloom_radius") == 0) g.bloom_radius = std::clamp(value, 1, 20);
-    else if (std::strcmp(key, "frame_rate") == 0) g.frame_rate = !FRAME_RATE_OPTION ? 0 : (value == 2 && !INTERPOLATED_FRAME_RATE_OPTION) ? 0 : std::clamp(value, 0, 2);
+    else if (std::strcmp(key, "frame_rate") == 0) {
+        // The old "60 + Interpolated" (2) is 60 with Smooth Motion: up to the monitor's rate, or the Interpolation Limit
+        // that follows it in the file.
+        g_old_interpolated = FRAME_RATE_OPTION && value == 2;
+        g.frame_rate = !FRAME_RATE_OPTION ? 0 : std::clamp(value, 0, 1);
+        if (g_old_interpolated && g.smooth_motion == 0) g.smooth_motion = 1;
+    }
     else if (std::strcmp(key, "interp_limit") == 0) {
-        // The choices of the Interpolation Limit option (tools/gen_jfg_config_rml.py); anything else is the monitor's rate.
-        static const int interp_limit_values[] = { 0, 90, 120, 144, 165, 240 };
-        g.interp_limit = 0;
-        for (int v : interp_limit_values) if (v == value) g.interp_limit = v;
+        g.interp_limit = value;
+        if (g_old_interpolated && value > 1) apply_option("smooth_motion", value);
+    }
+    else if (std::strcmp(key, "smooth_motion") == 0) {
+        // The choices of Smooth Motion (tools/gen_jfg_config_rml.py); anything else is off.
+        static const int smooth_motion_values[] = { 0, 1, 60, 90, 120, 144, 165, 240 };
+        g.smooth_motion = 0;
+        for (int v : smooth_motion_values) if (v == value) g.smooth_motion = v;
     }
     else if (std::strcmp(key, "widescreen") == 0) g.widescreen = value != 0;
     else if (std::strcmp(key, "fov") == 0) g.fov = std::clamp(value, 75, 140);
@@ -136,8 +149,9 @@ void load_options() {
         std::fclose(f);
     }
     // JFG_FRAME_RATE=0/1/2 (tests): the "Frame rate" option for this run (saved only if an option is changed in the run).
-    if (const char* env = std::getenv("JFG_FRAME_RATE")) g.frame_rate = std::clamp(std::atoi(env), 0, 2);
-    if (const char* env = std::getenv("JFG_INTERP_LIMIT")) apply_option("interp_limit", std::atoi(env)); // same, for the limit
+    if (const char* env = std::getenv("JFG_FRAME_RATE")) apply_option("frame_rate", std::atoi(env)); // 2 = 60 + Smooth Motion
+    if (const char* env = std::getenv("JFG_INTERP_LIMIT")) apply_option("interp_limit", std::atoi(env)); // with JFG_FRAME_RATE=2
+    if (const char* env = std::getenv("JFG_SMOOTH_MOTION")) apply_option("smooth_motion", std::atoi(env)); // 0, 1 (monitor), 60..240
     push_render_options();
 }
 
@@ -146,7 +160,7 @@ std::string options_text(const State& s) {
     char buf[512];
     std::snprintf(buf, sizeof(buf), "no_blood=%d\nstart_skips_cutscenes=%d\n", s.no_blood ? 1 : 0, s.start_skips_cutscenes ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "auto_save=%d\nauto_save_minutes=%d\nsave_notification=%d\nkeep_area_progress=%d\n", s.auto_save ? 1 : 0, s.auto_save_minutes, s.save_notification ? 1 : 0, s.keep_area_progress ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "show_fps=%d\nwidescreen=%d\nframe_rate=%d\ninterp_limit=%d\n", s.show_fps ? 1 : 0, s.widescreen ? 1 : 0, s.frame_rate, s.interp_limit); out += buf;
+    std::snprintf(buf, sizeof(buf), "show_fps=%d\nwidescreen=%d\nframe_rate=%d\nsmooth_motion=%d\n", s.show_fps ? 1 : 0, s.widescreen ? 1 : 0, s.frame_rate, s.smooth_motion); out += buf;
     std::snprintf(buf, sizeof(buf), "fov=%d\nhit_flash=%d\nhide_floyd=%d\n", s.fov, s.hit_flash, s.hide_floyd ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "vignette=%d\nvignette_strength=%d\nvignette_size=%d\n", s.vignette ? 1 : 0, s.vignette_strength, s.vignette_size); out += buf;
     std::snprintf(buf, sizeof(buf), "level_fog_distance=%d\nno_level_fog=%d\n", s.level_fog_distance, s.no_level_fog ? 1 : 0); out += buf;

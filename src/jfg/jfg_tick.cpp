@@ -260,8 +260,10 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         std::vector<Line> lines;
         if (g.show_fps) {
             char text[64];
-            // The frames shown a second (the renderer's presents, in-between frames included), not the game's own updates.
-            std::snprintf(text, sizeof(text), "%.0f FPS", g_screen_fps.load(std::memory_order_relaxed));
+            // Game: the game's own updates a second (its logic). Screen: the frames shown a second (the renderer's
+            // presents, in-between frames included).
+            std::snprintf(text, sizeof(text), "Game %.0f FPS  Screen %.0f FPS", g_fps.load(std::memory_order_relaxed),
+                          g_screen_fps.load(std::memory_order_relaxed));
             lines.push_back({ text, ImVec4(1.0f, 1.0f, 0.4f, 1.0f) });
         }
         if (g.show_level && g_rdram != nullptr) {
