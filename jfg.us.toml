@@ -463,13 +463,6 @@ func = "func_overlay_3_000148C0_1EE9DA0"
 before_vram = 0x82034CA4
 text = "{ void jfg_squad_spawn_after(uint8_t*, recomp_context*); jfg_squad_spawn_after(rdram, ctx); }"
 
-# Weapons tab (src/jfg/jfg_weapons.cpp): bolt size for the player's laser bolts, at the end of laserboltInit
-# (overlay 109; a0 = the new bolt).
-[[patches.hook]]
-func = "laserboltInit"
-before_vram = 0x826C0288
-text = "{ void jfg_bolt_init(uint8_t*, recomp_context*); jfg_bolt_init(rdram, ctx); }"
-
 # Weapons tab: the player's mines, for the "mines on the field" limit; end of mineInit (overlay 112; s1 = mine, s0 = data).
 [[patches.hook]]
 func = "mineInit"

@@ -26,3 +26,4 @@ FlowerBoltControl
 dAngle
 objAnimDframe
 objMoveXYZ
+laserboltInit
