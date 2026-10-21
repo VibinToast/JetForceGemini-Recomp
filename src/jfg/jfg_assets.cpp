@@ -93,7 +93,13 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
         r.mod_id = id;
         r.file = e["file"].get<std::string>();
         bool ok = false;
-        const std::vector<char> bytes = mod.manifest.file_handle->read_file(r.file, ok);
+        std::vector<char> bytes = mod.manifest.file_handle->read_file(r.file, ok);
+        // RecompModTool packs additional_files by name only (its folders dropped), so "tex3d/0291.bin" in a mod with
+        // code is "0291.bin"; a mod zipped by hand keeps the folders. Either works.
+        const size_t slash = r.file.find_last_of("/\\");
+        if (!ok && slash != std::string::npos) {
+            bytes = mod.manifest.file_handle->read_file(r.file.substr(slash + 1), ok);
+        }
         if (!ok) {
             log("assets: " + id + ": " + r.file + " isn't in the mod (add it to additional_files in mod.toml)");
             return;
