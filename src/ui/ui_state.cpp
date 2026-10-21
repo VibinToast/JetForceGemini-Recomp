@@ -38,6 +38,7 @@
 #include "ui_mod_installer.h"
 #include "ui_renderer.h"
 void jfg_config_menu_refresh(); // JFG PORT: src/ui/ui_config.cpp
+void close_config_menu(); // src/ui/ui_config.cpp (JFG_DEBUG_CONFIG_CLOSE)
 void jfg_config_step_tab(int dir); // JFG PORT: src/ui/ui_config.cpp
 void jfg_launcher_ui_tick(); // JFG PORT: src/ui/ui_launcher.cpp
 void jfg_config_pack_join_tick(); // JFG PORT: src/ui/ui_config.cpp (split texture packs)
@@ -943,6 +944,16 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                 if (Rml::Element* element = doc->GetElementById(debug_focus_id)) element->Focus(true);
             }
             debug_focus_id[0] = '\0';
+        }
+        // JFG_DEBUG_CONFIG_CLOSE=<secs>: closes this menu (as Esc does) <secs> seconds after start.
+        static float debug_close_secs = -2.0f;
+        if (debug_close_secs == -2.0f) {
+            const char* env = std::getenv("JFG_DEBUG_CONFIG_CLOSE");
+            debug_close_secs = env ? (float)std::atof(env) : -1.0f;
+        }
+        if (debug_close_secs >= 0.0f && config_was_open && since_start >= std::chrono::duration<float>(debug_close_secs)) {
+            close_config_menu();
+            debug_close_secs = -1.0f;
         }
     }
 
