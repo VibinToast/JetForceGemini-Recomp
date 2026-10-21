@@ -27,7 +27,10 @@ version.
 - `feature/<name>`: one piece of work, branched from `dev`, merged into `dev` when it's done and tested.
 - `dev`: what the next release will be.
 - `release/<x.y>`: cut from `dev` when a release goes into testing. Only bug fixes go on it, and each fix is merged back
-  into `dev` right away (`git switch dev && git merge release/<x.y>`). `dev` stays free for new work meanwhile.
+  into `dev` right away (`git switch dev && git merge release/<x.y>`). `dev` stays free for new work meanwhile. A fix
+  is made on a `bugfix/<name>` branch from `release/<x.y>` (never on `dev`, and `dev` is never merged into a release
+  branch, so nothing meant for the next release gets in). The owner's branch manager approves it before it goes on
+  the release branch.
 - `main`: only finished releases and hotfixes.
 - `hotfix/<x.y.z>`: an urgent fix for what players have, branched from `main`. It reaches `dev` and any open
   `release/<x.y>` through the workflow's merge back (below), so the release in testing gets it too.
