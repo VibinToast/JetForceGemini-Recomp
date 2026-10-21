@@ -413,7 +413,9 @@ static void draw_mod_api() {
         last_time = now;
     }
 
-    ImGui::TextDisabled("Per second. \"Listened\" = an active port option or a mod ran for it; the rest cost nothing.");
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("Per second. \"Listened\" = an active port option or a mod ran for it; the rest cost nothing.");
+    ImGui::PopStyleColor();
     if (!ImGui::BeginTable("events", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) return;
     ImGui::TableSetupColumn("Event");
     ImGui::TableSetupColumn("Fired", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 5.0f);
