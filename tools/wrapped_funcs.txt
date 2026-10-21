@@ -95,3 +95,6 @@ func_overlay_17_00004614_1F2C15C
 frontGetTargetControl
 Powerf
 controlGetManualAim
+
+# Audio: AI_LEN read directly (jfg_engine_wrappers.cpp)
+__amHandleFrameMsg
