@@ -271,11 +271,6 @@ func = "__scHandleRetrace"
 before_vram = 0x80050154
 text = "{ void jfg_sched_retrace(void); jfg_sched_retrace(); }"
 
-[[patches.hook]]
-func = "__scTaskReady"
-before_vram = 0x800509B0
-text = "{ int jfg_sched_task_ready(void); int r = jfg_sched_task_ready(); if (r == 1) { ctx->r2 = ctx->r4; recomp_exit_function(); return; } if (r == 0) { ctx->r2 = 0; recomp_exit_function(); return; } }"
-
 # 60 fps: the squad system (enemies, tribals; overlay 3) at the game's 30 fps cadence (src/jfg/jfg_frame_rate.cpp,
 # jfg_squad_frames). Much of it works per tick whatever the frame count, so at 60 fps squad members moved, animated and
 # attacked about twice as fast. In 60 fps mode SquaddieControl(obj, frames), SquadronControl(obj, frames) and

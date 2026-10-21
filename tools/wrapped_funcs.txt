@@ -56,3 +56,4 @@ rcpFast3d
 ad_sndp_play
 n_alEvtqPostEvent
 n_alEvtqNextEvent
+__scTaskReady

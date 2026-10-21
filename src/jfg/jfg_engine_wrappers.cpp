@@ -33,3 +33,10 @@ JFG_WRAP(n_alEvtqNextEvent) {
     jfg_evt_next(rdram, ctx);
     n_alEvtqNextEvent_orig(rdram, ctx);
 }
+
+JFG_WRAP(__scTaskReady) {
+    const int r = jfg_sched_task_ready();
+    if (r == 1) { ctx->r2 = ctx->r4; return; }
+    if (r == 0) { ctx->r2 = 0; return; }
+    __scTaskReady_orig(rdram, ctx);
+}
