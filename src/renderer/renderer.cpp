@@ -85,89 +85,6 @@ namespace dino::renderer {
 static RT64Context* active_rt64_context = nullptr;
 static std::mutex active_rt64_context_mutex;
 
-// Shader descriptions observed from boot through the Ancient Lake title
-// attract scene using the Steam Deck graphics preset (2x, no MSAA, LDR). This
-// table contains renderer state only; it has no textures, display-list data,
-// or other ROM-derived content. Entries that do not appear in a later scene
-// simply remain cached while RT64 falls back to the universal shader for any
-// description that is not listed here.
-static constexpr std::array<RT64::ShaderDescription, 74> deck_attract_shader_preload = {{
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229010979u, 4281335807u}, {5259840u, 3087u}, {.value = 9043979u}},
-    RT64::ShaderDescription{{4229010979u, 4281335807u}, {5259840u, 3087u}, {.value = 62538763u}},
-    RT64::ShaderDescription{{4244635647u, 4294833915u}, {5260096u, 8399935u}, {.value = 134217739u}},
-    RT64::ShaderDescription{{4244635647u, 4294833915u}, {252329984u, 8924223u}, {.value = 134217739u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4244609023u, 4281138815u}, {5262808u, 535567u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4244609023u, 4281138815u}, {5262808u, 535567u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229011116u, 4043308600u}, {3356569720u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229011116u, 4043308600u}, {3356509656u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229044396u, 4027579967u}, {1067480u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356511704u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4233500332u, 288161407u}, {5259840u, 3087u}, {.value = 80434187u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3405922304u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 196756494u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356511824u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4233526787u, 1326348287u}, {3356565624u, 1575951u}, {.value = 134217742u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356511704u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4244635647u, 4294867260u}, {5260096u, 527375u}, {.value = 134217738u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356511824u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4230112940u, 269521471u}, {1066456u, 1584143u}, {.value = 143523850u}},
-    RT64::ShaderDescription{{4233500332u, 288161407u}, {5259840u, 3087u}, {.value = 26939403u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4233526787u, 1326348799u}, {1067480u, 1575951u}, {.value = 134217738u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356514392u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 196756490u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1067480u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356508736u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229044735u, 4279238207u}, {1067512u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356569720u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356569720u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356569720u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4229010979u, 4281335807u}, {5259840u, 11279u}, {.value = 143261707u}},
-    RT64::ShaderDescription{{4229010979u, 4281335807u}, {5259840u, 11279u}, {.value = 196756491u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229044735u, 4279238207u}, {1067632u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4229070372u, 4294964217u}, {5261904u, 535567u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4233526956u, 1157527355u}, {5579896u, 527375u}, {.value = 134217738u}},
-    RT64::ShaderDescription{{4229011116u, 4043308600u}, {3356509656u, 1584143u}, {.value = 143348750u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 196756494u}},
-    RT64::ShaderDescription{{4233526788u, 536672248u}, {3356565624u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3405922304u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356569720u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 196756494u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 196756494u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 196756490u}},
-    RT64::ShaderDescription{{4229010979u, 4281335807u}, {5259720u, 535567u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356511824u, 1584143u}, {.value = 196756494u}},
-}};
-
 void dummy_check_interrupts() {}
 
 RT64::UserConfiguration::Antialiasing compute_max_supported_aa(plume::RenderSampleCounts bits) {
@@ -456,12 +373,12 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
     // consequently compete with the game and graphics threads whenever a new
     // scene introduces material combinations, causing severe frame drops and
     // occasional driver termination. Keep compilation disabled during play;
-    // the launcher preflight temporarily enables it for a bounded table and
-    // all unlisted descriptions retain the universal-shader fallback.
+    // everything is drawn with the universal shader (no Jet Force Gemini
+    // preload table yet, see preload_common_shaders).
     if (dino::config::running_on_steam_deck()) {
         app->rasterShaderCache->setCompilationEnabled(false);
         app->workloadQueue->ubershadersOnly.store(true, std::memory_order_relaxed);
-        fprintf(stderr, "[JFG] Steam Deck runtime shader compilation disabled pending launcher preflight\n");
+        fprintf(stderr, "[JFG] Steam Deck runtime shader compilation disabled (universal shader)\n");
     }
 
     // Set the application's fullscreen state.
@@ -514,24 +431,9 @@ void RT64Context::preload_common_shaders() {
         fprintf(stderr, "[JFG] Finalizing RT64 common shader pipelines\n");
         app->rasterShaderCache->shaderUber->waitForPipelineCreation();
 
-        if (dino::config::running_on_steam_deck()) {
-            const uint32_t shader_count_before = app->rasterShaderCache->shaderCount();
-            fprintf(stderr, "[JFG] Preloading %zu Steam Deck attract-scene shader pipelines\n",
-                deck_attract_shader_preload.size());
-
-            app->rasterShaderCache->setCompilationEnabled(true);
-            for (const RT64::ShaderDescription &shader : deck_attract_shader_preload) {
-                app->rasterShaderCache->submit(shader);
-            }
-            app->rasterShaderCache->waitForAll();
-            app->rasterShaderCache->setCompilationEnabled(false);
-
-            const uint32_t shader_count_after = app->rasterShaderCache->shaderCount();
-            app->workloadQueue->ubershadersOnly.store(false, std::memory_order_relaxed);
-            fprintf(stderr,
-                "[JFG] Steam Deck specialized shader preflight ready (%u new); universal fallback retained\n",
-                shader_count_after - shader_count_before);
-        }
+        // Steam Deck: no specialized shaders are compiled ahead of time yet. The base project's table was
+        // recorded from Diddy Kong Racing; one recorded from Jet Force Gemini can go here. Until then the Deck
+        // draws with the universal shader (see the RT64Context constructor).
 
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - start);

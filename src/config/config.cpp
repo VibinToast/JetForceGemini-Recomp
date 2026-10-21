@@ -149,15 +149,6 @@ void graphics_config_from_json(const nlohmann::json& j, ultramodern::renderer::G
         config.msaa_option = ultramodern::renderer::Antialiasing::None;
         config.hpfb_option = ultramodern::renderer::HighPrecisionFramebuffer::Off;
     }
-
-    // DKR reuses dynamic racer display-list state in ways that do not yet have
-    // stable identities across RT64-generated frames. Migrate the Deck preset
-    // back from interpolation so existing installs do not flash duplicate or
-    // displaced racers between the game's original frames.
-    if (is_steam_deck && config_version < 5) {
-        config.rr_option = ultramodern::renderer::RefreshRate::Original;
-    }
-
 }
 
 void input_field_to_json(nlohmann::json& j, const dino::input::InputField& field) {
