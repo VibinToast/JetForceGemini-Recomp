@@ -462,3 +462,8 @@ std::vector<ToolField> weapon_fields() {
 }
 
 } // namespace jfg
+
+JFG_WRAP(objAnimDframe) {
+    ctx->r5 = (gpr)(int32_t)jfg_anim_speed(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5);
+    objAnimDframe_orig(rdram, ctx);
+}
