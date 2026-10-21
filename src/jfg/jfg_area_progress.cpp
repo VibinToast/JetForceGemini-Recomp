@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "ultramodern/ultramodern.hpp"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -39,12 +40,12 @@ constexpr uint32_t ADDR_continuePoint = 0x800A3270;   // s16 x4: level, arg, ent
 constexpr uint32_t ADDR_racingInGame = 0x800A4FB4;    // u8
 constexpr uint32_t ADDR_roomFlags = 0x800FB1E0;       // 32 x 17 bytes
 constexpr int ROOMS = 32, ROOM_STRIDE = 17, ROOM_BITS = 16;
-constexpr uint32_t GAME_SLOT_OFFSET = 0x03, GAME_REGION_TIME = 0x514, CHAR_RESUME_OFFSET = 0x74;
 constexpr int SAVE_SLOTS = 6;
 
 // The Game-struct ranges mainResetRegion clears, except the region time (cleared by its caller just before it).
 struct Range { uint32_t offset, size; };
-constexpr Range GAME_RANGES[] = { { 0x004, 3 }, { 0x05C, 0x100 }, { 0x474, 0xA0 }, { 0x530, 2 } };
+constexpr Range GAME_RANGES[] = { { Game::TribalsRescuedCount::offset, 3 }, { Game::TribalsRescued::offset, 0x100 },
+                                  { Game::WeaponShots::offset, 0xA0 }, { 0x530, 2 } };
 constexpr uint32_t GAME_BYTES = 3 + 0x100 + 0xA0 + 2;
 
 struct Entry {
@@ -111,7 +112,7 @@ bool real_region(int region) { return region != 0 && region != 0xFF; }
 
 uint32_t shots_fired(uint32_t game) { // the region's weaponShots, for the log
     uint32_t n = 0;
-    for (int i = 0; i < 16; i++) n += rd32(game + 0x474 + 4 * i);
+    for (int i = 0; i < 16; i++) n += Game::WeaponShots::get(game, i);
     return n;
 }
 } // namespace
@@ -154,7 +155,7 @@ void area_progress_on_save(int slot) {
         e.region = (int16_t)region;
         e.continues = (int16_t)rd16(ADDR_continues);
         for (int i = 0; i < 4; i++) e.continue_point[i] = (int16_t)rd16(ADDR_continuePoint + 2 * i);
-        e.region_time = rd32(game + GAME_REGION_TIME);
+        e.region_time = Game::RegionTime::get(game);
         read_game_bytes(game, e.game);
         for (int r = 0; r < ROOMS; r++)
             for (int b = 0; b < ROOM_BITS; b++) e.rooms[r][b] = rd8(ADDR_roomFlags + r * ROOM_STRIDE + 1 + b);
@@ -163,9 +164,9 @@ void area_progress_on_save(int slot) {
         const int level = (int16_t)rd16(ADDR_currentLevel), entrance = (int16_t)rd16(ADDR_currentEntrance);
         const uint32_t ch = character_ptr((int16_t)rd16(ADDR_currentCharacter) & 3);
         if (ch != 0 && level >= 0 && level < 2048 && entrance >= 0 && entrance < 32)
-            wr16(ch + CHAR_RESUME_OFFSET, (uint16_t)((level << 5) | entrance));
+            Character::Resume::set(ch, (uint16_t)((level << 5) | entrance));
         std::fprintf(stderr, "[jfg] area progress: kept for file %d (region %d, level %d, entrance %d, %u shots, %d rescued)\n", slot + 1, region,
-            level, entrance, shots_fired(game), (int)rd8(game + 4));
+            level, entrance, shots_fired(game), (int)Game::TribalsRescuedCount::get(game));
     }
     if (!e.valid && !g_entries[slot].valid) return; // nothing kept before, nothing now
     g_entries[slot] = e;
@@ -197,7 +198,7 @@ void restore_area_progress() {
     if (!armed || !g.keep_area_progress) return;
     const uint32_t game = rd32(ADDR_gameplay);
     if (!valid_ptr(game)) return;
-    const int slot = (int8_t)rd8(game + GAME_SLOT_OFFSET);
+    const int slot = Game::SaveSlot::get(game);
     if (slot < 0 || slot >= SAVE_SLOTS) return;
     load_file();
     const Entry& e = g_entries[slot];
@@ -208,13 +209,13 @@ void restore_area_progress() {
         return;
     }
     write_game_bytes(game, e.game);
-    wr32(game + GAME_REGION_TIME, e.region_time);
+    Game::RegionTime::set(game, e.region_time);
     for (int r = 0; r < ROOMS; r++)
         for (int b = 0; b < ROOM_BITS; b++) wr8(ADDR_roomFlags + r * ROOM_STRIDE + 1 + b, e.rooms[r][b]);
     g_post_pending = true;
     g_post_slot = slot;
     std::fprintf(stderr, "[jfg] area progress: restored for file %d (region %d, %d rescued, %d killed, %u shots)\n", slot + 1, region,
-        (int)rd8(game + 4), (int)rd8(game + 5), shots_fired(game));
+        (int)Game::TribalsRescuedCount::get(game), (int)Game::TribalsKilledCount::get(game), shots_fired(game));
 }
 } // namespace
 

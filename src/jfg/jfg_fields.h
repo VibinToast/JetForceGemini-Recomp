@@ -216,7 +216,7 @@ using MaxCharge    = ArrayField<uint8_t, 0x54>;   // [16], by weapon; << 5 is th
 using Collected    = ArrayField<uint8_t, 0x66>;   // 9 bytes of bits
 using WeaponCount  = Field<uint8_t, 0x6F>;  // weapons owned; switching needs 2 or more
 using CurrentWeapon = Field<uint8_t, 0x70>; // NoWeapon = none
-using Resume       = Field<uint8_t, 0x74>;  // where it resumes (see jfg_area_progress.cpp)
+using Resume       = Field<uint16_t, 0x74>; // where it resumes: level << 5 | entrance
 constexpr uint8_t NoWeapon = 0xFF;
 constexpr uint32_t Size = 0x76;
 }
@@ -271,7 +271,7 @@ constexpr uint32_t Size = 0x4C;
 // The level's header (rd32(ADDR_levelHeader)).
 namespace LevelHeader {
 using Region   = Field<uint8_t, 0x102>;
-using RoomFlag = Field<uint8_t, 0x103>;
+using Room     = Field<uint8_t, 0x103>; // the room it is in its region
 }
 
 // The game's progress flags (ADDR_globalflags); the flag numbers each word holds.
