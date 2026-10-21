@@ -739,7 +739,18 @@ extern "C" void jfg_move_scale(uint8_t* rdram_, recomp_context* ctx) {
 
 } // namespace jfg
 
+// controlPlatform moves what stands on a platform with one objMoveXYZ call; jfg_platform_move marks it.
+static JfgCaller g_platform;
+
+JFG_WRAP(controlPlatform) {
+    JfgCaller::Scope scope(g_platform, ctx, 0x58);
+    controlPlatform_orig(rdram, ctx);
+}
+
 JFG_WRAP(objMoveXYZ) {
+    const bool platform = g_platform.direct(ctx);
+    if (platform) jfg_platform_move(1);
     jfg_move_scale(rdram, ctx);
     objMoveXYZ_orig(rdram, ctx);
+    if (platform) jfg_platform_move(0);
 }

@@ -236,18 +236,6 @@ func = "refuelControl"
 before_vram = 0x82630294
 text = "{ int jfg_refuel_amount(int); ctx->r25 = (gpr)(int32_t)((int32_t)ctx->r4 + jfg_refuel_amount((int32_t)ctx->r11)); }"
 
-# Moving platforms: controlPlatform carries the player along with objMoveXYZ; that step must not be enlarged by the
-# "Movement speed" option (jfg_move_scale). Flag set around the call.
-[[patches.hook]]
-func = "controlPlatform"
-before_vram = 0x80035A98
-text = "{ void jfg_platform_move(int); jfg_platform_move(1); }"
-
-[[patches.hook]]
-func = "controlPlatform"
-before_vram = 0x80035AA0
-text = "{ void jfg_platform_move(int); jfg_platform_move(0); }"
-
 # Sniper zoom: controlGetManualAim stores the zoom (data+0x1EC, 1..5) and its rate (+0x1F0); a fixed zoom replaces both.
 [[patches.hook]]
 func = "controlGetManualAim"
