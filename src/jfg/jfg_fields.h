@@ -228,6 +228,7 @@ constexpr uint32_t Size = 0x30;
 namespace Camera {
 using Yaw   = Field<uint16_t, 0x00>; // minus the heading it looks along
 using Pitch = Field<uint16_t, 0x02>;
+using Roll  = Field<uint16_t, 0x04>;
 using PosX  = Field<float, 0x0C>;
 using PosY  = Field<float, 0x10>;
 using PosZ  = Field<float, 0x14>;

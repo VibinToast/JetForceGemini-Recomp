@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -47,18 +48,18 @@ bool fly_camera_tick(recomp_context* ctx) {
         wr8(ADDR_instrumentsHide, 1);
     }
     else show_hud();
-    const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
+    const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
     if (!g_fly.started) {
         g_fly.started = true;
-        g_fly.x = rdf(cam + 0x0C); g_fly.y = rdf(cam + 0x10); g_fly.z = rdf(cam + 0x14);
-        g_fly.heading = -angle_from_s16(rd16(cam));
-        g_fly.pitch = angle_from_s16(rd16(cam + 2));
+        g_fly.x = Camera::PosX::get(cam); g_fly.y = Camera::PosY::get(cam); g_fly.z = Camera::PosZ::get(cam);
+        g_fly.heading = -angle_from_s16(Camera::Yaw::get(cam));
+        g_fly.pitch = angle_from_s16(Camera::Pitch::get(cam));
     }
     const uint32_t i = rd8(ADDR_sPlayerID) & 3u;
-    const uint32_t pad = ADDR_sControllerCurrData + 6u * i;
-    const uint16_t buttons = rd16(pad);
+    const uint32_t pad = ADDR_sControllerCurrData + Pad::Size * i;
+    const uint16_t buttons = Pad::Buttons::get(pad);
     // The character stands still: nothing reaches the game this tick.
-    wr16(pad, 0); wr8(pad + 2, 0); wr8(pad + 3, 0);
+    Pad::Buttons::set(pad, 0); Pad::StickX::set(pad, 0); Pad::StickY::set(pad, 0);
     wr16(ADDR_buttonsPressed + 2u * i, 0);
 
     const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
@@ -99,7 +100,7 @@ extern "C" int jfg_freeze_world(void) {
 void jfg_camera_restore() {
     if (!g_cam.overridden) return;
     g_cam.overridden = false;
-    for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { uint32_t v; std::memcpy(&v, &g_cam.saved[i], 4); wr32(g_cam.camera_addr + i, v); }
+    for (uint32_t i = 0; i < Camera::Size; i += 4) { uint32_t v; std::memcpy(&v, &g_cam.saved[i], 4); wr32(g_cam.camera_addr + i, v); }
 }
 
 // The game's follow camera keeps itself out of walls with func_8002CC70 (from the point it looks at, the wanted camera
@@ -131,31 +132,31 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     fov_refresh();
     if (g_fly.active && g_fly.started && !g_cam.overridden) {
-        const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
-        for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
+        const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
+        for (uint32_t i = 0; i < Camera::Size; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
         g_cam.camera_addr = cam;
         g_cam.overridden = true;
-        wrf(cam + 0x0C, g_fly.x); wrf(cam + 0x10, g_fly.y); wrf(cam + 0x14, g_fly.z);
-        wr16(cam + 0, angle_to_s16(-g_fly.heading));
-        wr16(cam + 2, angle_to_s16(g_fly.pitch));
-        wr16(cam + 4, 0);
+        Camera::PosX::set(cam, g_fly.x); Camera::PosY::set(cam, g_fly.y); Camera::PosZ::set(cam, g_fly.z);
+        Camera::Yaw::set(cam, angle_to_s16(-g_fly.heading));
+        Camera::Pitch::set(cam, angle_to_s16(g_fly.pitch));
+        Camera::Roll::set(cam, 0);
         return;
     }
     if (g_boss_cam_turn != 0 && boss_control_active() && !g_cam.overridden) {
         // Boss fight, mouse and keyboard: the game's camera, turned on the spot by how far the aim has gone to the side.
-        const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
-        for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
+        const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
+        for (uint32_t i = 0; i < Camera::Size; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
         g_cam.camera_addr = cam;
         g_cam.overridden = true;
-        wr16(cam + 0, (uint16_t)(rd16(cam + 0) - g_boss_cam_turn)); // camera angle = minus the heading it looks along
+        Camera::Yaw::set(cam, (uint16_t)(Camera::Yaw::get(cam) - g_boss_cam_turn)); // camera angle = minus the heading it looks along
         return;
     }
     if ((!g_cam.active && !g_cam.shoulder) || g_cam.overridden) return;
     const uint32_t obj = player_object(ctx);
     if (obj == 0) return;
-    const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
-    const float px = rdf(obj + 0x0C), py = rdf(obj + 0x10), pz = rdf(obj + 0x14);
-    const float cx = rdf(cam + 0x0C), cy = rdf(cam + 0x10), cz = rdf(cam + 0x14);
+    const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
+    const float px = Obj::PosX::get(obj), py = Obj::PosY::get(obj), pz = Obj::PosZ::get(obj);
+    const float cx = Camera::PosX::get(cam), cy = Camera::PosY::get(cam), cz = Camera::PosZ::get(cam);
     const float flat = std::sqrt((cx - px) * (cx - px) + (cz - pz) * (cz - pz));
 
     if (g_cam.shoulder) {
@@ -164,12 +165,12 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         // head height, a little behind and to the right, looking exactly where the character aims, turned slightly
         // inwards so the middle of the screen meets the line of fire some way ahead. It takes a tenth of a second to
         // get there from wherever the game's camera is.
-        const uint32_t data = rd32(obj + 0x68);
+        const uint32_t data = Obj::Data::get(obj);
         if (!valid_ptr(data)) return;
         constexpr float SIDE = 18.0f, BACK = 40.0f, HEAD = 60.0f, CONVERGE = 700.0f;
-        const float heading = angle_from_s16(rd16(data + PD_BODY_YAW)) + PI_F;
+        const float heading = angle_from_s16(PlayerData::BodyYaw::get(data)) + PI_F;
         // the game's own aiming camera pitch: view pitch plus 3/8 of the reticle's offset, positive looking down
-        const float pitch = -(angle_from_s16(rd16(data + PD_VIEW_PITCH)) + 0.375f * angle_from_s16(rd16(data + PD_RETICLE_PITCH)));
+        const float pitch = -(angle_from_s16((uint16_t)PlayerData::ViewPitch::get(data)) + 0.375f * angle_from_s16((uint16_t)PlayerData::ReticlePitch::get(data)));
         const float fx = std::sin(heading) * std::cos(pitch), fy = -std::sin(pitch), fz = std::cos(heading) * std::cos(pitch);
         // screen-right is heading - 90 degrees: (-cos, sin)
         const float tx = px - fx * BACK - std::cos(heading) * SIDE;
@@ -179,19 +180,19 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         const float b = g_cam.shoulder_blend;
         float ctx_ = tx, cty_ = ty, ctz_ = tz;
         camera_collide(ctx, px, py + HEAD, pz, ctx_, cty_, ctz_);
-        for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
+        for (uint32_t i = 0; i < Camera::Size; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
         g_cam.camera_addr = cam;
         g_cam.overridden = true;
-        const float game_look = -angle_from_s16(rd16(cam)), game_pitch = angle_from_s16(rd16(cam + 2));
-        wrf(cam + 0x0C, cx + (ctx_ - cx) * b);
-        wrf(cam + 0x10, cy + (cty_ - cy) * b);
-        wrf(cam + 0x14, cz + (ctz_ - cz) * b);
-        wr16(cam + 0, angle_to_s16(-(game_look + wrap_angle(look - game_look) * b)));
-        wr16(cam + 2, angle_to_s16(game_pitch + (pitch - game_pitch) * b));
+        const float game_look = -angle_from_s16(Camera::Yaw::get(cam)), game_pitch = angle_from_s16(Camera::Pitch::get(cam));
+        Camera::PosX::set(cam, cx + (ctx_ - cx) * b);
+        Camera::PosY::set(cam, cy + (cty_ - cy) * b);
+        Camera::PosZ::set(cam, cz + (ctz_ - cz) * b);
+        Camera::Yaw::set(cam, angle_to_s16(-(game_look + wrap_angle(look - game_look) * b)));
+        Camera::Pitch::set(cam, angle_to_s16(game_pitch + (pitch - game_pitch) * b));
         return;
     }
     if (flat < 20.0f || flat > 2000.0f) return; // not an ordinary follow camera (first person, a fixed view, ...)
-    const float game_elevation = angle_from_s16(rd16(cam + 2));
+    const float game_elevation = angle_from_s16(Camera::Pitch::get(cam));
     // The game's camera looks at a point above the character's feet; keep looking at that point from the same distance.
     const float pivot = std::clamp((cy - py) - flat * std::tan(game_elevation), 0.0f, 200.0f);
     const float boom = std::sqrt(flat * flat + (cy - py - pivot) * (cy - py - pivot));
@@ -200,18 +201,18 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     const float pitch = std::clamp(game_elevation + g_cam.elevation, -0.45f, 1.25f);
     const float elevation = std::max(pitch, 0.06f);
 
-    for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
+    for (uint32_t i = 0; i < Camera::Size; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
     g_cam.camera_addr = cam;
     g_cam.overridden = true;
     float wx = px - std::sin(g_cam.heading) * boom * std::cos(elevation);
     float wy = py + pivot + boom * std::sin(elevation);
     float wz = pz - std::cos(g_cam.heading) * boom * std::cos(elevation);
     camera_collide(ctx, px, py + pivot, pz, wx, wy, wz);
-    wrf(cam + 0x0C, wx);
-    wrf(cam + 0x10, wy);
-    wrf(cam + 0x14, wz);
-    wr16(cam + 0, angle_to_s16(-g_cam.heading));
-    wr16(cam + 2, angle_to_s16(pitch));
+    Camera::PosX::set(cam, wx);
+    Camera::PosY::set(cam, wy);
+    Camera::PosZ::set(cam, wz);
+    Camera::Yaw::set(cam, angle_to_s16(-g_cam.heading));
+    Camera::Pitch::set(cam, angle_to_s16(pitch));
 }
 
 } // namespace jfg
