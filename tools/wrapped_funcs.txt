@@ -48,3 +48,4 @@ shadowGenerate
 # Frame interpolation: matrix tags (jfg_interpolation.cpp)
 camPushModelMtx
 camPushFloatModelMtx
+camPushMuzzleMtx

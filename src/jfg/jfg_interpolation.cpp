@@ -121,3 +121,9 @@ JFG_WRAP(camPushFloatModelMtx) {
     camPushFloatModelMtx_orig(rdram, ctx);
     jfg_interp_pushed(rdram, ctx);
 }
+
+JFG_WRAP(camPushMuzzleMtx) {
+    jfg_interp_push(rdram, ctx);
+    camPushMuzzleMtx_orig(rdram, ctx);
+    jfg_interp_pushed(rdram, ctx);
+}
