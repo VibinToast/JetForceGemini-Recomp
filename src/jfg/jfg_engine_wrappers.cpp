@@ -133,3 +133,31 @@ JFG_WRAP(mmFree) {
     if (g_runlink == 3 && jfg_overlay_is_loaded((uint32_t)ctx->r4)) jfg_overlay_unloading(rdram, ctx);
     mmFree_orig(rdram, ctx);
 }
+
+// --- squads: bringing a squadron's members into play (overlay 3) --------------------------------------------------
+// func_overlay_3_000148C0 creates a squadron's first member when it has none (+0x58), then loops while created (+0x63)
+// < wanted (+0x01) over func_overlay_3_00014694, which reuses or creates one. Around each call of that loop the port
+// counts a pass that added nobody (jfg_squad_spawn_before / _after, $s0 = the squadron). The first-member call is the
+// first one made while +0x58 is 0, before the loop.
+static int g_squad_spawn = -1; // calls of 00014694 made by the current 000148C0; -1 outside it
+static bool g_squad_first_seen = false;
+
+JFG_WRAP(func_overlay_3_000148C0_1EE9DA0) {
+    const int prev = g_squad_spawn; const bool prev_first = g_squad_first_seen;
+    g_squad_spawn = 0; g_squad_first_seen = false;
+    func_overlay_3_000148C0_1EE9DA0_orig(rdram, ctx);
+    g_squad_spawn = prev; g_squad_first_seen = prev_first;
+}
+
+JFG_WRAP(func_overlay_3_00014694_1EE9B74) {
+    bool loop = false;
+    if (g_squad_spawn >= 0) {
+        const bool first_member = !g_squad_first_seen && g_squad_spawn == 0 && MEM_W(0x58, ctx->r16) == 0;
+        if (first_member) g_squad_first_seen = true;
+        loop = !first_member;
+        g_squad_spawn++;
+    }
+    if (loop) jfg_squad_spawn_before(rdram, ctx);
+    func_overlay_3_00014694_1EE9B74_orig(rdram, ctx);
+    if (loop) jfg_squad_spawn_after(rdram, ctx);
+}
