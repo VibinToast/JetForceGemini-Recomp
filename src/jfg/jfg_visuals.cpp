@@ -49,6 +49,7 @@ extern "C" uint32_t jfg_hit_flash(uint32_t color) {
 // paused and a reused object address hides nothing else. Not in a Floyd mission or a co-op game, where a player
 // flies him.
 static int g_floyd_kind = -1;
+static uint32_t g_floyd_obj = 0; // his object as last seen by sidekickControl
 static bool g_floyd_muted = false;
 constexpr uint32_t ADDR_cooperativeGame = 0x800A4FC8; // u8
 
@@ -68,7 +69,7 @@ extern "C" void jfg_floyd_seen(uint8_t* rdram_, recomp_context* ctx) {
     g_floyd_muted = floyd_hidden(obj);
 }
 
-// sidekickControl's return.
+// After sidekickControl (its wrapper, jfg_api.cpp).
 extern "C" void jfg_floyd_done(void) { g_floyd_muted = false; }
 
 // jfg_on_sound_play handler: nothing plays while sidekickControl runs for a hidden Floyd.

@@ -149,13 +149,6 @@ text = "{ void jfg_debug_frame(uint8_t*, recomp_context*); jfg_debug_frame(rdram
 func = "func_80044FAC_45BAC"
 before_vram = 0x800457BC
 text = "{ uint32_t jfg_frame_sync(uint8_t*, uint32_t); ctx->r2 = (int32_t)jfg_frame_sync(rdram, (uint32_t)ctx->r2); }"
-# "Hide Floyd" option (src/jfg/jfg_visuals.cpp): the entry of sidekickControl(obj, ...) notes Floyd's object kind, and
-# the entry of objPrintObject(dList, mtx, vtx, obj) skips drawing an object of that kind (the function returns nothing).
-[[patches.hook]]
-func = "sidekickControl"
-before_vram = 0x8002F728
-text = "{ void jfg_floyd_seen(uint8_t*, recomp_context*); jfg_floyd_seen(rdram, ctx); }"
-
 # Frame interpolation (src/jfg/jfg_interpolation.cpp): the entry of objPrintObject above and its return (below) keep
 # track of the object being drawn. Each of the four functions that write a model matrix notes where it was called
 # from at its entry, and right after it stores the matrix it wrote in D_800FAB30 the matrix is tagged for RT64.
@@ -205,13 +198,6 @@ text = "{ void jfg_interp_pushed(uint8_t*, recomp_context*); jfg_interp_pushed(r
 func = "shadowGenerate"
 before_vram = 0x8001DB6C
 text = "{ void jfg_hide_shadow(uint8_t*, recomp_context*); jfg_hide_shadow(rdram, ctx); }"
-
-# His sounds: amSndPlay(id, handle) plays nothing from the entry of sidekickControl (jfg_floyd_seen) to its only
-# return (`jr $ra`), so the sounds Floyd's own code starts are muted.
-[[patches.hook]]
-func = "sidekickControl"
-before_vram = 0x80031088
-text = "{ void jfg_floyd_done(void); jfg_floyd_done(); }"
 
 
 # Cutscene skip (src/jfg/jfg_cutscene_skip.cpp, jfg_frame_rate.cpp): after joyRead() in the main loop tick, and at the entry of viFrameSync.
@@ -391,18 +377,6 @@ text = "{ void jfg_squad_spawn_before(uint8_t*, recomp_context*); jfg_squad_spaw
 func = "func_overlay_3_000148C0_1EE9DA0"
 before_vram = 0x82034CA4
 text = "{ void jfg_squad_spawn_after(uint8_t*, recomp_context*); jfg_squad_spawn_after(rdram, ctx); }"
-
-# Floyd missions with the mouse (src/jfg/jfg_controls.cpp, jfg_floyd_steer): sidekickControl (s0 = Floyd's data), before
-# the roll is eased (phase 0) and after it, before heading, pitch and roll are copied to Floyd's object (phase 1).
-[[patches.hook]]
-func = "sidekickControl"
-before_vram = 0x8002FC28
-text = "{ void jfg_floyd_steer(uint8_t*, recomp_context*, int); jfg_floyd_steer(rdram, ctx, 0); }"
-
-[[patches.hook]]
-func = "sidekickControl"
-before_vram = 0x8002FC70
-text = "{ void jfg_floyd_steer(uint8_t*, recomp_context*, int); jfg_floyd_steer(rdram, ctx, 1); }"
 
 # The aim reticle's target lock (overlay 13, frontPlayerTarget): while the aim is off the target it counts down 10
 # calls (player +0x541, high nibble) before letting go, so at 60 fps the lock was dropped after 1/6 s instead of 1/3 s.

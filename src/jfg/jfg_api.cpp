@@ -210,3 +210,13 @@ JFG_WRAP(frontFlashScreen) {
     ctx->r6 = (gpr)(int32_t)color;
     frontFlashScreen_orig(rdram, ctx);
 }
+
+// sidekickControl(floyd, updateRate): jfg_on_sidekick_tick, then the game's code. Floyd's sounds are muted while it
+// runs for a hidden Floyd, and the mouse steers him in Floyd missions (jfg_controls.cpp, through dAngle's wrapper).
+JFG_WRAP(sidekickControl) {
+    jfg::api::fire(rdram, ctx, jfg::api::Event::SidekickTick, (int32_t)ctx->r4, (int32_t)ctx->r5);
+    jfg_sidekick_begin(rdram, ctx);
+    sidekickControl_orig(rdram, ctx);
+    jfg_sidekick_end();
+    jfg_floyd_done();
+}
