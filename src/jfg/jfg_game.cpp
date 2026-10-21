@@ -5,6 +5,7 @@
 #include <mutex>
 #include <span>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -64,7 +65,7 @@ void load_level_names_once() {
 uint32_t character_ptr(int character) {
     const uint32_t game = rd32(ADDR_gameplay);
     if (!valid_ptr(game)) return 0;
-    return game + GAME_CHARACTERS_OFFSET + (uint32_t)(character & 3) * GAME_CHARACTER_SIZE;
+    return game + Game::Characters + (uint32_t)(character & 3) * Character::Size;
 }
 
 // The first player's object (objGetPlayerlist), or 0.
@@ -84,10 +85,10 @@ bool select_weapon(recomp_context* ctx, int slot) {
     if (ch == 0 || slot < 0 || slot > 15) return false;
     const uint32_t obj = player_object(ctx);
     if (obj == 0) return false;
-    const uint32_t data = rd32(obj + 0x68);
+    const uint32_t data = Obj::Data::get(obj);
     if (!valid_ptr(data)) return false;
-    wr16(ch + CHAR_WEAPONS_OFFSET, (uint16_t)(rd16(ch + CHAR_WEAPONS_OFFSET) | (1u << slot)));
-    if (rd16(ch + CHAR_AMMO_OFFSET + 2 * slot) == 0) wr16(ch + CHAR_AMMO_OFFSET + 2 * slot, 50);
+    Character::WeaponsOwned::set(ch, (uint16_t)(Character::WeaponsOwned::get(ch) | (1u << slot)));
+    if (Character::Ammo::get(ch, slot) == 0) Character::Ammo::set(ch, slot, 50);
     return call_game(controlSelectWeapon, ctx, { obj, data, (uint32_t)slot }) != 0;
 }
 
@@ -104,8 +105,8 @@ void set_owned_weapons(uint32_t ch, uint16_t owned) {
     owned &= 0x7FFF;
     int count = 0;
     for (int w = 0; w < 15; w++) count += (owned >> w) & 1;
-    wr16(ch + CHAR_WEAPONS_OFFSET, owned);
-    wr8(ch + CHAR_WEAPON_COUNT_OFFSET, (uint8_t)count);
+    Character::WeaponsOwned::set(ch, owned);
+    Character::WeaponCount::set(ch, (uint8_t)count);
 }
 
 } // namespace jfg
