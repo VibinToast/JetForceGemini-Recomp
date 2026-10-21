@@ -28,3 +28,4 @@ objAnimDframe
 objMoveXYZ
 laserboltInit
 mineInit
+mainGetGameFlag

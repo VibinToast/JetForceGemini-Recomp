@@ -58,7 +58,7 @@ int jfg_no_blood(void);                                                // the bl
 int jfg_refuel_amount(int amount);                                     // refuelControl
 float jfg_sniper_zoom(float zoom);                                     // controlGetManualAim
 int jfg_sniper_walk(int weapon);                                       // the characters' aim control (overlays 15-17)
-int jfg_flag_override(int flag);                                       // entry of mainGetGameFlag
+int jfg_flag_override(int flag);                                       // mainGetGameFlag's wrapper
 // jfg_gore.cpp
 void jfg_gore_on_blood_spurt(uint8_t* rdram, recomp_context* ctx);     // jfg_on_blood_spurt handler (jfg_api.cpp)
 void jfg_gore_on_blood_hit(uint8_t* rdram, recomp_context* ctx);       // jfg_on_blood_hit handler

@@ -74,3 +74,11 @@ extern "C" int jfg_flag_override(int flag) {
 }
 
 } // namespace jfg
+
+JFG_WRAP(mainGetGameFlag) {
+    if (jfg_flag_override((int)ctx->r4)) {
+        ctx->r2 = 1;
+        return;
+    }
+    mainGetGameFlag_orig(rdram, ctx);
+}
