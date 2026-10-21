@@ -40,3 +40,27 @@ JFG_WRAP(__scTaskReady) {
     if (r == 0) { ctx->r2 = 0; return; }
     __scTaskReady_orig(rdram, ctx);
 }
+
+// --- the main loop tick (func_80044FAC) ----------------------------------------------------------------------------
+// Each tick: jfg_debug_frame before it; jfg_after_joy right after its joyRead (before it stores the result); and
+// jfg_frame_sync on what its viFrameSync returns (the frames the next tick simulates). joyRead is called from inside
+// the tick by other code too.
+static JfgCaller g_tick;
+
+JFG_WRAP(func_80044FAC_45BAC) {
+    jfg_debug_frame(rdram, ctx);
+    JfgCaller::Scope scope(g_tick, ctx, 0x50);
+    func_80044FAC_45BAC_orig(rdram, ctx);
+}
+
+JFG_WRAP(joyRead) {
+    const bool tick = g_tick.direct(ctx);
+    joyRead_orig(rdram, ctx);
+    if (tick) jfg_after_joy(rdram, ctx);
+}
+
+JFG_WRAP(viFrameSync) {
+    const bool tick = g_tick.direct(ctx);
+    if (!jfg_vi_skip(rdram, ctx)) viFrameSync_orig(rdram, ctx);
+    if (tick) ctx->r2 = (gpr)(int32_t)jfg_frame_sync(rdram, (uint32_t)ctx->r2);
+}
