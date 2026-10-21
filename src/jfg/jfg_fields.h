@@ -201,14 +201,23 @@ constexpr uint32_t Size = 0x76;
 // The game's data (rd32(ADDR_gameplay)).
 namespace Game {
 using SaveSlot    = Field<int8_t, 0x03>;   // the save file played from, -1 = none
-using CountRescued = Field<uint16_t, 0x04>;
-using CountLeft   = Field<uint16_t, 0x06>;
-using TribalsRescued = ArrayField<uint16_t, 0x5C>; // by room
-using TribalsKilled  = ArrayField<uint16_t, 0xDC>; // by room
+using TribalsRescuedCount = Field<uint8_t, 0x04>; // in the current region
+using TribalsKilledCount  = Field<uint8_t, 0x05>;
+using TribalsLeftCount    = Field<uint8_t, 0x06>;
+using TribalsRescued = ArrayField<uint16_t, 0x5C>; // by room: a bit per tribal
+using TribalsKilled  = ArrayField<uint16_t, 0xDC>; // by room: a bit per tribal
 constexpr uint32_t Characters = 0x15C;     // Character[3]
-constexpr uint32_t RegionStats = 0x334;    // 8 bytes per region: u8 best rescued, u8 killed, u16, u32
+constexpr uint32_t RegionStats = 0x334;    // RegionStat[31]
 using WeaponShots = ArrayField<uint32_t, 0x474>; // [16]
 using RegionTime  = Field<uint32_t, 0x514>;
+}
+
+// A region's tribal record (the game's data + Game::RegionStats + region * RegionStat::Size).
+namespace RegionStat {
+using Rescued = Field<uint8_t, 0x00>; // best
+using Killed  = Field<uint8_t, 0x01>;
+using Counts  = Field<uint16_t, 0x00>; // Rescued and Killed together
+constexpr uint32_t Size = 8;
 }
 
 // A weapon's definition (ADDR_weaponTable + weapon * WeaponDef::Size).
