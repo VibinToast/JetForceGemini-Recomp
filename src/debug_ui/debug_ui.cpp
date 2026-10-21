@@ -8,7 +8,7 @@
 namespace dino::debug_ui {
 
 bool is_open() {
-    return backend::is_open() && backend::dino_imgui_ctx->Initialized;
+    return backend::is_open() && backend::jfg_imgui_ctx->Initialized;
 }
 
 bool game_has_input() {
@@ -17,11 +17,11 @@ bool game_has_input() {
 
 bool want_capture_keyboard() {
     // Go directly through our context pointer so we don't have to worry about it being current
-    if (backend::dino_imgui_ctx == nullptr) {
+    if (backend::jfg_imgui_ctx == nullptr) {
         return false;
     }
 
-    return backend::is_open() && backend::dino_imgui_ctx->IO.WantCaptureKeyboard;
+    return backend::is_open() && backend::jfg_imgui_ctx->IO.WantCaptureKeyboard;
 }
 
 void ui_frame_begin() {

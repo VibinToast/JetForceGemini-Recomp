@@ -261,47 +261,23 @@ bool save_json_with_backups(const std::filesystem::path& path, const nlohmann::j
 bool save_general_config(const std::filesystem::path& path) {
     nlohmann::json config_json{};
 
-    dino::config::to_json(config_json["targeting_mode"], get_targeting_mode());
     dino::input::to_json(config_json["background_input_mode"], dino::input::get_background_input_mode());
     config_json["rumble_strength"] = dino::input::get_rumble_strength();
     config_json["gyro_sensitivity"] = dino::input::get_gyro_sensitivity();
     config_json["mouse_sensitivity"] = dino::input::get_mouse_sensitivity();
     config_json["joystick_deadzone"] = dino::input::get_joystick_deadzone();
     config_json["joystick_range"] = dino::input::get_joystick_range();
-    config_json["autosave_mode"] = get_autosave_mode();
-    config_json["camera_invert_mode"] = get_camera_invert_mode();
-    config_json["analog_cam_mode"] = get_analog_cam_mode();
-    config_json["analog_camera_invert_mode"] = get_analog_camera_invert_mode();
-    config_json["dinomod_check"] = get_dinomod_check();
-    config_json["hud_mode"] = get_hud_mode();
-    config_json["minimap_mode"] = get_minimap_mode();
-    config_json["debug_dll_logging"] = get_debug_dll_logging_enabled();
-    config_json["debug_diprintf"] = get_debug_diprintf_enabled();
-    config_json["debug_reasset_loglevel"] = get_debug_reasset_loglevel();
-    config_json["debug_recompsave"] = get_debug_recompsave_enabled();
 
     return save_json_with_backups(path, config_json);
 }
 
 void set_general_settings_from_json(const nlohmann::json& config_json) {
-    set_targeting_mode(from_or_default(config_json, "targeting_mode", TargetingMode::Switch));
     dino::input::set_background_input_mode(from_or_default(config_json, "background_input_mode", dino::input::BackgroundInputMode::On));
     dino::input::set_rumble_strength(from_or_default(config_json, "rumble_strength", 25));
     dino::input::set_gyro_sensitivity(from_or_default(config_json, "gyro_sensitivity", 50));
     dino::input::set_mouse_sensitivity(from_or_default(config_json, "mouse_sensitivity", is_steam_deck ? 50 : 0));
     dino::input::set_joystick_deadzone(from_or_default(config_json, "joystick_deadzone", 5));
     dino::input::set_joystick_range(from_or_default(config_json, "joystick_range", 66));
-    set_autosave_mode(from_or_default(config_json, "autosave_mode", AutosaveMode::On));
-    set_camera_invert_mode(from_or_default(config_json, "camera_invert_mode", CameraInvertMode::InvertY));
-    set_analog_cam_mode(from_or_default(config_json, "analog_cam_mode", AnalogCamMode::Off));
-    set_analog_camera_invert_mode(from_or_default(config_json, "analog_camera_invert_mode", CameraInvertMode::InvertNone));
-    set_dinomod_check(from_or_default(config_json, "dinomod_check", true));
-    set_hud_mode(from_or_default(config_json, "hud_mode", HUDMode::Default));
-    set_minimap_mode(from_or_default(config_json, "minimap_mode", MinimapMode::Default));
-    set_debug_dll_logging_enabled(from_or_default(config_json, "debug_dll_logging", false));
-    set_debug_diprintf_enabled(from_or_default(config_json, "debug_diprintf", false));
-    set_debug_reasset_loglevel(from_or_default(config_json, "debug_reasset_loglevel", 0));
-    set_debug_recompsave_enabled(from_or_default(config_json, "debug_recompsave", false));
 }
 
 bool load_general_config(const std::filesystem::path& path) {
@@ -539,10 +515,6 @@ bool save_sound_config(const std::filesystem::path& path) {
     nlohmann::json config_json{};
 
     config_json["main_volume"] = dino::config::get_main_volume();
-    config_json["bgm_volume"] = dino::config::get_bgm_volume();
-    config_json["sfx_volume"] = dino::config::get_sfx_volume();
-    config_json["dialog_volume"] = dino::config::get_dialog_volume();
-    config_json["subtitles"] = dino::config::get_subtitles_enabled();
 
     return save_json_with_backups(path, config_json);
 }
@@ -555,10 +527,6 @@ bool load_sound_config(const std::filesystem::path& path) {
 
     dino::config::reset_sound_settings();
     call_if_key_exists(dino::config::set_main_volume, config_json, "main_volume");
-    call_if_key_exists(dino::config::set_bgm_volume, config_json, "bgm_volume");
-    call_if_key_exists(dino::config::set_sfx_volume, config_json, "sfx_volume");
-    call_if_key_exists(dino::config::set_dialog_volume, config_json, "dialog_volume");
-    call_if_key_exists(dino::config::set_subtitles_enabled, config_json, "subtitles");
     return true;
 }
 

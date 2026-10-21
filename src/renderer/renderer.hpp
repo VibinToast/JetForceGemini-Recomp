@@ -33,12 +33,11 @@ namespace dino::renderer {
 
     private:
         std::unique_ptr<RT64::Application> app;
-        bool game_aspect_override = false;
         std::unordered_set<std::string> enabled_texture_packs;
         std::unordered_set<std::string> secondary_disabled_texture_packs;
 
         void check_texture_pack_actions();
-        void update_game_aspect_override();
+        void update_render_options();
     };
 
     std::unique_ptr<ultramodern::renderer::RendererContext> create_render_context(uint8_t *rdram, ultramodern::renderer::WindowHandle window_handle, bool developer_mode);

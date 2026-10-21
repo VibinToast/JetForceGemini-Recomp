@@ -20,19 +20,3 @@ extern "C" void recomp_eputs(uint8_t* rdram, recomp_context* ctx) {
         fputc(MEM_B(i, (gpr)cur_str), stderr);
     }
 }
-
-extern "C" void recomp_get_diprintf_enabled(uint8_t* rdram, recomp_context* ctx) {
-    _return<s32>(ctx, dino::config::get_debug_diprintf_enabled() ? 1 : 0);
-}
-
-extern "C" void recomp_get_debug_dll_logging_enabled(uint8_t* rdram, recomp_context* ctx) {
-    _return<s32>(ctx, dino::config::get_debug_dll_logging_enabled() ? 1 : 0);
-}
-
-extern "C" void recomp_get_debug_reasset_loglevel(uint8_t* rdram, recomp_context* ctx) {
-    _return<s32>(ctx, dino::config::get_debug_reasset_loglevel());
-}
-
-extern "C" void recomp_get_debug_recompsave_enabled(uint8_t* rdram, recomp_context* ctx) {
-    _return<s32>(ctx, dino::config::get_debug_recompsave_enabled() ? 1 : 0);
-}
