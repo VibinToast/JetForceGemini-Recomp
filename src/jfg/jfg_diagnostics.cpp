@@ -236,3 +236,10 @@ JFG_WRAP(mmAlloc2) {
     mmAlloc2_orig(rdram, ctx);
     jfg_mm_alloc_check(rdram, ctx, size, colour);
 }
+
+// The game's assertion ("break"): logged and reported before the process ends. Without this the runtime's exit()
+// could crash in its shutdown and leave nothing behind.
+JFG_WRAP(mathBreakPoint) {
+    jfg_game_break(rdram, ctx);
+    mathBreakPoint_orig(rdram, ctx);
+}
