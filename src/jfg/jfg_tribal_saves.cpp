@@ -19,6 +19,7 @@
 #include <map>
 
 #include "ultramodern/ultramodern.hpp"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -29,9 +30,6 @@ namespace jfg {
 namespace {
 constexpr uint32_t ADDR_currentRegion = 0x800FD7A4; // s16: the region being played (0 / 0xFF: none)
 constexpr uint32_t ADDR_roomFlags = 0x800FB1E0;     // 32 x { u8 id counter, u8 bits[16] }, by regionFlag
-constexpr uint32_t GAME_TRIBALS_RESCUED = 0x5C, GAME_TRIBALS_KILLED = 0xDC; // u16 per room
-constexpr uint32_t GAME_COUNT_RESCUED = 4, GAME_COUNT_LEFT = 6, GAME_SLOT_OFFSET = 0x03;
-constexpr uint32_t LEVEL_REGION_FLAG = 0x103;
 constexpr int ROOMS = 32, ROOM_STRIDE = 17, ROOM_BITS = 16, SAVE_SLOTS = 6;
 constexpr int CAPTURE_TICKS = 3; // ticks after a rescue in which the room's new object flags are taken as the Tribal's
 
@@ -106,7 +104,7 @@ bool real_region(int region) { return region != 0 && region != 0xFF; }
 
 int current_slot(uint32_t game) {
     if (!auto_save_file_in_play()) return -1; // a port warp from the title: the Game struct is no file's
-    const int slot = (int8_t)rd8(game + GAME_SLOT_OFFSET);
+    const int slot = Game::SaveSlot::get(game);
     return (slot >= 0 && slot < SAVE_SLOTS) ? slot : -1;
 }
 } // namespace
@@ -141,10 +139,10 @@ void tribal_saves_forget(int slot) {
 void tribal_saves_tick() {
     const uint32_t game = rd32(ADDR_gameplay), header = rd32(ADDR_levelHeader);
     if (!g.permanent_tribals || !valid_ptr(game) || !valid_ptr(header) || rd32(ADDR_mainGameMode) != 0) { g_watch = Watch{}; return; }
-    const int region = (int16_t)rd16(ADDR_currentRegion), room = rd8(header + LEVEL_REGION_FLAG);
+    const int region = (int16_t)rd16(ADDR_currentRegion), room = LevelHeader::Room::get(header);
     const int level = (int16_t)rd16(ADDR_currentLevel), slot = current_slot(game);
     if (!real_region(region) || room >= ROOMS || slot < 0 || level != (int16_t)rd16(ADDR_nextLevel)) { g_watch = Watch{}; return; }
-    const uint16_t rescued = rd16(game + GAME_TRIBALS_RESCUED + 2 * room);
+    const uint16_t rescued = Game::TribalsRescued::get(game, room);
     uint8_t flags[ROOM_BITS];
     for (int b = 0; b < ROOM_BITS; b++) flags[b] = rd8(ADDR_roomFlags + room * ROOM_STRIDE + 1 + b);
     Watch& w = g_watch;
@@ -178,14 +176,14 @@ void tribal_saves_region_reset() {
     const Region& kept = it->second;
     int restored = 0;
     for (int room = 0; room < ROOMS; room++) {
-        const uint32_t rescued_addr = game + GAME_TRIBALS_RESCUED + 2 * room;
-        const uint16_t taken = rd16(rescued_addr) | rd16(game + GAME_TRIBALS_KILLED + 2 * room);
+        const uint32_t rescued_addr = game + Game::TribalsRescued::offset + 2 * room;
+        const uint16_t taken = rd16(rescued_addr) | Game::TribalsKilled::get(game, room);
         const uint16_t add = kept.rescued[room] & ~taken;
         for (int bit = 0; bit < 16; bit++) {
             if (!(add & (1 << bit))) continue;
             restored++;
-            wr8(game + GAME_COUNT_RESCUED, rd8(game + GAME_COUNT_RESCUED) + 1);
-            if (rd8(game + GAME_COUNT_LEFT) > 0) wr8(game + GAME_COUNT_LEFT, rd8(game + GAME_COUNT_LEFT) - 1);
+            Game::TribalsRescuedCount::set(game, Game::TribalsRescuedCount::get(game) + 1);
+            if (Game::TribalsLeftCount::get(game) > 0) Game::TribalsLeftCount::set(game, Game::TribalsLeftCount::get(game) - 1);
         }
         wr16(rescued_addr, rd16(rescued_addr) | add);
         for (int b = 0; b < ROOM_BITS; b++) {
