@@ -34,7 +34,7 @@ are written here by hand and become that version's notes when it is released.
 ### Settings menu
 
 - Everything is in one menu with 8 tabs: Profiles, General, Gameplay, Controls, Bindings, Graphics, Textures and Mods.
-- New Jet Force Gemini colours, bigger option descriptions with the option's name as a heading, and options grouped under headings.
+- New Jet Force Gemini colors, bigger option descriptions with the option's name as a heading, and options grouped under headings.
 - The bumpers switch tabs instead of the triggers, and a controller reaches every option.
 - Choosing a profile shows what it will change before it is applied, and warns you if it would replace your controller bindings. New Keep My Controls option.
 - The Bindings tab tells you when its bindings are not the ones in use, and its note no longer covers the list. The Profiles tab scrolls instead of running off the bottom of the menu.
@@ -211,7 +211,7 @@ are written here by hand and become that version's notes when it is released.
 - Show the Mods tab again
 - Update JFG 4K texture pack link in README
 - Document HD texture packs in the README
-- Add a launcher in Jet Force Gemini colours
+- Add a launcher in Jet Force Gemini colors
 - Document the features and keys in the README
 - Add automatic releases
 - Add the Gameplay, Visuals, Profiles and Textures tabs to the settings menu
