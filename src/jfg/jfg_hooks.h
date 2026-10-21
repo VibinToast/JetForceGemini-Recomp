@@ -142,6 +142,20 @@ void jfg_recomp_printf(uint8_t* rdram, recomp_context* ctx);           // jfg_mo
     extern "C" void name##_orig(uint8_t* rdram, recomp_context* ctx);     \
     extern "C" void jfg_wrap_##name(uint8_t* rdram, recomp_context* ctx)
 
+// A wrapper that acts on one caller's own call of another function. The caller's wrapper opens a JfgCaller::Scope
+// around its _orig with the caller's frame size (its prologue's addiu $sp); the callee's wrapper checks direct(ctx): a
+// call made from deeper down (by a function the caller called) is entered with a lower $sp.
+struct JfgCaller {
+    struct Scope {
+        Scope(JfgCaller& c, recomp_context* ctx, uint32_t frame) : c(c), prev(c.sp) { c.sp = ctx->r29 - frame; }
+        ~Scope() { c.sp = prev; }
+        JfgCaller& c;
+        gpr prev;
+    };
+    bool direct(const recomp_context* ctx) const { return sp != 0 && ctx->r29 == sp; }
+    gpr sp = 0;
+};
+
 #include <span>
 #include <vector>
 // src/main.cpp, GameEntry::decompression_routine: the ROM the runtime regenerates hooked functions from, with every
