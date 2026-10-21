@@ -180,9 +180,9 @@
 			   per size (or the download's progress), then the last result and More info on the right. */
 			.rl-official { display: flex; flex: 0 0 auto; flex-direction: row; align-items: center; margin-bottom: 14dp; padding: 10dp 14dp;
 				background-color: #0B1733; border-width: 2dp; border-color: #1F3D73; }
-			.rl-official-head { display: block; flex: 0 0 auto; width: 200dp; margin-right: 14dp; }
+			.rl-official-head { display: block; flex: 0 1 auto; min-width: 200dp; margin-right: 14dp; } /* wider for a status with no buttons beside it */
 			.rl-official-title { display: block; font-family: "JFG Black"; font-weight: normal; font-size: 16dp; line-height: 20dp; color: #FFB21A; text-transform: uppercase; }
-			.rl-official-status { display: block; font-size: 13dp; line-height: 18dp; color: #8199BF; }
+			.rl-official-status { display: block; font-size: 13dp; line-height: 18dp; color: #8199BF; white-space: nowrap; }
 			.rl-official-btns { display: flex; flex: 0 0 auto; flex-direction: row; align-items: center; }
 			.rl-official-btn { display: flex; flex: 0 0 auto; flex-direction: row; align-items: center; margin-right: 10dp; padding: 5dp 12dp 5dp 10dp;
 				border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF; text-align: left; cursor: pointer;
