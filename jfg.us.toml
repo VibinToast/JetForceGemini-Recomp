@@ -221,10 +221,6 @@ func = "sidekickControl"
 before_vram = 0x80031088
 text = "{ void jfg_floyd_done(void); jfg_floyd_done(); }"
 
-[[patches.hook]]
-func = "amSndPlay"
-before_vram = 0x80001248
-text = "{ int jfg_floyd_mute(uint32_t); if (jfg_floyd_mute((uint32_t)ctx->r4)) { recomp_exit_function(); return; } }"
 
 # Cutscene skip (src/jfg/jfg_cutscene_skip.cpp, jfg_frame_rate.cpp): after joyRead() in the main loop tick, and at the entry of viFrameSync.
 [[patches.hook]]

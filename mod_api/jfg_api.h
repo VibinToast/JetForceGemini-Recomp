@@ -49,6 +49,12 @@ typedef struct {
     int cancel;
 } JfgObjectDraw;
 
+// jfg_on_sound_play: a sound effect is about to start. Change id to play another; set cancel to 1 to play nothing.
+typedef struct {
+    int id;
+    int cancel;
+} JfgSoundPlay;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)

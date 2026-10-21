@@ -194,3 +194,11 @@ JFG_WRAP(objPrintObject) {
     objPrintObject_orig(rdram, ctx);
     jfg_interp_object_done(rdram, ctx);
 }
+
+// amSndPlay(id, handle): jfg_on_sound_play (Hide Floyd mutes his sounds); a callback may change the sound's id.
+JFG_WRAP(amSndPlay) {
+    uint32_t id = (uint32_t)ctx->r4;
+    if (!fire_value_cancel(rdram, ctx, jfg::api::Event::SoundPlay, id)) return;
+    ctx->r4 = (gpr)(int32_t)id;
+    amSndPlay_orig(rdram, ctx);
+}
