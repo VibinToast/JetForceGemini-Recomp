@@ -30,3 +30,4 @@ laserboltInit
 mineInit
 mainGetGameFlag
 mainResetRegion
+mmAlloc

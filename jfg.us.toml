@@ -319,11 +319,6 @@ text = "{ void jfg_game_fog(uint8_t*, uint32_t); jfg_game_fog(rdram, (uint32_t)c
 # after mmFlushFreeStack (frees queued with a delay are released at once) and logs both cases (jfg_mm_alloc_check).
 # mmAlloc2 is the same function (models and textures use it), hooked the same way below.
 [[patches.hook]]
-func = "mmAlloc"
-before_vram = 0x8004A5FC
-text = "{ void jfg_mm_alloc_check(uint8_t*, recomp_context*); jfg_mm_alloc_check(rdram, ctx); }"
-
-[[patches.hook]]
 func = "mmAlloc2"
 before_vram = 0x8004A68C
 text = "{ void jfg_mm_alloc_check(uint8_t*, recomp_context*); jfg_mm_alloc_check(rdram, ctx); }"
