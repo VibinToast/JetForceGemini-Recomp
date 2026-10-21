@@ -463,12 +463,6 @@ func = "func_overlay_3_000148C0_1EE9DA0"
 before_vram = 0x82034CA4
 text = "{ void jfg_squad_spawn_after(uint8_t*, recomp_context*); jfg_squad_spawn_after(rdram, ctx); }"
 
-# Weapons tab: the player's mines, for the "mines on the field" limit; end of mineInit (overlay 112; s1 = mine, s0 = data).
-[[patches.hook]]
-func = "mineInit"
-before_vram = 0x826F020C
-text = "{ void jfg_mine_init(uint8_t*, recomp_context*); jfg_mine_init(rdram, ctx); }"
-
 # Floyd missions with the mouse (src/jfg/jfg_controls.cpp, jfg_floyd_steer): sidekickControl (s0 = Floyd's data), before
 # the roll is eased (phase 0) and after it, before heading, pitch and roll are copied to Floyd's object (phase 1).
 [[patches.hook]]

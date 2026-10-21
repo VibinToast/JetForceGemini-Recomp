@@ -27,3 +27,4 @@ dAngle
 objAnimDframe
 objMoveXYZ
 laserboltInit
+mineInit
