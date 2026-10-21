@@ -42,6 +42,7 @@ extern "C" void jfg_mm_alloc_check(uint8_t* rdram_, recomp_context* ctx) {
         if (fail != nullptr && !failed_once && (uint32_t)ctx->r2 != 0) {
             g_rdram = rdram_;
             if (rd32((uint32_t)ctx->r29 + 0x30) == (uint32_t)std::strtoul(fail, nullptr, 16)) { failed_once = true; ctx->r2 = 0; }
+            if (size == (uint32_t)std::strtoul(fail, nullptr, 16)) { failed_once = true; ctx->r2 = 0; }
         }
     }
     if ((uint32_t)ctx->r2 != 0) return;
