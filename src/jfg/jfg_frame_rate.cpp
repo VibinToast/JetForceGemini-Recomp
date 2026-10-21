@@ -785,3 +785,18 @@ JFG_WRAP(__scHandleRetrace) {
     }
     __scHandleRetrace_orig(rdram, ctx);
 }
+
+// frontPlayerTarget(?, player, ...): the target lock counts down (player +0x541, high nibble) while the aim is off the
+// target. On the ticks jfg_cadence_skip leaves out, that count is put back, so it keeps its 30 fps pace. The on-target
+// path sets the count to 0xA, which never looks like a count of one less.
+JFG_WRAP(frontPlayerTarget) {
+    jfg::g_rdram = rdram;
+    const uint32_t player = (uint32_t)ctx->r5;
+    const bool ok = jfg::valid_ptr(player);
+    const uint8_t before = ok ? jfg::rd8(player + 0x541) : 0;
+    frontPlayerTarget_orig(rdram, ctx);
+    if (!ok || (before >> 4) == 0 || !jfg_cadence_skip()) return;
+    jfg::g_rdram = rdram;
+    const uint8_t counted = (uint8_t)((((before >> 4) - 1) << 4) | (before & 0x0F));
+    if (jfg::rd8(player + 0x541) == counted) jfg::wr8(player + 0x541, before);
+}
