@@ -230,3 +230,9 @@ JFG_WRAP(mmAlloc) {
     mmAlloc_orig(rdram, ctx);
     jfg_mm_alloc_check(rdram, ctx, size, colour);
 }
+
+JFG_WRAP(mmAlloc2) {
+    const uint32_t size = (uint32_t)ctx->r4, colour = (uint32_t)ctx->r5;
+    mmAlloc2_orig(rdram, ctx);
+    jfg_mm_alloc_check(rdram, ctx, size, colour);
+}

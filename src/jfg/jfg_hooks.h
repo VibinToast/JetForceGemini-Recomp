@@ -72,7 +72,6 @@ uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_bits); // o
 void jfg_mine_init(uint8_t* rdram, uint32_t mine);                     // after mineInit (its wrapper)
 void jfg_bolt_init(uint8_t* rdram, recomp_context* ctx);               // after laserboltInit, a0 = the bolt
 // jfg_diagnostics.cpp
-void jfg_mm_alloc_check(uint8_t* rdram, recomp_context* ctx);          // mmAlloc and mmAlloc2, after mempool_slot_find
 void jfg_mm_alloc_check(uint8_t* rdram, recomp_context* ctx, uint32_t size, uint32_t colour); // after mmAlloc/mmAlloc2
 void jfg_squad_spawn_before(uint8_t* rdram, recomp_context* ctx);      // overlay 3 +0x14C9C, the squad member loop
 void jfg_squad_spawn_after(uint8_t* rdram, recomp_context* ctx);       // overlay 3 +0x14CA4, after its call

@@ -315,14 +315,6 @@ func = "func_8001BF9C_1CB9C"
 before_vram = 0x8001BFD4
 text = "{ void jfg_game_fog(uint8_t*, uint32_t); jfg_game_fog(rdram, (uint32_t)ctx->r29); }"
 
-# mmAlloc, right after mempool_slot_find returned ($v0 = the block, 0 when the heap has no room): the port retries once
-# after mmFlushFreeStack (frees queued with a delay are released at once) and logs both cases (jfg_mm_alloc_check).
-# mmAlloc2 is the same function (models and textures use it), hooked the same way below.
-[[patches.hook]]
-func = "mmAlloc2"
-before_vram = 0x8004A68C
-text = "{ void jfg_mm_alloc_check(uint8_t*, recomp_context*); jfg_mm_alloc_check(rdram, ctx); }"
-
 # squadsFireWeapon (overlay 3): the one objSetupObject call in it whose result is not checked (+0x8640, a squad member's
 # weapon object, written to +0x88 right after) crashed the game when the object could not be created (a gun turret in
 # level 248). It now leaves the way the function's other four calls do when they get NULL: to its exit at +0x9670.
