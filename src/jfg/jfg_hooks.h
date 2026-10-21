@@ -1,8 +1,7 @@
 // Jet Force Gemini port: every function the rest of the program calls in src/jfg, by caller.
 //
-// They have C linkage. The game handlers are called from the wrappers around game functions (JFG_WRAP below; one
-// jfg.us.toml hook is left, in squadsFireWeapon) and from the mod API's internal handlers (jfg_api.cpp); the others
-// from the base project's code. Most are defined inside namespace jfg in the file named below; with extern "C" they
+// They have C linkage. The game handlers are called from the wrappers around game functions (JFG_WRAP below) and from
+// the mod API's internal handlers (jfg_api.cpp); the others from the base project's code. Most are defined inside namespace jfg in the file named below; with extern "C" they
 // keep their plain name.
 #pragma once
 
