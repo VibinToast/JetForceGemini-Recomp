@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 
@@ -28,14 +29,9 @@ int drawn_count = 0;
 uint32_t push_caller = 0; // return address of the push function running now
 uint32_t push_source = 0; // its third argument: what it draws (transform, source matrix, position; the scale's bits)
 
-constexpr uint32_t OBJ_DEFINITION = 0x40;     // Object: pointer to its definition (objects.h)
-constexpr uint32_t OBJ_MODELS = 0x6C;         // Object: its model instances (ModelInstance_JFG*[], models.h)
-constexpr uint32_t OBJ_MODEL_INDEX = 0x3A;    // Object: s8, the one drawn (segment.unk3A)
-constexpr uint32_t INST_BONES = 0x10;         // ModelInstance_JFG: f32 *unk10[2], its two bone buffers (one per frame)
-
 uint32_t object_id(uint32_t object) {
     // The object's address with its definition, so an object created where another one was freed differs.
-    return (object * 2654435761u) ^ rd32(object + OBJ_DEFINITION);
+    return (object * 2654435761u) ^ Obj::Def::get(object);
 }
 constexpr uint32_t ADDR_modelMtx = 0x800FAAB0; // D_800FAAB0: the float model matrix the push functions multiply with the camera
 constexpr uint32_t ADDR_lastMtx = 0x800FAB30;  // D_800FAB30: the Mtx the push function just wrote
@@ -52,14 +48,14 @@ extern "C" void jfg_interp_object(uint8_t* rdram_, recomp_context* ctx) {
     drawn_count++;
     if (!valid_ptr(object)) return;
 
-    const uint32_t models = rd32(object + OBJ_MODELS);
-    const int index = (int8_t)rd8(object + OBJ_MODEL_INDEX);
+    const uint32_t models = Obj::Models::get(object);
+    const int index = Obj::ModelIndex::get(object);
     if (!valid_ptr(models) || index < 0 || index > 15) return;
     const uint32_t instance = rd32(models + (uint32_t)index * 4);
     if (!valid_ptr(instance)) return;
     const uint32_t id = (object_id(object) ^ ((uint32_t)index * 2246822519u)) | 1u; // never RT64's 0 ("not interpolated")
     for (uint32_t i = 0; i < 2; i++) {
-        const uint32_t buffer = rd32(instance + INST_BONES + i * 4);
+        const uint32_t buffer = ModelInstance::Bones::get(instance, i); // one per buffer (frame)
         if (valid_ptr(buffer)) rt64_jfg_tag_bone_buffer(buffer & 0x00FFFFFFu, id == 0xFFFFFFFFu ? 1u : id);
     }
 }
