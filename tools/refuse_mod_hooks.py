@@ -17,7 +17,12 @@ replaces one of the port's functions takes over that function, port change and a
 
 Usage: refuse_mod_hooks.py <RecompiledFuncs dir> <dynamic_relocs.json> <symbols.toml> <jfg.us.toml>
 """
-import bisect, json, os, re, sys, tomllib
+import bisect, json, os, re, sys
+
+try:
+    import tomllib  # Python 3.11+
+except ImportError:  # Python 3.10 (Ubuntu 22.04, the Linux release build): read_patches' own reader
+    tomllib = None
 
 
 def functions_by_section(syms_path):
@@ -55,6 +60,51 @@ def data_site_functions(dyn_path, secs):
     return out
 
 
+def strip_comment(line):
+    quoted = False
+    for i, c in enumerate(line):
+        if c == '"':
+            quoted = not quoted
+        elif c == "#" and not quoted:
+            return line[:i]
+    return line
+
+
+def read_patches(config_path):
+    """jfg.us.toml's [patches]: with tomllib, or without it only what this script uses (the func of each
+    [[patches.hook]] and [[patches.instruction]], and the ignored and renamed arrays)."""
+    if tomllib is not None:
+        return tomllib.load(open(config_path, "rb")).get("patches", {})
+    patches = {"hook": [], "instruction": []}
+    table, array = None, None
+    for line in open(config_path, encoding="utf-8"):
+        line = strip_comment(line).strip()
+        if array is not None:
+            patches[array] += re.findall(r'"([^"]*)"', line)
+            if "]" in line:
+                array = None
+            continue
+        m = re.fullmatch(r"\[\[patches\.(hook|instruction)\]\]", line)
+        if m:
+            table = m.group(1)
+            patches[table].append({})
+            continue
+        if line.startswith("["):
+            table = "patches" if line == "[patches]" else None
+            continue
+        m = re.match(r'func\s*=\s*"([^"]*)"', line)
+        if m and table in ("hook", "instruction"):
+            patches[table][-1]["func"] = m.group(1)
+        m = re.match(r"(ignored|renamed)\s*=\s*\[(.*)", line)
+        if m and table == "patches":
+            patches[m.group(1)] = re.findall(r'"([^"]*)"', m.group(2))
+            if "]" not in m.group(2):
+                array = m.group(1)
+    if any("func" not in p for p in patches["hook"] + patches["instruction"]):
+        sys.exit("refuse_mod_hooks: a [[patches.hook]] or [[patches.instruction]] without func in " + config_path)
+    return patches
+
+
 def port_changed_functions(patches):
     out = {h["func"] for h in patches.get("hook", [])} | {p["func"] for p in patches.get("instruction", [])}
     out.add("gen_anim_data")
@@ -64,7 +114,7 @@ def port_changed_functions(patches):
 def main(out_dir, dyn_path, syms_path, config_path):
     secs = functions_by_section(syms_path)
     data_sites = data_site_functions(dyn_path, secs)
-    patches = tomllib.load(open(config_path, "rb")).get("patches", {})
+    patches = read_patches(config_path)
     port = port_changed_functions(patches)
     # Not in the function table under their own name, nothing to do: N64Recomp skips ignored functions and adds
     # _recomp to renamed ones.
