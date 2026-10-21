@@ -118,8 +118,7 @@ commits this repository pins (set `JFG_KEEP_LIBS=1` to build with `lib/` as it i
 
 ## AI disclosure
 
-This project was built with heavy help from AI (Claude), under the direction of the project owner. It has not had
-an independent code review.
+This project is AI-assisted (Claude) and directed by a software developer who reviews the modding API and some of the port's own code. This dev (hello 🙂) has limited knowledge on recompiled MIPS game code and the low-level patches so these are tested and check by hand.
 
 ## Legal
 
