@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "ultramodern/error_handling.hpp"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -73,13 +74,13 @@ static uint8_t g_squad_created = 0;
 static std::string g_last_obj_failure = "none seen"; // the latest failed objSetupObject (jfg_objsetup_exit), for the line below
 extern "C" void jfg_squad_spawn_before(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    g_squad_created = rd8((uint32_t)ctx->r16 + 0x63);
+    g_squad_created = SquadronData::Created::get((uint32_t)ctx->r16);
 }
 extern "C" void jfg_squad_spawn_after(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t squadron = (uint32_t)ctx->r16;
-    if (rd8(squadron + 0x63) != g_squad_created) return;
-    wr8(squadron + 0x63, (uint8_t)(g_squad_created + 1));
+    if (SquadronData::Created::get(squadron) != g_squad_created) return;
+    SquadronData::Created::set(squadron, (uint8_t)(g_squad_created + 1));
     static int logged = 0;
     if (logged++ >= 20) return;
     char line[600];
@@ -167,16 +168,16 @@ extern "C" void jfg_squads_check_enemy(uint8_t* rdram_, recomp_context* ctx) {
     for (int i = count - 1; i >= 0; i--) {
         const uint32_t node = rd32(list + 4u * (uint32_t)i);
         if (!rdram_ptr(node)) { broken(i, -1, "bad squadron object", node); continue; }
-        const uint32_t data = rd32(node + 0x68);
+        const uint32_t data = Obj::Data::get(node);
         if (!rdram_ptr(data)) { broken(i, -1, "bad squadron data", data); continue; }
-        uint32_t member = rd32(data + 0x58);
+        uint32_t member = SquadronData::FirstMember::get(data);
         for (int link = 0; member != 0; link++) {
             if (link >= 256) { broken(i, link, "chain too long at member", member); break; }
             if (!rdram_ptr(member)) { broken(i, link, "bad member object", member); break; }
-            const uint32_t m = rd32(member + 0x68);
+            const uint32_t m = Obj::Data::get(member);
             if (!rdram_ptr(m)) { broken(i, link, "bad member data", m); break; }
-            if (rd32(m + 0x64) == freed) wr32(m + 0x64, 0);
-            member = rd32(m + 0x28);
+            if (SquadMemberData::Target::get(m) == freed) SquadMemberData::Target::set(m, 0);
+            member = SquadMemberData::NextMember::get(m);
         }
     }
 }
@@ -191,29 +192,31 @@ extern "C" void jfg_squads_check_enemy(uint8_t* rdram_, recomp_context* ctx) {
 extern "C" void jfg_tidy_linked_list_after(uint8_t* rdram_, uint32_t obj) {
     g_rdram = rdram_;
     if (!rdram_ptr(obj)) return;
-    const uint32_t sq = rd32(obj + 0x68);
+    const uint32_t sq = Obj::Data::get(obj);
     if (!rdram_ptr(sq)) return;
-    const uint32_t squadron = rd32(sq + 0x24);
+    const uint32_t squadron = SquadMemberData::Squadron::get(sq);
     if (!rdram_ptr(squadron)) return;
-    const uint32_t data = rd32(squadron + 0x68);
+    const uint32_t data = Obj::Data::get(squadron);
     if (!rdram_ptr(data)) return;
     int length = 0;
-    for (uint32_t c = rd32(data + 0x58); c != 0 && length < 256 && rdram_ptr(c) && rdram_ptr(rd32(c + 0x68)); length++) c = rd32(rd32(c + 0x68) + 0x28);
-    uint32_t prev = 0, member = rd32(data + 0x58);
+    for (uint32_t c = SquadronData::FirstMember::get(data); c != 0 && length < 256 && rdram_ptr(c) && rdram_ptr(Obj::Data::get(c)); length++) {
+        c = SquadMemberData::NextMember::get(Obj::Data::get(c));
+    }
+    uint32_t prev = 0, member = SquadronData::FirstMember::get(data);
     for (int link = 0; member != 0 && link < 256; link++) {
         if (!rdram_ptr(member)) return;
-        const uint32_t m = rd32(member + 0x68);
+        const uint32_t m = Obj::Data::get(member);
         if (!rdram_ptr(m)) return;
-        const uint32_t next = rd32(m + 0x28);
+        const uint32_t next = SquadMemberData::NextMember::get(m);
         if (member == obj) {
-            if (prev == 0) wr32(data + 0x58, next);
-            else wr32(prev + 0x28, next);
+            if (prev == 0) SquadronData::FirstMember::set(data, next);
+            else SquadMemberData::NextMember::set(prev, next);
             static int logged = 0;
             if (logged++ < 20) {
                 char line[320];
                 std::snprintf(line, sizeof(line),
                     "squad list: freed member 0x%08X was left in its squadron's chain (link %d of %d, squadron count now %d, level %d); taken out",
-                    obj, link, length, (int)rd8(data + 0x00), (int)(int16_t)rd16(ADDR_currentLevel));
+                    obj, link, length, (int)SquadronData::MemberCount::get(data), (int)(int16_t)rd16(ADDR_currentLevel));
                 jfg_log_line("jfg_memory.log", line);
             }
             return;
@@ -244,12 +247,12 @@ static int bats_link_ok(uint32_t ptr, int which, int link) {
 extern "C" int jfg_bats_chain_ok(uint8_t* rdram_, uint32_t data) {
     g_rdram = rdram_;
     if (!rdram_ptr(data)) return 1; // not read by the walk unless the function gets that far; left to the game
-    uint32_t member = rd32(data + 0x58);
+    uint32_t member = SquadronData::FirstMember::get(data);
     for (int link = 0; member != 0; link++) {
         if (!bats_link_ok(member, 0, link)) return 0;
-        const uint32_t m = rd32(member + 0x68);
+        const uint32_t m = Obj::Data::get(member);
         if (!bats_link_ok(m, 1, link)) return 0;
-        member = rd32(m + 0x28);
+        member = SquadMemberData::NextMember::get(m);
     }
     return 1;
 }
@@ -364,7 +367,7 @@ static uint32_t g_fire_member = 0;  // member data whose weapon object failed in
 constexpr uint32_t FIRE_SCRATCH_SIZE = 0x100;
 
 static bool fire_weapon_failed(uint8_t* rdram, recomp_context* ctx, uint32_t member) {
-    if (member < 0x80000000u || member >= 0x80800000u || MEM_W(0xB4, (gpr)(int32_t)member) != 0) return false;
+    if (member < 0x80000000u || member >= 0x80800000u || jfg::SquadMemberData::Carried::get(rdram, member) != 0) return false;
     if (g_fire_scratch == 0) {
         void* block = recomp::alloc(rdram, FIRE_SCRATCH_SIZE);
         if (block == nullptr) return false;
@@ -390,8 +393,8 @@ JFG_WRAP(squadsFireWeapon) {
         JfgCaller::Scope scope(g_fire, ctx, 0x1F0);
         squadsFireWeapon_orig(rdram, ctx);
     }
-    if (g_fire_member != 0 && (uint32_t)MEM_W(0xB4, (gpr)(int32_t)g_fire_member) == g_fire_scratch) {
-        MEM_W(0xB4, (gpr)(int32_t)g_fire_member) = 0;
+    if (g_fire_member != 0 && jfg::SquadMemberData::Carried::get(rdram, g_fire_member) == g_fire_scratch) {
+        jfg::SquadMemberData::Carried::set(rdram, g_fire_member, 0);
     }
     g_fire_member = prev;
 }
