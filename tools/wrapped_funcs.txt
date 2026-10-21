@@ -87,3 +87,5 @@ trackDraw
 __scHandleRetrace
 frontPlayerTarget
 camSetFOV
+refuelControl
+objTvTimes

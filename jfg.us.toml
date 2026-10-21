@@ -126,13 +126,6 @@ text = "{ if ((uint32_t)ctx->r2 == 0) goto L_82029670; }"
 # Not hooks here: the three are wrapped (tools/wrapped_funcs.txt, jfg_frame_rate.cpp), so mods can hook or replace
 # them and the cadence still applies around the game's code or the mod's.
 
-# Jetpack fuel pads (overlay 100, refuelControl): the fuel added this tick (t3) scaled by the "Refuel speed" option,
-# just before it is stored in the player's data (+0x58C); the game clamps it to the maximum right after.
-[[patches.hook]]
-func = "refuelControl"
-before_vram = 0x82630294
-text = "{ int jfg_refuel_amount(int); ctx->r25 = (gpr)(int32_t)((int32_t)ctx->r4 + jfg_refuel_amount((int32_t)ctx->r11)); }"
-
 # Sniper zoom: controlGetManualAim stores the zoom (data+0x1EC, 1..5) and its rate (+0x1F0); a fixed zoom replaces both.
 [[patches.hook]]
 func = "controlGetManualAim"
