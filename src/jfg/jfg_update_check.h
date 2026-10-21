@@ -44,7 +44,8 @@ JfgUpdateProgress jfg_update_progress();
 void jfg_update_reset();
 // Puts the dialog in the failed state with this message (the update could not even start).
 void jfg_update_fail(const std::string& message);
-// After stage 3: starts the new build. The caller then quits this one.
+// After stage 3: starts the new build. With no update waiting (and always on Linux) it starts this build again with the
+// same arguments. The caller then quits this one.
 void jfg_update_restart();
 // Starts the game again, on the launcher (--launcher). The caller then quits this run. False if it could not start it.
 bool jfg_restart_into_launcher();
