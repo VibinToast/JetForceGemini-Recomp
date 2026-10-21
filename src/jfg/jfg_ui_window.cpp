@@ -114,32 +114,33 @@ void draw_options() {
             if (FRAME_RATE_OPTION) {
                 static const char* const rates[] = { "Original (30, drops to 20)", "60", "60 + interpolated (experimental)" };
                 ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
-                changed |= ImGui::Combo("Frame rate", &g.frame_rate, rates, IM_ARRAYSIZE(rates));
+                changed |= ImGui::Combo("Frame rate", &g.frame_rate, rates, INTERPOLATED_FRAME_RATE_OPTION ? 3 : 2);
                 if (frame_rate_needs_restart()) {
                     ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Used after the game restarts.");
                     ImGui::SameLine();
                     if (ImGui::Button("Restart now")) jfg::settings::restart_game();
                 }
                 options_help("60: the game updates every video frame instead of every second one; game speed stays the same. If a "
-                             "frame runs long, the game simply advances further in the next one. "
-                             "Interpolated: the renderer also adds in-between frames up to your monitor's refresh rate (like the "
-                             "Graphics menu's Framerate: Display). Experimental: some moving objects may look off. With "
-                             "Original, the Graphics tab's Renderer Framerate applies.");
-                static const int limits[] = { 0, 90, 120, 144, 165, 240 };
-                static const char* const limit_names[] = { "Monitor", "90", "120", "144", "165", "240" };
-                int limit_index = 0;
-                for (int i = 0; i < IM_ARRAYSIZE(limits); i++) if (g.interp_limit == limits[i]) limit_index = i;
-                ImGui::BeginDisabled(g.frame_rate != 2);
-                ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
-                if (ImGui::Combo("Interpolation limit", &limit_index, limit_names, IM_ARRAYSIZE(limit_names))) {
-                    g.interp_limit = limits[limit_index];
-                    changed = true;
+                             "frame runs long, the game simply advances further in the next one. With Original, the settings "
+                             "menu's Graphics > Renderer Framerate adds in-between frames. A change is used after the game "
+                             "restarts.");
+                if (INTERPOLATED_FRAME_RATE_OPTION) {
+                    static const int limits[] = { 0, 90, 120, 144, 165, 240 };
+                    static const char* const limit_names[] = { "Monitor", "90", "120", "144", "165", "240" };
+                    int limit_index = 0;
+                    for (int i = 0; i < IM_ARRAYSIZE(limits); i++) if (g.interp_limit == limits[i]) limit_index = i;
+                    ImGui::BeginDisabled(g.frame_rate != 2);
+                    ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+                    if (ImGui::Combo("Interpolation limit", &limit_index, limit_names, IM_ARRAYSIZE(limit_names))) {
+                        g.interp_limit = limits[limit_index];
+                        changed = true;
                 }
                 ImGui::EndDisabled();
                 options_help("With 60 + interpolated: the most frames a second the renderer makes. Monitor: your monitor's "
                              "refresh rate. A lower limit takes less from the graphics card (try it if the frame rate is uneven "
                              "in a large or maximized window). Motion is smoothest at a multiple of 60 (120, 240) and at most "
                              "your monitor's rate.");
+                }
             }
             ImGui::EndTabItem();
         }

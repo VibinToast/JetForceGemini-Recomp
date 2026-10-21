@@ -61,7 +61,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "bloom_intensity") == 0) g.bloom_intensity = std::clamp(value, 0, 300);
     else if (std::strcmp(key, "bloom_threshold") == 0) g.bloom_threshold = std::clamp(value, 0, 100);
     else if (std::strcmp(key, "bloom_radius") == 0) g.bloom_radius = std::clamp(value, 1, 20);
-    else if (std::strcmp(key, "frame_rate") == 0) g.frame_rate = FRAME_RATE_OPTION ? std::clamp(value, 0, 2) : 0;
+    else if (std::strcmp(key, "frame_rate") == 0) g.frame_rate = !FRAME_RATE_OPTION ? 0 : (value == 2 && !INTERPOLATED_FRAME_RATE_OPTION) ? 0 : std::clamp(value, 0, 2);
     else if (std::strcmp(key, "interp_limit") == 0) {
         // The choices of the Interpolation Limit option (tools/gen_jfg_config_rml.py); anything else is the monitor's rate.
         static const int interp_limit_values[] = { 0, 90, 120, 144, 165, 240 };
