@@ -89,13 +89,6 @@ extern "C" void jfg_hide_object(uint8_t* rdram_, recomp_context* ctx) {
     return floyd_hidden((uint32_t)ctx->r7) ? 1 : 0;
 }
 
-// shadowGenerate, after the object ($s7) and its shadow data ($s6) are loaded: no shadow data, no shadow.
-extern "C" void jfg_hide_shadow(uint8_t* rdram_, recomp_context* ctx) {
-    g_rdram = rdram_;
-    if (!floyd_hidden((uint32_t)ctx->r23)) return;
-    static bool logged = false;
-    if (!logged && ctx->r22 != 0 && std::getenv("JFG_DEBUG_FLOYD")) { std::fprintf(stderr, "[jfg] Floyd: shadow skipped\n"); logged = true; }
-    ctx->r22 = 0;
     const uint32_t draw = (uint32_t)ctx->r4;
     if (floyd_hidden(rd32(draw + api::value_cancel::VALUE))) wr32(draw + api::value_cancel::CANCEL, 1);
 }
@@ -262,6 +255,24 @@ extern "C" void jfg_hit_flash_event(uint8_t* rdram_, recomp_context* ctx) {
     const uint32_t color = jfg_hit_flash(rd32(flash + api::value_cancel::VALUE));
     if (color == 0) wr32(flash + api::value_cancel::CANCEL, 1);
     else wr32(flash + api::value_cancel::VALUE, color);
+}
+
+// Floyd's shadow: shadowGenerate makes shadows from each object's shadow data (+0x50) and skips an object without any.
+// For a hidden Floyd it's blanked while shadowGenerate runs.
+JFG_WRAP(shadowGenerate) {
+    g_rdram = rdram;
+    const uint32_t floyd = g_floyd_obj;
+    const uint32_t shadow = floyd_hidden(floyd) ? rd32(floyd + 0x50) : 0;
+    if (shadow != 0) {
+        static bool logged = false;
+        if (!logged && std::getenv("JFG_DEBUG_FLOYD")) { std::fprintf(stderr, "[jfg] Floyd: shadow skipped\n"); logged = true; }
+        wr32(floyd + 0x50, 0);
+    }
+    shadowGenerate_orig(rdram, ctx);
+    if (shadow != 0) {
+        g_rdram = rdram;
+        wr32(floyd + 0x50, shadow);
+    }
 }
 
 } // namespace jfg
