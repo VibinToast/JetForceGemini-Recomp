@@ -1,9 +1,5 @@
 // Jet Force Gemini port: every function the rest of the program calls in src/jfg, by caller.
 //
-// They have C linkage. The game hooks are called from the recompiled game code, from the [[patches.hook]] entries of
-// jfg.us.toml (which declare them in their `text`); the others from the base project's code as changed by
-// patches/jfg-base.patch (which declares them where they are used). Most are defined inside namespace jfg in the file
-// named below; with extern "C" they keep their plain name.
 // They have C linkage. The game handlers are called from the wrappers around game functions (JFG_WRAP below; one
 // jfg.us.toml hook is left, in squadsFireWeapon) and from the mod API's internal handlers (jfg_api.cpp); the others
 // from the base project's code. Most are defined inside namespace jfg in the file named below; with extern "C" they
@@ -16,7 +12,6 @@
 
 extern "C" {
 
-// --- game hooks (jfg.us.toml) ---------------------------------------------------------------------------------------
 // --- game handlers (called around game functions) ------------------------------------------------------------------
 // jfg_tick.cpp
 void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx);             // entry of the main loop tick func_80044FAC
@@ -94,7 +89,6 @@ void jfg_sync_printf(uint8_t* rdram, recomp_context* ctx);             // osSync
 void jfg_overlay_loaded(uint8_t* rdram, recomp_context* ctx);          // runlinkDownloadCode, runlinkResumeCode (wrappers)
 void jfg_overlay_unloading(uint8_t* rdram, recomp_context* ctx);       // runlinkFreeCode, runlinkUnloadOverlay (wrappers)
 
-// --- base project (jfg-base.patch) ----------------------------------------------------------------------------------
 // --- base project --------------------------------------------------------------------------------------------------
 // jfg_controls.cpp: src/input/controls.cpp, src/input/input.cpp
 int jfg_dual_stick_active(void);

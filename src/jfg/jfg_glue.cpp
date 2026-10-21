@@ -215,15 +215,10 @@ void map_hardware(uint8_t* rdram) {
     MEM_W(0, (gpr)(int32_t)0xA00002E8u) = (int32_t)0xC86E2000u;
     // the first 4 KB of the cartridge, as the words a KSEG1 read gets (the ROM image is big-endian)
     std::span<const uint8_t> rom = recomp::get_rom();
-    uint32_t offset = address & 0x0FFFFFFFu;
-    if ((size_t)offset + 4 > rom.size()) {
-        fprintf(stderr, "[jfg] cartridge read outside ROM: 0x%08X\n", address);
-        return 0;
     for (uint32_t off = 0; off + 4 <= 0x1000 && off + 4 <= rom.size(); off += 4) {
         const uint32_t word = ((uint32_t)rom[off] << 24) | ((uint32_t)rom[off + 1] << 16) | ((uint32_t)rom[off + 2] << 8) | rom[off + 3];
         MEM_W(0, (gpr)(int32_t)(0xB0000000u + off)) = (int32_t)word;
     }
-    return ((uint32_t)rom[offset] << 24) | ((uint32_t)rom[offset + 1] << 16) | ((uint32_t)rom[offset + 2] << 8) | rom[offset + 3];
 }
 } // namespace
 
