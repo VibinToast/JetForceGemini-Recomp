@@ -18,7 +18,7 @@ GENERAL = [
     ("bool", "start_skips_cutscenes", "START Skips Cutscenes", None,
      "START skips cutscenes, the logo screens at start-up and the story intro after creating a file. A skipped cutscene still runs to its end at full speed, so everything it does (flags, items, the next level) still happens."),
     ("group", None, "On Screen", None, None),
-    ("bool", "show_fps", "Show FPS", None, "The game's frame rate in the top right corner."),
+    ("bool", "show_fps", "Show FPS", None, "The frames a second on screen (with <b>Renderer Framerate</b>, in-between frames included) in the top right corner."),
     ("bool", "show_level", "Show Level", None, "The level number and name in the top right corner."),
     ("bool", "show_pack", "Show Texture Pack", None, "The texture pack in use in the top right corner."),
     ("bool", "save_notification", "Show Save Notification", None, "\"Game saved\" shows briefly in the bottom right corner after an auto save."),
