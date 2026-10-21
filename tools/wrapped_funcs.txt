@@ -54,3 +54,4 @@ camScaleModelMtx
 # Engine, main loop, overlays, squads, platforms, object setup (jfg_engine_wrappers.cpp, jfg_controls.cpp, jfg_diagnostics.cpp)
 rcpFast3d
 ad_sndp_play
+n_alEvtqPostEvent
