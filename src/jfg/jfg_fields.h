@@ -22,13 +22,13 @@ struct Field {
     static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4, "fields are 8, 16 or 32 bits");
     static constexpr uint32_t offset = Offset;
 
-    static T get(uint32_t base) {
+    static inline T get(uint32_t base) {
         if constexpr (std::is_same_v<T, float>) return rdf(base + Offset);
         else if constexpr (sizeof(T) == 1) return (T)rd8(base + Offset);
         else if constexpr (sizeof(T) == 2) return (T)rd16(base + Offset);
         else return (T)rd32(base + Offset);
     }
-    static void set(uint32_t base, T value) {
+    static inline void set(uint32_t base, T value) {
         if constexpr (std::is_same_v<T, float>) wrf(base + Offset, value);
         else if constexpr (sizeof(T) == 1) wr8(base + Offset, (uint8_t)value);
         else if constexpr (sizeof(T) == 2) wr16(base + Offset, (uint16_t)value);
@@ -36,13 +36,13 @@ struct Field {
     }
 
     // With the caller's rdram (recomp.h's MEM_* macros index a variable called rdram; jfg_game.h names it g_rdram).
-    static T get(uint8_t* rdram, uint32_t base) {
+    static inline T get(uint8_t* rdram, uint32_t base) {
         static_assert(!std::is_same_v<T, float>, "floats: use get(base)");
         if constexpr (sizeof(T) == 1) return (T)MEM_BU(Offset, (gpr)(int32_t)base);
         else if constexpr (sizeof(T) == 2) return (T)MEM_HU(Offset, (gpr)(int32_t)base);
         else return (T)MEM_W(Offset, (gpr)(int32_t)base);
     }
-    static void set(uint8_t* rdram, uint32_t base, T value) {
+    static inline void set(uint8_t* rdram, uint32_t base, T value) {
         static_assert(!std::is_same_v<T, float>, "floats: use set(base, value)");
         if constexpr (sizeof(T) == 1) MEM_B(Offset, (gpr)(int32_t)base) = (int8_t)value;
         else if constexpr (sizeof(T) == 2) MEM_H(Offset, (gpr)(int32_t)base) = (int16_t)value;
@@ -50,12 +50,25 @@ struct Field {
     }
 };
 
-// An array of fields: element i is at Offset + i * Stride.
+// An array of fields: element i is at Offset + i * Stride. (Written out rather than through Field, so it compiles
+// exactly like the reads it replaced: one more level of inlining changed the code around it.)
 template <typename T, uint32_t Offset, uint32_t Stride = sizeof(T)>
 struct ArrayField {
+    static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4, "fields are 8, 16 or 32 bits");
     static constexpr uint32_t offset = Offset, stride = Stride;
-    static T get(uint32_t base, uint32_t i) { return Field<T, 0>::get(base + Offset + i * Stride); }
-    static void set(uint32_t base, uint32_t i, T value) { Field<T, 0>::set(base + Offset + i * Stride, value); }
+
+    static inline T get(uint32_t base, uint32_t i) {
+        if constexpr (std::is_same_v<T, float>) return rdf(base + Offset + i * Stride);
+        else if constexpr (sizeof(T) == 1) return (T)rd8(base + Offset + i * Stride);
+        else if constexpr (sizeof(T) == 2) return (T)rd16(base + Offset + i * Stride);
+        else return (T)rd32(base + Offset + i * Stride);
+    }
+    static inline void set(uint32_t base, uint32_t i, T value) {
+        if constexpr (std::is_same_v<T, float>) wrf(base + Offset + i * Stride, value);
+        else if constexpr (sizeof(T) == 1) wr8(base + Offset + i * Stride, (uint8_t)value);
+        else if constexpr (sizeof(T) == 2) wr16(base + Offset + i * Stride, (uint16_t)value);
+        else wr32(base + Offset + i * Stride, (uint32_t)value);
+    }
 };
 
 // --- objects --------------------------------------------------------------------------------------------------------
