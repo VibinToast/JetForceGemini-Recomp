@@ -161,14 +161,6 @@ func = "viFrameSync"
 before_vram = 0x80054FBC
 text = "{ int jfg_vi_skip(uint8_t*, recomp_context*); if (jfg_vi_skip(rdram, ctx)) { recomp_exit_function(); return; } }"
 
-# If the sound-effect player has lost its periodic event anyway, its queue runs empty and its handler (func_80084468)
-# loops forever on "nonsense" events that are due right now: the audio thread spins and the game freezes. The event is
-# put back before the queue is read (src/jfg/jfg_cutscene_skip.cpp, jfg_evt_next).
-[[patches.hook]]
-func = "n_alEvtqNextEvent"
-before_vram = 0x8008B55C
-text = "{ void jfg_evt_next(uint8_t*, recomp_context*); jfg_evt_next(rdram, ctx); }"
-
 # Dual-stick camera (src/jfg/jfg_camera.cpp): right before the scene is drawn (the "jal trackDraw" in the game
 # tick), the active camera is moved to the angle the right stick has chosen. Then, at 60 fps, squad members are given
 # the in-between positions they are drawn at (src/jfg/jfg_frame_rate.cpp, jfg_squad_draw_begin).
