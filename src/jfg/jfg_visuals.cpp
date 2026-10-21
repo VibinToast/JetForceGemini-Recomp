@@ -254,4 +254,13 @@ std::string depth_fog_status() {
 extern "C" int jfg_texture_three_point(void) { return g.texture_filter == 0 ? 1 : 0; }
 extern "C" int jfg_output_filtering(void) { return g.output_filter; }
 
+// jfg_on_screen_flash handler: the hit flash's colour (jfg_hit_flash); 0 cancels it.
+extern "C" void jfg_hit_flash_event(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t flash = (uint32_t)ctx->r4;
+    const uint32_t color = jfg_hit_flash(rd32(flash + api::value_cancel::VALUE));
+    if (color == 0) wr32(flash + api::value_cancel::CANCEL, 1);
+    else wr32(flash + api::value_cancel::VALUE, color);
+}
+
 } // namespace jfg

@@ -149,14 +149,6 @@ text = "{ void jfg_debug_frame(uint8_t*, recomp_context*); jfg_debug_frame(rdram
 func = "func_80044FAC_45BAC"
 before_vram = 0x800457BC
 text = "{ uint32_t jfg_frame_sync(uint8_t*, uint32_t); ctx->r2 = (int32_t)jfg_frame_sync(rdram, (uint32_t)ctx->r2); }"
-
-# "Hit flash opacity" option (src/jfg/jfg_visuals.cpp): entry of frontFlashScreen(arg0, player, color), the red screen
-# when the character is hit (color in $a2). Returns the colour to use, 0 = no flash (the function returns nothing).
-[[patches.hook]]
-func = "frontFlashScreen"
-before_vram = 0x80059864
-text = "{ uint32_t jfg_hit_flash(uint32_t); const uint32_t c = jfg_hit_flash((uint32_t)ctx->r6); if (c == 0) { recomp_exit_function(); return; } ctx->r6 = (gpr)(int32_t)c; }"
-
 # "Hide Floyd" option (src/jfg/jfg_visuals.cpp): the entry of sidekickControl(obj, ...) notes Floyd's object kind, and
 # the entry of objPrintObject(dList, mtx, vtx, obj) skips drawing an object of that kind (the function returns nothing).
 [[patches.hook]]

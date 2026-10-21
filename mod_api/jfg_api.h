@@ -55,6 +55,12 @@ typedef struct {
     int cancel;
 } JfgSoundPlay;
 
+// jfg_on_screen_flash: the screen is about to flash (the red hit flash). Change color (RGBA) or set cancel to 1.
+typedef struct {
+    unsigned int color;
+    int cancel;
+} JfgScreenFlash;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
