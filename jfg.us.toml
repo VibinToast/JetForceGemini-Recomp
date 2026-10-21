@@ -526,12 +526,6 @@ func = "func_overlay_17_00004614_1F2C15C"
 before_vram = 0x821146C4
 text = "{ int jfg_sniper_walk(int); ctx->r12 = (gpr)(int32_t)jfg_sniper_walk((int32_t)ctx->r12); }"
 
-# "Skip the Tribal check" cheat: game flag 88 (all Tribals rescued) reads as set, without changing the save.
-[[patches.hook]]
-func = "mainGetGameFlag"
-before_vram = 0x80047ED0
-text = "{ int jfg_flag_override(int); if (jfg_flag_override((int)ctx->r4)) { ctx->r2 = 1; recomp_exit_function(); return; } }"
-
 # Fly camera "freeze": at the branch where func_80045F00 chooses between the world's tick and its pause tick (v1 =
 # the pause mode), a non-zero v1 runs the pause tick (objects drawn, not moved) without the pause menu.
 [[patches.hook]]
