@@ -161,13 +161,6 @@ func = "viFrameSync"
 before_vram = 0x80054FBC
 text = "{ int jfg_vi_skip(uint8_t*, recomp_context*); if (jfg_vi_skip(rdram, ctx)) { recomp_exit_function(); return; } }"
 
-# Sounds started by a skipped cutscene are dropped (they would all be heard at once when the skip ends, and the sound
-# player runs out of sound states). ad_sndp_play(bank, sound, volume, pan, pitch, ?, handlePtr): the handle (7th argument, on the stack) is set to NULL.
-[[patches.hook]]
-func = "ad_sndp_play"
-before_vram = 0x80085EEC
-text = "{ int jfg_snd_skip(uint8_t*, uint32_t); if (jfg_snd_skip(rdram, (uint32_t)ctx->r29)) { ctx->r2 = 0; recomp_exit_function(); return; } }"
-
 # The other sound-player events the game thread posts during a skipped cutscene (volume, pan and pitch updates of
 # sounds that are already playing) are dropped as well; only "stop" events are let through. A skip runs hundreds of
 # ticks before the audio thread gets a turn, and the sound player's event queue is small: once it is full the player

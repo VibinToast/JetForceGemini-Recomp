@@ -18,3 +18,8 @@ JFG_WRAP(rcpFast3d) {
     if (jfg_rcp_skip(rdram, (uint32_t)ctx->r6)) { ctx->r2 = 0; return; }
     rcpFast3d_orig(rdram, ctx);
 }
+
+JFG_WRAP(ad_sndp_play) {
+    if (jfg_snd_skip(rdram, (uint32_t)ctx->r29)) { ctx->r2 = 0; return; }
+    ad_sndp_play_orig(rdram, ctx);
+}
