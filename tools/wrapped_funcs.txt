@@ -1,4 +1,4 @@
-# Game functions the port wraps instead of changing them (tools/wrap_functions.py). Each needs a wrapper in src/jfg/
+# Game functions the port wraps instead of changing them ([wrappers] in jfg.us.toml). Each needs a wrapper in src/jfg/
 # declared with JFG_WRAP(name) (jfg_hooks.h). Mods' patches and hooks apply to the original inside the wrapper.
 
 # 60 fps squad cadence (jfg_frame_rate.cpp)

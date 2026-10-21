@@ -58,12 +58,11 @@ else
   # Recompiler input only: a copy of the ROM with the overlays pre-linked at private addresses. Never used at run time.
   python3 tools/prepare_overlays.py baserom.us.z64 - baserom.us.recomp.z64 - tools/jfg.us.dynamic_relocs.json
   rm -rf RecompiledFuncs && mkdir RecompiledFuncs
+  python3 tools/refuse_mod_hooks.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json JFGRecompSyms/jfg.us.syms.toml jfg.us.toml
   "$OUT/build-tools/N64Recomp" jfg.us.toml > recomp.log 2>&1 || { tail -20 recomp.log; die "N64Recomp failed (full output: $HERE/recomp.log)"; }
   "$OUT/build-tools/RSPRecomp" rsp-aspMain.jfg.toml       # audio microcode -> rsp/aspMain.cpp
   python3 tools/merge_gen_anim_data.py RecompiledFuncs
   python3 tools/fix_dynamic_relocs.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json baserom.us.recomp.z64 JFGRecompSyms/jfg.us.syms.toml
-  python3 tools/refuse_mod_hooks.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json JFGRecompSyms/jfg.us.syms.toml jfg.us.toml
-  python3 tools/wrap_functions.py RecompiledFuncs tools/wrapped_funcs.txt
   inputs_hash > "$STAMP"   # last, so a run that stopped half-way generates again next time
 fi
 
