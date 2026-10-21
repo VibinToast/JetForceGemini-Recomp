@@ -291,7 +291,19 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
     set(THREADS_PREFER_PTHREAD_FLAG TRUE)
     find_package(Threads REQUIRED)
 
-    target_link_libraries(JetForceGeminiRecompiled PRIVATE "-latomic -static-libstdc++" ${CMAKE_DL_LIBS} Threads::Threads)
+    # JFG PORT: libatomic is linked in statically when the compiler has libatomic.a (the release container does):
+    # Fedora does not install libatomic.so.1 by default, and a game that needs it does not start there. It goes at the
+    # very end of the link line, after the static libraries (rt64, librecomp...) that may use it.
+    execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libatomic.a
+        OUTPUT_VARIABLE JFG_LIBATOMIC_A OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if (IS_ABSOLUTE "${JFG_LIBATOMIC_A}" AND EXISTS "${JFG_LIBATOMIC_A}")
+        message(STATUS "libatomic: static (${JFG_LIBATOMIC_A})")
+        set(CMAKE_CXX_STANDARD_LIBRARIES "${CMAKE_CXX_STANDARD_LIBRARIES} ${JFG_LIBATOMIC_A}")
+    else()
+        message(STATUS "libatomic: shared (no libatomic.a found; the game needs libatomic.so.1 on the system)")
+        set(CMAKE_CXX_STANDARD_LIBRARIES "${CMAKE_CXX_STANDARD_LIBRARIES} -latomic")
+    endif()
+    target_link_libraries(JetForceGeminiRecompiled PRIVATE "-static-libstdc++" ${CMAKE_DL_LIBS} Threads::Threads)
 
     # Export symbols to the dynamic symbol table so backtraces work (when symbols aren't stripped)
     target_link_options(JetForceGeminiRecompiled PRIVATE -Wl,-export-dynamic)
