@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_api.h"
 #include "jfg_hooks.h"
@@ -54,7 +55,7 @@ static bool g_floyd_muted = false;
 constexpr uint32_t ADDR_cooperativeGame = 0x800A4FC8; // u8
 
 static bool floyd_hidden(uint32_t obj) {
-    if (!g.hide_floyd || g_floyd_kind < 0 || !valid_ptr(obj) || (int16_t)rd16(obj + 0x48) != g_floyd_kind) return false;
+    if (!g.hide_floyd || g_floyd_kind < 0 || !valid_ptr(obj) || Obj::Kind::get(obj) != g_floyd_kind) return false;
     return rd8(ADDR_robotMission) == 0 && rd8(ADDR_cooperativeGame) == 0;
 }
 
@@ -62,7 +63,7 @@ extern "C" void jfg_floyd_seen(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t obj = (uint32_t)ctx->r4;
     if (!valid_ptr(obj)) return;
-    const int kind = (int16_t)rd16(obj + 0x48);
+    const int kind = Obj::Kind::get(obj);
     if (kind != g_floyd_kind && std::getenv("JFG_DEBUG_FLOYD")) std::fprintf(stderr, "[jfg] Floyd: behaviorId %d\n", kind);
     g_floyd_kind = kind;
     g_floyd_obj = obj;
@@ -98,7 +99,7 @@ void apply_no_lod(recomp_context* ctx) {
     //   + 0xCC float: LOD distance (objPrintModelObject); + 0x16 s16: draw distance (track.c func_80015ED8 skips the
     //   object beyond it, and fades it out just before; 0 = always drawn).
     struct Field { uint32_t offset; uint32_t size; const bool* option; std::unordered_map<uint32_t, uint32_t> saved; };
-    static Field fields[2] = { { 0xCC, 4, &g.no_lod, {} }, { 0x16, 2, &g.far_objects, {} } };
+    static Field fields[2] = { { ObjDef::LodDistance::offset, 4, &g.no_lod, {} }, { ObjDef::DrawRange::offset, 2, &g.far_objects, {} } };
     static int saved_level = -1;
     const int level = (int16_t)rd16(ADDR_currentLevel);
     if (level != saved_level) { for (Field& f : fields) f.saved.clear(); saved_level = level; }
@@ -114,7 +115,7 @@ void apply_no_lod(recomp_context* ctx) {
     for (int i = first; i < last; i++) {
         const uint32_t obj = rd32(list + 4 * i);
         if (!valid_ptr(obj)) continue;
-        const uint32_t def = rd32(obj + 0x40);
+        const uint32_t def = Obj::Def::get(obj);
         if (!valid_ptr(def)) continue;
         for (Field& f : fields) {
             const uint32_t value = f.size == 4 ? rd32(def + f.offset) : rd16(def + f.offset);
@@ -122,7 +123,7 @@ void apply_no_lod(recomp_context* ctx) {
             if (*f.option) {
                 if (value != 0 && f.saved.find(def) == f.saved.end()) {
                     f.saved[def] = value; put(0);
-                    if (log) std::fprintf(stderr, "[jfg] object %d (definition %08X): field +0x%X was %08X, now 0\n", (int)(int16_t)rd16(obj + 0x48), def, f.offset, value);
+                    if (log) std::fprintf(stderr, "[jfg] object %d (definition %08X): field +0x%X was %08X, now 0\n", (int)Obj::Kind::get(obj), def, f.offset, value);
                 }
             }
             else {
@@ -257,16 +258,16 @@ extern "C" void jfg_hit_flash_event(uint8_t* rdram_, recomp_context* ctx) {
 JFG_WRAP(shadowGenerate) {
     g_rdram = rdram;
     const uint32_t floyd = g_floyd_obj;
-    const uint32_t shadow = floyd_hidden(floyd) ? rd32(floyd + 0x50) : 0;
+    const uint32_t shadow = floyd_hidden(floyd) ? Obj::Shadow::get(floyd) : 0;
     if (shadow != 0) {
         static bool logged = false;
         if (!logged && std::getenv("JFG_DEBUG_FLOYD")) { std::fprintf(stderr, "[jfg] Floyd: shadow skipped\n"); logged = true; }
-        wr32(floyd + 0x50, 0);
+        Obj::Shadow::set(floyd, 0);
     }
     shadowGenerate_orig(rdram, ctx);
     if (shadow != 0) {
         g_rdram = rdram;
-        wr32(floyd + 0x50, shadow);
+        Obj::Shadow::set(floyd, shadow);
     }
 }
 
@@ -288,7 +289,7 @@ JFG_WRAP(camSetFOV) {
     ctx->f12.fl = wanted;
     camSetFOV_orig(rdram, ctx);
     g_rdram = rdram;
-    wrf(ADDR_cameraActorArray + cam * CAMERA_SIZE + 0x2C, fov);
+    Camera::Fov::set(ADDR_cameraActorArray + cam * Camera::Size, fov);
 }
 
 } // namespace jfg
