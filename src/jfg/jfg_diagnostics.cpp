@@ -34,7 +34,7 @@ void jfg_log_line(const char* file, const char* text) {
 // big blocks (the track buffer is 0x9F000 bytes, see func_overlay_24_000001F8) while earlier frees may still wait in
 // the delayed free queue. When the heap has no room, release that queue and try once more; log either way to
 // bin/jfg_memory.log.
-extern "C" void jfg_mm_alloc_check(uint8_t* rdram_, recomp_context* ctx) {
+extern "C" void jfg_mm_alloc_check(uint8_t* rdram_, recomp_context* ctx, uint32_t size, uint32_t colour) {
     {
         // Tests: JFG_DEBUG_FAIL_ALLOC=<size hex> makes the first allocation of that size look failed (it leaks).
         static const char* const fail = std::getenv("JFG_DEBUG_FAIL_ALLOC");
@@ -223,3 +223,10 @@ extern "C" void jfg_sync_printf(uint8_t* rdram_, recomp_context* ctx) {
 }
 
 } // namespace jfg
+
+// mmAlloc(size, colour) and mmAlloc2 (the same function twice): jfg_mm_alloc_check on the result.
+JFG_WRAP(mmAlloc) {
+    const uint32_t size = (uint32_t)ctx->r4, colour = (uint32_t)ctx->r5;
+    mmAlloc_orig(rdram, ctx);
+    jfg_mm_alloc_check(rdram, ctx, size, colour);
+}
