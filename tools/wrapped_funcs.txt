@@ -89,3 +89,6 @@ frontPlayerTarget
 camSetFOV
 refuelControl
 objTvTimes
+func_overlay_15_00004658_1F17FD8
+frontGetTargetControl
+Powerf

@@ -98,3 +98,47 @@ JFG_WRAP(objTvTimes) {
     if (!refuel) return;
     ctx->r2 = (gpr)(int32_t)jfg_refuel_amount((int32_t)ctx->r2);
 }
+
+// Sniper rifle walking. Each character's aim control (overlays 15-17) skips walking with the sniper (weapon 7, the
+// character's +0x70) because the zoom keys walk; with the fixed zoom it walks like any weapon. The weapon is read once,
+// right after frontGetTargetControl returns; until the aim control's next call (Powerf, or controlGetManualAim, or its
+// return) the weapon reads as none. The character is at 0x4C($sp) of the aim control (0x50 for Lupus, overlay 17).
+static JfgCaller g_aim;
+static uint32_t g_aim_char_slot = 0, g_walk_char = 0;
+
+static void sniper_walk_restore(uint8_t* rdram) {
+    if (g_walk_char == 0) return;
+    MEM_B(0x70, (gpr)(int32_t)g_walk_char) = 7;
+    g_walk_char = 0;
+}
+
+static void aim_control(uint8_t* rdram, recomp_context* ctx, recomp_func_t* orig, uint32_t frame, uint32_t slot) {
+    const uint32_t prev = g_aim_char_slot;
+    g_aim_char_slot = slot;
+    {
+        JfgCaller::Scope scope(g_aim, ctx, frame);
+        orig(rdram, ctx);
+    }
+    g_aim_char_slot = prev;
+    sniper_walk_restore(rdram);
+}
+
+JFG_WRAP(func_overlay_15_00004658_1F17FD8) { aim_control(rdram, ctx, func_overlay_15_00004658_1F17FD8_orig, 0x58, 0x4C); }
+
+JFG_WRAP(frontGetTargetControl) {
+    const bool aim = g_aim.direct(ctx);
+    frontGetTargetControl_orig(rdram, ctx);
+    const uint32_t slot = g_aim_char_slot;
+    if (!aim || (uint32_t)ctx->r2 == 0) return;
+    const uint32_t ch = (uint32_t)MEM_W(slot, ctx->r29);
+    if (ch < 0x80000400u || ch >= 0x80800000u) return;
+    if (MEM_BU(0x70, (gpr)(int32_t)ch) == 7 && jfg_sniper_walk(7) != 7) {
+        MEM_B(0x70, (gpr)(int32_t)ch) = (int8_t)0xFF;
+        g_walk_char = ch;
+    }
+}
+
+JFG_WRAP(Powerf) {
+    if (g_aim.direct(ctx)) sniper_walk_restore(rdram);
+    Powerf_orig(rdram, ctx);
+}
