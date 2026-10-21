@@ -30,7 +30,6 @@ int jfg_sched_task_ready(void);                                        // entry 
 int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames);     // FlowerBoltControl; the squad wrappers below
 int jfg_cadence_skip(void);                                            // frontPlayerTarget, the target lock countdown
 void jfg_squad_draw_begin(uint8_t* rdram);                             // func_80045F00, right before trackDraw
-void jfg_dangle(uint8_t* rdram, recomp_context* ctx);                  // replaces dAngle (angle easing)
 void jfg_squad_draw_end(uint8_t* rdram);                               // func_80045F00, right after trackDraw
 // jfg_controls.cpp
 void jfg_move_scale(uint8_t* rdram, recomp_context* ctx);              // entry of objMoveXYZ

@@ -457,14 +457,6 @@ text = "{ int jfg_sched_task_ready(void); int r = jfg_sched_task_ready(); if (r 
 # Not hooks here: the three are wrapped (tools/wrapped_funcs.txt, jfg_frame_rate.cpp), so mods can hook or replace
 # them and the cadence still applies around the game's code or the mod's.
 
-# 60 fps: dAngle(angle, target, t), the game's easing of an angle towards a target, is replaced by the same arithmetic
-# with one change at 60 fps: a step that truncates to 0 short of the target becomes 1 unit. Otherwise eased angles stop
-# a little short with one frame per tick, and Mizar's first phase never ended (src/jfg/jfg_frame_rate.cpp, jfg_dangle).
-[[patches.hook]]
-func = "dAngle"
-before_vram = 0x80033FA4
-text = "{ void jfg_dangle(uint8_t*, recomp_context*); jfg_dangle(rdram, ctx); recomp_exit_function(); return; }"
-
 # The loop that brings a squadron's members into play (func_overlay_3_000148C0: while created < wanted, create or reuse
 # one) never ended when a member could not be created: the game froze. A pass that adds nobody is counted
 # (src/jfg/jfg_diagnostics.cpp, jfg_squad_spawn_before/after); the squadron gets one member fewer.

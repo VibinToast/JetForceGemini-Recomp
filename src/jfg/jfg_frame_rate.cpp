@@ -196,14 +196,13 @@ extern "C" int jfg_cadence_skip(void) {
 }
 
 // --- 60 fps: angles that ease towards a target ---------------------------------------------------------------------
-// Replaces dAngle(angle, target, t) (charControl.c): angle + (shortest signed difference * t), the product truncated.
-// Callers ease an angle with t = 1 - damping^frames (Powerf), so with one frame per tick t is about half what it is at
-// 30 fps, and the step truncates to 0 while the angle is still a little short of the target: it never arrives. Mizar's
-// first phase waits for his rotation to reach 0x8000 exactly (mizarControl, the three dAngle calls at +0x301C..): at
-// 60 fps it stayed at 0x8020 and the fight did not go on until the frame rate was switched back (2026-10-18). Same
-// arithmetic as the game; in 60 fps mode only, a step that truncates to 0 with a difference left and t > 0 is 1 unit.
-extern "C" void jfg_dangle(uint8_t* rdram, recomp_context* ctx) {
-    g_rdram = rdram;
+// dAngle(angle, target, t) (charControl.c): angle + (shortest signed difference * t), the product truncated. Callers
+// ease an angle with t = 1 - damping^frames (Powerf), so with one frame per tick t is about half what it is at 30 fps,
+// and the step truncates to 0 while the angle is still a little short of the target: it never arrives. Mizar's first
+// phase waits for his rotation to reach 0x8000 exactly (mizarControl, the three dAngle calls at +0x301C..): at 60 fps
+// it stayed at 0x8020 and the fight did not go on until the frame rate was switched back (2026-10-18). The wrapper
+// runs the game's code; in 60 fps mode only, a result that didn't move with a difference left and t > 0 moves 1 unit.
+JFG_WRAP(dAngle) {
     const int32_t angle = (int16_t)(uint32_t)ctx->r4;
     const int32_t target = (int32_t)ctx->r5;
     const uint32_t t_bits = (uint32_t)ctx->r6;
