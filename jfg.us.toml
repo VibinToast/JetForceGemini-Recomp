@@ -153,16 +153,6 @@ text = "{ uint32_t jfg_frame_sync(uint8_t*, uint32_t); ctx->r2 = (int32_t)jfg_fr
 # track of the object being drawn. Each of the four functions that write a model matrix notes where it was called
 # from at its entry, and right after it stores the matrix it wrote in D_800FAB30 the matrix is tagged for RT64.
 [[patches.hook]]
-func = "camPushFloatModelMtx"
-before_vram = 0x800419AC
-text = "{ void jfg_interp_push(uint8_t*, recomp_context*); jfg_interp_push(rdram, ctx); }"
-
-[[patches.hook]]
-func = "camPushFloatModelMtx"
-before_vram = 0x80041A48
-text = "{ void jfg_interp_pushed(uint8_t*, recomp_context*); jfg_interp_pushed(rdram, ctx); }"
-
-[[patches.hook]]
 func = "camPushMuzzleMtx"
 before_vram = 0x80041A90
 text = "{ void jfg_interp_push(uint8_t*, recomp_context*); jfg_interp_push(rdram, ctx); }"
