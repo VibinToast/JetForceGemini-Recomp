@@ -45,12 +45,6 @@ int jfg_freeze_world(void);                                            // func_8
 // jfg_visuals.cpp
 float jfg_fov(uint8_t* rdram, float fov, uint32_t zoomed);             // camSetFOV
 void jfg_game_fog(uint8_t* rdram, uint32_t sp);                        // func_8001BF9C, right after trackGetFog
-uint32_t jfg_hit_flash(uint32_t color);                                // entry of frontFlashScreen
-void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // entry of sidekickControl
-int jfg_hide_object(uint8_t* rdram, recomp_context* ctx);              // entry of objPrintObject
-void jfg_hide_shadow(uint8_t* rdram, recomp_context* ctx);             // shadowGenerate, per object
-void jfg_floyd_done(void);                                             // return of sidekickControl
-int jfg_floyd_mute(uint32_t id);                                       // entry of amSndPlay
 uint32_t jfg_hit_flash(uint32_t color);                                // the hit flash's colour (jfg_visuals.cpp)
 void jfg_hit_flash_event(uint8_t* rdram, recomp_context* ctx);        // jfg_on_screen_flash handler
 void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // jfg_on_sidekick_tick handler

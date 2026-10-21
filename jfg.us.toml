@@ -192,13 +192,6 @@ func = "camScaleModelMtx"
 before_vram = 0x80041C58
 text = "{ void jfg_interp_pushed(uint8_t*, recomp_context*); jfg_interp_pushed(rdram, ctx); }"
 
-# His shadow: shadowGenerate's object loop, after `lw $s6, 0x50($s7)` (the object's shadow data) and before the
-# `beq $s6, $zero` that skips an object without any.
-[[patches.hook]]
-func = "shadowGenerate"
-before_vram = 0x8001DB6C
-text = "{ void jfg_hide_shadow(uint8_t*, recomp_context*); jfg_hide_shadow(rdram, ctx); }"
-
 
 # Cutscene skip (src/jfg/jfg_cutscene_skip.cpp, jfg_frame_rate.cpp): after joyRead() in the main loop tick, and at the entry of viFrameSync.
 [[patches.hook]]

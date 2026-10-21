@@ -41,3 +41,6 @@ objPrintObject
 amSndPlay
 frontFlashScreen
 sidekickControl
+
+# Hide Floyd: his shadow (jfg_visuals.cpp)
+shadowGenerate
