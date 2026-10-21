@@ -78,3 +78,9 @@ texLoadTexture
 modLoadModel
 texLoadSprite
 mmAllocR
+
+# World tick and scene, scheduler, target lock, FOV, refuel, sniper (jfg_engine_wrappers.cpp, jfg_frame_rate.cpp, jfg_visuals.cpp, jfg_gameplay.cpp)
+func_80045F00_46B00
+objCutCameraActive
+objObjectsPauseTick
+trackDraw

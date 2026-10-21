@@ -111,20 +111,6 @@ vram = 0x829B0010
 func = "osRamTest4_6105"
 value = 0x10000003 # beq t7, at, pass -> b pass
 
-# Dual-stick camera (src/jfg/jfg_camera.cpp): right before the scene is drawn (the "jal trackDraw" in the game
-# tick), the active camera is moved to the angle the right stick has chosen. Then, at 60 fps, squad members are given
-# the in-between positions they are drawn at (src/jfg/jfg_frame_rate.cpp, jfg_squad_draw_begin).
-[[patches.hook]]
-func = "func_80045F00_46B00"
-before_vram = 0x800462A0
-text = "{ void jfg_camera_override(uint8_t*, recomp_context*); void jfg_squad_draw_begin(uint8_t*); jfg_camera_override(rdram, ctx); jfg_squad_draw_begin(rdram); }"
-
-# 60 fps: right after trackDraw returns, squad members get their own positions back (src/jfg/jfg_frame_rate.cpp).
-[[patches.hook]]
-func = "func_80045F00_46B00"
-before_vram = 0x800462A8
-text = "{ void jfg_squad_draw_end(uint8_t*); jfg_squad_draw_end(rdram); }"
-
 # Field of view option (src/jfg/jfg_visuals.cpp): camSetFOV, where its zoomed and unzoomed paths meet. $f12 = the FOV
 # about to be applied (camera->fov already holds the game's own), $t7 = the camera's zoom flag (D_800A3174[camNo]).
 [[patches.hook]]
@@ -206,10 +192,3 @@ text = "{ int jfg_sniper_walk(int); ctx->r11 = (gpr)(int32_t)jfg_sniper_walk((in
 func = "func_overlay_17_00004614_1F2C15C"
 before_vram = 0x821146C4
 text = "{ int jfg_sniper_walk(int); ctx->r12 = (gpr)(int32_t)jfg_sniper_walk((int32_t)ctx->r12); }"
-
-# Fly camera "freeze": at the branch where func_80045F00 chooses between the world's tick and its pause tick (v1 =
-# the pause mode), a non-zero v1 runs the pause tick (objects drawn, not moved) without the pause menu.
-[[patches.hook]]
-func = "func_80045F00_46B00"
-before_vram = 0x80046058
-text = "{ int jfg_freeze_world(void); if (jfg_freeze_world()) ctx->r3 = 1; }"

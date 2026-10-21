@@ -36,6 +36,11 @@ JFG_WRAP(n_alEvtqNextEvent) {
     n_alEvtqNextEvent_orig(rdram, ctx);
 }
 
+// __scTaskReady starts a frame's graphics task only once the previous swap has taken effect (VI current framebuffer
+// != next). With the runtime's VI that still looks pending at the retrace that applies it, which put every frame one
+// more retrace behind; letting every task through made RT64 draw into the buffer still on screen (the CPU-drawn
+// reticles were lost). So at 60 fps jfg_sched_task_ready lets the task wait for one retrace since the swap was asked
+// for (1 = ready, 0 = not yet); at the original rate (-1) the game's own check runs.
 JFG_WRAP(__scTaskReady) {
     const int r = jfg_sched_task_ready();
     if (r == 1) { ctx->r2 = ctx->r4; return; }
@@ -160,4 +165,49 @@ JFG_WRAP(func_overlay_3_00014694_1EE9B74) {
     if (loop) jfg_squad_spawn_before(rdram, ctx);
     func_overlay_3_00014694_1EE9B74_orig(rdram, ctx);
     if (loop) jfg_squad_spawn_after(rdram, ctx);
+}
+
+// --- the world tick and the scene (func_80045F00) ----------------------------------------------------------------
+// It reads the pause mode (D_800FD7BD) once, right after objCutCameraActive, to choose between the world's tick and
+// the pause tick (objObjectsPauseTick: objects drawn, not moved). The fly camera's "freeze" and "Pause in the Settings
+// Menu" (jfg_freeze_world) make it a pause tick without the pause menu: the pause mode reads as 1 until the pause tick
+// starts. Right before trackDraw the camera override and the squads' in-between positions go in; after it, out.
+static JfgCaller g_world;
+static bool g_freeze_set = false;
+
+static void freeze_undo(uint8_t* rdram) {
+    if (!g_freeze_set) return;
+    g_freeze_set = false;
+    MEM_B(0, (gpr)(int32_t)0x800FD7BD) = 0;
+}
+
+JFG_WRAP(func_80045F00_46B00) {
+    {
+        JfgCaller::Scope scope(g_world, ctx, 0x48);
+        func_80045F00_46B00_orig(rdram, ctx);
+    }
+    freeze_undo(rdram);
+}
+
+JFG_WRAP(objCutCameraActive) {
+    const bool world = g_world.direct(ctx);
+    objCutCameraActive_orig(rdram, ctx);
+    if (!world) return;
+    if (jfg_freeze_world() && MEM_B(0, (gpr)(int32_t)0x800FD7BD) == 0) {
+        MEM_B(0, (gpr)(int32_t)0x800FD7BD) = 1;
+        g_freeze_set = true;
+    }
+}
+
+JFG_WRAP(objObjectsPauseTick) {
+    if (g_world.direct(ctx)) freeze_undo(rdram);
+    objObjectsPauseTick_orig(rdram, ctx);
+}
+
+JFG_WRAP(trackDraw) {
+    if (!g_world.direct(ctx)) { trackDraw_orig(rdram, ctx); return; }
+    jfg_camera_override(rdram, ctx);
+    jfg_squad_draw_begin(rdram);
+    trackDraw_orig(rdram, ctx);
+    jfg_squad_draw_end(rdram);
 }
