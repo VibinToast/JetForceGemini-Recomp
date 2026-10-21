@@ -12,11 +12,12 @@
 # By hand: GitHub -> Actions -> "Release" -> "Run workflow" on main, with a bump or an exact version.
 #
 # What it does:
-# - The release notes are the commit messages (first line of each, newest first) since the last release: nothing to write
-#   by hand, so write commit messages that read well to players. Commits that only change the README, .gitignore,
-#   .recomp.json, docs and other files players do not see are left out, and so are "WIP" commits and the commits
-#   listed in .github/changelog-skip.txt.
-# - Adds them to the top of CHANGELOG.md (the game shows that file under Changelogs), writes the version into version.txt
+# - The release notes are the "## Unreleased" section at the top of CHANGELOG.md, written by hand on the release branch
+#   while it is in testing; that section becomes "## vX.Y.Z (date)". Without one (a quick hotfix, say), the notes are
+#   the commit messages instead (first line of each, newest first) since the last release, so commit messages should
+#   still read well to players. That list leaves out commits that only change the README, .gitignore, .recomp.json,
+#   docs and other files players do not see, "WIP" commits and the commits listed in .github/changelog-skip.txt.
+# - Puts them at the top of CHANGELOG.md (the game shows that file under Changelogs), writes the version into version.txt
 #   (the launcher shows it), commits both to main and makes a DRAFT release vX.Y.Z on that commit. Players do not see a
 #   draft, and the launcher's update check skips it.
 # - Merges main back into dev, rt64-update and any open release/* branch, so the release commit, the release branch's
@@ -240,9 +241,15 @@ jobs:
           version = os.environ["VERSION"]
           last = os.environ["LAST"]
           text = open("CHANGELOG.md", encoding="utf-8").read() if os.path.exists("CHANGELOG.md") else "# Changelog\n"
-          # A leftover hand-written "Unreleased" section is dropped: the notes come from the commits only.
-          text = re.sub(r"^## Unreleased[ \t]*\n.*?(?=^## |\Z)", "", text, flags=re.S | re.M)
-          body = open("commits.md", encoding="utf-8").read().strip() or "- Maintenance"
+          # The hand-written "## Unreleased" section is the release notes: it becomes this version's section. With no
+          # such section, or only the heading (and <!-- comments -->) in it, the notes are the commit list instead.
+          written = ""
+          m = re.search(r"^## Unreleased\b[^\n]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+          if m:
+              written = re.sub(r"<!--.*?-->", "", m.group(1), flags=re.S).strip()
+              text = text[:m.start()] + text[m.end():]
+          body = written or open("commits.md", encoding="utf-8").read().strip() or "- Maintenance"
+          print("Release notes from", "the Unreleased section of CHANGELOG.md" if written else "the commit messages")
           heading = "## v%s (%s)" % (version, datetime.date.today().isoformat())
           section = heading + "\n\n" + body + "\n\n"
           m = re.search(r"^## ", text, re.M)
