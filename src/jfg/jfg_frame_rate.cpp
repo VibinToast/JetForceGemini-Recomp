@@ -202,7 +202,9 @@ extern "C" int jfg_cadence_skip(void) {
 // phase waits for his rotation to reach 0x8000 exactly (mizarControl, the three dAngle calls at +0x301C..): at 60 fps
 // it stayed at 0x8020 and the fight did not go on until the frame rate was switched back (2026-10-18). The wrapper
 // runs the game's code; in 60 fps mode only, a result that didn't move with a difference left and t > 0 moves 1 unit.
+// It's also where the mouse steers Floyd in Floyd missions (jfg_controls.cpp, jfg_floyd_roll_before / _after).
 JFG_WRAP(dAngle) {
+    const int floyd_roll = jfg_floyd_roll_before(rdram, ctx);
     const int32_t angle = (int16_t)(uint32_t)ctx->r4;
     const int32_t target = (int32_t)ctx->r5;
     const uint32_t t_bits = (uint32_t)ctx->r6;
@@ -214,6 +216,15 @@ JFG_WRAP(dAngle) {
     const int32_t back = (angle - target) & 0xFFFF;
     if (back < diff) diff = -back;
     if (diff != 0 && t > 0.0f) ctx->r2 = (gpr)(int32_t)(int16_t)(angle + (diff > 0 ? 1 : -1));
+    if (game_frame_rate() >= 1 && !g.skipping && (int16_t)ctx->r2 == (int16_t)angle) {
+        float t;
+        std::memcpy(&t, &t_bits, sizeof(t));
+        int32_t diff = (target - angle) & 0xFFFF;
+        const int32_t back = (angle - target) & 0xFFFF;
+        if (back < diff) diff = -back;
+        if (diff != 0 && t > 0.0f) ctx->r2 = (gpr)(int32_t)(int16_t)(angle + (diff > 0 ? 1 : -1));
+    }
+    if (floyd_roll) jfg_floyd_roll_after(rdram, ctx);
 }
 
 // --- 60 fps: squad members drawn in between their updates ---------------------------------------------------------

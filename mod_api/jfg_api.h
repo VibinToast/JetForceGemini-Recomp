@@ -43,6 +43,12 @@ typedef struct {
     int cancel;
 } JfgBloodHit;
 
+// jfg_on_object_draw: an object is about to be drawn. Set cancel to 1 to draw nothing for it.
+typedef struct {
+    void* object;
+    int cancel;
+} JfgObjectDraw;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
@@ -58,5 +64,13 @@ typedef struct {
 //     A blood hit sprite is about to be added.
 // jfg_on_severed_limb_tick(void* limb, int frames)
 //     Each tick a severed body part (an object) is updated, before the game's code for it.
+// jfg_on_object_draw(JfgObjectDraw* draw)
+//     An object is about to be drawn (after the game's own option, Hide Floyd, has applied).
+// jfg_on_sound_play(JfgSoundPlay* sound)
+//     A sound effect is about to start.
+// jfg_on_screen_flash(JfgScreenFlash* flash)
+//     The screen is about to flash; the Hit flash opacity option has already applied.
+// jfg_on_sidekick_tick(void* floyd, int frames)
+//     Each tick Floyd is updated, before the game's code for him.
 
 #endif

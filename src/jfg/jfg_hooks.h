@@ -48,11 +48,21 @@ int jfg_hide_object(uint8_t* rdram, recomp_context* ctx);              // entry 
 void jfg_hide_shadow(uint8_t* rdram, recomp_context* ctx);             // shadowGenerate, per object
 void jfg_floyd_done(void);                                             // return of sidekickControl
 int jfg_floyd_mute(uint32_t id);                                       // entry of amSndPlay
+uint32_t jfg_hit_flash(uint32_t color);                                // the hit flash's colour (jfg_visuals.cpp)
+void jfg_hit_flash_event(uint8_t* rdram, recomp_context* ctx);        // jfg_on_screen_flash handler
+void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // jfg_on_sidekick_tick handler
+void jfg_hide_object(uint8_t* rdram, recomp_context* ctx);             // jfg_on_object_draw handler
+void jfg_floyd_done(void);                                             // after sidekickControl
+void jfg_floyd_mute(uint8_t* rdram, recomp_context* ctx);             // jfg_on_sound_play handler
 // jfg_interpolation.cpp
 void jfg_interp_object(uint8_t* rdram, recomp_context* ctx);            // entry of objPrintObject
 void jfg_interp_object_done(uint8_t* rdram, recomp_context* ctx);       // return of objPrintObject
 void jfg_interp_push(uint8_t* rdram, recomp_context* ctx);              // entry of the four matrix push functions
 void jfg_interp_pushed(uint8_t* rdram, recomp_context* ctx);            // ... after they note the matrix written
+void jfg_interp_object(uint8_t* rdram, recomp_context* ctx);            // objPrintObject's wrapper, before
+void jfg_interp_object_done(uint8_t* rdram, recomp_context* ctx);       // ... and after
+void jfg_interp_push(uint8_t* rdram, recomp_context* ctx);              // the four matrix push functions' wrappers, before
+void jfg_interp_pushed(uint8_t* rdram, recomp_context* ctx);            // ... and after
 // jfg_gameplay.cpp
 int jfg_no_blood(void);                                                // the blood event handlers (jfg_gore.cpp)
 int jfg_refuel_amount(int amount);                                     // refuelControl

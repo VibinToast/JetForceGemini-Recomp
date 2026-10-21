@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include "jfg_game.h"
+#include "jfg_api.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
@@ -63,6 +64,7 @@ extern "C" void jfg_floyd_seen(uint8_t* rdram_, recomp_context* ctx) {
     const int kind = (int16_t)rd16(obj + 0x48);
     if (kind != g_floyd_kind && std::getenv("JFG_DEBUG_FLOYD")) std::fprintf(stderr, "[jfg] Floyd: behaviorId %d\n", kind);
     g_floyd_kind = kind;
+    g_floyd_obj = obj;
     g_floyd_muted = floyd_hidden(obj);
 }
 
@@ -75,9 +77,11 @@ extern "C" int jfg_floyd_mute(uint32_t id) {
     static const bool log = std::getenv("JFG_DEBUG_FLOYD") != nullptr;
     if (log) std::fprintf(stderr, "[jfg] Floyd: sound 0x%X muted\n", id & 0xFFFF);
     return 1;
+    if (log) std::fprintf(stderr, "[jfg] Floyd: sound 0x%X muted\n", rd32(sound + api::value_cancel::VALUE) & 0xFFFF);
+    wr32(sound + api::value_cancel::CANCEL, 1);
 }
 
-extern "C" int jfg_hide_object(uint8_t* rdram_, recomp_context* ctx) {
+extern "C" void jfg_hide_object(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     return floyd_hidden((uint32_t)ctx->r7) ? 1 : 0;
 }
@@ -89,6 +93,8 @@ extern "C" void jfg_hide_shadow(uint8_t* rdram_, recomp_context* ctx) {
     static bool logged = false;
     if (!logged && ctx->r22 != 0 && std::getenv("JFG_DEBUG_FLOYD")) { std::fprintf(stderr, "[jfg] Floyd: shadow skipped\n"); logged = true; }
     ctx->r22 = 0;
+    const uint32_t draw = (uint32_t)ctx->r4;
+    if (floyd_hidden(rd32(draw + api::value_cancel::VALUE))) wr32(draw + api::value_cancel::CANCEL, 1);
 }
 
 // "Disable LOD". objPrintModelObject draws an object with its next, simpler model (model index + 1) when the object

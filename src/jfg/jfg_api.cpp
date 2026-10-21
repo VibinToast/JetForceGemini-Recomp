@@ -15,6 +15,8 @@ namespace {
 const char* const g_event_names[] = {
     "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", "jfg_on_blood_spurt", "jfg_on_blood_hit",
     "jfg_on_severed_limb_tick", nullptr
+    "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
+    nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
@@ -71,6 +73,10 @@ void register_api() {
     add_internal(Event::BloodSpurt, jfg_gore_on_blood_spurt); // No blood, Blood amount (jfg_gore.cpp)
     add_internal(Event::BloodHit, jfg_gore_on_blood_hit);     // No blood
     add_internal(Event::SeveredLimbTick, jfg_gore_limb);      // Body parts stay
+    add_internal(Event::SidekickTick, jfg_floyd_seen);        // Hide Floyd: his object kind (jfg_visuals.cpp)
+    add_internal(Event::ObjectDraw, jfg_hide_object);         // Hide Floyd
+    add_internal(Event::SoundPlay, jfg_floyd_mute);           // Hide Floyd: his sounds
+    add_internal(Event::ScreenFlash, jfg_hit_flash_event);    // Hit flash opacity
     recomp::overlays::register_base_events(g_event_names);
     recomp::overlays::register_base_export("jfg_api_version", api_version);
     recomp::overlays::register_base_export("jfg_get_tick_scale", get_tick_scale);
@@ -161,4 +167,30 @@ JFG_WRAP(bloodHitSpriteAdd) {
 JFG_WRAP(severedLimbControl) {
     jfg::api::fire(rdram, ctx, jfg::api::Event::SeveredLimbTick, (int32_t)ctx->r4, (int32_t)ctx->r5);
     severedLimbControl_orig(rdram, ctx);
+}
+
+// An event with one value a callback may change, and cancel (JfgObjectDraw, JfgSoundPlay, JfgScreenFlash). Returns
+// false when it was cancelled; else value holds what to use.
+static bool fire_value_cancel(uint8_t* rdram, recomp_context* ctx, jfg::api::Event event, uint32_t& value) {
+    using namespace jfg;
+    namespace v = jfg::api::value_cancel;
+    g_rdram = rdram;
+    api::Payload p(ctx, v::SIZE);
+    wr32(p.addr + v::VALUE, value);
+    wr32(p.addr + v::CANCEL, 0);
+    api::fire(rdram, ctx, event, (int32_t)p.addr);
+    g_rdram = rdram;
+    value = rd32(p.addr + v::VALUE);
+    return rd32(p.addr + v::CANCEL) == 0;
+}
+
+// objPrintObject(dList, mtx, vtx, obj): jfg_on_object_draw (Hide Floyd cancels his drawing), then the game's code with
+// the interpolation's bookkeeping around it (jfg_interpolation.cpp).
+JFG_WRAP(objPrintObject) {
+    uint32_t object = (uint32_t)ctx->r7;
+    if (!fire_value_cancel(rdram, ctx, jfg::api::Event::ObjectDraw, object)) return;
+    ctx->r7 = (gpr)(int32_t)object;
+    jfg_interp_object(rdram, ctx);
+    objPrintObject_orig(rdram, ctx);
+    jfg_interp_object_done(rdram, ctx);
 }
