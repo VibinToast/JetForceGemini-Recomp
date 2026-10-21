@@ -81,7 +81,7 @@ void jfg_objsetup_exit(uint8_t* rdram, recomp_context* ctx);           // objSet
 void jfg_squads_check_enemy(uint8_t* rdram, recomp_context* ctx);      // squadsCheckEnemyPointers' wrapper (replaces it)
 void jfg_game_break(uint8_t* rdram, recomp_context* ctx);              // mathBreakPoint's wrapper
 void jfg_change_level_log(uint8_t* rdram, recomp_context* ctx);        // jfg_on_level_change handler (jfg_api.cpp)
-void jfg_sync_printf(uint8_t* rdram, recomp_context* ctx);             // replaces osSyncPrintf
+void jfg_sync_printf(uint8_t* rdram, recomp_context* ctx);             // osSyncPrintf's wrapper (replaces it)
 // jfg_glue.cpp
 void jfg_overlay_loaded(uint8_t* rdram, recomp_context* ctx);          // runlinkDownloadCode, runlinkResumeCode
 void jfg_overlay_unloading(uint8_t* rdram, recomp_context* ctx);       // runlinkFreeCode, runlinkUnloadOverlay

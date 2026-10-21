@@ -261,14 +261,6 @@ func = "ad_sndp_play"
 before_vram = 0x80085EEC
 text = "{ int jfg_snd_skip(uint8_t*, uint32_t); if (jfg_snd_skip(rdram, (uint32_t)ctx->r29)) { ctx->r2 = 0; recomp_exit_function(); return; } }"
 
-# osSyncPrintf: the game's debug output. Its output routine (0x8009A710) is reached through a function pointer the
-# recompiler has no entry for, which stopped the program the first time the game printed a warning (for example
-# "out of sound states"). The port prints the format string to stderr instead and returns.
-[[patches.hook]]
-func = "osSyncPrintf"
-before_vram = 0x8009A724
-text = "{ void jfg_sync_printf(uint8_t*, recomp_context*); jfg_sync_printf(rdram, ctx); recomp_exit_function(); return; }"
-
 # The other sound-player events the game thread posts during a skipped cutscene (volume, pan and pitch updates of
 # sounds that are already playing) are dropped as well; only "stop" events are let through. A skip runs hundreds of
 # ticks before the audio thread gets a turn, and the sound player's event queue is small: once it is full the player
