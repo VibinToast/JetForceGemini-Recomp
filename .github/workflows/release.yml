@@ -1,12 +1,14 @@
 # Releases start by themselves when something is merged into main. The branch it came from picks the version:
 #
-#   dev                        -> minor   1.1.8 -> 1.2.0
+#   release/<x.y>              -> exactly x.y.0   release/1.2 -> 1.2.0
+#   dev                        -> minor   1.1.8 -> 1.2.0   (only if dev is merged straight into main; normally a release/x.y is)
 #   hotfix/<name>              -> patch   1.1.8 -> 1.1.9
 #   rt64-update, milestone/*   -> major   1.1.8 -> 2.0.0
 #
 # A label on the pull request wins over the branch: release:major, release:minor, release:patch, or release:none (no
 # release). A push straight to main (no pull request) is released only when its commit message says [major], [minor] or
-# [patch], or when it is a local "Merge branch 'dev'" commit. [no release] in the message skips the release.
+# [patch], or when it is a local "Merge branch 'release/1.2'" (or 'dev', 'hotfix/...') commit. [no release] in the
+# message skips the release.
 # By hand: GitHub -> Actions -> "Release" -> "Run workflow" on main, with a bump or an exact version.
 #
 # What it does:
@@ -16,7 +18,8 @@
 # - Adds them to the top of CHANGELOG.md (the game shows that file under Changelogs), writes the version into version.txt
 #   (the launcher shows it), commits both to main and makes a DRAFT release vX.Y.Z on that commit. Players do not see a
 #   draft, and the launcher's update check skips it.
-# - Merges main back into dev and rt64-update, so the release commit and any hotfix are there too (BACK_MERGE below).
+# - Merges main back into dev and rt64-update, so the release commit, the release branch's fixes and any hotfix are
+#   there too (BACK_MERGE below).
 #
 # It does not build the game: the game's code is translated from the owner's own ROM, which never goes to GitHub. The
 # builds are made on the owner's PC: tools\package_release.bat (Windows) and tools/package_release.sh (Linux) find the
@@ -108,6 +111,13 @@ jobs:
             fi
             if [ -z "$bump" ]; then
               case "$head" in
+                release/*)
+                  if [[ "${head#release/}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+                    exact="${head#release/}.0"; bump=minor; why="merged from $head"
+                  else
+                    echo "A release branch is named release/<major>.<minor> (for example release/1.2), not '$head'." >&2
+                    exit 1
+                  fi ;;
                 dev)                          bump=minor; why="merged from dev" ;;
                 hotfix/*|hotfix-*)            bump=patch; why="merged from $head" ;;
                 rt64-update|milestone/*)      bump=major; why="merged from $head" ;;
@@ -116,7 +126,7 @@ jobs:
             [ -n "$number" ] && why="$why (pull request #$number)"
             if [ -z "$bump" ]; then
               bump=none
-              why="no pull request from dev, hotfix/* or rt64-update, no release:* label and no [major]/[minor]/[patch] in the commit message"
+              why="no pull request from release/*, dev, hotfix/* or rt64-update, no release:* label and no [major]/[minor]/[patch] in the commit message"
             fi
           fi
           echo "Bump: ${exact:-$bump} ($why)"
