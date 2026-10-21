@@ -466,7 +466,15 @@ ContextId get_config_sub_menu_parent_context() {
 }
 
 // After a change made in one mod menu (enabled, order, rescan), the others read the mod list again.
+// It runs from the changed menu's callbacks, with that menu's context open: only one context may be open at a time, so
+// that one is closed while the others are marked, and opened again after.
 static void mark_other_mod_menus_dirty(ModMenu* changed) {
+    struct Reopen {
+        ContextId context = recompui::try_close_current_context();
+        ~Reopen() {
+            if (context != ContextId::null()) context.open();
+        }
+    } reopen;
     for (ModMenu* menu : mod_menus) {
         if (menu == changed) continue;
         ContextId menu_context = menu->get_owner_context();
@@ -663,7 +671,7 @@ void ModMenu::process_event(const Event &e) {
 }
 
 ModMenu::ModMenu(Element *parent) : Element(parent) {
-    game_mod_id = "dino-planet";
+    game_mod_id = "jet-force-gemini"; // JFG PORT: the mod_game_id in src/main.cpp
 
     ContextId context = get_current_context();
     owner_context = context;
