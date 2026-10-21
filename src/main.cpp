@@ -244,7 +244,7 @@ int main(int argc, char** argv) {
     }
     // Populate ROM validity before deciding whether the launcher is needed.
     // The runtime performs this check again during startup; doing it here lets
-    // an already configured Mac app launch straight into DKR.
+    // an already configured Mac app launch straight into the game.
     recomp::check_all_stored_roms();
     // JFG PORT: bin\jfg_launcher.txt (src/jfg/jfg_update_check.cpp). A ROM path there starts the game straight away, as
     // --rom <path> --skip-launcher would, unless --rom or --launcher was given. It also holds check_for_updates.

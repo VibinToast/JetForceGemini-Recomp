@@ -303,7 +303,7 @@ void set_application_user_config(RT64::Application* application, const ultramode
     }
     application->userConfig.internalColorFormat = to_rt64(config.hpfb_option);
     application->userConfig.displayBuffering = RT64::UserConfiguration::DisplayBuffering::Triple;
-    // JFG PORT: the F9 / Visuals menu's filtering options (also switched while the game runs, see update_game_aspect_override).
+    // JFG PORT: the F9 / Visuals menu's filtering options (also switched while the game runs, see update_render_options).
     application->userConfig.filtering = jfg_rt64_filtering(jfg_output_filtering());
     application->userConfig.threePointFiltering = jfg_texture_three_point() != 0;
 }
@@ -416,8 +416,8 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
     app->enhancementConfig.f3dex.forceBranch = true;
     // Scale LODs based on the output resolution.
     app->enhancementConfig.textureLOD.scale = true;
-    // Don't try to fix rectangle lower-right coords. This causes Dino Planet's font window scissors
-    // to stretch glyph rects down by a pixel when they are drawn right on the edge of the scissor.
+    // Don't try to fix rectangle lower-right coords (kept from the base project, where the fix stretched glyph
+    // rects drawn on the edge of a scissor down by a pixel; not checked for Jet Force Gemini).
     app->enhancementConfig.rect.fixRectLR = false;
     // Pick an API if the user has set an override.
     switch (cur_config.api_option) {
@@ -501,9 +501,10 @@ void RT64Context::send_dl(const OSTask* task) {
     if (jfg_skip_render_active()) return;
     check_texture_pack_actions();
     app->state->rsp->reset();
-    constexpr uint32_t DkrRdramMask = 0x007FFFFFU;
-    app->interpreter->loadUCodeGBI(task->t.ucode & DkrRdramMask, task->t.ucode_data & DkrRdramMask, true);
-    app->processDisplayLists(app->core.RDRAM, task->t.data_ptr & DkrRdramMask, 0, true);
+    // Physical addresses in the console's 8 MB of RDRAM (the task's pointers are KSEG0 addresses).
+    constexpr uint32_t RdramPhysicalMask = 0x007FFFFFU;
+    app->interpreter->loadUCodeGBI(task->t.ucode & RdramPhysicalMask, task->t.ucode_data & RdramPhysicalMask, true);
+    app->processDisplayLists(app->core.RDRAM, task->t.data_ptr & RdramPhysicalMask, 0, true);
 }
 
 void RT64Context::preload_common_shaders() {
@@ -539,10 +540,9 @@ void RT64Context::preload_common_shaders() {
     }
 }
 
-void RT64Context::update_game_aspect_override() {
-    // JFG PORT: everything below reads Diddy Kong Racing variables at fixed RDRAM addresses to switch the aspect
-    // ratio for some DKR menus. Those addresses hold unrelated data in Jet Force Gemini. Instead, follow the
-    // "Widescreen" option of the F9 menu (it can change while the game runs).
+// JFG PORT: the port's render options that can change while the game runs, applied once per screen update: the
+// "Widescreen" option of the F9 menu, the presentation mode, the "Frame rate" option and the filtering options.
+void RT64Context::update_render_options() {
     {
         static int applied = -1;
         const int want = jfg_widescreen_active();
@@ -589,60 +589,10 @@ void RT64Context::update_game_aspect_override() {
             app->updateUserConfig(false);
         }
     }
-    return;
-
-    // The track-select backdrop is an authored 320-pixel-wide scrolling page.
-    // The post-race and results layouts likewise draw only a 4:3 page while the
-    // race scene remains visible behind it. Expanding any of those projections
-    // exposes content outside the page, so render them at the original aspect.
-    // Normal race gameplay continues to use the user's configured aspect ratio.
-    constexpr size_t DkrTrackMenuFlagOffset = 0x000E0EFC;
-    constexpr size_t DkrCurrentMenuIdOffset = 0x000DF9F0;
-    constexpr size_t DkrGameModeOffset = 0x00123A6C;
-    constexpr size_t DkrPostRaceViewportOffset = 0x00123A96;
-    constexpr int32_t DkrGameModeMenu = 1;
-    constexpr int32_t DkrMenuResults = 17;
-
-    const uint8_t *rdram = app->core.RDRAM;
-    const bool track_menu_active =
-        *reinterpret_cast<const int32_t *>(rdram + DkrTrackMenuFlagOffset) != 0;
-    // N64Recomp keeps byte-addressed RDRAM word-swapped on little-endian hosts.
-    const bool postrace_active = rdram[DkrPostRaceViewportOffset ^ 3U] != 0;
-    const int32_t game_mode = *reinterpret_cast<const int32_t *>(rdram + DkrGameModeOffset);
-    const int32_t current_menu_id = *reinterpret_cast<const int32_t *>(rdram + DkrCurrentMenuIdOffset);
-    if (std::getenv("JFG_SCENE_TRACE") != nullptr) {
-        static int32_t previous_game_mode = INT32_MIN;
-        static int32_t previous_menu_id = INT32_MIN;
-        if ((game_mode != previous_game_mode) || (current_menu_id != previous_menu_id)) {
-            std::fprintf(stderr, "[DKR SCENE] gameMode=%d menuId=%d\n", game_mode, current_menu_id);
-            previous_game_mode = game_mode;
-            previous_menu_id = current_menu_id;
-        }
-    }
-    const bool results_menu_active =
-        (game_mode == DkrGameModeMenu) && (current_menu_id == DkrMenuResults);
-    const bool original_aspect_active =
-        track_menu_active || postrace_active || results_menu_active;
-
-    if (original_aspect_active == game_aspect_override) {
-        return;
-    }
-
-    game_aspect_override = original_aspect_active;
-    if (game_aspect_override) {
-        app->userConfig.aspectRatio = RT64::UserConfiguration::AspectRatio::Original;
-    }
-    else {
-        app->userConfig.aspectRatio = to_rt64(ultramodern::renderer::get_graphics_config().ar_option);
-    }
-
-    app->updateUserConfig(false);
-    fprintf(stderr, "[JFG] Authored 4:3 aspect override %s\n",
-        game_aspect_override ? "enabled" : "disabled");
 }
 
 void RT64Context::update_screen() {
-    update_game_aspect_override();
+    update_render_options();
     app->updateScreen();
 }
 
@@ -662,10 +612,6 @@ bool RT64Context::update_config(const ultramodern::renderer::GraphicsConfig& old
     }
 
     set_application_user_config(app.get(), new_config);
-
-    if (game_aspect_override) {
-        app->userConfig.aspectRatio = RT64::UserConfiguration::AspectRatio::Original;
-    }
 
     app->updateUserConfig(true);
 
