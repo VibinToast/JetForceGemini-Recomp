@@ -13,7 +13,8 @@
 // "assets" replaces a whole asset. "entries" replaces one entry of a set whose table asset is a list of big-endian
 // offsets into its data asset, ended by -1 (the 2D and 3D texture sets are tables 3 and 1 over data 2 and 0; see
 // tools/textures.py in the decomp for the entry format). The files are the game's own formats, and they go in the
-// .nrm through RecompModTool's additional_files. Mods lower in the mod list are applied later, so they win.
+// .nrm through RecompModTool's additional_files. When two mods replace the same asset or entry, the one higher in the
+// mod list wins, as with texture packs.
 //
 // At game start, before the game's first instruction, the port copies the whole asset area with the replacements in
 // it to the end of the ROM and points the table there. The game never sees the difference: it reads the table at
@@ -205,7 +206,7 @@ extern "C" void jfg_apply_asset_mods(void) {
         assets[i].assign(rom.begin() + start, rom.begin() + end);
     }
 
-    // Whole assets, in mod order: a later mod's replacement wins.
+    // Whole assets, in mod order (top of the list first): the first mod to replace an asset keeps it.
     std::vector<std::string> owner(count);
     int whole = 0, entries = 0;
     for (const Replacement& r : reps) {
@@ -216,7 +217,8 @@ extern "C" void jfg_apply_asset_mods(void) {
         }
         if (!owner[r.asset].empty()) {
             log("assets: asset " + std::to_string(r.asset) + " is replaced by " + owner[r.asset] + " and " + r.mod_id +
-                "; " + r.mod_id + " wins (lower in the mod list)");
+                "; " + owner[r.asset] + " wins (higher in the mod list)");
+            continue;
         }
         owner[r.asset] = r.mod_id;
         assets[r.asset] = r.data;
@@ -224,7 +226,7 @@ extern "C" void jfg_apply_asset_mods(void) {
         whole++;
     }
 
-    // Entries, grouped by set; within a set a later mod's entry wins.
+    // Entries, grouped by set; within a set the first mod's entry (highest in the list) is kept.
     std::map<int, std::pair<int, std::map<int, const Replacement*>>> sets; // data asset -> table asset, entries
     for (const Replacement& r : reps) {
         if (r.entry < 0) continue;
@@ -234,14 +236,15 @@ extern "C" void jfg_apply_asset_mods(void) {
         }
         auto [it, fresh] = sets.try_emplace(r.asset, r.table, std::map<int, const Replacement*>{});
         if (it->second.first != r.table) {
-            log("assets: " + r.mod_id + ": data asset " + std::to_string(r.asset) + " was given another table by an "
-                "earlier mod; skipped " + r.file);
+            log("assets: " + r.mod_id + ": data asset " + std::to_string(r.asset) + " was given another table by a mod "
+                "higher in the mod list; skipped " + r.file);
             continue;
         }
         const Replacement*& slot = it->second.second[r.entry];
         if (slot != nullptr) {
             log("assets: entry " + std::to_string(r.entry) + " of data asset " + std::to_string(r.asset) + " is replaced by " +
-                slot->mod_id + " and " + r.mod_id + "; " + r.mod_id + " wins (lower in the mod list)");
+                slot->mod_id + " and " + r.mod_id + "; " + slot->mod_id + " wins (higher in the mod list)");
+            continue;
         }
         slot = &r;
     }
