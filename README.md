@@ -55,8 +55,6 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 
 ## Build and run
 
-(Making a release instead: see [docs/RELEASING.md](docs/RELEASING.md).)
-
  Save your rom as
 `baserom.us.z64` in this folder.
 

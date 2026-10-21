@@ -1,0 +1,21 @@
+# Commits the release notes leave out (CHANGELOG.md and the GitHub release), one full hash per line, then a note.
+# For commits whose message is not for players, or that describe something hidden in the release. Commits whose first
+# line starts with "WIP" are left out without being listed here. Hashes of released commits can stay: they never come
+# up again.
+
+# Old alpha history, merged into dev from an unrelated root (v0.1.x), not new in 1.2
+ffd1b2d7bf5928a28074f00d52e92d1ad1fe52be Initial public alpha source
+b75f7f45dc46888babe20b39c6224a70399705a4 Add privacy-aware bug reporting
+cf497cccc732ea1dd15f25bf34fa92027ca0b46b Limit source CI to patched dependencies
+81f25d5bdb8ab54bc57cacfffe49230e71fc66e1 Prepare v0.1.18 binary alpha
+eb8151c05837359c9eca0ad006077a14f5bf72b8 Fix rt64 patch missing new F3DDKR GBI source files
+
+# Notes files only
+8de654e58ba49b6b7416d728078e3e3d46b21d94 Update ToDo.md
+9cab54871bcd5878a7b8cb116a1f11c6a11c52eb Updated Docs
+
+# 60 + Interpolated and Interpolation Limit, hidden in 1.2 (bb534d3)
+af1e6318574dad16e15919de0d56bb1702430b31 60 + Interpolated now adds in-between frames in levels
+0b92729f86978be5daa3b4c329976d5fc533df1f Interpolation Limit: new option
+47c519fd18ad84f411899cfce33bbe683060ab90 The F9 menu has the Interpolation Limit option too
+899ffcdb7acb97997917584d94efd012c43a1dce 60 + Interpolated is marked Experimental

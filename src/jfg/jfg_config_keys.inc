@@ -2,7 +2,7 @@
 static const char* const jfg_general_keys[] = { "main_volume", "pause_in_menu", "start_skips_cutscenes", "show_fps", "show_level", "show_pack", "save_notification", "fly_speed", "fly_freeze", "fly_hide_hud", "skip_launcher", "check_for_updates", "show_official_pack" };
 static const char* const jfg_gameplay_keys[] = { "auto_save", "auto_save_minutes", "keep_area_progress", "permanent_tribals", "no_blood", "gore_keep_blood", "gore_keep_limbs", "blood_amount", "damage_taken", "unlimited_continues", "refuel_speed", "dive_speed", "move_speed", "sprint", "sprint_speed", "sprint_aiming", "sprint_swimming", "sprint_swim_speed", "normalize_diagonal" };
 static const char* const jfg_controls_keys[] = { "dual_stick", "dual_layout", "swap_triggers", "invert_aim_y", "invert_camera_y", "aim_from_character", "camera_speed_h", "camera_speed_v", "camera_collision", "mouse_keyboard", "mouse_camera_speed", "mouse_aim_speed", "invert_mouse_y", "aim_shoulder", "aim_centered", "aim_jump", "aim_speed", "sniper_fixed_zoom", "sniper_zoom", "invert_aim_normal", "joystick_deadzone", "joystick_range", "rumble_strength", "background_input" };
-static const char* const jfg_graphics_keys[] = { "wm_option", "res_option", "ds_option", "msaa_option", "frame_rate", "interp_limit", "widescreen", "fov", "texture_filter", "output_filter", "hit_flash", "no_lod", "far_objects", "hide_floyd", "ssao", "ssao_strength", "ssao_radius", "bloom", "bloom_intensity", "bloom_threshold", "bloom_radius", "vignette", "vignette_strength", "vignette_size", "level_fog_distance", "no_level_fog" };
+static const char* const jfg_graphics_keys[] = { "wm_option", "res_option", "ds_option", "msaa_option", "frame_rate", "smooth_motion", "widescreen", "fov", "texture_filter", "output_filter", "hit_flash", "no_lod", "far_objects", "hide_floyd", "ssao", "ssao_strength", "ssao_radius", "bloom", "bloom_intensity", "bloom_threshold", "bloom_radius", "vignette", "vignette_strength", "vignette_size", "level_fog_distance", "no_level_fog" };
 static const char* const jfg_textures_keys[] = { "texture_dump", "dump_by_level" };
 struct JfgTabFirst { const char* tab; const char* first; };
 static const JfgTabFirst jfg_tab_first_ids[] = {
@@ -75,8 +75,8 @@ static const JfgOptionTitle jfg_option_titles[] = {
     { "res_option", "Resolution", 'c', "", "0:Original|1:Original 2x|2:Auto" },
     { "ds_option", "Downsampling", 'c', "", "1:Off|2:2x|4:4x" },
     { "msaa_option", "Anti-Aliasing (MSAA)", 'c', "", "0:None|1:2x|2:4x" },
-    { "frame_rate", "Frame Rate", 'c', "", "0:Original|1:60|2:60 + Interpolated (Experimental)" },
-    { "interp_limit", "Interpolation Limit", 'c', "", "0:Monitor|90:90|120:120|144:144|165:165|240:240" },
+    { "frame_rate", "Game Frame Rate", 'c', "", "0:30 (Original)|1:60" },
+    { "smooth_motion", "Smooth Motion", 'c', "", "0:Off|60:60|90:90|120:120|144:144|240:240|1:Monitor" },
     { "widescreen", "Widescreen", 'b', "", "" },
     { "fov", "Field of View", 'r', "%", "" },
     { "texture_filter", "Texture Filtering", 'c', "", "0:N64 Three-Point|1:Bilinear" },

@@ -105,7 +105,8 @@ static void close_update_dialog() {
 }
 
 static void open_changelog_dialog(Rml::ElementDocument* doc) {
-    // The commits since the last release (from GitHub, when they have arrived) above the changelog shipped with the game.
+    // The notes of the release in testing, or else the commits since the last release (from GitHub, when they have
+    // arrived), above the changelog shipped with the game.
     changelog_text = jfg_changelog_rml(jfg_changelog_commits() + jfg_changelog_text(), version_string);
     model_handle.DirtyVariable("changelog_text");
     remember_focus(doc);

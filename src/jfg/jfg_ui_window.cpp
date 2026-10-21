@@ -113,35 +113,27 @@ void draw_options() {
             options_help("Objects normally fade out and disappear beyond a set distance. With this they stay drawn. Takes effect "
                          "for the objects in play; level scenery itself is not affected.");
             if (FRAME_RATE_OPTION) {
-                static const char* const rates[] = { "Original (30, drops to 20)", "60", "60 + interpolated (experimental)" };
+                static const char* const rates[] = { "30 (Original, drops to 20)", "60" };
                 ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
-                changed |= ImGui::Combo("Frame rate", &g.frame_rate, rates, IM_ARRAYSIZE(rates));
+                changed |= ImGui::Combo("Game frame rate", &g.frame_rate, rates, IM_ARRAYSIZE(rates));
                 if (frame_rate_needs_restart()) {
                     ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Used after the game restarts.");
                     ImGui::SameLine();
                     if (ImGui::Button("Restart now")) jfg::settings::restart_game();
                 }
-                options_help("60: the game updates every video frame instead of every second one; game speed stays the same. If a "
-                             "frame runs long, the game simply advances further in the next one. "
-                             "Interpolated: the renderer also adds in-between frames up to your monitor's refresh rate (like the "
-                             "Graphics menu's Framerate: Display). Experimental: some moving objects may look off. A change "
-                             "applies after the game restarts. With Original, the Graphics menu's own Framerate setting "
-                             "applies.");
-                static const int limits[] = { 0, 90, 120, 144, 165, 240 };
-                static const char* const limit_names[] = { "Monitor", "90", "120", "144", "165", "240" };
-                int limit_index = 0;
-                for (int i = 0; i < IM_ARRAYSIZE(limits); i++) if (g.interp_limit == limits[i]) limit_index = i;
-                ImGui::BeginDisabled(g.frame_rate != 2);
+                options_help("How many times a second the game itself updates. 60: the game updates every video frame instead "
+                             "of every second one; game speed stays the same.");
+                static const int smooth[] = { 0, 60, 90, 120, 144, 240, 1 };
+                static const char* const smooth_names[] = { "Off", "60", "90", "120", "144", "240", "Monitor" };
+                int smooth_index = 0;
+                for (int i = 0; i < IM_ARRAYSIZE(smooth); i++) if (g.smooth_motion == smooth[i]) smooth_index = i;
                 ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
-                if (ImGui::Combo("Interpolation limit", &limit_index, limit_names, IM_ARRAYSIZE(limit_names))) {
-                    g.interp_limit = limits[limit_index];
+                if (ImGui::Combo("Smooth motion", &smooth_index, smooth_names, IM_ARRAYSIZE(smooth_names))) {
+                    g.smooth_motion = smooth[smooth_index];
                     changed = true;
                 }
-                ImGui::EndDisabled();
-                options_help("With 60 + interpolated: the most frames a second the renderer makes. Monitor: your monitor's "
-                             "refresh rate. A lower limit takes less from the graphics card (try it if the frame rate is uneven "
-                             "in a large or maximized window). Motion is smoothest at a multiple of 60 (120, 240) and at most "
-                             "your monitor's rate.");
+                options_help("How many frames a second you see: the renderer adds in-between frames to the game's own. Monitor: "
+                             "up to your monitor's refresh rate. The shadow and a few effects still move at the game's rate.");
             }
             ImGui::EndTabItem();
         }

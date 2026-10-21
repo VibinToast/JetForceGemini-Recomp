@@ -44,7 +44,8 @@ JfgUpdateProgress jfg_update_progress();
 void jfg_update_reset();
 // Puts the dialog in the failed state with this message (the update could not even start).
 void jfg_update_fail(const std::string& message);
-// After stage 3: starts the new build. The caller then quits this one.
+// After stage 3: starts the new build. With no update waiting (and always on Linux) it starts this build again with the
+// same arguments. The caller then quits this one.
 void jfg_update_restart();
 // Starts the game again, on the launcher (--launcher). The caller then quits this run. False if it could not start it.
 bool jfg_restart_into_launcher();
@@ -52,9 +53,11 @@ bool jfg_restart_into_launcher();
 // The markdown of CHANGELOG.md that ships in assets/jfg_launcher, from its first version heading (newest first).
 std::string jfg_changelog_text();
 
-// The commits made since the last release, from GitHub (empty until they have arrived, or when offline), as markdown: a
-// "## Since the last release" heading and one "- " line each. Commits by GitHub's bots (the release commit of the Release
-// workflow) are left out.
+// What is coming after this build, from GitHub (empty until it has arrived, or when offline), as markdown. When a newer
+// release is in testing and its branch (release/<x.y>) has hand-written notes in CHANGELOG.md's "## Unreleased"
+// section: a "## Coming in x.y" heading and those notes. Otherwise the commits made since the last release: a
+// "## Since the last release" heading and one "- " line each, leaving out commits by GitHub's bots (the release commit
+// of the Release workflow).
 std::string jfg_changelog_commits();
 
 // Changelog markdown (the two above, JfgUpdateInfo::changelog) as RML for the launcher's dialogs, with the version

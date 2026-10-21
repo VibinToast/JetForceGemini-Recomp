@@ -42,6 +42,7 @@ void objMoveXYZ(uint8_t* rdram, recomp_context* ctx);
 void n_alEvtqPostEvent(uint8_t* rdram, recomp_context* ctx);
 void func_8002CC70_2D870(uint8_t* rdram, recomp_context* ctx); // the follow camera's wall check, see camera_collide()
 void fb_swap(uint8_t* rdram, recomp_context* ctx);
+void viGetCurrentSize(uint8_t* rdram, recomp_context* ctx); // (s32* width, s32* height) of the frame being drawn
 void osViSwapBuffer_recomp(uint8_t* rdram, recomp_context* ctx);
 void osViBlack_recomp(uint8_t* rdram, recomp_context* ctx);
 void osRecvMesg_recomp(uint8_t* rdram, recomp_context* ctx);

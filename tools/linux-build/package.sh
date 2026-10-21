@@ -80,6 +80,10 @@ if [ "$(cat "$HERE/game/.appimage_version")" != "$(cat "$DIR/.appimage_version" 
   rm -rf "$DIR/assets" "$DIR/lib"
   cp -rf "$HERE/game/." "$DIR/" || { echo "Cannot copy the game into $DIR" >&2; exit 1; }
 fi
+# The game runs from the copy, not from this mount: with APPIMAGE set it would look for its assets in $APPDIR/usr/bin
+# (get_program_path in src/runtime/support.cpp), which this AppImage does not have, and a restarted game would point at
+# a mount that is already gone. Unset, it uses the folder it runs in.
+unset APPIMAGE APPDIR
 cd "$DIR" && exec ./JetForceGeminiRecompiled "$@"
 EOF
 chmod +x "$APPDIR/AppRun"

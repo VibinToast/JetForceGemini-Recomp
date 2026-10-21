@@ -101,3 +101,6 @@ controlGetManualAim
 
 # Audio: AI_LEN read directly (jfg_engine_wrappers.cpp)
 __amHandleFrameMsg
+
+# CPU-drawn reticles with in-between frames (jfg_cpu_layer.cpp)
+fxOutputLines

@@ -28,9 +28,12 @@ namespace jfg {
 // main loop) and the renderer's interpolation are set up for one frame rate, and switching while the game runs left
 // them out of step. The value is taken the first time the game asks for it; until then (the launcher) it follows the
 // option. Changing the option later only saves it; the menus offer a restart (frame_rate_needs_restart).
+// Off: a change applies at once (the owner's tests found that fine); true brings back taking it at start and the prompt.
+constexpr bool FRAME_RATE_NEEDS_RESTART = false;
 static std::atomic<int> g_running_frame_rate{ -1 };
 
 int game_frame_rate() {
+    if (!FRAME_RATE_NEEDS_RESTART) return g.frame_rate;
     int rate = g_running_frame_rate.load(std::memory_order_acquire);
     if (rate < 0) {
         int expected = -1;
@@ -45,9 +48,12 @@ int running_frame_rate() {
     return rate >= 0 ? rate : g.frame_rate;
 }
 
+// src/renderer/renderer.cpp: the Graphics tab's Renderer Framerate also applies from the next start.
+extern "C" int jfg_renderer_rate_needs_restart(void);
+
 bool frame_rate_needs_restart() {
     const int rate = g_running_frame_rate.load(std::memory_order_acquire);
-    return rate >= 0 && rate != g.frame_rate;
+    return (rate >= 0 && rate != g.frame_rate) || jfg_renderer_rate_needs_restart() != 0;
 }
 
 std::atomic<float> g_fps{ 0.0f }; // game frames per second, for the "Show FPS" option
@@ -103,17 +109,17 @@ extern "C" int jfg_sched_task_ready(void) {
     return 1;
 }
 
-// Read by the renderer thread (src/renderer/renderer.cpp) for the "Frame rate" option: 0 = Original (the frames the
-// game draws), 1 = Display (RT64 adds in-between frames up to the monitor's refresh rate). It is the only frame rate
-// setting in the menus: the recomp's own Framerate (rr_option, -1 here) is no longer shown.
+// Read by the renderer thread (src/renderer/renderer.cpp) for "Smooth Motion": 0 = off (the frames the game draws), 1 = RT64
+// adds in-between frames, up to the monitor's refresh rate or jfg_interp_limit(). Either Game Frame Rate. (-1, which handed
+// it to the recomp's own Framerate setting, rr_option, is no longer used.)
 extern "C" int jfg_refresh_override(void) {
-    return running_frame_rate() == 2 ? 1 : 0;
+    return g.smooth_motion != 0 ? 1 : 0; // Smooth Motion, for either Game Frame Rate
 }
 
-// Read with it for "60 + Interpolated": the "Interpolation Limit" option, the most frames a second RT64 makes
-// (0 = up to the monitor's refresh rate). RT64 never goes above the monitor's rate either way.
+// Read with it: Smooth Motion's frames a second at most (0 = up to the monitor's refresh rate). RT64 never goes above the
+// monitor's rate either way.
 extern "C" int jfg_interp_limit(void) {
-    return running_frame_rate() == 2 ? g.interp_limit : 0;
+    return g.smooth_motion > 1 ? g.smooth_motion : 0;
 }
 
 // --- 60 fps: the squad system at the game's own 30 fps cadence --------------------------------------------------------
