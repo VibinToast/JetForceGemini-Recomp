@@ -279,9 +279,9 @@ extern "C" uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_
     return speed_bits;
 }
 
-// Hook at the end of mineInit (overlay 112): s1 = the new mine, s0 = its data. Mines placed while the player holds a
+// After mineInit (overlay 112; its wrapper): the new mine and its data (mine + 0x68). Mines placed while the player holds a
 // mine weapon are the player's.
-extern "C" void jfg_mine_init(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void jfg_mine_init(uint8_t* rdram, uint32_t mine) {
     g_rdram = rdram;
     const uint32_t mine = (uint32_t)ctx->r17, md = (uint32_t)ctx->r16;
     const uint32_t md = valid_ptr(mine) ? rd32(mine + 0x68) : 0;
@@ -462,6 +462,13 @@ std::vector<ToolField> weapon_fields() {
 }
 
 } // namespace jfg
+
+// The ends of mineInit(mine, ...) and laserboltInit(bolt, ...), and the entry of objAnimDframe (see the handlers).
+JFG_WRAP(mineInit) {
+    const uint32_t mine = (uint32_t)ctx->r4;
+    mineInit_orig(rdram, ctx);
+    jfg_mine_init(rdram, mine);
+}
 
 JFG_WRAP(laserboltInit) {
     const gpr bolt = ctx->r4;

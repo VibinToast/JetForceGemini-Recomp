@@ -68,9 +68,6 @@ void jfg_blood_extra_drops(uint8_t* rdram, recomp_context* ctx, int amount); // 
 void jfg_region_reset_begin(uint8_t* rdram, recomp_context* ctx);      // entry of mainResetRegion
 void jfg_region_reset_end(uint8_t* rdram, recomp_context* ctx);        // mainResetRegion, before it returns
 // jfg_weapons.cpp
-uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_bits); // entry of objAnimDframe
-void jfg_mine_init(uint8_t* rdram, recomp_context* ctx);               // end of mineInit
-void jfg_bolt_init(uint8_t* rdram, recomp_context* ctx);               // end of laserboltInit
 uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_bits); // objAnimDframe's wrapper
 void jfg_mine_init(uint8_t* rdram, uint32_t mine);                     // after mineInit (its wrapper)
 void jfg_bolt_init(uint8_t* rdram, recomp_context* ctx);               // after laserboltInit, a0 = the bolt
