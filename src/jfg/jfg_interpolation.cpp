@@ -108,3 +108,10 @@ extern "C" void jfg_interp_pushed(uint8_t* rdram_, recomp_context* ctx) {
 }
 
 } // namespace jfg
+
+// The four matrix push functions: jfg_interp_push before, jfg_interp_pushed after.
+JFG_WRAP(camPushModelMtx) {
+    jfg_interp_push(rdram, ctx);
+    camPushModelMtx_orig(rdram, ctx);
+    jfg_interp_pushed(rdram, ctx);
+}

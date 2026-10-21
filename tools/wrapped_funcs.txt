@@ -44,3 +44,6 @@ sidekickControl
 
 # Hide Floyd: his shadow (jfg_visuals.cpp)
 shadowGenerate
+
+# Frame interpolation: matrix tags (jfg_interpolation.cpp)
+camPushModelMtx

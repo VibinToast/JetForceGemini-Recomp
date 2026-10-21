@@ -52,10 +52,6 @@ void jfg_hide_object(uint8_t* rdram, recomp_context* ctx);             // jfg_on
 void jfg_floyd_done(void);                                             // after sidekickControl
 void jfg_floyd_mute(uint8_t* rdram, recomp_context* ctx);             // jfg_on_sound_play handler
 // jfg_interpolation.cpp
-void jfg_interp_object(uint8_t* rdram, recomp_context* ctx);            // entry of objPrintObject
-void jfg_interp_object_done(uint8_t* rdram, recomp_context* ctx);       // return of objPrintObject
-void jfg_interp_push(uint8_t* rdram, recomp_context* ctx);              // entry of the four matrix push functions
-void jfg_interp_pushed(uint8_t* rdram, recomp_context* ctx);            // ... after they note the matrix written
 void jfg_interp_object(uint8_t* rdram, recomp_context* ctx);            // objPrintObject's wrapper, before
 void jfg_interp_object_done(uint8_t* rdram, recomp_context* ctx);       // ... and after
 void jfg_interp_push(uint8_t* rdram, recomp_context* ctx);              // the four matrix push functions' wrappers, before
