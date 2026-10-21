@@ -35,7 +35,10 @@ void jfg_squad_draw_end(uint8_t* rdram);                               // func_8
 void jfg_move_scale(uint8_t* rdram, recomp_context* ctx);              // objMoveXYZ's wrapper
 void jfg_boss_tick(uint8_t* rdram, recomp_context* ctx);               // jfg_on_boss_fight_control handler (jfg_api.cpp)
 void jfg_platform_move(int on);                                        // controlPlatform, around its objMoveXYZ call
-void jfg_floyd_steer(uint8_t* rdram, recomp_context* ctx, int phase);  // sidekickControl, around Floyd's roll easing
+void jfg_sidekick_begin(uint8_t* rdram, recomp_context* ctx);          // sidekickControl's wrapper (jfg_controls.cpp)
+void jfg_sidekick_end(void);
+int jfg_floyd_roll_before(uint8_t* rdram, recomp_context* ctx);       // dAngle's wrapper: Floyd missions' mouse steering
+void jfg_floyd_roll_after(uint8_t* rdram, recomp_context* ctx);
 // jfg_camera.cpp
 void jfg_camera_override(uint8_t* rdram, recomp_context* ctx);         // func_80045F00, right before the scene is drawn
 int jfg_freeze_world(void);                                            // func_80045F00, world tick or pause tick

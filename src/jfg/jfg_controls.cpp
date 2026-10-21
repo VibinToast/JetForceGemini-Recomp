@@ -388,10 +388,18 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
 // game's stick left as it is (the A / D keys and a controller still turn Floyd the game's way). The levelling drift is
 // left out while the mouse flies, and the roll gets a bank of its own from the mouse's turn rate.
 //
-// Two hooks in sidekickControl, s0 = Floyd's data, sp + 0x124 = the tick's frames. Phase 0 (0x8002FC28, before the roll
-// is eased): the bank added last tick is taken off again, so the game eases its own roll. Phase 1 (0x8002FC70, after the
-// roll, before heading, pitch and roll are copied to the object): the mouse's turn, pitch and bank are put in.
-extern "C" void jfg_floyd_steer(uint8_t* rdram_, recomp_context* ctx, int phase) {
+// sidekickControl's wrapper notes Floyd's data and frames; dAngle's wrapper does the steering around the roll easing.
+namespace {
+uint32_t g_sidekick_data = 0;   // Floyd's data (object + 0x68) while sidekickControl runs
+int g_sidekick_frames = 0;      // its updateRate
+int g_sidekick_dangles = -1;    // dAngle calls it has made; -1 outside it
+uint32_t g_bank_data = 0, g_pitch_data = 0, g_pitch_tick = 0;
+int g_bank_added = 0, g_pitch = 0;
+float g_bank = 0.0f;
+constexpr uint32_t FLOYD_YAW = 0x60, FLOYD_PITCH = 0x62, FLOYD_ROLL = 0x64, FLOYD_PITCH_RATE = 0x68;
+} // namespace
+
+extern "C" void jfg_sidekick_begin(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     constexpr uint32_t FLOYD_YAW = 0x60, FLOYD_PITCH = 0x62, FLOYD_ROLL = 0x64, FLOYD_PITCH_RATE = 0x68;
     const uint32_t obj = (uint32_t)ctx->r4;
@@ -400,6 +408,28 @@ extern "C" void jfg_floyd_steer(uint8_t* rdram_, recomp_context* ctx, int phase)
     g_sidekick_dangles = 0;
 }
 
+extern "C" void jfg_sidekick_end(void) { g_sidekick_dangles = -1; }
+
+// dAngle's wrapper, before the game's code. In a Floyd mission the first dAngle sidekickControl makes eases the roll
+// towards the turn rate; then the bank added last tick is taken off (the roll argument and Floyd's data), so the game
+// eases its own roll. Returns 1 for that call.
+extern "C" int jfg_floyd_roll_before(uint8_t* rdram_, recomp_context* ctx) {
+    if (g_sidekick_dangles < 0 || g_sidekick_dangles++ != 0) return 0;
+    g_rdram = rdram_;
+    const uint32_t data = g_sidekick_data;
+    if (rd8(ADDR_robotMission) == 0 || !valid_ptr(data)) return 0;
+    if (g_bank_added != 0 && data == g_bank_data) {
+        wr16(data + FLOYD_ROLL, (uint16_t)(rd16(data + FLOYD_ROLL) - g_bank_added));
+        ctx->r4 = (gpr)(int32_t)(int16_t)((int32_t)ctx->r4 - g_bank_added);
+    }
+    g_bank_added = 0;
+    return 1;
+}
+
+// ... and after it, before sidekickControl copies heading, pitch and roll to Floyd's object: the mouse's turn and
+// pitch go into his data, and its bank onto the eased roll (dAngle's result, which the game stores).
+extern "C" void jfg_floyd_roll_after(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
     constexpr int PITCH_LIMIT = 0x4000, ROLL_LIMIT = 520 * 20; // the game's own limits (full stick: rate 520)
     static uint32_t bank_data = 0, pitch_data = 0, pitch_tick = 0;
     static int bank_added = 0, pitch = 0;

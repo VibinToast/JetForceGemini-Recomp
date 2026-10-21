@@ -40,3 +40,4 @@ osSyncPrintf
 objPrintObject
 amSndPlay
 frontFlashScreen
+sidekickControl
