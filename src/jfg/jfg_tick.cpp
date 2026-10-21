@@ -68,19 +68,22 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     // start. With the fifth number, F5 (back to the title screen) is done first at that time: warping from the start-up
     // screens does not stay in the level (the splash sequence takes over again). The sixth replaces the front-end mode
     // passed on (from the title it is 3, the title backdrop, with no player). JFG_DEBUG_WARP2="seconds,level,character,
-    // entrance" warps a second time, the way a level exit does (an arrival through a door).
+    // entrance" warps a second time, the way a level exit does (an arrival through a door); JFG_DEBUG_WARP3, same
+    // fields, a third time after that.
     {
         static uint32_t tick = 0;
         static const auto start = std::chrono::steady_clock::now();
-        static bool warped = false, warped2 = false, reset_done = false;
+        static bool warped = false, warped2 = false, warped3 = false, reset_done = false;
         static const char* warp = std::getenv("JFG_DEBUG_WARP");
         static const char* warp2 = std::getenv("JFG_DEBUG_WARP2");
+        static const char* warp3 = std::getenv("JFG_DEBUG_WARP3");
         static const bool cheats = std::getenv("JFG_DEBUG_CHEATS") != nullptr;
-        static int w[6] = { -1, 0, 1, 0, -1, -1 }, w2[4] = { -1, 0, 1, 0 };
+        static int w[6] = { -1, 0, 1, 0, -1, -1 }, w2[4] = { -1, 0, 1, 0 }, w3[4] = { -1, 0, 1, 0 };
         if (tick == 0) {
             if (cheats) g.invulnerable = g.infinite_ammo = g.all_weapons = g.all_levels = true;
             if (warp != nullptr) std::sscanf(warp, "%d,%d,%d,%d,%d,%d", &w[0], &w[1], &w[2], &w[3], &w[4], &w[5]);
             if (warp2 != nullptr) std::sscanf(warp2, "%d,%d,%d,%d", &w2[0], &w2[1], &w2[2], &w2[3]);
+            if (warp3 != nullptr) std::sscanf(warp3, "%d,%d,%d,%d", &w3[0], &w3[1], &w3[2], &w3[3]);
         }
         tick++;
         const auto now = std::chrono::steady_clock::now();
@@ -96,6 +99,10 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         else if (warped && !warped2 && w2[0] >= 0 && now - start >= std::chrono::seconds(w2[0])) {
             warped2 = true;
             g.warp_level = w2[1]; g.warp_character = w2[2]; g.warp_entrance = w2[3]; g.pending_warp = true;
+        }
+        else if (warped2 && !warped3 && w3[0] >= 0 && now - start >= std::chrono::seconds(w3[0])) {
+            warped3 = true;
+            g.warp_level = w3[1]; g.warp_character = w3[2]; g.warp_entrance = w3[3]; g.pending_warp = true;
         }
     }
 
@@ -345,7 +352,9 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         // through unchanged - passing 0 there starts the level without its HUD and weapon selection.
         const uint32_t mode = g_warp_mode >= 0 ? (uint32_t)g_warp_mode : call_game(frontGetMode, ctx, {}) & 0xFFu;
         if (rd32(ADDR_mainGameMode) != 0) auto_save_forget_file(); // not from inside a game: no file to auto save to
-        if (g_warp_mode == 0) wr32(ADDR_mainGameMode, 0); // from the title: in game, as starting a game does
+        // From the title with a front-end mode other than the title's own (3): in game, as starting a game does. 16 is the
+        // in-game HUD (frontInstruments), as in a game loaded from a file; 0 has no HUD.
+        if (g_warp_mode >= 0 && g_warp_mode != 3) wr32(ADDR_mainGameMode, 0);
         g_warp_mode = -1;
         std::fprintf(stderr, "[jfg] debug menu: mainChangeLevel(%d, %d, %d, %u, 1, 0)\n", g.warp_level, g.warp_character, g.warp_entrance, mode);
         call_game(mainChangeLevel, ctx, { (uint32_t)g.warp_level, (uint32_t)g.warp_character, (uint32_t)g.warp_entrance, mode, 1u, 0u });
