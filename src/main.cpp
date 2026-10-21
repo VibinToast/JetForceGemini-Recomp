@@ -265,6 +265,9 @@ int main(int argc, char** argv) {
         recomp::RomValidationError rom_error = recomp::select_rom(cli_args.rom_path, supported_games[0].game_id);
         fprintf(stderr, "[jfg] --rom %s: %s\n", cli_args.rom_path,
             rom_error == recomp::RomValidationError::Good ? "accepted" : "REJECTED (wrong or modified ROM)");
+        // select_rom stores the ROM but does not mark the game valid; the check above ran before it, so on a fresh install
+        // the skip below (is_rom_valid) failed and the launcher opened. Check the stored ROMs again.
+        if (rom_error == recomp::RomValidationError::Good) recomp::check_all_stored_roms();
     }
 
     recompui::register_ui_exports();

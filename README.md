@@ -62,11 +62,23 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 tools), Git and Python 3. Run `build_windows.bat` (the first build takes 10-40 minutes, about 15 GB), then
 `run_windows.bat`.
 
-**Linux** (Vulkan GPU):
+**Linux** (Vulkan GPU). The release files run on Ubuntu 22.04 or newer, Debian 12 or newer, current Fedora and SteamOS
+3: the AppImage (on a Steam Deck: make it executable, then "Add a Non-Steam Game"; saves go to
+`~/.local/share/JetForceGeminiRecompiled`) or the portable `.tar.gz` (saves stay in its folder). Older systems
+(Ubuntu 20.04, Debian 11) are not supported. The update check and the HD pack download need `curl`, and the Open
+Folder buttons need `xdg-open` (xdg-utils).
 
+To build it yourself, install the packages for your system, then run `./build_linux.sh && ./run_linux.sh`. The build
+needs clang 15 or newer and a recent CMake, so on Ubuntu 22.04 and Debian 12 use the release files instead (or the
+build container, see `tools/package_release.sh`). On SteamOS, use the AppImage.
+
+Ubuntu 24.04 or newer, Debian 13 or newer:
 ```
-sudo apt install git cmake ninja-build clang lld python3 libsdl2-dev libvulkan-dev libgtk-3-dev libdbus-1-dev libfreetype6-dev
-./build_linux.sh && ./run_linux.sh
+sudo apt install git cmake ninja-build clang lld python3 libsdl2-dev libvulkan-dev libgtk-3-dev libdbus-1-dev libfreetype-dev zlib1g curl
+```
+Fedora:
+```
+sudo dnf install git cmake ninja-build clang lld python3 SDL2-devel vulkan-loader-devel gtk3-devel dbus-devel freetype-devel libatomic-static zlib curl
 ```
 
 The game ends up in `bin`, together with its saves and settings. The build also creates empty `bin/mods` and `bin/texture_packs` folders for mods and texture packs (see
@@ -123,8 +135,7 @@ commit here.
 
 ## AI disclosure
 
-This project was built with heavy help from AI (Claude), under the direction of the project owner. It has not had
-an independent code review.
+This project is AI-assisted (Claude) and directed by a software developer who reviews the modding API and some of the port's own code. This dev (hello 🙂) has limited knowledge of recompiled MIPS game code and the low-level patches so these are tested and checked by hand.
 
 ## Legal
 
