@@ -211,7 +211,7 @@ are written here by hand and become that version's notes when it is released.
 - Show the Mods tab again
 - Update JFG 4K texture pack link in README
 - Document HD texture packs in the README
-- Add a launcher in Jet Force Gemini colours
+- Add a launcher in Jet Force Gemini colors
 - Document the features and keys in the README
 - Add automatic releases
 - Add the Gameplay, Visuals, Profiles and Textures tabs to the settings menu
