@@ -7,24 +7,19 @@
 #include <utility>
 #include <vector>
 
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <sys/mman.h>
+#endif
+
 #include "recomp.h"
 
 // N64Recomp only emits this when the toml has an `entrypoint`; ours declares the entrypoint as a manual
 // function because the decomp ELF marks `entrypoint` as an absolute symbol.
 gpr get_entrypoint_address() { return (gpr)(int32_t)0x80000400u; }
-
-// --- Anti-tamper -----------------------------------------------------------------------------------------------
-// src/osBootRamTest.c: the retail functions read IPL3 (CIC-6105) boot leftovers from RDRAM via KSEG1 and return
-// TRUE when they match. There is no IPL3 stage here, so return the result genuine hardware produces.
-// The results are stored in D_800A331C / D_800A3320 and consulted later (mainSetDefaultGame, mainSetGameFlag,
-// diCpu); FALSE makes the game sabotage itself.
-extern "C" void osBootRamTest1_6105(uint8_t* rdram, recomp_context* ctx) {
-    ctx->r2 = 1;
-}
-
-extern "C" void osBootRamTest2_6105(uint8_t* rdram, recomp_context* ctx) {
-    ctx->r2 = 1;
-}
 
 // --- Overlays ----------------------------------------------------------------------------------------------------
 // The game's runtime linker (src/runLink.c) still loads, relocates and frees overlays in emulated RDRAM exactly as on
@@ -187,17 +182,54 @@ extern "C" void __osSiRawStartDma_recomp(uint8_t* rdram, recomp_context* ctx) {
 // --- Cartridge reads through the KSEG1 mapping (0xB0000000 + offset) ---------------------------------------------
 // Used by the hooks in osCartTest3_6105 / osCartTest4_6105 (see jfg.us.toml): returns the big-endian word of the
 // user's ROM at that cartridge address, which is what the PI bus would deliver.
+// --- Hardware the game reads directly (KSEG1) ------------------------------------------------------------------
+// A few game functions read hardware registers or boot leftovers through KSEG1 instead of through libultra. Recompiled
+// code turns 0xA0000000 + x into rdram + 0x20000000 + x, past the emulated RDRAM, in the runtime's reserved but
+// inaccessible range. Those pages are opened here and hold what genuine hardware delivers, so the game's own code
+// runs unchanged:
+// - osBootRamTest1_6105 / 2 (boot): words the CIC-6105 IPL3 leaves at physical 0x2FB1F4 / 0x2FE1C0, 0xAD090010 and
+//   0xAD170014. The results are kept in D_800A331C / D_800A3320 and consulted later (mainSetDefaultGame,
+//   mainSetGameFlag, diCpu); FALSE makes the game sabotage itself.
+// - osRamTest4_6105 (overlay 156): the IPL3 leftover 0xC86E2000 at physical 0x2E8.
+// - osCartTest3_6105 / 4 (overlays 111, 133): PI_STATUS (0xA4600010) reads idle, and the cartridge words at
+//   0xB0000454 / 0xB0000A5C (the boot code) come from the user's ROM, so the comparison runs against real data.
+// - __amHandleFrameMsg reads AI_LEN (0xA4500004) inlined; its wrapper (jfg_engine_wrappers.cpp) puts the runtime's
+//   audio backend's value there first.
 namespace recomp { std::span<const uint8_t> get_rom(); }
 
 extern "C" uint32_t jfg_cart_read32(uint32_t address) {
+namespace {
+bool open_hardware_page(uint8_t* rdram, uint32_t kseg1) {
+    uint8_t* page = rdram + ((uint64_t)kseg1 - 0x80000000u) / 0x1000 * 0x1000;
+#ifdef _WIN32
+    DWORD old_protect;
+    return VirtualProtect(page, 0x1000, PAGE_READWRITE, &old_protect) != 0;
+#else
+    return mprotect(page, 0x1000, PROT_READ | PROT_WRITE) == 0;
+#endif
+}
+
+void map_hardware(uint8_t* rdram) {
+    const uint32_t pages[] = { 0xA0000000u, 0xA02FB000u, 0xA02FE000u, 0xA4500000u, 0xA4600000u, 0xB0000000u };
+    for (uint32_t page : pages) {
+        if (!open_hardware_page(rdram, page)) fprintf(stderr, "[jfg] could not open the page for 0x%08X\n", page);
+    }
+    MEM_W(0, (gpr)(int32_t)0xA02FB1F4u) = (int32_t)0xAD090010u;
+    MEM_W(0, (gpr)(int32_t)0xA02FE1C0u) = (int32_t)0xAD170014u;
+    MEM_W(0, (gpr)(int32_t)0xA00002E8u) = (int32_t)0xC86E2000u;
+    // the first 4 KB of the cartridge, as the words a KSEG1 read gets (the ROM image is big-endian)
     std::span<const uint8_t> rom = recomp::get_rom();
     uint32_t offset = address & 0x0FFFFFFFu;
     if ((size_t)offset + 4 > rom.size()) {
         fprintf(stderr, "[jfg] cartridge read outside ROM: 0x%08X\n", address);
         return 0;
+    for (uint32_t off = 0; off + 4 <= 0x1000 && off + 4 <= rom.size(); off += 4) {
+        const uint32_t word = ((uint32_t)rom[off] << 24) | ((uint32_t)rom[off + 1] << 16) | ((uint32_t)rom[off + 2] << 8) | rom[off + 3];
+        MEM_W(0, (gpr)(int32_t)(0xB0000000u + off)) = (int32_t)word;
     }
     return ((uint32_t)rom[offset] << 24) | ((uint32_t)rom[offset + 1] << 16) | ((uint32_t)rom[offset + 2] << 8) | rom[offset + 3];
 }
+} // namespace
 
 // --- osCicId ----------------------------------------------------------------------------------------------------
 // IPL3 stores the CIC type it booted with at 0x80000310 (osCicId). The runtime's boot emulation leaves it 0, and
@@ -209,6 +241,7 @@ extern "C" void jfg_mods_alias_overlays(void); // jfg_mods.cpp
 extern "C" void jfg_on_init(uint8_t* rdram, recomp_context* ctx) {
     (void)ctx;
     MEM_W(0, (gpr)(int32_t)0x80000310) = 6105;
+    map_hardware(rdram);
     // Mod support: overlay functions are also callable at their private link addresses (see jfg_mods.cpp). The
     // runtime calls this after building its function table and before loading mods.
     jfg_mods_alias_overlays();
