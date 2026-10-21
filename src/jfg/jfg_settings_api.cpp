@@ -135,11 +135,20 @@ std::vector<std::string> texture_packs() {
     return out;
 }
 std::string texture_pack_name(const std::string& folder) { return pack_display_name(folder); }
+void texture_pack_join_poll() { join_split_packs(); }
+std::string texture_pack_join_text(int& finished) { return pack_join_text(finished); }
 TexturePackDetails texture_pack_details(const std::string& folder) {
     PackInfo info = texture_pack_info(folder);
-    return { info.has_json, info.serial, info.name, info.version, info.author, info.website, info.description, std::move(info.image) };
+    return { info.has_json, info.serial, info.version, info.variant, info.author, info.website, info.description, std::move(info.image) };
 }
-std::string texture_pack() { load_texture_pack_choice(); std::lock_guard lock(g_pack_mutex); return g_pack_folder; }
+// The pack in use; "" (Off) also when it was removed or renamed while the game runs.
+std::string texture_pack() {
+    load_texture_pack_choice();
+    std::string folder;
+    { std::lock_guard lock(g_pack_mutex); folder = g_pack_folder; }
+    std::error_code ec;
+    return !folder.empty() && std::filesystem::exists(std::filesystem::u8path(folder), ec) ? folder : std::string();
+}
 void set_texture_pack(const std::string& folder) { jfg::set_texture_pack(folder); }
 int texture_pack_count() { return g_texture_pack_count.load(); }
 int dumped_texture_files() {

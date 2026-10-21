@@ -66,6 +66,7 @@
 		/* JFG PORT: the Textures tab's packs as cards (image, name, version and author from the pack's credits.json), and on
 		   the right the focused pack's details. */
 		.jfg-pack-list { display: block; width: 100%; margin-top: 16dp; }
+		.jfg-pack-join { display: block; margin: 12dp 12dp 0dp; font-size: 20dp; line-height: 28dp; color: #ffb21a; }
 		.jfg-pack { display: flex; flex-direction: row; align-items: center; width: 100%; box-sizing: border-box; margin: 0dp 0dp 12dp; padding: 12dp;
 			text-align: left; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
 		.jfg-pack__thumb { flex: 0 0 auto; width: 72dp; height: 72dp; margin-right: 22dp; background-color: rgba(3, 8, 22, 0.8); }
@@ -73,6 +74,14 @@
 		.jfg-pack__name { display: block; }
 		.jfg-pack__meta { display: block; margin-top: 10dp; font-size: 20dp; line-height: 24dp; letter-spacing: 1dp; font-weight: normal; color: #8199bf; }
 		.jfg-pack.jfg-selected .jfg-pack__meta { color: #e8f3ff; }
+		/* The pack's variant (credits.json, "4K") as a gold bubble after its name. */
+		.jfg-pack__variant { display: inline-block; margin-left: 12dp; padding: 3dp 13dp; border-radius: 14dp; background-color: #ffb21a; color: #050b1c;
+			font-size: 21dp; line-height: 23dp; letter-spacing: 1dp; vertical-align: middle; }
+		.jfg-pack__size { margin-left: 16dp; }
+		.jfg-pack__tags { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; margin-left: 16dp; }
+		.jfg-pack__update { display: block; margin-bottom: 8dp; padding: 3dp 10dp; background-color: #ffb21a; color: #050b1c;
+			font-size: 16dp; line-height: 18dp; letter-spacing: 1dp; text-transform: uppercase; }
+		.jfg-pack__tags .jfg-pack__kind { margin-left: 0dp; }
 		.jfg-pack__kind { flex: 0 0 auto; margin-left: 16dp; padding: 4dp 10dp; border-width: 2dp; border-color: #ffb21a; color: #ffb21a;
 			font-size: 18dp; line-height: 20dp; letter-spacing: 1dp; text-transform: uppercase; }
 		.jfg-pack-detail__image { display: block; width: 160dp; height: 160dp; margin-bottom: 28dp; }
