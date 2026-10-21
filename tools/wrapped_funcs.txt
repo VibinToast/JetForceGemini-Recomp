@@ -31,3 +31,4 @@ mineInit
 mainGetGameFlag
 mainResetRegion
 mmAlloc
+mmAlloc2
