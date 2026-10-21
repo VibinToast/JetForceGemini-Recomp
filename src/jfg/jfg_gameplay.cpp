@@ -83,3 +83,18 @@ JFG_WRAP(mainGetGameFlag) {
     }
     mainGetGameFlag_orig(rdram, ctx);
 }
+
+// Refuel speed: refuelControl's fuel per tick is objTvTimes(updateRate * 6) (its only call of it); scaled here.
+static JfgCaller g_refuel;
+
+JFG_WRAP(refuelControl) {
+    JfgCaller::Scope scope(g_refuel, ctx, 0x80);
+    refuelControl_orig(rdram, ctx);
+}
+
+JFG_WRAP(objTvTimes) {
+    const bool refuel = g_refuel.direct(ctx);
+    objTvTimes_orig(rdram, ctx);
+    if (!refuel) return;
+    ctx->r2 = (gpr)(int32_t)jfg_refuel_amount((int32_t)ctx->r2);
+}
