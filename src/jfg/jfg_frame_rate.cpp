@@ -12,6 +12,7 @@
 
 #include "librecomp/overlays.hpp"
 
+#include "jfg_api.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -702,6 +703,7 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
                 std::fprintf(stderr, "[jfg] squad: %d members this tick, %u drawn in between since the last line, %u extra poses put back\n", (int)g_squad_members.size(), g_squad_smoothed, g_squad_data_kept);
                 g_squad_smoothed = 0;
                 g_squad_data_kept = 0;
+                jfg::api::log_stats();
                 { load_level_names(); const int lv = (int16_t)rd16(ADDR_currentLevel); if (lv >= 0 && lv < (int)g_level_names.size()) std::fprintf(stderr, "[jfg] level name '%s'\n", g_level_names[lv].c_str()); }
                 n = 0; sum = 0; t0 = std::chrono::steady_clock::now();
             }
