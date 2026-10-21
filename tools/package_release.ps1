@@ -1,5 +1,5 @@
 # Builds the Windows release and uploads it to GitHub. Run it through package_release.bat. Needs the GitHub CLI (gh),
-# signed in (gh auth login), for anything that talks to GitHub. See docs/RELEASING.md.
+# signed in (gh auth login), for anything that talks to GitHub. See RELEASING.md in the owner's Recomp-Docs notes.
 #
 #   package_release.bat                    finds the draft release waiting for a Windows build (made by the Release workflow
 #                                          when something is merged into main), builds that release's exact commit in
