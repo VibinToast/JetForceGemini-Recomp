@@ -122,6 +122,13 @@ JFG_WRAP(runlinkFreeCode) {
     g_runlink = prev;
 }
 
+JFG_WRAP(runlinkUnloadOverlay) {
+    const int prev = g_runlink;
+    g_runlink = 3;
+    runlinkUnloadOverlay_orig(rdram, ctx);
+    g_runlink = prev;
+}
+
 JFG_WRAP(mmFree) {
     if (g_runlink == 3 && jfg_overlay_is_loaded((uint32_t)ctx->r4)) jfg_overlay_unloading(rdram, ctx);
     mmFree_orig(rdram, ctx);

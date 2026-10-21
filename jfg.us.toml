@@ -40,13 +40,6 @@ stubs = [
 vram = 0x80074E2C
 func = "gen_anim_data"
 value = 0x00000000
-# runlinkFreeCode / runlinkUnloadOverlay, at the mmFree of a loaded overlay ($a0 = its address). This is AFTER the
-# overlay's own exit function has been called through runlinkCallResumeFunction, which still needs the mapping.
-# (runlinkSuspendCode frees through runlinkFreeCode.)
-[[patches.hook]]
-func = "runlinkUnloadOverlay"
-before_vram = 0x800537D0
-text = "{ void jfg_overlay_unloading(uint8_t*, recomp_context*); jfg_overlay_unloading(rdram, ctx); }"
 
 # --- Direct hardware access in game code ----------------------------------------------------------------------------
 # __amHandleFrameMsg (audio manager) has osAiGetLength inlined: `lw $t7, AI_LEN_REG` through KSEG1 (0xA4500004).

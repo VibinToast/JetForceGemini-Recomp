@@ -86,8 +86,6 @@ void jfg_game_break(uint8_t* rdram, recomp_context* ctx);              // mathBr
 void jfg_change_level_log(uint8_t* rdram, recomp_context* ctx);        // jfg_on_level_change handler (jfg_api.cpp)
 void jfg_sync_printf(uint8_t* rdram, recomp_context* ctx);             // osSyncPrintf's wrapper (replaces it)
 // jfg_glue.cpp
-void jfg_overlay_loaded(uint8_t* rdram, recomp_context* ctx);          // runlinkDownloadCode, runlinkResumeCode
-void jfg_overlay_unloading(uint8_t* rdram, recomp_context* ctx);       // runlinkFreeCode, runlinkUnloadOverlay
 void jfg_overlay_loaded(uint8_t* rdram, recomp_context* ctx);          // runlinkDownloadCode, runlinkResumeCode (wrappers)
 void jfg_overlay_unloading(uint8_t* rdram, recomp_context* ctx);       // runlinkFreeCode, runlinkUnloadOverlay (wrappers)
 uint32_t jfg_cart_read32(uint32_t address);                            // osCartTest3_6105, osCartTest4_6105
