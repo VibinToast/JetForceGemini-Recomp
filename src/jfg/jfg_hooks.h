@@ -110,6 +110,8 @@ void jfg_texture_dump_scene(char* buf, int size);                      // jfg_te
 int jfg_texture_pack_current(char* buf, int size);                     // jfg_texture_packs.cpp
 int jfg_refresh_override(void);                                        // jfg_frame_rate.cpp
 int jfg_interp_limit(void);                                            // jfg_frame_rate.cpp
+void jfg_cpu_lines_before(uint8_t* rdram, recomp_context* ctx);        // jfg_cpu_layer.cpp: entry of fxOutputLines
+void jfg_cpu_lines_after(uint8_t* rdram, recomp_context* ctx);         // ... and mainCPUeffects after it returns
 int jfg_widescreen_active(void);                                       // jfg_visuals.cpp
 int jfg_texture_three_point(void);                                     // jfg_visuals.cpp
 int jfg_output_filtering(void);                                        // jfg_visuals.cpp

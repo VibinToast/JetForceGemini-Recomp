@@ -663,3 +663,15 @@ text = "{ int jfg_flag_override(int); if (jfg_flag_override((int)ctx->r4)) { ctx
 func = "func_80045F00_46B00"
 before_vram = 0x80046058
 text = "{ int jfg_freeze_world(void); if (jfg_freeze_world()) ctx->r3 = 1; }"
+
+# CPU-drawn reticles with in-between frames (src/jfg/jfg_cpu_layer.cpp): what fxOutputLines adds to the finished frame
+# is taken out again and drawn on every presented frame by the render hook, while RT64 adds in-between frames.
+[[patches.hook]]
+func = "fxOutputLines"
+before_vram = 0x8006E188
+text = "{ void jfg_cpu_lines_before(uint8_t*, recomp_context*); jfg_cpu_lines_before(rdram, ctx); }"
+
+[[patches.hook]]
+func = "mainCPUeffects"
+before_vram = 0x80045B78
+text = "{ void jfg_cpu_lines_after(uint8_t*, recomp_context*); jfg_cpu_lines_after(rdram, ctx); }"
