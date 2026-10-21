@@ -146,14 +146,17 @@ bool cpu_layer_build(ImDrawList* list) {
             oy = (prev->cy - cur->cy) * back;
         }
     }
-    const float sx = info.viewWidth / (float)info.fbWidth, sy = info.viewHeight / (float)info.fbHeight;
+    // Square pixels, centred: in widescreen RT64 stretches the frame across the wider window, but pastes CPU-drawn pixels
+    // at the frame's height scale in the middle (RenderTarget::copyFromChanges, "pillarBox"), where the 4:3 picture sits.
+    const float sy = info.viewHeight / (float)info.fbHeight, sx = sy;
+    const float left = info.viewX + 0.5f * info.viewWidth - 0.5f * (float)info.fbWidth * sx;
     for (const LayerPixel& p : cur->pixels) {
         // Additive in the game: shown as the added colour over the picture, covering it by the amount of the brightest
         // channel added (result = added + (1 - that) x picture).
         const int m = std::max({ (int)p.r, (int)p.g, (int)p.b });
         const float alpha = (float)m / 31.0f;
         const ImU32 col = IM_COL32(p.r * 255 / m, p.g * 255 / m, p.b * 255 / m, (int)(alpha * 255.0f + 0.5f));
-        const float x0 = info.viewX + ((float)p.x + ox) * sx, y0 = info.viewY + ((float)p.y + oy) * sy;
+        const float x0 = left + ((float)p.x + ox) * sx, y0 = info.viewY + ((float)p.y + oy) * sy;
         list->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + sx, y0 + sy), col);
     }
     return true;
