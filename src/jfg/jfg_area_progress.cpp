@@ -227,3 +227,11 @@ extern "C" void jfg_region_reset_end(uint8_t* rdram_, recomp_context* ctx) {
 }
 
 } // namespace jfg
+
+// mainResetRegion clears an area's progress when it is entered: before it, the progress loaded with the file is
+// noted; after it, it's put back when Keep Area Progress is on and it matches what was kept with that save.
+JFG_WRAP(mainResetRegion) {
+    jfg_region_reset_begin(rdram, ctx);
+    mainResetRegion_orig(rdram, ctx);
+    jfg_region_reset_end(rdram, ctx);
+}

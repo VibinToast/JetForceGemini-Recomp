@@ -65,8 +65,8 @@ void jfg_gore_on_blood_hit(uint8_t* rdram, recomp_context* ctx);       // jfg_on
 void jfg_gore_limb(uint8_t* rdram, recomp_context* ctx);               // jfg_on_severed_limb_tick handler
 void jfg_blood_extra_drops(uint8_t* rdram, recomp_context* ctx, int amount); // bloodSpurtAdd's wrapper
 // jfg_area_progress.cpp
-void jfg_region_reset_begin(uint8_t* rdram, recomp_context* ctx);      // entry of mainResetRegion
-void jfg_region_reset_end(uint8_t* rdram, recomp_context* ctx);        // mainResetRegion, before it returns
+void jfg_region_reset_begin(uint8_t* rdram, recomp_context* ctx);      // mainResetRegion's wrapper, before
+void jfg_region_reset_end(uint8_t* rdram, recomp_context* ctx);        // ... and after
 // jfg_weapons.cpp
 uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_bits); // objAnimDframe's wrapper
 void jfg_mine_init(uint8_t* rdram, uint32_t mine);                     // after mineInit (its wrapper)
