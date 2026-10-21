@@ -953,7 +953,11 @@ void RT64Context::check_texture_pack_actions() {
         const std::filesystem::path pack_dir = dino::config::get_app_folder_path() / std::filesystem::u8path(jfg_pack_folder);
         std::error_code pack_ec;
         jfg_texture_pack_set_count(-1);
-        const bool pack_is_rtz = !jfg_pack_folder.empty() && pack_dir.extension() == ".rtz" && std::filesystem::is_regular_file(pack_dir, pack_ec);
+        // The extension in any case (Pack.RTZ too), as the pack list takes it (jfg_texture_packs.cpp).
+        const auto pack_ext_u8 = pack_dir.extension().u8string();
+        std::string pack_ext(pack_ext_u8.begin(), pack_ext_u8.end());
+        for (char& c : pack_ext) c = (char)std::tolower((unsigned char)c);
+        const bool pack_is_rtz = !jfg_pack_folder.empty() && pack_ext == ".rtz" && std::filesystem::is_regular_file(pack_dir, pack_ec);
         if (!jfg_pack_folder.empty() && (pack_is_rtz || std::filesystem::is_directory(pack_dir, pack_ec))) {
             size_t count = 0;
             if (pack_is_rtz) {
