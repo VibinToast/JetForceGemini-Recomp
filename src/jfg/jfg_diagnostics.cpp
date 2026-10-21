@@ -98,6 +98,7 @@ constexpr uint32_t ADDR_ObjListCount = 0x800F2CA8, ADDR_NoAddObjListCount = 0x80
 constexpr int OBJ_STEPS = 8, OBJ_DEPTH = 8;
 const char* const OBJ_STEP_NAMES[OBJ_STEPS] = { "objdef", "8000F978", "texture", "model", "model2", "sprite", "allocR", "alloc" };
 struct ObjSetupRecord { bool ran[OBJ_STEPS]; uint32_t result[OBJ_STEPS]; };
+struct ObjSetupRecord { bool ran[OBJ_STEPS]; uint32_t result[OBJ_STEPS]; int type; bool typed; };
 ObjSetupRecord g_obj_setup[OBJ_DEPTH];
 int g_obj_depth = 0;
 }
@@ -226,6 +227,8 @@ JFG_WRAP(mmAlloc) {
     const uint32_t size = (uint32_t)ctx->r4, colour = (uint32_t)ctx->r5;
     mmAlloc_orig(rdram, ctx);
     jfg_mm_alloc_check(rdram, ctx, size, colour);
+}
+
 }
 
 JFG_WRAP(mmAlloc2) {
