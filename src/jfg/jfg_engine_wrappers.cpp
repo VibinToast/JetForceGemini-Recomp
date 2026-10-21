@@ -80,3 +80,28 @@ JFG_WRAP(trackGetFog) {
     trackGetFog_orig(rdram, ctx);
     if (fog) jfg_game_fog(rdram, (uint32_t)ctx->r29); // the caller's $sp, as trackGetFog returned
 }
+
+// --- overlays: the runtime learns where the game's own linker put an overlay, and when it frees one -------------------
+// runlinkDownloadCode and runlinkResumeCode: before the romCopy of the overlay's code (from the header's ROM address
+// to its load address; $fp = the OverlayHeader). Nothing in the overlay runs before its copies are done.
+// runlinkFreeCode / runlinkUnloadOverlay: before the mmFree of the overlay's own block, which comes after the overlay's
+// exit function has run (it still needs the mapping). runlinkSuspendCode frees through runlinkFreeCode.
+static int g_runlink = 0; // 1 = in runlinkDownloadCode, 2 = in runlinkResumeCode, 3 = freeing
+static bool g_runlink_loaded = false;
+
+JFG_WRAP(runlinkDownloadCode) {
+    const int prev = g_runlink; const bool prev_loaded = g_runlink_loaded;
+    g_runlink = 1; g_runlink_loaded = false;
+    runlinkDownloadCode_orig(rdram, ctx);
+    g_runlink = prev; g_runlink_loaded = prev_loaded;
+}
+
+JFG_WRAP(romCopy) {
+    const gpr fp = ctx->r30;
+    if ((g_runlink == 1 || g_runlink == 2) && !g_runlink_loaded && (uint32_t)ctx->r4 == (uint32_t)MEM_W(4, fp) &&
+        (uint32_t)ctx->r5 == (uint32_t)MEM_W(0, fp)) {
+        g_runlink_loaded = true;
+        jfg_overlay_loaded(rdram, ctx);
+    }
+    romCopy_orig(rdram, ctx);
+}
