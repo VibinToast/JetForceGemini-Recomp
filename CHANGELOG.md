@@ -5,8 +5,6 @@ are written here by hand and become that version's notes when it is released.
 
 ## Unreleased
 
-<!-- DRAFT for 1.2, from the commit messages since v1.1.8. Edit freely. Lines like this one are notes for the owner: the release leaves them out. -->
-
 ### New options
 
 - Auto Save: the game saves itself a few seconds after you arrive in a level and every few minutes, so a crash no longer loses your progress. It is on in every profile except Default (the original game).
