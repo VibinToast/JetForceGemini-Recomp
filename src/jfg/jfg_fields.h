@@ -7,7 +7,7 @@
 // The accessors compile to the same code as the reads and writes they replace.
 //
 // The names are the port's own (the decomp's names are private for now). Where a field's meaning is a guess, its
-// comment says so.
+// comment says so. Angles are uint16_t (they wrap); the pitches the port clamps are int16_t.
 #pragma once
 
 #include <cstdint>
@@ -75,7 +75,7 @@ struct ArrayField {
 // A game object (anything in play: characters, enemies, squad members, bolts, mines, Floyd, ...).
 namespace Obj {
 using Rotation   = ArrayField<uint16_t, 0x00>; // yaw, pitch, roll (index 0, 1, 2)
-using Yaw        = Field<int16_t, 0x00>;
+using Yaw        = Field<uint16_t, 0x00>;
 using PosX       = Field<float, 0x0C>;
 using PosY       = Field<float, 0x10>;
 using PosZ       = Field<float, 0x14>;
@@ -120,9 +120,14 @@ namespace PlayerData {
 using SavedX       = Field<float, 0x3C>;    // position kept for working out its velocity
 using SavedY       = Field<float, 0x40>;
 using SavedZ       = Field<float, 0x44>;
-using BodyYawCopy  = Field<int16_t, 0x106>;
-using BodyYaw      = Field<int16_t, 0x11C>;
-using ReticleYaw   = Field<int16_t, 0x1CE>;
+using BodyYawCopy  = Field<uint16_t, 0x106>; // the object's yaw and the copies the control code keeps and writes back
+using BodyYaw      = Field<uint16_t, 0x11C>;
+using BodyYawCopy2 = Field<uint16_t, 0x122>;
+using BodyYawCopy3 = Field<uint16_t, 0x1C6>;
+using BodyYawCopy4 = Field<uint16_t, 0x1CA>;
+using ReticleYaw   = Field<int16_t, 0x1CE>;  // the aim's offset from the body, and two copies
+using ReticleYawCopy  = Field<int16_t, 0x1DC>;
+using ReticleYawCopy2 = Field<int16_t, 0x246>;
 using ReticlePitch = Field<int16_t, 0x1E0>;
 using ViewPitch    = Field<int16_t, 0x1E2>;
 using AimZoom      = Field<float, 0x1EC>;   // sniper zoom, 1..5
@@ -134,14 +139,14 @@ using State        = Field<uint8_t, 0x568>; // StateAiming, StateJumping, ...
 using ThrowLock    = Field<int8_t, 0x577>;  // controls held during a throw, in frames
 using LastWeapon   = Field<uint8_t, 0x585>; // the weapon slot selected before
 using Fuel         = Field<int16_t, 0x58C>; // jetpack fuel
-constexpr uint8_t StateAiming = 0x0B, StateJumping = 3;
+constexpr uint8_t StateJumping = 3, StateSwimming = 4, StateAiming = 0x0B;
 }
 
 // Floyd's own data (Obj::Data of Floyd).
 namespace SidekickData {
-using Yaw       = Field<int16_t, 0x60>;
+using Yaw       = Field<uint16_t, 0x60>;
 using Pitch     = Field<int16_t, 0x62>;
-using Roll      = Field<int16_t, 0x64>;
+using Roll      = Field<uint16_t, 0x64>;
 using PitchRate = Field<int16_t, 0x68>;
 }
 
@@ -221,8 +226,8 @@ constexpr uint32_t Size = 0x30;
 
 // A camera (ADDR_cameraActorArray + camera * Camera::Size).
 namespace Camera {
-using Yaw   = Field<int16_t, 0x00>;
-using Pitch = Field<int16_t, 0x02>;
+using Yaw   = Field<uint16_t, 0x00>; // minus the heading it looks along
+using Pitch = Field<uint16_t, 0x02>;
 using PosX  = Field<float, 0x0C>;
 using PosY  = Field<float, 0x10>;
 using PosZ  = Field<float, 0x14>;
@@ -242,6 +247,14 @@ using Flags0To19  = Field<uint32_t, 0x64>;
 using Flags82To87 = Field<uint16_t, 0x68>;
 using Flags66To70 = Field<uint8_t, 0x6A>;
 using Flags73To76 = Field<uint8_t, 0x6B>;
+}
+
+// A controller's state (libultra's OSContPad; ADDR_sControllerCurrData + controller * Pad::Size).
+namespace Pad {
+using Buttons = Field<uint16_t, 0x00>;
+using StickX  = Field<int8_t, 0x02>;
+using StickY  = Field<int8_t, 0x03>;
+constexpr uint32_t Size = 6;
 }
 
 // --- engine -----------------------------------------------------------------------------------------------------------
