@@ -23,3 +23,4 @@ TrapDanglingJump
 
 # 60 fps and gameplay fixes, error handling (wrappers next to their handlers)
 FlowerBoltControl
+dAngle
