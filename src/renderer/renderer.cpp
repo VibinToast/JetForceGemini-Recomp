@@ -602,7 +602,9 @@ void RT64Context::update_game_aspect_override() {
         // And the "Frame rate" option (Display = interpolate up to the monitor's refresh rate; with an Interpolation
         // Limit, up to that).
         static int applied_rate = -2, applied_limit = -1;
-        if ((jfg_rr_option_used.load() < 0) && ultramodern::is_game_started()) {
+        // Off: Smooth Motion (src/jfg/jfg_frame_rate.cpp) replaced the Renderer Framerate, and a change applies at once.
+        constexpr bool JFG_RR_NEEDS_RESTART = false;
+        if (JFG_RR_NEEDS_RESTART && (jfg_rr_option_used.load() < 0) && ultramodern::is_game_started()) {
             const auto &started = ultramodern::renderer::get_graphics_config();
             jfg_rr_value_used.store(started.rr_manual_value);
             jfg_rr_option_used.store((int)started.rr_option);
