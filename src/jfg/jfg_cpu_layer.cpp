@@ -1,15 +1,15 @@
-// Jet Force Gemini port: the CPU-drawn reticles with in-between frames.
+// Jet Force Gemini port: the CPU-drawn rain and reticles with in-between frames.
 //
-// Most weapons' reticles (and their tiny "LOCK" text and numbers) are not drawn by the RDP: fxOutputLines adds them
-// straight into the finished framebuffer in RDRAM (decomp docs/PORT_FINDINGS.md, "CPU line drawing"). RT64 only notices
-// such pixels when the next frame's display list arrives (checkRDRAM), and copies them into that one framebuffer's
-// picture. With the Renderer Framerate above 30 the frames on screen are mostly in-between frames made from draw calls,
-// so the reticle was missing (or, at best, moved at 30).
+// Rain and most weapons' reticles (and their tiny "LOCK" text and numbers) are not drawn by the RDP: rainDraw and
+// fxOutputLines add them straight into the finished framebuffer in RDRAM (decomp docs/PORT_FINDINGS.md, "CPU line
+// drawing"). RT64 only notices such pixels when the next frame's display list arrives (checkRDRAM), and copies them
+// into that one framebuffer's picture. With Smooth Motion the frames on screen are mostly in-between frames made from
+// draw calls, so the reticles and the rain were missing.
 //
-// While RT64 adds in-between frames, the pixels fxOutputLines adds are taken out of RDRAM again (so RT64 never sees
+// While RT64 adds in-between frames, the pixels these effects add are taken out of RDRAM again (so RT64 never sees
 // them) and kept as a layer for the framebuffer they were drawn into. The render hook (src/debug_ui/backend.cpp) draws
-// that layer on every frame presented for that framebuffer, moved between the previous layer's place and this one's by
-// the frame's weight, the way RT64 moves the scene.
+// that layer on every frame presented for that framebuffer. The reticles' pixels are moved between the previous
+// layer's place and this one's by the frame's weight, the way RT64 moves the scene; rain, new every frame, is not.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -27,12 +27,13 @@ extern "C" int jfg_renderer_adds_frames(void); // src/renderer/renderer.cpp
 namespace jfg {
 namespace {
 
-struct LayerPixel { uint16_t x, y; uint8_t r, g, b; };
+struct LayerPixel { uint16_t x, y; uint8_t r, g, b; bool still; }; // still: drawn where it is, never moved (rain)
 struct Layer {
     uint32_t fb = 0;        // physical address, as RT64's VI reports it
     uint32_t seq = 0;       // 0 = empty slot
     uint32_t width = 0, height = 0;
-    float cx = 0, cy = 0;   // centre of the lit pixels
+    float cx = 0, cy = 0;   // centre of the lit pixels that move with blending (the reticle's lines and text)
+    uint32_t moving = 0;    // how many of those
     std::vector<LayerPixel> pixels;
 };
 
@@ -40,10 +41,13 @@ std::mutex g_layer_mutex;
 Layer g_layers[2];         // the two most recent, for the double-buffered screen
 uint32_t g_layer_seq = 0;
 
-// Game thread only.
+// Game thread only. mainCPUeffects draws rain (rainDraw) and then the lines (fxOutputLines); each is captured on its
+// own (refractOutput, between them, moves pixels instead of adding them and is left as it is) into one pending layer,
+// published once the lines are done.
 bool g_capturing = false;
 uint32_t g_capture_screen = 0, g_capture_width = 0, g_capture_height = 0;
 std::vector<uint8_t> g_before;
+Layer g_pending;
 
 inline uint16_t pixel_at(const uint8_t* raw, uint32_t offset) {
     uint16_t v;
@@ -51,10 +55,8 @@ inline uint16_t pixel_at(const uint8_t* raw, uint32_t offset) {
     return v;
 }
 
-} // namespace
-
-// Entry of fxOutputLines (jfg.us.toml): keep the framebuffer as it is before the lines are added.
-extern "C" void jfg_cpu_lines_before(uint8_t* rdram, recomp_context* ctx) {
+// Keeps the framebuffer as it is before a CPU effect draws into it.
+void capture_begin(uint8_t* rdram, recomp_context* ctx) {
     g_rdram = rdram;
     g_capturing = false;
     if (!jfg_renderer_adds_frames()) return;
@@ -74,18 +76,20 @@ extern "C" void jfg_cpu_lines_before(uint8_t* rdram, recomp_context* ctx) {
     g_capturing = true;
 }
 
-// mainCPUeffects, right after fxOutputLines returns: what it added becomes the layer, and RDRAM gets the frame back.
-extern "C" void jfg_cpu_lines_after(uint8_t* rdram, recomp_context* ctx) {
-    (void)ctx;
+// What the effect added goes into the pending layer, and RDRAM gets the frame back (so RT64 does not copy it in a
+// frame late as well).
+void capture_end(uint8_t* rdram, bool still) {
     if (!g_capturing) return;
     g_capturing = false;
     uint8_t* raw = rdram + (g_capture_screen - 0x80000000u);
     const uint32_t bytes = g_capture_width * g_capture_height * 2;
-    Layer layer;
-    layer.fb = g_capture_screen & 0x1FFFFFFFu;
-    layer.width = g_capture_width;
-    layer.height = g_capture_height;
-    double sx = 0, sy = 0;
+    const uint32_t fb = g_capture_screen & 0x1FFFFFFFu;
+    if (g_pending.fb != fb || g_pending.width != g_capture_width || g_pending.height != g_capture_height) {
+        g_pending = Layer();
+        g_pending.fb = fb;
+        g_pending.width = g_capture_width;
+        g_pending.height = g_capture_height;
+    }
     for (uint32_t word = 0; word < bytes; word += 4) {
         uint32_t a, b;
         std::memcpy(&a, raw + word, 4);
@@ -95,29 +99,63 @@ extern "C" void jfg_cpu_lines_after(uint8_t* rdram, recomp_context* ctx) {
             const uint32_t offset = word + half;
             const uint16_t now = pixel_at(raw, offset), was = pixel_at(g_before.data(), offset);
             if (now == was) continue;
-            // RGBA5551: the amounts fxOutputLines added (it only adds, with saturation; a few brushes also subtract,
-            // those are left out).
+            // RGBA5551: the amounts the effect added (fxOutputLines only adds, with saturation; a few brushes also
+            // subtract, those are left out; rain lightens).
             const int dr = std::max(0, ((now >> 11) & 31) - ((was >> 11) & 31));
             const int dg = std::max(0, ((now >> 6) & 31) - ((was >> 6) & 31));
             const int db = std::max(0, ((now >> 1) & 31) - ((was >> 1) & 31));
             if (dr == 0 && dg == 0 && db == 0) continue;
             const uint32_t index = offset / 2;
             const uint16_t x = (uint16_t)(index % g_capture_width), y = (uint16_t)(index / g_capture_width);
-            layer.pixels.push_back({ x, y, (uint8_t)dr, (uint8_t)dg, (uint8_t)db });
-            sx += x;
-            sy += y;
+            g_pending.pixels.push_back({ x, y, (uint8_t)dr, (uint8_t)dg, (uint8_t)db, still });
+            if (!still) {
+                g_pending.cx += x;
+                g_pending.cy += y;
+                g_pending.moving++;
+            }
         }
     }
-    // The frame without the lines, so RT64 does not copy them in a frame late as well.
     std::memcpy(raw, g_before.data(), bytes);
-    if (!layer.pixels.empty()) {
-        layer.cx = (float)(sx / layer.pixels.size());
-        layer.cy = (float)(sy / layer.pixels.size());
+}
+
+// The pending layer becomes the layer of its framebuffer.
+void publish() {
+    if (g_pending.fb == 0) return;
+    Layer layer = std::move(g_pending);
+    g_pending = Layer();
+    if (layer.moving > 0) {
+        layer.cx /= (float)layer.moving;
+        layer.cy /= (float)layer.moving;
     }
     std::lock_guard<std::mutex> lock(g_layer_mutex);
     layer.seq = ++g_layer_seq;
     Layer& slot = (g_layers[0].seq <= g_layers[1].seq) ? g_layers[0] : g_layers[1];
     slot = std::move(layer);
+}
+
+} // namespace
+
+// mainCPUeffects (jfg.us.toml): before rainDraw is called ...
+extern "C" void jfg_cpu_rain_before(uint8_t* rdram, recomp_context* ctx) {
+    capture_begin(rdram, ctx);
+}
+
+// ... and after it (also reached when no rain is drawn: then nothing was captured).
+extern "C" void jfg_cpu_rain_after(uint8_t* rdram, recomp_context* ctx) {
+    (void)ctx;
+    capture_end(rdram, true);
+}
+
+// Entry of fxOutputLines.
+extern "C" void jfg_cpu_lines_before(uint8_t* rdram, recomp_context* ctx) {
+    capture_begin(rdram, ctx);
+}
+
+// mainCPUeffects, right after fxOutputLines returns: the frame's layer is complete.
+extern "C" void jfg_cpu_lines_after(uint8_t* rdram, recomp_context* ctx) {
+    (void)ctx;
+    capture_end(rdram, false);
+    publish();
 }
 
 // Present thread (render hook): the layer for the frame being presented, in window pixels. False if there is none.
@@ -138,8 +176,8 @@ bool cpu_layer_build(ImDrawList* list) {
     // Moved back toward the previous layer's place by the part of the step this frame has not reached yet. Only when
     // the two look alike (a reticle that appears, or whose shape changes, is drawn where it is).
     float ox = 0, oy = 0;
-    if (prev != nullptr && !prev->pixels.empty()) {
-        const float a = (float)prev->pixels.size(), b = (float)cur->pixels.size();
+    if (prev != nullptr && prev->moving > 0 && cur->moving > 0) {
+        const float a = (float)prev->moving, b = (float)cur->moving;
         if (std::fabs(a - b) <= 0.25f * std::max(a, b)) {
             const float back = 1.0f - std::clamp(info.weight, 0.0f, 1.0f);
             ox = (prev->cx - cur->cx) * back;
@@ -156,7 +194,8 @@ bool cpu_layer_build(ImDrawList* list) {
         const int m = std::max({ (int)p.r, (int)p.g, (int)p.b });
         const float alpha = (float)m / 31.0f;
         const ImU32 col = IM_COL32(p.r * 255 / m, p.g * 255 / m, p.b * 255 / m, (int)(alpha * 255.0f + 0.5f));
-        const float x0 = left + ((float)p.x + ox) * sx, y0 = info.viewY + ((float)p.y + oy) * sy;
+        const float px = (float)p.x + (p.still ? 0.0f : ox), py = (float)p.y + (p.still ? 0.0f : oy);
+        const float x0 = left + px * sx, y0 = info.viewY + py * sy;
         list->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + sx, y0 + sy), col);
     }
     return true;
