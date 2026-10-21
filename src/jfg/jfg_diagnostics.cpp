@@ -243,3 +243,10 @@ JFG_WRAP(mathBreakPoint) {
     jfg_game_break(rdram, ctx);
     mathBreakPoint_orig(rdram, ctx);
 }
+
+// Replaced by the port's own code (they don't call the game's). squadsCheckEnemyPointers runs whenever an object is
+// freed; the port's copy checks each squad link before following it (in a boss fight the game's reached a squad
+// member freed while still linked and crashed).
+JFG_WRAP(squadsCheckEnemyPointers) {
+    jfg_squads_check_enemy(rdram, ctx);
+}
