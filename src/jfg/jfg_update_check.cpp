@@ -277,7 +277,7 @@ UnreleasedSection find_unreleased(const std::string& changelog) {
 }
 
 // The body of that section without its <!-- comments -->, trimmed: the release notes of the next release, written by
-// hand on its release branch (docs/RELEASING.md "Release notes"). Empty when there is none, or only the heading. The
+// hand on its release branch (Recomp-Docs/RELEASING.md "Release notes"). Empty when there is none, or only the heading. The
 // Release workflow (.github/workflows/release.yml) makes the release notes from the same section.
 std::string unreleased_notes(std::string changelog) {
     changelog.erase(std::remove(changelog.begin(), changelog.end(), '\r'), changelog.end());
