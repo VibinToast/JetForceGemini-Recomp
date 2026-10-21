@@ -140,59 +140,6 @@ func = "squadsFireWeapon"
 before_vram = 0x82028648
 text = "{ if ((uint32_t)ctx->r2 == 0) goto L_82029670; }"
 
-# objSetupObject returning NULL (an object could not be created): which step failed, with object counts and free heap,
-# logged to bin/jfg_memory.log (src/jfg/jfg_diagnostics.cpp, jfg_objsetup_*). Entry, the return of each call that can
-# fail, and the one exit.
-[[patches.hook]]
-func = "objSetupObject"
-before_vram = 0x80005F14
-text = "{ void jfg_objsetup_enter(uint8_t*, recomp_context*); jfg_objsetup_enter(rdram, ctx); }"
-
-[[patches.hook]]
-func = "objSetupObject"
-before_vram = 0x80006070
-text = "{ void jfg_objsetup_step(uint8_t*, recomp_context*, int); jfg_objsetup_step(rdram, ctx, 0); }"
-
-[[patches.hook]]
-func = "objSetupObject"
-before_vram = 0x80006190
-text = "{ void jfg_objsetup_step(uint8_t*, recomp_context*, int); jfg_objsetup_step(rdram, ctx, 1); }"
-
-[[patches.hook]]
-func = "objSetupObject"
-before_vram = 0x80006230
-text = "{ void jfg_objsetup_step(uint8_t*, recomp_context*, int); jfg_objsetup_step(rdram, ctx, 2); }"
-
-[[patches.hook]]
-func = "objSetupObject"
-before_vram = 0x800062D4
-text = "{ void jfg_objsetup_step(uint8_t*, recomp_context*, int); jfg_objsetup_step(rdram, ctx, 3); }"
-
-[[patches.hook]]
-func = "objSetupObject"
-before_vram = 0x80006300
-text = "{ void jfg_objsetup_step(uint8_t*, recomp_context*, int); jfg_objsetup_step(rdram, ctx, 4); }"
-
-[[patches.hook]]
-func = "objSetupObject"
-before_vram = 0x80006388
-text = "{ void jfg_objsetup_step(uint8_t*, recomp_context*, int); jfg_objsetup_step(rdram, ctx, 5); }"
-
-[[patches.hook]]
-func = "objSetupObject"
-before_vram = 0x80006770
-text = "{ void jfg_objsetup_step(uint8_t*, recomp_context*, int); jfg_objsetup_step(rdram, ctx, 6); }"
-
-[[patches.hook]]
-func = "objSetupObject"
-before_vram = 0x80006798
-text = "{ void jfg_objsetup_step(uint8_t*, recomp_context*, int); jfg_objsetup_step(rdram, ctx, 7); }"
-
-[[patches.hook]]
-func = "objSetupObject"
-before_vram = 0x80006E04
-text = "{ void jfg_objsetup_exit(uint8_t*, recomp_context*); jfg_objsetup_exit(rdram, ctx); }"
-
 # 60 fps (F9 -> Options -> Display -> Frame rate). The scheduler holds back the "frame done" message of each frame
 # until 2 video retraces have passed since the last one (sc->frameCount at OSSched + 0x300, counted up here in
 # __scHandleRetrace; the decomp notes "if you want to make the game 60FPS, change this to 2"), which caps the game at

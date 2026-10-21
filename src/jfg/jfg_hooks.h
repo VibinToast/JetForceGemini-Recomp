@@ -80,7 +80,7 @@ void jfg_squad_spawn_before(uint8_t* rdram, recomp_context* ctx);      // overla
 void jfg_squad_spawn_after(uint8_t* rdram, recomp_context* ctx);       // overlay 3 +0x14CA4, after its call
 void jfg_objsetup_enter(uint8_t* rdram, recomp_context* ctx);          // entry of objSetupObject
 void jfg_objsetup_step(uint8_t* rdram, recomp_context* ctx, int step); // objSetupObject, after each call that can fail
-void jfg_objsetup_exit(uint8_t* rdram, recomp_context* ctx);           // objSetupObject, its exit (0x80006E04)
+void jfg_objsetup_exit(uint8_t* rdram, recomp_context* ctx, int type); // objSetupObject's wrapper, after
 void jfg_squads_check_enemy(uint8_t* rdram, recomp_context* ctx);      // squadsCheckEnemyPointers' wrapper (replaces it)
 void jfg_game_break(uint8_t* rdram, recomp_context* ctx);              // mathBreakPoint's wrapper
 void jfg_change_level_log(uint8_t* rdram, recomp_context* ctx);        // jfg_on_level_change handler (jfg_api.cpp)
