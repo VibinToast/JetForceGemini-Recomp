@@ -207,6 +207,8 @@ extern "C" void jfg_dangle(uint8_t* rdram, recomp_context* ctx) {
     const int32_t angle = (int16_t)(uint32_t)ctx->r4;
     const int32_t target = (int32_t)ctx->r5;
     const uint32_t t_bits = (uint32_t)ctx->r6;
+    dAngle_orig(rdram, ctx);
+    if (game_frame_rate() < 1 || g.skipping || (int16_t)ctx->r2 != (int16_t)angle) return;
     float t;
     std::memcpy(&t, &t_bits, sizeof(t));
     int32_t diff = (target - angle) & 0xFFFF;
@@ -216,6 +218,7 @@ extern "C" void jfg_dangle(uint8_t* rdram, recomp_context* ctx) {
     int32_t step = (product > -2147483648.0f && product < 2147483648.0f) ? (int32_t)product : 0x7FFFFFFF; // cvt.w.s, toward 0
     if (step == 0 && diff != 0 && t > 0.0f && game_frame_rate() >= 1 && !g.skipping) step = diff > 0 ? 1 : -1;
     ctx->r2 = (gpr)(int32_t)(int16_t)(angle + step);
+    if (diff != 0 && t > 0.0f) ctx->r2 = (gpr)(int32_t)(int16_t)(angle + (diff > 0 ? 1 : -1));
 }
 
 // --- 60 fps: squad members drawn in between their updates ---------------------------------------------------------
@@ -757,3 +760,12 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
 }
 
 } // namespace jfg
+
+// FlowerBoltControl(obj, frames): the slug boss's homing bolts (overlay 149) apply a turn limit, steering smoothing and
+// speed growth per call, so at 60 fps they homed and sped up about twice as hard. They run with the squad cadence.
+JFG_WRAP(FlowerBoltControl) {
+    const int r = jfg_squad_frames(rdram, (uint32_t)ctx->r4, (int32_t)ctx->r5);
+    if (r == 0) return;
+    ctx->r5 = (gpr)r;
+    FlowerBoltControl_orig(rdram, ctx);
+}
