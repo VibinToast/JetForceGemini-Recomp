@@ -8,6 +8,7 @@
 //    Functions whose code materialises another overlay's data address can't be regenerated correctly; the build
 //    makes them unhookable (tools/refuse_mod_hooks.py). See Recomp-Docs/MOD_SUPPORT.md.
 // 2. Functions mods can import ("*"): recomp_printf, written to jfg_mods.log and stderr.
+// 3. Mods that replace a function a port feature needs as the caller: logged and shown in the Mods menu.
 // (Mods that replace game data rather than code: jfg_assets.cpp.)
 #include <algorithm>
 #include <cctype>
@@ -19,6 +20,7 @@
 #include <vector>
 
 #include "librecomp/game.hpp"
+#include "librecomp/mods.hpp"
 #include "librecomp/overlays.hpp"
 #include "recomp.h"
 #include "jfg_api.h"
@@ -348,6 +350,86 @@ extern "C" void jfg_register_mod_exports(void) {
     jfg_register_wrapped(recomp::overlays::register_base_wrapper); // mods patch and hook the originals, not the wrappers
     jfg::api::register_api(); // the JFG mod API's events and helpers (jfg_api.cpp)
     jfg_register_asset_mods(); // mods that replace game data (jfg_assets.json)
+}
+
+// --- mods replacing a function a port feature needs as the caller ---------------------------------------------------
+// Some port features act on one game function's own call of another (JfgCaller in jfg_hooks.h): the caller's wrapper
+// notes its stack frame, the callee's wrapper acts only when called from that frame. A mod that replaces such a caller
+// (RECOMP_PATCH) runs its own code with its own frame, so those features turn off for as long as the mod is loaded.
+// They can't be kept, but the player and the mod's author are told: jfg_mods.log, and the mod's page in the Mods menu.
+extern "C" {
+void func_80044FAC_45BAC(uint8_t* rdram, recomp_context* ctx);
+void func_8001BF9C_1CB9C(uint8_t* rdram, recomp_context* ctx);
+void func_80045F00_46B00(uint8_t* rdram, recomp_context* ctx);
+void controlPlatform(uint8_t* rdram, recomp_context* ctx);
+void refuelControl(uint8_t* rdram, recomp_context* ctx);
+void func_overlay_15_00004658_1F17FD8(uint8_t* rdram, recomp_context* ctx);
+void func_overlay_16_00004440_1F22458(uint8_t* rdram, recomp_context* ctx);
+void func_overlay_17_00004614_1F2C15C(uint8_t* rdram, recomp_context* ctx);
+void squadsFireWeapon(uint8_t* rdram, recomp_context* ctx);
+}
+
+namespace {
+struct CallerFeatures {
+    recomp_func_t* func;
+    const char* name;
+    const char* features; // what stops working while a mod replaces it
+};
+
+// Every JfgCaller::Scope in src/jfg (keep in step with them).
+const CallerFeatures g_caller_features[] = {
+    { func_80044FAC_45BAC, "func_80044FAC_45BAC (the main loop tick)",
+      "60 fps frame pacing, the dual-stick and mouse camera controls, cutscene skipping and F5" },
+    { func_8001BF9C_1CB9C, "func_8001BF9C_1CB9C (level fog)", "the fog options" },
+    { func_80045F00_46B00, "func_80045F00_46B00 (the world tick)",
+      "the fly camera's freeze, Pause in the Settings Menu, the camera override and the squads' smoothing at 60 fps" },
+    { controlPlatform, "controlPlatform", "Movement speed on moving platforms" },
+    { refuelControl, "refuelControl", "Refuel speed" },
+    { func_overlay_15_00004658_1F17FD8, "func_overlay_15_00004658_1F17FD8 (aim control)", "walking with the sniper rifle" },
+    { func_overlay_16_00004440_1F22458, "func_overlay_16_00004440_1F22458 (aim control)", "walking with the sniper rifle" },
+    { func_overlay_17_00004614_1F2C15C, "func_overlay_17_00004614_1F2C15C (aim control)", "walking with the sniper rifle" },
+    { squadsFireWeapon, "squadsFireWeapon",
+      "the fix for the crash when an enemy's weapon can't be created (low memory)" },
+};
+
+// Mod id -> the text for its page in the Mods menu.
+std::vector<std::pair<std::string, std::string>> g_mod_warnings;
+} // namespace
+
+// Once mods are loaded, before the game's first instruction (src/main.cpp, custom_recomp_entrypoint).
+extern "C" void jfg_check_mod_replacements(void) {
+    g_mod_warnings.clear();
+    const std::vector<recomp::mods::ModDetails> details = recomp::mods::get_all_mod_details("jet-force-gemini");
+    for (const CallerFeatures& c : g_caller_features) {
+        const std::string mod_id = recomp::mods::get_func_replacement_mod(c.func);
+        if (mod_id.empty()) continue;
+        std::string mod_name = mod_id;
+        for (const recomp::mods::ModDetails& d : details) {
+            if (d.mod_id == mod_id) mod_name = d.display_name;
+        }
+        const std::string line = "mods: " + mod_name + " (" + mod_id + ") replaces " + c.name +
+                                 "; off while it's loaded: " + c.features;
+        jfg::jfg_log_line("jfg_mods.log", line.c_str());
+        auto it = std::find_if(g_mod_warnings.begin(), g_mod_warnings.end(), [&](const auto& w) { return w.first == mod_id; });
+        if (it == g_mod_warnings.end()) {
+            g_mod_warnings.emplace_back(mod_id, "This mod replaces game code that Jet Force Gemini: Recompiled's own "
+                                                "features rely on, so these are off while it's loaded: ");
+            it = g_mod_warnings.end() - 1;
+        }
+        else {
+            it->second += "; ";
+        }
+        it->second += std::string(c.features) + " (" + c.name + ")"; // one line: labels don't keep line breaks
+    }
+}
+
+// The Mods menu's details panel (src/ui/ui_mod_details_panel.cpp): the warning for a mod, or "" (none, or the game
+// hasn't started: mods load with the game).
+extern "C" const char* jfg_mod_warning(const char* mod_id) {
+    for (const auto& w : g_mod_warnings) {
+        if (w.first == mod_id) return w.second.c_str();
+    }
+    return "";
 }
 
 // GameEntry::decompression_routine (src/main.cpp): the ROM the runtime regenerates hooked functions from.

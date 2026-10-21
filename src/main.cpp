@@ -43,6 +43,7 @@ const std::string version_string = JFG_VERSION_STRING; // JFG PORT: from version
 extern "C" void recomp_entrypoint(uint8_t *rdram, recomp_context *ctx);
 gpr get_entrypoint_address();
 extern "C" void jfg_apply_asset_mods(void); // JFG PORT: src/jfg/jfg_assets.cpp
+extern "C" void jfg_check_mod_replacements(void); // JFG PORT: src/jfg/jfg_mods.cpp
 
 static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
     printf("Initialized RDRAM at %p\n", rdram);
@@ -51,6 +52,7 @@ static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
     dino::runtime::crash_register_thread_context(ctx);
 
     jfg_apply_asset_mods(); // JFG PORT: data replaced by mods (src/jfg/jfg_assets.cpp), once mods are loaded
+    jfg_check_mod_replacements(); // JFG PORT: mods that turn port features off (src/jfg/jfg_mods.cpp)
 
     recomp_entrypoint(rdram, ctx);
 }
