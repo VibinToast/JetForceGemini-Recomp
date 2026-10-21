@@ -23,3 +23,8 @@ JFG_WRAP(ad_sndp_play) {
     if (jfg_snd_skip(rdram, (uint32_t)ctx->r29)) { ctx->r2 = 0; return; }
     ad_sndp_play_orig(rdram, ctx);
 }
+
+JFG_WRAP(n_alEvtqPostEvent) {
+    if (jfg_evt_skip(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5)) return;
+    n_alEvtqPostEvent_orig(rdram, ctx);
+}
