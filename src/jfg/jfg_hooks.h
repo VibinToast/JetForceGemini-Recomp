@@ -82,6 +82,8 @@ void jfg_objsetup_enter(uint8_t* rdram, recomp_context* ctx);          // entry 
 void jfg_objsetup_step(uint8_t* rdram, recomp_context* ctx, int step); // objSetupObject, after each call that can fail
 void jfg_objsetup_exit(uint8_t* rdram, recomp_context* ctx, int type); // objSetupObject's wrapper, after
 void jfg_squads_check_enemy(uint8_t* rdram, recomp_context* ctx);      // squadsCheckEnemyPointers' wrapper (replaces it)
+void jfg_tidy_linked_list_after(uint8_t* rdram, uint32_t obj);         // TidyLinkedList's wrapper: a member it missed
+int jfg_bats_chain_ok(uint8_t* rdram, uint32_t data);                  // GalaxianBatsSoundsHandler's wrapper
 void jfg_game_break(uint8_t* rdram, recomp_context* ctx);              // mathBreakPoint's wrapper
 void jfg_change_level_log(uint8_t* rdram, recomp_context* ctx);        // jfg_on_level_change handler (jfg_api.cpp)
 void jfg_sync_printf(uint8_t* rdram, recomp_context* ctx);             // osSyncPrintf's wrapper (replaces it)
