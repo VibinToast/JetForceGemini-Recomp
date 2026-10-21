@@ -35,6 +35,7 @@ mmAlloc2
 mathBreakPoint
 squadsCheckEnemyPointers
 TidyLinkedList
+squadsFireWeapon
 GalaxianBatsSoundsHandler
 osSyncPrintf
 

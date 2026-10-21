@@ -36,14 +36,6 @@ vram = 0x80074E2C
 func = "gen_anim_data"
 value = 0x00000000
 
-# squadsFireWeapon (overlay 3): the one objSetupObject call in it whose result is not checked (+0x8640, a squad member's
-# weapon object, written to +0x88 right after) crashed the game when the object could not be created (a gun turret in
-# level 248). It now leaves the way the function's other four calls do when they get NULL: to its exit at +0x9670.
-[[patches.hook]]
-func = "squadsFireWeapon"
-before_vram = 0x82028648
-text = "{ if ((uint32_t)ctx->r2 == 0) goto L_82029670; }"
-
 # 60 fps: the squad system (enemies, tribals; overlay 3) at the game's 30 fps cadence (src/jfg/jfg_frame_rate.cpp,
 # jfg_squad_frames). Much of it works per tick whatever the frame count, so at 60 fps squad members moved, animated and
 # attacked about twice as fast. In 60 fps mode SquaddieControl(obj, frames), SquadronControl(obj, frames) and

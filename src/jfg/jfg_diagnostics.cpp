@@ -350,8 +350,58 @@ JFG_WRAP(osSyncPrintf) {
     jfg_sync_printf(rdram, ctx);
 }
 
+// squadsFireWeapon (overlay 3) makes a squad member's weapon object (member data +0xB4, while it has none) with one
+// objSetupObject call whose result it never checks (+0x8640, setup data at $sp + 0x174): on NULL the stores right after
+// it crashed the game (a gun turret in level 248, with 200 KB of heap free). Its other objSetupObject calls leave the
+// function on NULL, and this one now does too, as far as the game can tell: the NULL becomes a scratch block that takes
+// those stores, the function's next objSetupObject (the shot) gets NULL without anything being made, which takes the
+// function's own NULL exit, and afterwards the member's weapon slot is cleared so its next shot tries again. The member
+// data is still in $t4 at the call (from the +0xB4 check).
+namespace recomp { void* alloc(uint8_t* rdram, size_t size); }
+static JfgCaller g_fire;
+static uint32_t g_fire_scratch = 0; // the scratch block, in the runtime's heap (outside the game's memory)
+static uint32_t g_fire_member = 0;  // member data whose weapon object failed in this squadsFireWeapon; 0 = none
+constexpr uint32_t FIRE_SCRATCH_SIZE = 0x100;
+
+static bool fire_weapon_failed(uint8_t* rdram, recomp_context* ctx, uint32_t member) {
+    if (member < 0x80000000u || member >= 0x80800000u || MEM_W(0xB4, (gpr)(int32_t)member) != 0) return false;
+    if (g_fire_scratch == 0) {
+        void* block = recomp::alloc(rdram, FIRE_SCRATCH_SIZE);
+        if (block == nullptr) return false;
+        g_fire_scratch = 0x80000000u + (uint32_t)((uint8_t*)block - rdram);
+    }
+    for (uint32_t i = 0; i < FIRE_SCRATCH_SIZE; i += 4) MEM_W(i, (gpr)(int32_t)g_fire_scratch) = 0;
+    ctx->r2 = (gpr)(int32_t)g_fire_scratch;
+    g_fire_member = member;
+    static int logged = 0;
+    if (logged++ < 20) {
+        char line[200];
+        std::snprintf(line, sizeof(line), "squad member weapon object could not be created (member data 0x%08X, level %d); shot left out",
+            member, (int)(int16_t)MEM_H(0, (gpr)(int32_t)jfg::ADDR_currentLevel));
+        jfg::jfg_log_line("jfg_memory.log", line);
+    }
+    return true;
+}
+
+JFG_WRAP(squadsFireWeapon) {
+    const uint32_t prev = g_fire_member;
+    g_fire_member = 0;
+    {
+        JfgCaller::Scope scope(g_fire, ctx, 0x1F0);
+        squadsFireWeapon_orig(rdram, ctx);
+    }
+    if (g_fire_member != 0 && (uint32_t)MEM_W(0xB4, (gpr)(int32_t)g_fire_member) == g_fire_scratch) {
+        MEM_W(0xB4, (gpr)(int32_t)g_fire_member) = 0;
+    }
+    g_fire_member = prev;
+}
+
 // objSetupObject and its steps (see jfg_objsetup_enter).
 JFG_WRAP(objSetupObject) {
+    const bool fire = g_fire.direct(ctx);
+    if (fire && g_fire_member != 0) { ctx->r2 = 0; return; } // squadsFireWeapon's shot after a failed weapon object
+    const bool weapon = fire && (uint32_t)ctx->r4 == (uint32_t)(g_fire.sp + 0x174);
+    const uint32_t member = (uint32_t)ctx->r12;
     const int nest = jfg::g_obj_step_nest;
     jfg::g_obj_step_nest = 0;
     jfg_objsetup_enter(rdram, ctx);
@@ -360,6 +410,7 @@ JFG_WRAP(objSetupObject) {
     const int type = (d >= 0 && d < jfg::OBJ_DEPTH && jfg::g_obj_setup[d].typed) ? jfg::g_obj_setup[d].type : -1;
     jfg_objsetup_exit(rdram, ctx, type);
     jfg::g_obj_step_nest = nest;
+    if (weapon && (uint32_t)ctx->r2 == 0) fire_weapon_failed(rdram, ctx, member);
 }
 
 // A step call: noted when objSetupObject is running and made it itself.
