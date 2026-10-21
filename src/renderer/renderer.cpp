@@ -667,7 +667,13 @@ bool RT64Context::update_config(const ultramodern::renderer::GraphicsConfig& old
         app->userConfig.aspectRatio = RT64::UserConfiguration::AspectRatio::Original;
     }
 
-    app->updateUserConfig(true);
+    // JFG PORT: a change of the Framerate options alone (Renderer Framerate, Manual Framerate: the Graphics tab applies
+    // each step of the slider at once) keeps the framebuffers. Discarding them while the present thread still shows
+    // in-between frames made from them crashed in the graphics driver (RT64 Present thread).
+    ultramodern::renderer::GraphicsConfig rate_only = old_config;
+    rate_only.rr_option = new_config.rr_option;
+    rate_only.rr_manual_value = new_config.rr_manual_value;
+    app->updateUserConfig(!(rate_only == new_config));
 
     if (new_config.msaa_option != old_config.msaa_option) {
         app->updateMultisampling();
