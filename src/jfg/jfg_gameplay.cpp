@@ -125,6 +125,7 @@ static void aim_control(uint8_t* rdram, recomp_context* ctx, recomp_func_t* orig
 
 JFG_WRAP(func_overlay_15_00004658_1F17FD8) { aim_control(rdram, ctx, func_overlay_15_00004658_1F17FD8_orig, 0x58, 0x4C); }
 JFG_WRAP(func_overlay_16_00004440_1F22458) { aim_control(rdram, ctx, func_overlay_16_00004440_1F22458_orig, 0x58, 0x4C); }
+JFG_WRAP(func_overlay_17_00004614_1F2C15C) { aim_control(rdram, ctx, func_overlay_17_00004614_1F2C15C_orig, 0x60, 0x50); }
 
 JFG_WRAP(frontGetTargetControl) {
     const bool aim = g_aim.direct(ctx);
