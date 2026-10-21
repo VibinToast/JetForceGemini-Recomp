@@ -29,3 +29,4 @@ objMoveXYZ
 laserboltInit
 mineInit
 mainGetGameFlag
+mainResetRegion
