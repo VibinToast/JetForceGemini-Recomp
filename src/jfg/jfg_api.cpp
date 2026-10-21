@@ -1,11 +1,16 @@
 // Jet Force Gemini port: the JFG mod API (mod_api/jfg_api.h for mods, jfg_api.h for the port).
 #include <algorithm>
+#include <atomic>
+#include <cstdio>
+#include <string>
 #include <vector>
 
+#include "librecomp/mods.hpp"
 #include "librecomp/overlays.hpp"
 #include "jfg_api.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
+#include "jfg_options.h"
 
 extern "C" void recomp_trigger_event(uint8_t* rdram, recomp_context* ctx, uint32_t event_index);
 
@@ -19,7 +24,19 @@ const char* const g_event_names[] = {
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
-std::vector<Handler> g_internal[(size_t)Event::Count];
+struct Internal {
+    Handler handler;
+    Active active;
+};
+std::vector<Internal> g_internal[(size_t)Event::Count];
+
+// Counted on the game thread, read by the F9 window.
+std::atomic<uint64_t> g_fired[(size_t)Event::Count];
+std::atomic<uint64_t> g_ran[(size_t)Event::Count];
+
+bool internal_active(const Internal& internal) {
+    return internal.active == nullptr || internal.active();
+}
 
 // --- helpers mods import ("*") -------------------------------------------------------------------------------------
 void api_version(uint8_t*, recomp_context* ctx) {
@@ -47,35 +64,80 @@ Payload::~Payload() {
     ctx->r29 = saved_sp;
 }
 
-void add_internal(Event event, Handler handler) {
-    g_internal[(size_t)event].push_back(handler);
+void add_internal(Event event, Handler handler, Active active) {
+    g_internal[(size_t)event].push_back({handler, active});
+}
+
+// Base events come first in the runtime's list, so an event's index is its own.
+bool listened(Event event) {
+    for (const Internal& internal : g_internal[(size_t)event]) {
+        if (internal_active(internal)) return true;
+    }
+    return recomp::mods::event_has_callbacks((size_t)event);
 }
 
 void fire(uint8_t* rdram_, recomp_context* ctx, Event event, int32_t arg0, int32_t arg1, int32_t arg2, int32_t arg3) {
+    g_fired[(size_t)event].fetch_add(1, std::memory_order_relaxed);
+    const bool mods = recomp::mods::event_has_callbacks((size_t)event);
+    bool any = mods;
+    for (const Internal& internal : g_internal[(size_t)event]) any = any || internal_active(internal);
+    if (!any) return;
+    g_ran[(size_t)event].fetch_add(1, std::memory_order_relaxed);
+
     const recomp_context saved = *ctx;
     ctx->r4 = (gpr)arg0;
     ctx->r5 = (gpr)arg1;
     ctx->r6 = (gpr)arg2;
     ctx->r7 = (gpr)arg3;
     const recomp_context args = *ctx;
-    for (Handler handler : g_internal[(size_t)event]) {
-        handler(rdram_, ctx);
+    for (const Internal& internal : g_internal[(size_t)event]) {
+        if (!internal_active(internal)) continue;
+        internal.handler(rdram_, ctx);
         *ctx = args;
     }
-    recomp_trigger_event(rdram_, ctx, (uint32_t)event); // base events come first, so the index is the event's
+    if (mods) recomp_trigger_event(rdram_, ctx, (uint32_t)event);
     *ctx = saved;
 }
 
+const char* event_name(Event event) {
+    return g_event_names[(size_t)event];
+}
+
+Stats stats(Event event) {
+    return {g_fired[(size_t)event].load(std::memory_order_relaxed), g_ran[(size_t)event].load(std::memory_order_relaxed)};
+}
+
+size_t mod_callbacks(Event event) {
+    return recomp::mods::event_callback_count((size_t)event);
+}
+
+void log_stats() {
+    static Stats last[(size_t)Event::Count] = {};
+    std::string line = "[jfg] mod API events (fired/listened):";
+    for (size_t i = 0; i < (size_t)Event::Count; i++) {
+        const Stats s = stats((Event)i);
+        if (s.fired != last[i].fired) {
+            line += " " + std::string(g_event_names[i] + 7) + " " + std::to_string(s.fired - last[i].fired) + "/" +
+                    std::to_string(s.ran - last[i].ran); // name without "jfg_on_"
+        }
+        last[i] = s;
+    }
+    std::fprintf(stderr, "%s\n", line.c_str());
+}
+
 void register_api() {
+    // A handler with an option runs only while it's on (the last argument), so with the options at their defaults and no
+    // mod listening, the frequent events (object draw, sound) cost nothing.
     add_internal(Event::LevelChange, jfg_change_level_log); // JFG_DEBUG_STATS log (jfg_diagnostics.cpp)
     add_internal(Event::BossFightControl, jfg_boss_tick);   // boss-fight control layout (jfg_controls.cpp)
-    add_internal(Event::BloodSpurt, jfg_gore_on_blood_spurt); // No blood, Blood amount (jfg_gore.cpp)
-    add_internal(Event::BloodHit, jfg_gore_on_blood_hit);     // No blood
-    add_internal(Event::SeveredLimbTick, jfg_gore_limb);      // Body parts stay
-    add_internal(Event::SidekickTick, jfg_floyd_seen);        // Hide Floyd: his object kind (jfg_visuals.cpp)
-    add_internal(Event::ObjectDraw, jfg_hide_object);         // Hide Floyd
-    add_internal(Event::SoundPlay, jfg_floyd_mute);           // Hide Floyd: his sounds
-    add_internal(Event::ScreenFlash, jfg_hit_flash_event);    // Hit flash opacity
+    add_internal(Event::BloodSpurt, jfg_gore_on_blood_spurt, // No blood, Blood amount (jfg_gore.cpp)
+                 [] { return jfg_no_blood() != 0 || g.blood_amount != 100; });
+    add_internal(Event::BloodHit, jfg_gore_on_blood_hit, [] { return jfg_no_blood() != 0; }); // No blood
+    add_internal(Event::SeveredLimbTick, jfg_gore_limb, [] { return g.gore_keep_limbs; });     // Body parts stay
+    add_internal(Event::SidekickTick, jfg_floyd_seen);       // Hide Floyd: his object kind (jfg_visuals.cpp)
+    add_internal(Event::ObjectDraw, jfg_hide_object, [] { return g.hide_floyd; }); // Hide Floyd
+    add_internal(Event::SoundPlay, jfg_floyd_mute, [] { return g.hide_floyd; });   // Hide Floyd: his sounds
+    add_internal(Event::ScreenFlash, jfg_hit_flash_event, [] { return g.hit_flash < 100; }); // Hit flash opacity
     recomp::overlays::register_base_events(g_event_names);
     recomp::overlays::register_base_export("jfg_api_version", api_version);
     recomp::overlays::register_base_export("jfg_get_tick_scale", get_tick_scale);
@@ -115,6 +177,11 @@ JFG_WRAP(dogBossControl) {
 JFG_WRAP(bloodSpurtAdd) {
     using namespace jfg;
     namespace b = jfg::api::blood_spurt;
+    if (!api::listened(api::Event::BloodSpurt)) { // no payload to build; fire only counts it
+        api::fire(rdram, ctx, api::Event::BloodSpurt);
+        bloodSpurtAdd_orig(rdram, ctx);
+        return;
+    }
     g_rdram = rdram;
     const uint32_t sp = (uint32_t)ctx->r29;
     int32_t amount, cancel;
@@ -146,6 +213,11 @@ JFG_WRAP(bloodSpurtAdd) {
 JFG_WRAP(bloodHitSpriteAdd) {
     using namespace jfg;
     namespace b = jfg::api::blood_hit;
+    if (!api::listened(api::Event::BloodHit)) { // no payload to build; fire only counts it
+        api::fire(rdram, ctx, api::Event::BloodHit);
+        bloodHitSpriteAdd_orig(rdram, ctx);
+        return;
+    }
     g_rdram = rdram;
     int32_t cancel;
     {
@@ -173,6 +245,10 @@ JFG_WRAP(severedLimbControl) {
 static bool fire_value_cancel(uint8_t* rdram, recomp_context* ctx, jfg::api::Event event, uint32_t& value) {
     using namespace jfg;
     namespace v = jfg::api::value_cancel;
+    if (!api::listened(event)) { // no payload to build; fire only counts it
+        api::fire(rdram, ctx, event);
+        return true;
+    }
     g_rdram = rdram;
     api::Payload p(ctx, v::SIZE);
     wr32(p.addr + v::VALUE, value);

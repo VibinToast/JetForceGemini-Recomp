@@ -5,6 +5,7 @@
 // arguments in ctx->r4.. as a mod does.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include "recomp.h"
@@ -29,6 +30,8 @@ enum class Event : uint32_t {
 };
 
 using Handler = void (*)(uint8_t* rdram, recomp_context* ctx);
+// Whether an internal handler has anything to do right now (its option is on). Lets fire() skip an event entirely.
+using Active = bool (*)();
 
 // Events whose callbacks may change values or cancel get a struct in game memory (layout in mod_api/jfg_api.h), just
 // below the game's stack pointer; the event's a0 points at it. While a Payload lives, ctx's $sp is below the struct,
@@ -54,11 +57,28 @@ namespace value_cancel {
 constexpr uint32_t VALUE = 0x00, CANCEL = 0x04, SIZE = 0x08;
 }
 
-void add_internal(Event event, Handler handler);
-// Runs the event's internal handlers, then mods' callbacks. ctx is left as it was.
+// active: nullptr = always runs.
+void add_internal(Event event, Handler handler, Active active = nullptr);
+// True when firing the event would run anything: an active internal handler or a mod's callback. Events with a Payload
+// check it first, so an event nobody listens to costs no game-memory writes either.
+bool listened(Event event);
+// Runs the event's active internal handlers, then mods' callbacks. ctx is left as it was. Returns at once when
+// nothing listens.
 void fire(uint8_t* rdram, recomp_context* ctx, Event event, int32_t arg0 = 0, int32_t arg1 = 0, int32_t arg2 = 0,
           int32_t arg3 = 0);
 // Registers the events and helpers with the runtime; once, before mods load (jfg_register_mod_exports).
 void register_api();
+
+// For the F9 window's Mod API tab: an event's name, how often it fired and how often something listened, since start
+// (read on the UI thread), and the number of mods' callbacks.
+struct Stats {
+    uint64_t fired;
+    uint64_t ran;
+};
+const char* event_name(Event event);
+Stats stats(Event event);
+size_t mod_callbacks(Event event);
+// JFG_DEBUG_STATS: one line with each event fired since the last call, as fired/listened.
+void log_stats();
 
 } // namespace jfg::api
