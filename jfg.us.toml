@@ -60,26 +60,6 @@ text = "{ uint32_t recomp_osAiGetLength(void); ctx->r15 = (gpr)(int32_t)recomp_o
 # value from a genuine cartridge. Natively: report the PI bus idle, and fetch the word from the user's ROM image,
 # so the comparison itself still runs against real data.
 [[patches.instruction]]
-vram = 0x826E0018
-func = "osCartTest3_6105"
-value = 0x00001025 # lw v0, 0(v1) [PI_STATUS] -> or v0, zero, zero
-
-[[patches.instruction]]
-vram = 0x826E002C
-func = "osCartTest3_6105"
-value = 0x00001025 # lw v0, 0(v1) [PI_STATUS] -> or v0, zero, zero
-
-[[patches.instruction]]
-vram = 0x826E0050
-func = "osCartTest3_6105"
-value = 0x00000000 # lw v0, 0(t0) [cartridge] -> nop (value supplied by the hook below)
-
-[[patches.hook]]
-func = "osCartTest3_6105"
-before_vram = 0x826E0054
-text = "{ uint32_t jfg_cart_read32(uint32_t); ctx->r2 = (gpr)(int32_t)jfg_cart_read32((uint32_t)ctx->r8); }"
-
-[[patches.instruction]]
 vram = 0x82840018
 func = "osCartTest4_6105"
 value = 0x00001025
