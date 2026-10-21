@@ -70,7 +70,6 @@ extern "C" void jfg_interp_object_done(uint8_t* rdram_, recomp_context* ctx) {
     if (drawn_count > 0) drawn_count--;
 }
 
-// Entry of each push function: where it was called from, and its third argument ($a2), which tells apart several
 // Before each push function: where it was called from, and its third argument ($a2), which tells apart several
 // matrices pushed from the same place (a character's weapon parts): camPushModelMtx's transform, camPushFloatModelMtx's
 // source matrix, camPushMuzzleMtx's position, camScaleModelMtx's scale.
@@ -80,7 +79,6 @@ extern "C" void jfg_interp_push(uint8_t* rdram_, recomp_context* ctx) {
     push_source = (uint32_t)ctx->r6;
 }
 
-// Each push function right after it noted the matrix it wrote (D_800FAB30). A matrix pushed outside an object's
 // Each push function after it wrote the matrix and noted it (D_800FAB30; its wrapper). A matrix pushed outside an object's
 // drawing is tagged with ID 0, so a tag left at that address by an earlier frame cannot apply to it.
 extern "C" void jfg_interp_pushed(uint8_t* rdram_, recomp_context* ctx) {
@@ -125,5 +123,11 @@ JFG_WRAP(camPushFloatModelMtx) {
 JFG_WRAP(camPushMuzzleMtx) {
     jfg_interp_push(rdram, ctx);
     camPushMuzzleMtx_orig(rdram, ctx);
+    jfg_interp_pushed(rdram, ctx);
+}
+
+JFG_WRAP(camScaleModelMtx) {
+    jfg_interp_push(rdram, ctx);
+    camScaleModelMtx_orig(rdram, ctx);
     jfg_interp_pushed(rdram, ctx);
 }

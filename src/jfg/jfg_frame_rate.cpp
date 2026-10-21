@@ -209,13 +209,6 @@ JFG_WRAP(dAngle) {
     const int32_t target = (int32_t)ctx->r5;
     const uint32_t t_bits = (uint32_t)ctx->r6;
     dAngle_orig(rdram, ctx);
-    if (game_frame_rate() < 1 || g.skipping || (int16_t)ctx->r2 != (int16_t)angle) return;
-    float t;
-    std::memcpy(&t, &t_bits, sizeof(t));
-    int32_t diff = (target - angle) & 0xFFFF;
-    const int32_t back = (angle - target) & 0xFFFF;
-    if (back < diff) diff = -back;
-    if (diff != 0 && t > 0.0f) ctx->r2 = (gpr)(int32_t)(int16_t)(angle + (diff > 0 ? 1 : -1));
     if (game_frame_rate() >= 1 && !g.skipping && (int16_t)ctx->r2 == (int16_t)angle) {
         float t;
         std::memcpy(&t, &t_bits, sizeof(t));
