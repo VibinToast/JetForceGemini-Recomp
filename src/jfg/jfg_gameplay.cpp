@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 
 #include "jfg_game.h"
 #include "jfg_hooks.h"
