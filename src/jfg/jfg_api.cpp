@@ -202,3 +202,11 @@ JFG_WRAP(amSndPlay) {
     ctx->r4 = (gpr)(int32_t)id;
     amSndPlay_orig(rdram, ctx);
 }
+
+// frontFlashScreen(?, ?, colour, ...): jfg_on_screen_flash (Hit flash opacity); a callback may change the colour.
+JFG_WRAP(frontFlashScreen) {
+    uint32_t color = (uint32_t)ctx->r6;
+    if (!fire_value_cancel(rdram, ctx, jfg::api::Event::ScreenFlash, color)) return;
+    ctx->r6 = (gpr)(int32_t)color;
+    frontFlashScreen_orig(rdram, ctx);
+}

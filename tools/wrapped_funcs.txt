@@ -39,3 +39,4 @@ osSyncPrintf
 # Mod API events (jfg_api.cpp): drawing, sounds, screen flash, Floyd
 objPrintObject
 amSndPlay
+frontFlashScreen
