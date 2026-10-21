@@ -29,8 +29,8 @@ version.
 - `release/<x.y>`: cut from `dev` when a release goes into testing. Only bug fixes go on it, and each fix is merged back
   into `dev` right away (`git switch dev && git merge release/<x.y>`). `dev` stays free for new work meanwhile.
 - `main`: only finished releases and hotfixes.
-- `hotfix/<x.y.z>`: an urgent fix for what players have, branched from `main`. It reaches `dev` through the workflow's
-  merge back (below).
+- `hotfix/<x.y.z>`: an urgent fix for what players have, branched from `main`. It reaches `dev` and any open
+  `release/<x.y>` through the workflow's merge back (below), so the release in testing gets it too.
 
 ## Day to day
 
@@ -40,7 +40,7 @@ version.
   merge it. Only the fix ships. Unfinished work on `dev` stays out.
 - **RT64:** open a pull request from `rt64-update` into `main` and merge it. That makes 2.0.0.
 
-After a release, the workflow merges `main` back into `dev` and `rt64-update`. That brings over the release commit
+After a release, the workflow merges `main` back into `dev`, `rt64-update` and every `release/*` branch. That brings over the release commit
 (`CHANGELOG.md`, `version.txt`) and any hotfix, so the next merge has no conflicts. If that merge itself conflicts, the
 workflow run shows a warning and you merge by hand (`git switch dev && git merge origin/main`). The list of branches is
 `BACK_MERGE` in `.github/workflows/release.yml`.
