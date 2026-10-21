@@ -179,9 +179,6 @@ extern "C" void __osSiRawStartDma_recomp(uint8_t* rdram, recomp_context* ctx) {
     ctx->r2 = 0;
 }
 
-// --- Cartridge reads through the KSEG1 mapping (0xB0000000 + offset) ---------------------------------------------
-// Used by the hooks in osCartTest3_6105 / osCartTest4_6105 (see jfg.us.toml): returns the big-endian word of the
-// user's ROM at that cartridge address, which is what the PI bus would deliver.
 // --- Hardware the game reads directly (KSEG1) ------------------------------------------------------------------
 // A few game functions read hardware registers or boot leftovers through KSEG1 instead of through libultra. Recompiled
 // code turns 0xA0000000 + x into rdram + 0x20000000 + x, past the emulated RDRAM, in the runtime's reserved but
@@ -197,7 +194,6 @@ extern "C" void __osSiRawStartDma_recomp(uint8_t* rdram, recomp_context* ctx) {
 //   audio backend's value there first.
 namespace recomp { std::span<const uint8_t> get_rom(); }
 
-extern "C" uint32_t jfg_cart_read32(uint32_t address) {
 namespace {
 bool open_hardware_page(uint8_t* rdram, uint32_t kseg1) {
     uint8_t* page = rdram + ((uint64_t)kseg1 - 0x80000000u) / 0x1000 * 0x1000;

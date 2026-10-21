@@ -93,7 +93,6 @@ void jfg_sync_printf(uint8_t* rdram, recomp_context* ctx);             // osSync
 // jfg_glue.cpp
 void jfg_overlay_loaded(uint8_t* rdram, recomp_context* ctx);          // runlinkDownloadCode, runlinkResumeCode (wrappers)
 void jfg_overlay_unloading(uint8_t* rdram, recomp_context* ctx);       // runlinkFreeCode, runlinkUnloadOverlay (wrappers)
-uint32_t jfg_cart_read32(uint32_t address);                            // osCartTest3_6105, osCartTest4_6105
 
 // --- base project (jfg-base.patch) ----------------------------------------------------------------------------------
 // --- base project --------------------------------------------------------------------------------------------------

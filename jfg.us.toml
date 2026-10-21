@@ -54,31 +54,6 @@ func = "__amHandleFrameMsg"
 before_vram = 0x80001F30
 text = "{ uint32_t recomp_osAiGetLength(void); ctx->r15 = (gpr)(int32_t)recomp_osAiGetLength(); }"
 
-# --- Anti-tamper checks that touch hardware directly (overlays 111, 133, 156) -----------------------------------------
-# osCartTest3_6105 / osCartTest4_6105: wait for PI idle by polling PI_STATUS_REG (0xA4600010), then read a word of
-# the cartridge through its KSEG1 mapping (0xB0000454 / 0xB0000A5C, part of the boot code) and compare it with the
-# value from a genuine cartridge. Natively: report the PI bus idle, and fetch the word from the user's ROM image,
-# so the comparison itself still runs against real data.
-[[patches.instruction]]
-vram = 0x82840018
-func = "osCartTest4_6105"
-value = 0x00001025
-
-[[patches.instruction]]
-vram = 0x8284002C
-func = "osCartTest4_6105"
-value = 0x00001025
-
-[[patches.instruction]]
-vram = 0x82840050
-func = "osCartTest4_6105"
-value = 0x00000000
-
-[[patches.hook]]
-func = "osCartTest4_6105"
-before_vram = 0x82840054
-text = "{ uint32_t jfg_cart_read32(uint32_t); ctx->r2 = (gpr)(int32_t)jfg_cart_read32((uint32_t)ctx->r8); }"
-
 # squadsFireWeapon (overlay 3): the one objSetupObject call in it whose result is not checked (+0x8640, a squad member's
 # weapon object, written to +0x88 right after) crashed the game when the object could not be created (a gun turret in
 # level 248). It now leaves the way the function's other four calls do when they get NULL: to its exit at +0x9670.
