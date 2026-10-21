@@ -213,10 +213,6 @@ JFG_WRAP(dAngle) {
     int32_t diff = (target - angle) & 0xFFFF;
     const int32_t back = (angle - target) & 0xFFFF;
     if (back < diff) diff = -back;
-    const float product = (float)diff * t;
-    int32_t step = (product > -2147483648.0f && product < 2147483648.0f) ? (int32_t)product : 0x7FFFFFFF; // cvt.w.s, toward 0
-    if (step == 0 && diff != 0 && t > 0.0f && game_frame_rate() >= 1 && !g.skipping) step = diff > 0 ? 1 : -1;
-    ctx->r2 = (gpr)(int32_t)(int16_t)(angle + step);
     if (diff != 0 && t > 0.0f) ctx->r2 = (gpr)(int32_t)(int16_t)(angle + (diff > 0 ? 1 : -1));
 }
 

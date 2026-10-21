@@ -283,7 +283,6 @@ extern "C" uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_
 // mine weapon are the player's.
 extern "C" void jfg_mine_init(uint8_t* rdram, uint32_t mine) {
     g_rdram = rdram;
-    const uint32_t mine = (uint32_t)ctx->r17, md = (uint32_t)ctx->r16;
     const uint32_t md = valid_ptr(mine) ? rd32(mine + 0x68) : 0;
     if (!valid_ptr(mine) || !valid_ptr(md) || g_cam.player == 0) return;
     const int c = (int16_t)rd16(ADDR_currentCharacter);

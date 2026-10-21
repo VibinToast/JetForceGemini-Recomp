@@ -41,7 +41,6 @@ extern "C" void jfg_mm_alloc_check(uint8_t* rdram_, recomp_context* ctx, uint32_
         static bool failed_once = false;
         if (fail != nullptr && !failed_once && (uint32_t)ctx->r2 != 0) {
             g_rdram = rdram_;
-            if (rd32((uint32_t)ctx->r29 + 0x30) == (uint32_t)std::strtoul(fail, nullptr, 16)) { failed_once = true; ctx->r2 = 0; }
             if (size == (uint32_t)std::strtoul(fail, nullptr, 16)) { failed_once = true; ctx->r2 = 0; }
         }
     }
@@ -49,8 +48,6 @@ extern "C" void jfg_mm_alloc_check(uint8_t* rdram_, recomp_context* ctx, uint32_
     g_rdram = rdram_;
     static thread_local bool retrying = false;
     if (retrying) return;
-    const uint32_t sp = (uint32_t)ctx->r29;
-    const uint32_t size = rd32(sp + 0x30), colour = rd32(sp + 0x34);
     const int pending = (int)rd32(ADDR_gFreeQueueCount);
     uint32_t block = 0;
     if (pending > 0) {
@@ -249,4 +246,10 @@ JFG_WRAP(mathBreakPoint) {
 // member freed while still linked and crashed).
 JFG_WRAP(squadsCheckEnemyPointers) {
     jfg_squads_check_enemy(rdram, ctx);
+}
+
+// osSyncPrintf's output routine (0x8009A710) is reached through a function pointer the recompiler has no entry for,
+// which stopped the program the first time the game printed a warning ("out of sound states").
+JFG_WRAP(osSyncPrintf) {
+    jfg_sync_printf(rdram, ctx);
 }

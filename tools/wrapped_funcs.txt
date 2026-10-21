@@ -34,3 +34,4 @@ mmAlloc
 mmAlloc2
 mathBreakPoint
 squadsCheckEnemyPointers
+osSyncPrintf
