@@ -63,4 +63,5 @@ viFrameSync
 func_8001BF9C_1CB9C
 trackGetFog
 runlinkDownloadCode
+runlinkResumeCode
 romCopy

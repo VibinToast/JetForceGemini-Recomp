@@ -40,13 +40,6 @@ stubs = [
 vram = 0x80074E2C
 func = "gen_anim_data"
 value = 0x00000000
-# runlinkResumeCode, at its romCopy of the text: a suspended overlay's code is being reloaded at its old address
-# ($fp = OverlayHeader*). It does not go through runlinkDownloadCode.
-[[patches.hook]]
-func = "runlinkResumeCode"
-before_vram = 0x80053EC4
-text = "{ void jfg_overlay_loaded(uint8_t*, recomp_context*); jfg_overlay_loaded(rdram, ctx); }"
-
 # runlinkFreeCode / runlinkUnloadOverlay, at the mmFree of a loaded overlay ($a0 = its address). This is AFTER the
 # overlay's own exit function has been called through runlinkCallResumeFunction, which still needs the mapping.
 # (runlinkSuspendCode frees through runlinkFreeCode.)
