@@ -64,3 +64,19 @@ JFG_WRAP(viFrameSync) {
     if (!jfg_vi_skip(rdram, ctx)) viFrameSync_orig(rdram, ctx);
     if (tick) ctx->r2 = (gpr)(int32_t)jfg_frame_sync(rdram, (uint32_t)ctx->r2);
 }
+
+// --- fog: func_8001BF9C reads the level's fog with trackGetFog into its stack ($sp + 0x38..) ------------------------
+// Fog options (jfg_visuals.cpp): near (s16 at $sp + 0x3E) and far (+0x3C) may be rewritten before they go in the
+// display list.
+static JfgCaller g_fog;
+
+JFG_WRAP(func_8001BF9C_1CB9C) {
+    JfgCaller::Scope scope(g_fog, ctx, 0x40);
+    func_8001BF9C_1CB9C_orig(rdram, ctx);
+}
+
+JFG_WRAP(trackGetFog) {
+    const bool fog = g_fog.direct(ctx);
+    trackGetFog_orig(rdram, ctx);
+    if (fog) jfg_game_fog(rdram, (uint32_t)ctx->r29); // the caller's $sp, as trackGetFog returned
+}
