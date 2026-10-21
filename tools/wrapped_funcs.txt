@@ -85,3 +85,4 @@ objCutCameraActive
 objObjectsPauseTick
 trackDraw
 __scHandleRetrace
+frontPlayerTarget

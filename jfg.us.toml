@@ -133,14 +133,6 @@ text = "{ if ((uint32_t)ctx->r2 == 0) goto L_82029670; }"
 # Not hooks here: the three are wrapped (tools/wrapped_funcs.txt, jfg_frame_rate.cpp), so mods can hook or replace
 # them and the cadence still applies around the game's code or the mod's.
 
-# The aim reticle's target lock (overlay 13, frontPlayerTarget): while the aim is off the target it counts down 10
-# calls (player +0x541, high nibble) before letting go, so at 60 fps the lock was dropped after 1/6 s instead of 1/3 s.
-# At the store of the decremented value (t8 = new, v0 = old byte) the old value is kept on the ticks left out.
-[[patches.hook]]
-func = "frontPlayerTarget"
-before_vram = 0x820D02BC
-text = "{ int jfg_cadence_skip(void); if (jfg_cadence_skip()) ctx->r24 = ctx->r2; }"
-
 # Jetpack fuel pads (overlay 100, refuelControl): the fuel added this tick (t3) scaled by the "Refuel speed" option,
 # just before it is stored in the player's data (+0x58C); the game clamps it to the maximum right after.
 [[patches.hook]]
