@@ -146,7 +146,8 @@ extern "C" void jfg_objsetup_exit(uint8_t* rdram_, recomp_context* ctx, int type
 // data+0x58; a member's data at obj+0x68, its enemy at data+0x64, the next member at data+0x28). In a boss fight a
 // member reached through those links had data 0x005E0000, a member object freed while still linked (its memory reused),
 // and reading it crashed the game. Same work, but each pointer is checked before it is followed, a chain is followed at
-// most 256 links, and a broken one is left at that point and logged (jfg_memory.log). Nothing is changed in the links.
+// most 256 links, and a broken one is left at that point and logged (jfg_memory.log). Nothing is changed in the links:
+// this runs before TidyLinkedList, while a member being freed is still linked as it should be (see below).
 static bool rdram_ptr(uint32_t p) { return p >= 0x80000000u && p < 0x80800000u && (p & 3) == 0; }
 extern "C" void jfg_squads_check_enemy(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
@@ -178,6 +179,79 @@ extern "C" void jfg_squads_check_enemy(uint8_t* rdram_, recomp_context* ctx) {
             member = rd32(m + 0x28);
         }
     }
+}
+
+// End of TidyLinkedList(obj) (overlay 3; objDoFrees calls it for a squad member being freed, after
+// squadsCheckEnemyPointers): it takes obj out of its squadron's member chain, but looks only as far as the squadron's
+// member count (+0x00, which it has just lowered). In the Lurg fight (level 195) a squadron's chain held one member more
+// than its count (count 2, chain 3), so a member at the end was never found, stayed linked after being freed, and the
+// next walk of the chain crashed in the reused memory (GalaxianBatsSoundsHandler, squadsCheckEnemyPointers; the level
+// 138 boss fight too). After it (its wrapper) the whole chain is walked; if obj is still in it, it is taken out (the count
+// is left as the game set it) and logged. Its member data: +0x24 the squadron.
+extern "C" void jfg_tidy_linked_list_after(uint8_t* rdram_, uint32_t obj) {
+    g_rdram = rdram_;
+    if (!rdram_ptr(obj)) return;
+    const uint32_t sq = rd32(obj + 0x68);
+    if (!rdram_ptr(sq)) return;
+    const uint32_t squadron = rd32(sq + 0x24);
+    if (!rdram_ptr(squadron)) return;
+    const uint32_t data = rd32(squadron + 0x68);
+    if (!rdram_ptr(data)) return;
+    int length = 0;
+    for (uint32_t c = rd32(data + 0x58); c != 0 && length < 256 && rdram_ptr(c) && rdram_ptr(rd32(c + 0x68)); length++) c = rd32(rd32(c + 0x68) + 0x28);
+    uint32_t prev = 0, member = rd32(data + 0x58);
+    for (int link = 0; member != 0 && link < 256; link++) {
+        if (!rdram_ptr(member)) return;
+        const uint32_t m = rd32(member + 0x68);
+        if (!rdram_ptr(m)) return;
+        const uint32_t next = rd32(m + 0x28);
+        if (member == obj) {
+            if (prev == 0) wr32(data + 0x58, next);
+            else wr32(prev + 0x28, next);
+            static int logged = 0;
+            if (logged++ < 20) {
+                char line[320];
+                std::snprintf(line, sizeof(line),
+                    "squad list: freed member 0x%08X was left in its squadron's chain (link %d of %d, squadron count now %d, level %d); taken out",
+                    obj, link, length, (int)rd8(data + 0x00), (int)(int16_t)rd16(ADDR_currentLevel));
+                jfg_log_line("jfg_memory.log", line);
+            }
+            return;
+        }
+        prev = m;
+        member = next;
+    }
+}
+
+// GalaxianBatsSoundsHandler (overlay 143, the bats' squadron in the Lurg fight, level 195) walks its squadron's member
+// list to pick a bat to squeak - the same links as above, without checks. A member freed while still linked crashed it
+// there. Its wrapper asks this first, with the squadron data (its a0; first member +0x58): every link the walk would
+// follow is checked, and on a bad one the function is left out (no squeak this time; the game's own walk would have
+// ended with no bat picked, after two mathRnd calls). At most 20 lines are logged a run.
+static int bats_link_ok(uint32_t ptr, int which, int link) {
+    if (rdram_ptr(ptr) && link < 256) return 1;
+    static int logged = 0;
+    if (logged++ < 20) {
+        char line[256];
+        std::snprintf(line, sizeof(line), "bats' squeak: %s 0x%08X at link %d (level %d); no bat picked",
+            link >= 256 ? "chain too long at" : (which == 0 ? "bad member object" : "bad member data"), ptr, link,
+            (int)(int16_t)rd16(ADDR_currentLevel));
+        jfg_log_line("jfg_memory.log", line);
+    }
+    return 0;
+}
+
+extern "C" int jfg_bats_chain_ok(uint8_t* rdram_, uint32_t data) {
+    g_rdram = rdram_;
+    if (!rdram_ptr(data)) return 1; // not read by the walk unless the function gets that far; left to the game
+    uint32_t member = rd32(data + 0x58);
+    for (int link = 0; member != 0; link++) {
+        if (!bats_link_ok(member, 0, link)) return 0;
+        const uint32_t m = rd32(member + 0x68);
+        if (!bats_link_ok(m, 1, link)) return 0;
+        member = rd32(m + 0x28);
+    }
+    return 1;
 }
 
 // mathBreakPoint: the game stopped itself on a failed check (on the N64 this is a debugger break). Leave a note and a
@@ -255,6 +329,19 @@ JFG_WRAP(mathBreakPoint) {
 // member freed while still linked and crashed).
 JFG_WRAP(squadsCheckEnemyPointers) {
     jfg_squads_check_enemy(rdram, ctx);
+}
+
+// A squad member TidyLinkedList(obj) left in its squadron's chain is taken out (jfg_tidy_linked_list_after).
+JFG_WRAP(TidyLinkedList) {
+    const uint32_t obj = (uint32_t)ctx->r4;
+    TidyLinkedList_orig(rdram, ctx);
+    jfg_tidy_linked_list_after(rdram, obj);
+}
+
+// The bats' squeak (overlay 143) runs only when its squadron's chain is sound (jfg_bats_chain_ok).
+JFG_WRAP(GalaxianBatsSoundsHandler) {
+    if (!jfg_bats_chain_ok(rdram, (uint32_t)ctx->r4)) return;
+    GalaxianBatsSoundsHandler_orig(rdram, ctx);
 }
 
 // osSyncPrintf's output routine (0x8009A710) is reached through a function pointer the recompiler has no entry for,
