@@ -144,3 +144,20 @@ JFG_WRAP(Powerf) {
     if (g_aim.direct(ctx)) sniper_walk_restore(rdram);
     Powerf_orig(rdram, ctx);
 }
+
+// Sniper zoom: controlGetManualAim(?, data) stores the zoom (data +0x1EC, 1..5) and its rate (+0x1F0); a fixed zoom
+// replaces both (rate 0) after it. Nothing after that store in it reads them.
+JFG_WRAP(controlGetManualAim) {
+    if (g_aim.direct(ctx)) sniper_walk_restore(rdram);
+    const uint32_t data = (uint32_t)ctx->r5;
+    controlGetManualAim_orig(rdram, ctx);
+    if (data < 0x80000400u || data >= 0x80800000u) return;
+    uint32_t bits = (uint32_t)MEM_W(0x1EC, (gpr)(int32_t)data);
+    float zoom;
+    std::memcpy(&zoom, &bits, 4);
+    const float fixed = jfg_sniper_zoom(zoom);
+    if (fixed == zoom) return;
+    std::memcpy(&bits, &fixed, 4);
+    MEM_W(0x1EC, (gpr)(int32_t)data) = (int32_t)bits;
+    MEM_W(0x1F0, (gpr)(int32_t)data) = 0;
+}

@@ -125,9 +125,3 @@ text = "{ if ((uint32_t)ctx->r2 == 0) goto L_82029670; }"
 # squadsModuleTick(frames) run on every second tick only, with the frames of both ticks.
 # Not hooks here: the three are wrapped (tools/wrapped_funcs.txt, jfg_frame_rate.cpp), so mods can hook or replace
 # them and the cadence still applies around the game's code or the mod's.
-
-# Sniper zoom: controlGetManualAim stores the zoom (data+0x1EC, 1..5) and its rate (+0x1F0); a fixed zoom replaces both.
-[[patches.hook]]
-func = "controlGetManualAim"
-before_vram = 0x8003AC74
-text = "{ float jfg_sniper_zoom(float); float z = jfg_sniper_zoom(ctx->f2.fl); if (z != ctx->f2.fl) { ctx->f2.fl = z; ctx->f14.fl = 0.0f; } }"

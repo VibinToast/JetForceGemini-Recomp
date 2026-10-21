@@ -94,3 +94,4 @@ func_overlay_16_00004440_1F22458
 func_overlay_17_00004614_1F2C15C
 frontGetTargetControl
 Powerf
+controlGetManualAim
