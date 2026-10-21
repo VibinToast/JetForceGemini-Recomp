@@ -71,9 +71,11 @@ extern "C" void jfg_floyd_seen(uint8_t* rdram_, recomp_context* ctx) {
 // sidekickControl's return.
 extern "C" void jfg_floyd_done(void) { g_floyd_muted = false; }
 
-// Entry of amSndPlay(id, handle): 1 = play nothing.
-extern "C" int jfg_floyd_mute(uint32_t id) {
-    if (!g_floyd_muted) return 0;
+// jfg_on_sound_play handler: nothing plays while sidekickControl runs for a hidden Floyd.
+extern "C" void jfg_floyd_mute(uint8_t* rdram_, recomp_context* ctx) {
+    if (!g_floyd_muted) return;
+    g_rdram = rdram_;
+    const uint32_t sound = (uint32_t)ctx->r4;
     static const bool log = std::getenv("JFG_DEBUG_FLOYD") != nullptr;
     if (log) std::fprintf(stderr, "[jfg] Floyd: sound 0x%X muted\n", id & 0xFFFF);
     return 1;
