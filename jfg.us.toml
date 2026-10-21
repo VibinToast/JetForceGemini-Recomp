@@ -136,11 +136,6 @@ text = "{ float jfg_sniper_zoom(float); float z = jfg_sniper_zoom(ctx->f2.fl); i
 # skips walking with the sniper rifle (t3 / t4 = the current weapon, 7 = sniper), as those keys zoom the scope. With
 # "Sniper rifle: fixed zoom" the zoom keys are free, so the sniper walks like any other weapon.
 [[patches.hook]]
-func = "func_overlay_16_00004440_1F22458"
-before_vram = 0x821044DC
-text = "{ int jfg_sniper_walk(int); ctx->r11 = (gpr)(int32_t)jfg_sniper_walk((int32_t)ctx->r11); }"
-
-[[patches.hook]]
 func = "func_overlay_17_00004614_1F2C15C"
 before_vram = 0x821146C4
 text = "{ int jfg_sniper_walk(int); ctx->r12 = (gpr)(int32_t)jfg_sniper_walk((int32_t)ctx->r12); }"
