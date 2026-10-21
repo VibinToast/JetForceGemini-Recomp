@@ -795,6 +795,14 @@ void RT64Context::check_texture_pack_actions() {
 
         if (!replacement_directories.empty()) {
             app->textureCache->loadReplacementDirectories(replacement_directories);
+            // JFG PORT: how many textures RT64 found in each pack (by hash, in its rt64.json), so a pack whose paths
+            // don't match its files shows 0. Packs inside mods (.nrm) and .rtz packs alike.
+            std::unique_lock lock(app->textureCache->textureMapMutex);
+            const auto &resolved = app->textureCache->textureMap.replacementMap.fileSystemResolvedPaths;
+            for (size_t i = 0; (i < replacement_directories.size()) && (i < resolved.size()); i++) {
+                fprintf(stderr, "[JFG] texture pack loaded: %s, %zu textures\n",
+                    replacement_directories[i].dirOrZipPath.filename().string().c_str(), resolved[i].size());
+            }
         }
         else {
             app->textureCache->clearReplacementDirectories();
