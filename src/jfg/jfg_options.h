@@ -10,6 +10,10 @@ namespace jfg {
 // reached the game two at a time, held up behind a surplus controller message the runtime kept putting back into its
 // queue (fixed in src/main.cpp, message_queue_control). False hides it again.
 constexpr bool FRAME_RATE_OPTION = true;
+// "60 + Interpolated" and its Interpolation Limit are hidden for now (camera jitter on the owner's PC); the Graphics
+// tab's Renderer Framerate (in-between frames for the game's own 30) is used instead. A saved 60 + Interpolated
+// loads as Original. True brings both back.
+constexpr bool INTERPOLATED_FRAME_RATE_OPTION = false;
 // The "Depth fog" option (FogPS.hlsl in RT64) is hidden and off: in testing nothing showed in any level. The renderer
 // pass, the option and its status line are kept for when it is looked at again. Set to true to bring it back.
 constexpr bool DEPTH_FOG_OPTION = false;

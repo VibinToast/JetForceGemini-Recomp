@@ -7,12 +7,15 @@ extern "C" int jfg_texture_pack_current(char* buf, int size); // the chosen pack
 extern "C" int jfg_texture_three_point(void); // src/jfg/jfg_visuals.cpp: "Texture filtering" (1 = the N64's three-point filter)
 extern "C" int jfg_output_filtering(void);    // src/jfg/jfg_visuals.cpp: "Picture scaling" (0 anti-aliased pixel scaling, 1 linear, 2 nearest)
 extern "C" int jfg_interp_limit(void);       // src/jfg/jfg_frame_rate.cpp: "Interpolation Limit" option; 0 = the monitor's rate
+extern "C" int jfg_renderer_rate_needs_restart(void); // defined below, read by src/jfg/jfg_frame_rate.cpp
 extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_frame_rate.cpp: "Frame rate" option; 0 = Original, 1 = Display (-1 would use rr_option)
 #define HLSL_CPU
 #include "hle/rt64_application.h"
 #include "renderer.hpp"
+#include "ultramodern/ultramodern.hpp"
 
 #include <array>
+#include <atomic>
 #include <cctype>
 #include <cstring>
 #include <filesystem>
@@ -249,6 +252,28 @@ static RT64::UserConfiguration::Filtering jfg_rt64_filtering(int option) {
     }
 }
 
+// JFG PORT: the Renderer Framerate (rr_option, rr_manual_value) applies from the next start, like the port's Frame Rate:
+// changing it while the game ran left the in-between frames uneven until a restart. Taken when the game starts
+// (until then, in the launcher, it follows the setting); a later change is saved and the menus offer a restart.
+static std::atomic<int> jfg_rr_option_used{ -1 }, jfg_rr_value_used{ 0 };
+
+static ultramodern::renderer::RefreshRate jfg_rr_option(const ultramodern::renderer::GraphicsConfig& config) {
+    const int used = jfg_rr_option_used.load();
+    return used >= 0 ? (ultramodern::renderer::RefreshRate)used : config.rr_option;
+}
+
+static int jfg_rr_value(const ultramodern::renderer::GraphicsConfig& config) {
+    return jfg_rr_option_used.load() >= 0 ? jfg_rr_value_used.load() : config.rr_manual_value;
+}
+
+extern "C" int jfg_renderer_rate_needs_restart(void) {
+    const int used = jfg_rr_option_used.load();
+    if (used < 0) return 0;
+    const auto &config = ultramodern::renderer::get_graphics_config();
+    if ((int)config.rr_option != used) return 1;
+    return (config.rr_option == ultramodern::renderer::RefreshRate::Manual) && (config.rr_manual_value != jfg_rr_value_used.load());
+}
+
 void set_application_user_config(RT64::Application* application, const ultramodern::renderer::GraphicsConfig& config) {
     switch (config.res_option) {
         default:
@@ -284,8 +309,8 @@ void set_application_user_config(RT64::Application* application, const ultramode
 
     application->userConfig.aspectRatio = jfg_widescreen_active() ? RT64::UserConfiguration::AspectRatio::Expand : to_rt64(config.ar_option);
     application->userConfig.antialiasing = to_rt64(config.msaa_option);
-    application->userConfig.refreshRate = to_rt64(config.rr_option);
-    application->userConfig.refreshRateTarget = config.rr_manual_value;
+    application->userConfig.refreshRate = to_rt64(jfg_rr_option(config));
+    application->userConfig.refreshRateTarget = jfg_rr_value(config);
     // JFG PORT: the "Frame rate" option (Graphics tab, F9 menu) replaces the recomp's own Framerate setting.
     switch (jfg_refresh_override()) {
         case 0: application->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Original; break;
@@ -569,6 +594,12 @@ void RT64Context::update_game_aspect_override() {
         // And the "Frame rate" option (Display = interpolate up to the monitor's refresh rate; with an Interpolation
         // Limit, up to that).
         static int applied_rate = -2, applied_limit = -1;
+        if ((jfg_rr_option_used.load() < 0) && ultramodern::is_game_started()) {
+            const auto &started = ultramodern::renderer::get_graphics_config();
+            jfg_rr_value_used.store(started.rr_manual_value);
+            jfg_rr_option_used.store((int)started.rr_option);
+            applied_rate = -2; // apply it below
+        }
         const int rate = jfg_refresh_override();
         const int limit = jfg_interp_limit();
         if ((rate != applied_rate) || (limit != applied_limit)) {
@@ -576,8 +607,8 @@ void RT64Context::update_game_aspect_override() {
             applied_limit = limit;
             const auto &config = ultramodern::renderer::get_graphics_config();
             app->userConfig.refreshRate = (rate == 1) ? ((limit > 0) ? RT64::UserConfiguration::RefreshRate::Manual : RT64::UserConfiguration::RefreshRate::Display)
-                : (rate == 0) ? RT64::UserConfiguration::RefreshRate::Original : to_rt64(config.rr_option);
-            app->userConfig.refreshRateTarget = ((rate == 1) && (limit > 0)) ? limit : config.rr_manual_value;
+                : (rate == 0) ? RT64::UserConfiguration::RefreshRate::Original : to_rt64(jfg_rr_option(config));
+            app->userConfig.refreshRateTarget = ((rate == 1) && (limit > 0)) ? limit : jfg_rr_value(config);
             app->updateUserConfig(false);
         }
         // And the filtering options. Both are read by RT64 every frame, so no framebuffers need to be discarded.

@@ -24,8 +24,7 @@ namespace jfg {
 // main loop) and the renderer's interpolation are set up for one frame rate, and switching while the game runs left
 // them out of step. The value is taken the first time the game asks for it; until then (the launcher) it follows the
 // option. Changing the option later only saves it; the menus offer a restart (frame_rate_needs_restart).
-// Off for now (owner's frame rate tests): the option applies at once again and no restart is offered.
-constexpr bool FRAME_RATE_NEEDS_RESTART = false;
+constexpr bool FRAME_RATE_NEEDS_RESTART = true;
 static std::atomic<int> g_running_frame_rate{ -1 };
 
 int game_frame_rate() {
@@ -44,9 +43,12 @@ int running_frame_rate() {
     return rate >= 0 ? rate : g.frame_rate;
 }
 
+// src/renderer/renderer.cpp: the Graphics tab's Renderer Framerate also applies from the next start.
+extern "C" int jfg_renderer_rate_needs_restart(void);
+
 bool frame_rate_needs_restart() {
     const int rate = g_running_frame_rate.load(std::memory_order_acquire);
-    return rate >= 0 && rate != g.frame_rate;
+    return (rate >= 0 && rate != g.frame_rate) || jfg_renderer_rate_needs_restart() != 0;
 }
 
 std::atomic<float> g_fps{ 0.0f }; // game frames per second, for the "Show FPS" option
