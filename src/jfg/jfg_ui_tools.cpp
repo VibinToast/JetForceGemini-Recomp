@@ -127,6 +127,7 @@ struct Tools {
     ui::Element* open_menu = nullptr;
     bool opened_by_focus = false; // the open menu opened as its button got the focus: pressing the button goes into it
     bool quiet_focus = false;     // the focus is put back on a bar button: its menu stays closed
+    float menu_left = -1.0f, menu_top = -1.0f; // where the open drop-down was last put (place_open_menu)
     std::vector<Window*> window_order; // open windows, the last opened last (B closes it first)
     ui::Element* profile_menu = nullptr;
     ui::Element* textures_menu = nullptr;
@@ -395,12 +396,28 @@ void rebuild_profile_menu();
 void rebuild_textures_menu();
 
 // Opens a menu's drop-down under its button (closing any other).
+// Puts the open drop-down under its button. Also every frame (jfg_tools_ui_frame): just after the bar is first shown its
+// buttons are not laid out at their full height yet (their text comes later), and a menu placed only once then stayed
+// over the bar, hiding the menu names (QA F-004, the Select menu's tools button with the controller).
+void place_open_menu() {
+    const int i = open_menu_index();
+    if (i < 0) return;
+    Menu& m = t.menus[i];
+    const float left = m.button->get_absolute_left();
+    const float top = m.button->get_absolute_top() + m.button->get_client_height() + 2.0f;
+    if (left == t.menu_left && top == t.menu_top) return;
+    t.menu_left = left;
+    t.menu_top = top;
+    m.menu->set_left(left, ui::Unit::Px);
+    m.menu->set_top(top, ui::Unit::Px);
+}
+
 void open_menu(size_t i) {
     Menu& m = t.menus[i];
     close_menus();
     t.open_menu = m.menu;
-    m.menu->set_left(m.button->get_absolute_left(), ui::Unit::Px);
-    m.menu->set_top(m.button->get_absolute_top() + m.button->get_client_height() + 2.0f, ui::Unit::Px);
+    t.menu_left = t.menu_top = -1.0f;
+    place_open_menu();
     m.menu->set_display(ui::Display::Flex);
     // Rebuilt each time: profiles and packs can be added while the game runs.
     if (m.menu == t.profile_menu || m.menu == t.textures_menu) {
@@ -989,6 +1006,7 @@ extern "C" void jfg_tools_ui_frame(void) {
     if (alt_request) set_captures(!t.captures);
     static bool pad_shown = false; // the input status follows the controller / mouse and keys
     if (pad_shown != recompui::get_cont_active()) { pad_shown = !pad_shown; show_input_status(); }
+    place_open_menu();
     refresh_values();
     g_toolbar_height = t.bar->get_client_height();
     t.context.close();
