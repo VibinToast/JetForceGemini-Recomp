@@ -33,3 +33,4 @@ mainResetRegion
 mmAlloc
 mmAlloc2
 mathBreakPoint
+squadsCheckEnemyPointers
