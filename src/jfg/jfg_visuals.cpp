@@ -78,17 +78,12 @@ extern "C" void jfg_floyd_mute(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t sound = (uint32_t)ctx->r4;
     static const bool log = std::getenv("JFG_DEBUG_FLOYD") != nullptr;
-    if (log) std::fprintf(stderr, "[jfg] Floyd: sound 0x%X muted\n", id & 0xFFFF);
-    return 1;
     if (log) std::fprintf(stderr, "[jfg] Floyd: sound 0x%X muted\n", rd32(sound + api::value_cancel::VALUE) & 0xFFFF);
     wr32(sound + api::value_cancel::CANCEL, 1);
 }
 
 extern "C" void jfg_hide_object(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    return floyd_hidden((uint32_t)ctx->r7) ? 1 : 0;
-}
-
     const uint32_t draw = (uint32_t)ctx->r4;
     if (floyd_hidden(rd32(draw + api::value_cancel::VALUE))) wr32(draw + api::value_cancel::CANCEL, 1);
 }

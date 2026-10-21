@@ -14,7 +14,6 @@ namespace {
 // Event names for mods, in the order of Event.
 const char* const g_event_names[] = {
     "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", "jfg_on_blood_spurt", "jfg_on_blood_hit",
-    "jfg_on_severed_limb_tick", nullptr
     "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
     nullptr
 };

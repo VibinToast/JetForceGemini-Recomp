@@ -49,3 +49,4 @@ shadowGenerate
 camPushModelMtx
 camPushFloatModelMtx
 camPushMuzzleMtx
+camScaleModelMtx

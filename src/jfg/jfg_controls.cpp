@@ -401,7 +401,6 @@ constexpr uint32_t FLOYD_YAW = 0x60, FLOYD_PITCH = 0x62, FLOYD_ROLL = 0x64, FLOY
 
 extern "C" void jfg_sidekick_begin(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    constexpr uint32_t FLOYD_YAW = 0x60, FLOYD_PITCH = 0x62, FLOYD_ROLL = 0x64, FLOYD_PITCH_RATE = 0x68;
     const uint32_t obj = (uint32_t)ctx->r4;
     g_sidekick_data = valid_ptr(obj) ? rd32(obj + 0x68) : 0;
     g_sidekick_frames = std::clamp((int)ctx->r5, 1, 6);
@@ -431,18 +430,6 @@ extern "C" int jfg_floyd_roll_before(uint8_t* rdram_, recomp_context* ctx) {
 extern "C" void jfg_floyd_roll_after(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     constexpr int PITCH_LIMIT = 0x4000, ROLL_LIMIT = 520 * 20; // the game's own limits (full stick: rate 520)
-    static uint32_t bank_data = 0, pitch_data = 0, pitch_tick = 0;
-    static int bank_added = 0, pitch = 0;
-    static float bank = 0.0f;
-    const uint32_t data = (uint32_t)ctx->r16;
-    if (!valid_ptr(data)) return;
-    if (phase == 0) {
-        if (bank_added != 0 && data == bank_data) wr16(data + FLOYD_ROLL, (uint16_t)(rd16(data + FLOYD_ROLL) - bank_added));
-        bank_added = 0;
-        return;
-    }
-    if (!jfg_floyd_mouse_active()) { bank = 0.0f; pitch_data = 0; return; }
-    const int frames = std::clamp((int)rd32((uint32_t)ctx->r29 + 0x124), 1, 6);
     const uint32_t data = g_sidekick_data;
     if (!jfg_floyd_mouse_active()) { g_bank = 0.0f; g_pitch_data = 0; return; }
     const int frames = g_sidekick_frames;
@@ -450,15 +437,9 @@ extern "C" void jfg_floyd_roll_after(uint8_t* rdram_, recomp_context* ctx) {
     wr16(data + FLOYD_YAW, (uint16_t)(rd16(data + FLOYD_YAW) - g_mouse_aim_x));
     // Pitch: carried on from what was written last tick plus what the game's own pitch rate added (a controller's stick),
     // so the levelling drift does not pull it back. Taken from the game afresh when Floyd or the mission is new.
-    if (data != pitch_data || g_tick_count - pitch_tick > 1) pitch = (int16_t)rd16(data + FLOYD_PITCH);
-    else pitch += (int16_t)rd16(data + FLOYD_PITCH_RATE) * frames;
     if (data != g_pitch_data || g_tick_count - g_pitch_tick > 1) g_pitch = (int16_t)rd16(data + FLOYD_PITCH);
     else g_pitch += (int16_t)rd16(data + FLOYD_PITCH_RATE) * frames;
     static const int pitch_sign = std::getenv("JFG_FLOYD_PITCH_SIGN") ? std::atoi(std::getenv("JFG_FLOYD_PITCH_SIGN")) : 1; // tests
-    pitch = std::clamp(pitch + pitch_sign * g_mouse_aim_y, -PITCH_LIMIT, PITCH_LIMIT);
-    wr16(data + FLOYD_PITCH, (uint16_t)(int16_t)pitch);
-    pitch_data = data;
-    pitch_tick = g_tick_count;
     g_pitch = std::clamp(g_pitch + pitch_sign * g_mouse_aim_y, -PITCH_LIMIT, PITCH_LIMIT);
     wr16(data + FLOYD_PITCH, (uint16_t)(int16_t)g_pitch);
     g_pitch_data = data;
@@ -466,10 +447,6 @@ extern "C" void jfg_floyd_roll_after(uint8_t* rdram_, recomp_context* ctx) {
     // Bank: as the game banks for a turn rate (roll = -20 x rate per frame; the mouse's rate is minus its step per frame),
     // smoothed, since the mouse's steps come in lumps.
     const float target = std::clamp(20.0f * (float)g_mouse_aim_x / (float)frames, (float)-ROLL_LIMIT, (float)ROLL_LIMIT);
-    bank += (target - bank) * std::min(1.0f, 0.2f * (float)frames);
-    bank_added = (int)std::lround(bank);
-    bank_data = data;
-    wr16(data + FLOYD_ROLL, (uint16_t)(rd16(data + FLOYD_ROLL) + bank_added));
     g_bank += (target - g_bank) * std::min(1.0f, 0.2f * (float)frames);
     g_bank_added = (int)std::lround(g_bank);
     g_bank_data = data;
