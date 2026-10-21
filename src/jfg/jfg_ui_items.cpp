@@ -6,6 +6,7 @@
 #include <iterator>
 
 #include "imgui/imgui.h"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -78,11 +79,11 @@ void flag_checkboxes(recomp_context* ctx, const NamedFlag* flags, size_t count) 
 
 int current_region() {
     const uint32_t header = rd32(ADDR_levelHeader);
-    return valid_ptr(header) ? (int)rd8(header + 0x102) : 0;
+    return valid_ptr(header) ? (int)LevelHeader::Region::get(header) : 0;
 }
 
 void collected_checkbox(uint32_t ch, int n, const char* name) {
-    const uint32_t addr = ch + CHAR_COLLECTED_OFFSET + (uint32_t)(n >> 3);
+    const uint32_t addr = ch + Character::Collected::offset + (uint32_t)(n >> 3);
     const uint8_t mask = (uint8_t)(0x80u >> (n & 7));
     bool on = (rd8(addr) & mask) != 0;
     char label[64];
@@ -98,12 +99,12 @@ void draw_tribals(recomp_context* ctx) {
                        "\"All tribals rescued\" flag, which is what earns the Tribals' ship part. Editing numbers here does not "
                        "run that check, so the button below sets the flag as well.");
     int total = 0, rescued = 0;
-    if (valid_ptr(table)) for (int r = 0; r < 31; r++) { total += (int8_t)rd8(table + r); rescued += rd8(game + GAME_REGION_STATS_OFFSET + 8 * r); }
+    if (valid_ptr(table)) for (int r = 0; r < 31; r++) { total += (int8_t)rd8(table + r); rescued += RegionStat::Rescued::get(game + Game::RegionStats + RegionStat::Size * r); }
     ImGui::Text("Rescued in total: %d of %d", rescued, total);
     if (valid_ptr(table) && ImGui::Button("Mark every region fully rescued")) {
         for (int r = 0; r < 31; r++) {
-            wr8(game + GAME_REGION_STATS_OFFSET + 8 * r, (uint8_t)std::max(0, (int)(int8_t)rd8(table + r)));
-            wr8(game + GAME_REGION_STATS_OFFSET + 8 * r + 1, 0);
+            RegionStat::Rescued::set(game + Game::RegionStats + RegionStat::Size * r, (uint8_t)std::max(0, (int)(int8_t)rd8(table + r)));
+            RegionStat::Killed::set(game + Game::RegionStats + RegionStat::Size * r, 0);
         }
         call_game(mainSetGameFlag, ctx, { 88u, 1u }); // ALL_TRIBALS_RESCUED, as frontShowRegionStats does
     }
@@ -112,7 +113,7 @@ void draw_tribals(recomp_context* ctx) {
         if (ImGui::Checkbox("\"All tribals rescued\" flag", &flag)) call_game(mainSetGameFlag, ctx, { 88u, flag ? 1u : 0u });
     }
     ImGui::SameLine();
-    if (ImGui::Button("Clear all##trib")) for (int r = 0; r < 31; r++) wr16(game + GAME_REGION_STATS_OFFSET + 8 * r, 0);
+    if (ImGui::Button("Clear all##trib")) for (int r = 0; r < 31; r++) RegionStat::Counts::set(game + Game::RegionStats + RegionStat::Size * r, 0);
     if (ImGui::BeginTable("tribals", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Region", ImGuiTableColumnFlags_WidthStretch, 4.0f);
         ImGui::TableSetupColumn("Rescued", ImGuiTableColumnFlags_WidthStretch, 2.0f);
@@ -122,19 +123,19 @@ void draw_tribals(recomp_context* ctx) {
         for (int r = 1; r < 31; r++) {
             const int count = valid_ptr(table) ? (int)(int8_t)rd8(table + r) : 0;
             if (count <= 0) continue;
-            const uint32_t rec = game + GAME_REGION_STATS_OFFSET + 8 * (uint32_t)r;
+            const uint32_t rec = game + Game::RegionStats + RegionStat::Size * (uint32_t)r;
             ImGui::PushID(r);
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::Text("%s", region_names[r]);
             ImGui::TableNextColumn();
-            int v = rd8(rec);
+            int v = RegionStat::Rescued::get(rec);
             ImGui::SetNextItemWidth(-FLT_MIN);
-            if (ImGui::InputInt("##saved", &v)) wr8(rec, (uint8_t)std::clamp(v, 0, count));
+            if (ImGui::InputInt("##saved", &v)) RegionStat::Rescued::set(rec, (uint8_t)std::clamp(v, 0, count));
             ImGui::TableNextColumn();
-            v = rd8(rec + 1);
+            v = RegionStat::Killed::get(rec);
             ImGui::SetNextItemWidth(-FLT_MIN);
-            if (ImGui::InputInt("##killed", &v)) wr8(rec + 1, (uint8_t)std::clamp(v, 0, count));
+            if (ImGui::InputInt("##killed", &v)) RegionStat::Killed::set(rec, (uint8_t)std::clamp(v, 0, count));
             ImGui::TableNextColumn();
             ImGui::Text("%d", count);
             ImGui::PopID();
@@ -144,12 +145,12 @@ void draw_tribals(recomp_context* ctx) {
     ImGui::SeparatorText("This visit (the region you are in)");
     const int region = current_region();
     ImGui::Text("Region: %s", (region >= 1 && region <= 30) ? region_names[region] : "(none)");
-    int v = rd8(game + 4);
-    if (ImGui::InputInt("Rescued so far", &v)) wr8(game + 4, (uint8_t)std::clamp(v, 0, 255));
-    v = rd8(game + 5);
-    if (ImGui::InputInt("Killed so far", &v)) wr8(game + 5, (uint8_t)std::clamp(v, 0, 255));
-    v = rd8(game + 6);
-    if (ImGui::InputInt("Remaining", &v)) wr8(game + 6, (uint8_t)std::clamp(v, 0, 255));
+    int v = Game::TribalsRescuedCount::get(game);
+    if (ImGui::InputInt("Rescued so far", &v)) Game::TribalsRescuedCount::set(game, (uint8_t)std::clamp(v, 0, 255));
+    v = Game::TribalsKilledCount::get(game);
+    if (ImGui::InputInt("Killed so far", &v)) Game::TribalsKilledCount::set(game, (uint8_t)std::clamp(v, 0, 255));
+    v = Game::TribalsLeftCount::get(game);
+    if (ImGui::InputInt("Remaining", &v)) Game::TribalsLeftCount::set(game, (uint8_t)std::clamp(v, 0, 255));
     ImGui::TextDisabled("\"Killed\" above 0 or \"Remaining\" above 0 when you leave means the visit is not a full rescue.");
 }
 
@@ -183,19 +184,19 @@ const MultiUnlock multi_levels[] = {
     {73, "Target range: Goldwood (level 251)"}, {74, "Target range: SS Anubis (level 364)"}, {75, "Target range: Rith Essa (level 408)"},
 };
 bool multi_unlocked(int flag) {
-    if (flag >= 0 && flag < 20) return (rd32(ADDR_globalflags + 0x64) >> flag) & 1;
-    if (flag >= 66 && flag <= 70) return (rd8(ADDR_globalflags + 0x6A) >> (flag - 66)) & 1;
-    if (flag >= 73 && flag <= 76) return (rd8(ADDR_globalflags + 0x6B) >> (flag - 73)) & 1;
-    if (flag >= 82 && flag <= 87) return (rd16(ADDR_globalflags + 0x68) >> (flag - 82)) & 1;
+    if (flag >= 0 && flag < 20) return (GlobalFlags::Flags0To19::get(ADDR_globalflags) >> flag) & 1;
+    if (flag >= 66 && flag <= 70) return (GlobalFlags::Flags66To70::get(ADDR_globalflags) >> (flag - 66)) & 1;
+    if (flag >= 73 && flag <= 76) return (GlobalFlags::Flags73To76::get(ADDR_globalflags) >> (flag - 73)) & 1;
+    if (flag >= 82 && flag <= 87) return (GlobalFlags::Flags82To87::get(ADDR_globalflags) >> (flag - 82)) & 1;
     return false;
 }
 void set_multi_unlocked(recomp_context* ctx, int flag, bool on) {
     if (on) { call_game(mainSetGameFlag, ctx, { (uint32_t)flag, 1u }); return; }
     call_game(mainSetGameFlag, ctx, { (uint32_t)flag, 0u });
-    if (flag >= 0 && flag < 20) wr32(ADDR_globalflags + 0x64, rd32(ADDR_globalflags + 0x64) & ~(1u << flag));
-    else if (flag >= 66 && flag <= 70) wr8(ADDR_globalflags + 0x6A, (uint8_t)(rd8(ADDR_globalflags + 0x6A) & ~(1u << (flag - 66))));
-    else if (flag >= 73 && flag <= 76) wr8(ADDR_globalflags + 0x6B, (uint8_t)(rd8(ADDR_globalflags + 0x6B) & ~(1u << (flag - 73))));
-    else if (flag >= 82 && flag <= 87) wr16(ADDR_globalflags + 0x68, (uint16_t)(rd16(ADDR_globalflags + 0x68) & ~(1u << (flag - 82))));
+    if (flag >= 0 && flag < 20) GlobalFlags::Flags0To19::set(ADDR_globalflags, GlobalFlags::Flags0To19::get(ADDR_globalflags) & ~(1u << flag));
+    else if (flag >= 66 && flag <= 70) GlobalFlags::Flags66To70::set(ADDR_globalflags, (uint8_t)(GlobalFlags::Flags66To70::get(ADDR_globalflags) & ~(1u << (flag - 66))));
+    else if (flag >= 73 && flag <= 76) GlobalFlags::Flags73To76::set(ADDR_globalflags, (uint8_t)(GlobalFlags::Flags73To76::get(ADDR_globalflags) & ~(1u << (flag - 73))));
+    else if (flag >= 82 && flag <= 87) GlobalFlags::Flags82To87::set(ADDR_globalflags, (uint16_t)(GlobalFlags::Flags82To87::get(ADDR_globalflags) & ~(1u << (flag - 82))));
 }
 void draw_multiplayer_unlocks(recomp_context* ctx) {
     ImGui::TextWrapped("Bonuses found in the game (totem poles, Floyd medals, race wins) that unlock multiplayer characters "
@@ -235,12 +236,12 @@ void draw_inventory(recomp_context* ctx) {
     }
 
     if (ImGui::CollapsingHeader("Weapons and ammo", ImGuiTreeNodeFlags_DefaultOpen)) {
-        uint16_t owned = rd16(ch + CHAR_WEAPONS_OFFSET);
-        ImGui::Text("Current weapon slot: %d", (int)rd8(ch + CHAR_WEAPON_OFFSET));
+        uint16_t owned = Character::WeaponsOwned::get(ch);
+        ImGui::Text("Current weapon slot: %d", (int)Character::CurrentWeapon::get(ch));
         if (ImGui::Button("Give all")) { owned = 0x7FFF; set_owned_weapons(ch, owned); }
         ImGui::SameLine();
         if (ImGui::Button("Fill ammo")) {
-            for (int w = 0; w < 16; w++) wr16(ch + CHAR_AMMO_OFFSET + 2 * w, 999);
+            for (int w = 0; w < 16; w++) Character::Ammo::set(ch, w, 999);
         }
         if (ImGui::BeginTable("weapons", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn("Weapon", ImGuiTableColumnFlags_WidthStretch, 3.0f);
@@ -259,9 +260,9 @@ void draw_inventory(recomp_context* ctx) {
                     set_owned_weapons(ch, owned);
                 }
                 ImGui::TableNextColumn();
-                int ammo = rd16(ch + CHAR_AMMO_OFFSET + 2 * w);
+                int ammo = Character::Ammo::get(ch, w);
                 ImGui::SetNextItemWidth(-FLT_MIN);
-                if (ImGui::InputInt("##ammo", &ammo, 10, 100)) wr16(ch + CHAR_AMMO_OFFSET + 2 * w, (uint16_t)std::clamp(ammo, 0, 0xFFFF));
+                if (ImGui::InputInt("##ammo", &ammo, 10, 100)) Character::Ammo::set(ch, w, (uint16_t)std::clamp(ammo, 0, 0xFFFF));
                 ImGui::TableNextColumn();
                 if (g.edit_character == (int16_t)rd16(ADDR_currentCharacter) && ImGui::SmallButton("Hold")) select_weapon(ctx, w);
                 ImGui::PopID();
@@ -274,20 +275,20 @@ void draw_inventory(recomp_context* ctx) {
         // Game character: +0 s16 health (256 per unit), +2 s16 health level. A level allows 5 * level + 4 units; a new
         // character starts at level 6 and each "Gemini capacity" pickup adds one, up to 12 (healthPickupControl).
         // The character on screen keeps its live health in its object's damage data (object + 0x4C, +6).
-        int level = (int16_t)rd16(ch + CHAR_HEALTH_LEVEL_OFFSET);
+        int level = Character::HealthLevel::get(ch);
         const bool on_screen = g.edit_character == (int16_t)rd16(ADDR_currentCharacter);
         const uint32_t obj = on_screen ? player_object(ctx) : 0;
-        const uint32_t live = (obj != 0 && valid_ptr(rd32(obj + 0x4C))) ? rd32(obj + 0x4C) + 6 : 0;
-        int units = (int16_t)rd16(live != 0 ? live : ch + CHAR_HEALTH_OFFSET) / 256;
+        const uint32_t live = (obj != 0 && valid_ptr(Obj::Damage::get(obj))) ? Obj::Damage::get(obj) + Damage::Health::offset : 0;
+        int units = (int16_t)rd16(live != 0 ? live : ch + Character::Health::offset) / 256;
         auto set_health = [&](int new_units) {
             const uint16_t v = (uint16_t)(std::clamp(new_units, 1, 5 * level + 4) * 256);
-            wr16(ch + CHAR_HEALTH_OFFSET, v);
+            Character::Health::set(ch, (int16_t)v);
             if (live != 0) wr16(live, v);
         };
         int upgrades = level - 6;
         if (ImGui::SliderInt("Upgrades", &upgrades, 0, 6)) {
             level = std::clamp(upgrades, 0, 6) + 6;
-            wr16(ch + CHAR_HEALTH_LEVEL_OFFSET, (uint16_t)level);
+            Character::HealthLevel::set(ch, (int16_t)level);
             set_health(5 * level + 4);
         }
         ImGui::Text("Maximum health: %d units", 5 * level + 4);
@@ -359,12 +360,12 @@ std::vector<ToolField> item_fields() {
         out.push_back({ F::Toggle, name, 0, 1, 1, 1,
             [ch, n](recomp_context*) {
                 const uint32_t c = ch();
-                return c != 0 && (rd8(c + CHAR_COLLECTED_OFFSET + (uint32_t)(n >> 3)) & (0x80u >> (n & 7))) ? 1 : 0;
+                return c != 0 && (rd8(c + Character::Collected::offset + (uint32_t)(n >> 3)) & (0x80u >> (n & 7))) ? 1 : 0;
             },
             [ch, n](recomp_context*, int v) {
                 const uint32_t c = ch();
                 if (c == 0) return;
-                const uint32_t addr = c + CHAR_COLLECTED_OFFSET + (uint32_t)(n >> 3);
+                const uint32_t addr = c + Character::Collected::offset + (uint32_t)(n >> 3);
                 const uint8_t mask = (uint8_t)(0x80u >> (n & 7));
                 wr8(addr, (uint8_t)((rd8(addr) & ~mask) | (v ? mask : 0)));
             } });
@@ -374,24 +375,24 @@ std::vector<ToolField> item_fields() {
         const uint32_t c = ch();
         if (c == 0) return std::string("No game loaded.");
         return std::string("Editing ") + character_names[std::clamp(g.edit_character, 0, 2)] +
-               ", current weapon slot " + std::to_string(rd8(c + CHAR_WEAPON_OFFSET)) + ".";
+               ", current weapon slot " + std::to_string(Character::CurrentWeapon::get(c)) + ".";
     } });
 
     heading("Weapons and ammo");
     action("Give all weapons", [ch](recomp_context*) { if (const uint32_t c = ch()) set_owned_weapons(c, 0x7FFF); });
-    action("Fill ammo", [ch](recomp_context*) { if (const uint32_t c = ch()) for (int w = 0; w < 16; w++) wr16(c + CHAR_AMMO_OFFSET + 2 * w, 999); });
+    action("Fill ammo", [ch](recomp_context*) { if (const uint32_t c = ch()) for (int w = 0; w < 16; w++) Character::Ammo::set(c, w, 999); });
     for (int w = 0; w < 15; w++) {
         out.push_back({ F::Toggle, std::to_string(w) + "  " + weapon_names[w], 0, 1, 1, 1,
-            [ch, w](recomp_context*) { const uint32_t c = ch(); return c != 0 && ((rd16(c + CHAR_WEAPONS_OFFSET) >> w) & 1) ? 1 : 0; },
+            [ch, w](recomp_context*) { const uint32_t c = ch(); return c != 0 && ((Character::WeaponsOwned::get(c) >> w) & 1) ? 1 : 0; },
             [ch, w](recomp_context*, int v) {
                 const uint32_t c = ch();
                 if (c == 0) return;
-                const uint16_t owned = rd16(c + CHAR_WEAPONS_OFFSET);
+                const uint16_t owned = Character::WeaponsOwned::get(c);
                 set_owned_weapons(c, (uint16_t)((owned & ~(1u << w)) | ((v ? 1u : 0u) << w)));
             } });
         out.push_back({ F::Number, std::string("    Ammo: ") + weapon_names[w], 0, 999, 10, 100,
-            [ch, w](recomp_context*) { const uint32_t c = ch(); return c != 0 ? (int)rd16(c + CHAR_AMMO_OFFSET + 2 * w) : 0; },
-            [ch, w](recomp_context*, int v) { if (const uint32_t c = ch()) wr16(c + CHAR_AMMO_OFFSET + 2 * w, (uint16_t)std::clamp(v, 0, 0xFFFF)); } });
+            [ch, w](recomp_context*) { const uint32_t c = ch(); return c != 0 ? (int)Character::Ammo::get(c, w) : 0; },
+            [ch, w](recomp_context*, int v) { if (const uint32_t c = ch()) Character::Ammo::set(c, w, (uint16_t)std::clamp(v, 0, 0xFFFF)); } });
         out.push_back({ F::Action, std::string("    Hold the ") + weapon_names[w], 0, 1, 1, 1, nullptr, [w](recomp_context* c, int) {
             if (g.edit_character == (int16_t)rd16(ADDR_currentCharacter)) select_weapon(c, w);
         } });
@@ -403,26 +404,26 @@ std::vector<ToolField> item_fields() {
     auto set_health = [ch](recomp_context* c, int units) {
         const uint32_t p = ch();
         if (p == 0) return;
-        const int level = (int16_t)rd16(p + CHAR_HEALTH_LEVEL_OFFSET);
+        const int level = Character::HealthLevel::get(p);
         const uint16_t v = (uint16_t)(std::clamp(units, 1, 5 * level + 4) * 256);
-        wr16(p + CHAR_HEALTH_OFFSET, v);
+        Character::Health::set(p, (int16_t)v);
         const uint32_t obj = g.edit_character == (int16_t)rd16(ADDR_currentCharacter) ? player_object(c) : 0;
-        if (obj != 0 && valid_ptr(rd32(obj + 0x4C))) wr16(rd32(obj + 0x4C) + 6, v);
+        if (obj != 0 && valid_ptr(Obj::Damage::get(obj))) wr16(Obj::Damage::get(obj) + Damage::Health::offset, v);
     };
     auto get_health = [ch](recomp_context* c) {
         const uint32_t p = ch();
         if (p == 0) return 0;
         const uint32_t obj = g.edit_character == (int16_t)rd16(ADDR_currentCharacter) ? player_object(c) : 0;
-        const uint32_t live = (obj != 0 && valid_ptr(rd32(obj + 0x4C))) ? rd32(obj + 0x4C) + 6 : p + CHAR_HEALTH_OFFSET;
+        const uint32_t live = (obj != 0 && valid_ptr(Obj::Damage::get(obj))) ? Obj::Damage::get(obj) + Damage::Health::offset : p + Character::Health::offset;
         return (int)(int16_t)rd16(live) / 256;
     };
     out.push_back({ F::Number, "Health upgrades", 0, 6, 1, 1,
-        [ch](recomp_context*) { const uint32_t p = ch(); return p != 0 ? (int)(int16_t)rd16(p + CHAR_HEALTH_LEVEL_OFFSET) - 6 : 0; },
+        [ch](recomp_context*) { const uint32_t p = ch(); return p != 0 ? (int)Character::HealthLevel::get(p) - 6 : 0; },
         [ch, set_health](recomp_context* c, int v) {
             const uint32_t p = ch();
             if (p == 0) return;
             const int level = std::clamp(v, 0, 6) + 6;
-            wr16(p + CHAR_HEALTH_LEVEL_OFFSET, (uint16_t)level);
+            Character::HealthLevel::set(p, (int16_t)level);
             set_health(c, 5 * level + 4);
         } });
     out.push_back({ F::Number, "Health (units)", 1, 64, 1, 5, get_health, set_health });
@@ -441,31 +442,31 @@ std::vector<ToolField> item_fields() {
         const uint32_t game = rd32(ADDR_gameplay), table = rd32(ADDR_tribaltable);
         int total = 0, rescued = 0;
         if (valid_ptr(game) && valid_ptr(table))
-            for (int r = 0; r < 31; r++) { total += (int8_t)rd8(table + r); rescued += rd8(game + GAME_REGION_STATS_OFFSET + 8 * r); }
+            for (int r = 0; r < 31; r++) { total += (int8_t)rd8(table + r); rescued += RegionStat::Rescued::get(game + Game::RegionStats + RegionStat::Size * r); }
         return "Rescued in total: " + std::to_string(rescued) + " of " + std::to_string(total);
     } });
     action("Mark every region fully rescued", [](recomp_context* c) {
         const uint32_t game = rd32(ADDR_gameplay), table = rd32(ADDR_tribaltable);
         if (!valid_ptr(game) || !valid_ptr(table)) return;
         for (int r = 0; r < 31; r++) {
-            wr8(game + GAME_REGION_STATS_OFFSET + 8 * r, (uint8_t)std::max(0, (int)(int8_t)rd8(table + r)));
-            wr8(game + GAME_REGION_STATS_OFFSET + 8 * r + 1, 0);
+            RegionStat::Rescued::set(game + Game::RegionStats + RegionStat::Size * r, (uint8_t)std::max(0, (int)(int8_t)rd8(table + r)));
+            RegionStat::Killed::set(game + Game::RegionStats + RegionStat::Size * r, 0);
         }
         call_game(mainSetGameFlag, c, { 88u, 1u }); // ALL_TRIBALS_RESCUED, as frontShowRegionStats does
     });
     flag_toggle(88, "\"All tribals rescued\" flag (88)");
     action("Clear all region records", [](recomp_context*) {
         const uint32_t game = rd32(ADDR_gameplay);
-        if (valid_ptr(game)) for (int r = 0; r < 31; r++) wr16(game + GAME_REGION_STATS_OFFSET + 8 * r, 0);
+        if (valid_ptr(game)) for (int r = 0; r < 31; r++) RegionStat::Counts::set(game + Game::RegionStats + RegionStat::Size * r, 0);
     });
     auto region_count = [](int r) { const uint32_t t = rd32(ADDR_tribaltable); return valid_ptr(t) ? (int)(int8_t)rd8(t + r) : 0; };
     for (int r = 1; r < 31; r++) {
         for (int k = 0; k < 2; k++) {
             ToolField f{ F::Number, "", 0, 20, 1, 5,
-                [r, k](recomp_context*) { const uint32_t game = rd32(ADDR_gameplay); return valid_ptr(game) ? (int)rd8(game + GAME_REGION_STATS_OFFSET + 8 * r + k) : 0; },
+                [r, k](recomp_context*) { const uint32_t game = rd32(ADDR_gameplay); return valid_ptr(game) ? (int)rd8(game + Game::RegionStats + RegionStat::Size * r + k) : 0; },
                 [r, k, region_count](recomp_context*, int v) {
                     const uint32_t game = rd32(ADDR_gameplay);
-                    if (valid_ptr(game)) wr8(game + GAME_REGION_STATS_OFFSET + 8 * r + k, (uint8_t)std::clamp(v, 0, std::max(0, region_count(r))));
+                    if (valid_ptr(game)) wr8(game + Game::RegionStats + RegionStat::Size * r + k, (uint8_t)std::clamp(v, 0, std::max(0, region_count(r))));
                 },
                 [r, k, region_count](recomp_context*) {
                     return std::string(region_names[r]) + (k == 0 ? ": rescued (of " : ": killed (of ") + std::to_string(region_count(r)) + ")";
@@ -480,8 +481,8 @@ std::vector<ToolField> item_fields() {
     const char* const visit_labels[3] = { "Rescued so far", "Killed so far", "Remaining" };
     for (int k = 0; k < 3; k++) {
         out.push_back({ F::Number, visit_labels[k], 0, 255, 1, 5,
-            [k](recomp_context*) { const uint32_t game = rd32(ADDR_gameplay); return valid_ptr(game) ? (int)rd8(game + 4 + k) : 0; },
-            [k](recomp_context*, int v) { const uint32_t game = rd32(ADDR_gameplay); if (valid_ptr(game)) wr8(game + 4 + k, (uint8_t)std::clamp(v, 0, 255)); } });
+            [k](recomp_context*) { const uint32_t game = rd32(ADDR_gameplay); return valid_ptr(game) ? (int)rd8(game + Game::TribalsRescuedCount::offset + k) : 0; },
+            [k](recomp_context*, int v) { const uint32_t game = rd32(ADDR_gameplay); if (valid_ptr(game)) wr8(game + Game::TribalsRescuedCount::offset + k, (uint8_t)std::clamp(v, 0, 255)); } });
     }
 
     heading("Ship parts");
