@@ -8,12 +8,14 @@
 # plus a .sha256 for each. Run by tools/package_release.sh, normally inside the tools/linux-build container:
 #   tools/linux-build/package.sh <source folder> <version> <output folder>
 # Needs patchelf, appimagetool, binutils. SDL2 goes in with the game (so controller support does not depend on the
-# system); Vulkan, the GPU drivers, GTK and the C/C++ runtime come from the system, as they must.
+# system); Vulkan, the GPU drivers, D-Bus and the C/C++ runtime come from the system, as they must. libatomic is
+# normally linked into the game (CMakeLists.txt); if this build still needs libatomic.so.1, it goes in too, because
+# Fedora does not install it by default.
 set -euo pipefail
 SRC="$(realpath "$1")"; VERSION="$2"; OUT="$(realpath "$3")"
 BIN="$SRC/bin"
 EXE="$BIN/JetForceGeminiRecompiled"
-BUNDLE="libSDL2-2.0.so.0"
+BUNDLE="libSDL2-2.0.so.0 libatomic.so.1"
 
 say() { echo "[jfg] $*"; }
 die() { echo "[jfg] ERROR: $*" >&2; exit 1; }

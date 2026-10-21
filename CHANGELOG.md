@@ -57,6 +57,7 @@ are written here by hand and become that version's notes when it is released.
 - Texture packs keep their own settings (such as the texture shift) instead of having them reset when the pack loads.
 - Pack buttons are labelled Folder or .rtz, so two copies of the same pack can be told apart.
 - HUD numbers and text in HD texture packs sit where the original ones do.
+- Texture packs whose file ends in .RTZ (or any other mix of capitals) now load. Before, they were listed but the game ignored them.
 
 ### Graphics
 
@@ -68,6 +69,7 @@ are written here by hand and become that version's notes when it is released.
 ### Linux
 
 - Linux releases come as one AppImage that runs on SteamOS (Steam Deck), Fedora and Ubuntu, plus a portable folder.
+- On Linux, options that need a restart now start the game again instead of only closing it.
 
 ### Tools (F10)
 
