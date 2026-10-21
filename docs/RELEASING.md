@@ -55,7 +55,9 @@ The notes are written by hand, in an `## Unreleased` section at the top of `CHAN
 Write them on the release branch while it's in testing, so they describe exactly what ships. When the release is made,
 the workflow renames the section to `## vX.Y.Z (date)` and uses the same text for the GitHub release, with a "Full
 changelog" link added at the end. The game and the launcher show `CHANGELOG.md` under Changelogs, and test builds of
-the release branch already show the Unreleased section.
+the release branch already show the Unreleased section. Once the release branch with its notes is pushed, the launcher
+of older versions shows them too, at the top of Changelogs as "Coming in x.y" (instead of the commits since the last
+release).
 
 ```markdown
 ## Unreleased
