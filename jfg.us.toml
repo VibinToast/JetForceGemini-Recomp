@@ -111,13 +111,6 @@ vram = 0x829B0010
 func = "osRamTest4_6105"
 value = 0x10000003 # beq t7, at, pass -> b pass
 
-# Field of view option (src/jfg/jfg_visuals.cpp): camSetFOV, where its zoomed and unzoomed paths meet. $f12 = the FOV
-# about to be applied (camera->fov already holds the game's own), $t7 = the camera's zoom flag (D_800A3174[camNo]).
-[[patches.hook]]
-func = "camSetFOV"
-before_vram = 0x8003F870
-text = "{ float jfg_fov(uint8_t*, float, uint32_t); ctx->f12.fl = jfg_fov(rdram, ctx->f12.fl, (uint32_t)ctx->r15); }"
-
 # squadsFireWeapon (overlay 3): the one objSetupObject call in it whose result is not checked (+0x8640, a squad member's
 # weapon object, written to +0x88 right after) crashed the game when the object could not be created (a gun turret in
 # level 248). It now leaves the way the function's other four calls do when they get NULL: to its exit at +0x9670.
