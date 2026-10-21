@@ -295,7 +295,7 @@ extern "C" void jfg_mine_init(uint8_t* rdram, recomp_context* ctx) {
     g_player_mines.emplace_back(mine, md);
 }
 
-// Hook at the end of laserboltInit (overlay 109): a0 = the new bolt. Scales bolts the player fires.
+// After laserboltInit (overlay 109; its wrapper): a0 = the new bolt. Scales bolts the player fires.
 extern "C" void jfg_bolt_init(uint8_t* rdram, recomp_context* ctx) {
     g_rdram = rdram;
     const uint32_t bolt = (uint32_t)ctx->r4;
@@ -462,6 +462,14 @@ std::vector<ToolField> weapon_fields() {
 }
 
 } // namespace jfg
+
+JFG_WRAP(laserboltInit) {
+    const gpr bolt = ctx->r4;
+    laserboltInit_orig(rdram, ctx);
+    recomp_context c = *ctx;
+    c.r4 = bolt;
+    jfg_bolt_init(rdram, &c);
+}
 
 JFG_WRAP(objAnimDframe) {
     ctx->r5 = (gpr)(int32_t)jfg_anim_speed(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5);
