@@ -640,7 +640,7 @@ void jfg_camera_controls(recomp_context* ctx) {
             Obj::Yaw::set(obj, yaw);
             const uint32_t data = Obj::Data::get(obj);
             // the object's yaw and the copies the control code keeps and writes back every tick
-            if (valid_ptr(data)) { for (uint32_t k : { PlayerData::BodyYawCopy::offset, PlayerData::BodyYaw::offset, PlayerData::BodyYawCopy2::offset, PlayerData::BodyYawCopy3::offset, PlayerData::BodyYawCopy4::offset }) {
+            if (valid_ptr(data)) { for (uint32_t k : { PlayerData::BodyYawCopy::offset, PlayerData::BodyYaw::offset, PlayerData::BodyYawCopy2::offset, PlayerData::AimYaw::offset, PlayerData::AimYawCopy::offset }) {
                     wr16(data + k, yaw);
                 } }
         }
