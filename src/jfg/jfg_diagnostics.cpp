@@ -90,17 +90,17 @@ extern "C" void jfg_squad_spawn_after(uint8_t* rdram_, recomp_context* ctx) {
 
 // objSetupObject(entry, flags) returning NULL: which of its steps failed, logged to jfg_memory.log. A squadron member and
 // a gun turret's shot could not be created in level 248 with 200 KB of heap free (the shot's NULL then crashed
-// squadsFireWeapon), so the heap is not the only thing that runs out. Hooks: the entry, the return of each call that can
-// fail (step numbers below), and the shared exit at 0x80006E04 ($v0 = the object, the type at 0x7A($sp)). Calls nest
-// (an object's children), so the record is kept per depth.
+// squadsFireWeapon), so the heap is not the only thing that runs out. Its wrapper keeps a record per depth (calls nest:
+// an object's children); the wrappers of the calls that can fail (step numbers below) note their result when
+// objSetupObject made the call itself, not one of them. The type is objGetObjdef's argument.
 namespace {
 constexpr uint32_t ADDR_ObjListCount = 0x800F2CA8, ADDR_NoAddObjListCount = 0x800F2CB8;
 constexpr int OBJ_STEPS = 8, OBJ_DEPTH = 8;
 const char* const OBJ_STEP_NAMES[OBJ_STEPS] = { "objdef", "8000F978", "texture", "model", "model2", "sprite", "allocR", "alloc" };
-struct ObjSetupRecord { bool ran[OBJ_STEPS]; uint32_t result[OBJ_STEPS]; };
 struct ObjSetupRecord { bool ran[OBJ_STEPS]; uint32_t result[OBJ_STEPS]; int type; bool typed; };
 ObjSetupRecord g_obj_setup[OBJ_DEPTH];
 int g_obj_depth = 0;
+int g_obj_step_nest = 0; // step calls under way: only the outermost (made by objSetupObject) is noted
 }
 extern "C" void jfg_objsetup_enter(uint8_t* rdram_, recomp_context*) {
     g_rdram = rdram_;
@@ -111,15 +111,15 @@ extern "C" void jfg_objsetup_step(uint8_t* rdram_, recomp_context* ctx, int step
     g_rdram = rdram_;
     const int d = g_obj_depth - 1;
     if (d < 0 || d >= OBJ_DEPTH || step < 0 || step >= OBJ_STEPS) return;
+    if (step == 4 && !g_obj_setup[d].ran[3]) step = 3; // modLoadModel: the first call is step 3, the second step 4
     g_obj_setup[d].ran[step] = true;
     g_obj_setup[d].result[step] = (uint32_t)ctx->r2;
 }
-extern "C" void jfg_objsetup_exit(uint8_t* rdram_, recomp_context* ctx) {
+extern "C" void jfg_objsetup_exit(uint8_t* rdram_, recomp_context* ctx, int type) {
     g_rdram = rdram_;
     const int d = --g_obj_depth;
     if (g_obj_depth < 0) g_obj_depth = 0;
     if ((uint32_t)ctx->r2 != 0 || d < 0 || d >= OBJ_DEPTH) return;
-    const int type = (int16_t)rd16((uint32_t)ctx->r29 + 0x7A);
     std::string steps;
     uint32_t signature = (uint32_t)type << 16; // the type, which steps ran, which of them returned 0
     for (int i = 0; i < OBJ_STEPS; i++) {
@@ -223,12 +223,18 @@ extern "C" void jfg_sync_printf(uint8_t* rdram_, recomp_context* ctx) {
 } // namespace jfg
 
 // mmAlloc(size, colour) and mmAlloc2 (the same function twice): jfg_mm_alloc_check on the result.
-JFG_WRAP(mmAlloc) {
+extern "C" void mmAlloc_orig(uint8_t* rdram, recomp_context* ctx);
+
+static void mm_alloc_checked(uint8_t* rdram, recomp_context* ctx) {
     const uint32_t size = (uint32_t)ctx->r4, colour = (uint32_t)ctx->r5;
     mmAlloc_orig(rdram, ctx);
     jfg_mm_alloc_check(rdram, ctx, size, colour);
 }
 
+static void objsetup_step_call(uint8_t* rdram, recomp_context* ctx, recomp_func_t* orig, int step);
+
+JFG_WRAP(mmAlloc) {
+    objsetup_step_call(rdram, ctx, mm_alloc_checked, 7);
 }
 
 JFG_WRAP(mmAlloc2) {
@@ -256,3 +262,38 @@ JFG_WRAP(squadsCheckEnemyPointers) {
 JFG_WRAP(osSyncPrintf) {
     jfg_sync_printf(rdram, ctx);
 }
+
+// objSetupObject and its steps (see jfg_objsetup_enter).
+JFG_WRAP(objSetupObject) {
+    const int nest = jfg::g_obj_step_nest;
+    jfg::g_obj_step_nest = 0;
+    jfg_objsetup_enter(rdram, ctx);
+    const int d = jfg::g_obj_depth - 1;
+    objSetupObject_orig(rdram, ctx);
+    const int type = (d >= 0 && d < jfg::OBJ_DEPTH && jfg::g_obj_setup[d].typed) ? jfg::g_obj_setup[d].type : -1;
+    jfg_objsetup_exit(rdram, ctx, type);
+    jfg::g_obj_step_nest = nest;
+}
+
+// A step call: noted when objSetupObject is running and made it itself.
+static void objsetup_step_call(uint8_t* rdram, recomp_context* ctx, recomp_func_t* orig, int step) {
+    const bool outer = jfg::g_obj_depth > 0 && jfg::g_obj_step_nest == 0;
+    if (outer && step == 0) {
+        const int d = jfg::g_obj_depth - 1;
+        if (d < jfg::OBJ_DEPTH && !jfg::g_obj_setup[d].typed) {
+            jfg::g_obj_setup[d].type = (int16_t)(int32_t)ctx->r4;
+            jfg::g_obj_setup[d].typed = true;
+        }
+    }
+    jfg::g_obj_step_nest++;
+    orig(rdram, ctx);
+    jfg::g_obj_step_nest--;
+    if (outer) jfg_objsetup_step(rdram, ctx, step);
+}
+
+JFG_WRAP(objGetObjdef) { objsetup_step_call(rdram, ctx, objGetObjdef_orig, 0); }
+JFG_WRAP(func_8000F978_10578) { objsetup_step_call(rdram, ctx, func_8000F978_10578_orig, 1); }
+JFG_WRAP(texLoadTexture) { objsetup_step_call(rdram, ctx, texLoadTexture_orig, 2); }
+JFG_WRAP(modLoadModel) { objsetup_step_call(rdram, ctx, modLoadModel_orig, 4); }
+JFG_WRAP(texLoadSprite) { objsetup_step_call(rdram, ctx, texLoadSprite_orig, 5); }
+JFG_WRAP(mmAllocR) { objsetup_step_call(rdram, ctx, mmAllocR_orig, 6); }
