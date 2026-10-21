@@ -21,6 +21,10 @@ enum class Event : uint32_t {
     BloodSpurt,       // jfg_on_blood_spurt(JfgBloodSpurt* blood)
     BloodHit,         // jfg_on_blood_hit(JfgBloodHit* hit)
     SeveredLimbTick,  // jfg_on_severed_limb_tick(Object* limb, int frames)
+    ObjectDraw,       // jfg_on_object_draw(JfgObjectDraw* draw)
+    SoundPlay,        // jfg_on_sound_play(JfgSoundPlay* sound)
+    ScreenFlash,      // jfg_on_screen_flash(JfgScreenFlash* flash)
+    SidekickTick,     // jfg_on_sidekick_tick(Object* floyd, int frames)
     Count
 };
 
@@ -44,6 +48,10 @@ constexpr uint32_t X = 0x00, Y = 0x04, Z = 0x08, VX = 0x0C, VY = 0x10, VZ = 0x14
 }
 namespace blood_hit {
 constexpr uint32_t X = 0x00, Y = 0x04, Z = 0x08, CANCEL = 0x0C, SIZE = 0x10;
+}
+// JfgObjectDraw, JfgSoundPlay, JfgScreenFlash: one value and cancel.
+namespace value_cancel {
+constexpr uint32_t VALUE = 0x00, CANCEL = 0x04, SIZE = 0x08;
 }
 
 void add_internal(Event event, Handler handler);

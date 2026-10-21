@@ -41,7 +41,7 @@ constexpr uint32_t ADDR_modelMtx = 0x800FAAB0; // D_800FAAB0: the float model ma
 constexpr uint32_t ADDR_lastMtx = 0x800FAB30;  // D_800FAB30: the Mtx the push function just wrote
 }
 
-// Entry of objPrintObject(dList, mtx, vtx, obj). A character's model has no model matrix of its own: its bones are
+// Before objPrintObject(dList, mtx, vtx, obj) (its wrapper, jfg_api.cpp). A character's model has no model matrix of its own: its bones are
 // world-space matrices the game converts into a bone buffer of the model instance, and the model's display lists
 // multiply them onto the camera from there (G_DMAOFFSETS points at the buffer). Both of the instance's buffers are
 // tagged with the object, so RT64 can tell whose bones they are.
@@ -64,13 +64,14 @@ extern "C" void jfg_interp_object(uint8_t* rdram_, recomp_context* ctx) {
     }
 }
 
-// objPrintObject's return.
+// After objPrintObject (its wrapper, jfg_api.cpp).
 extern "C" void jfg_interp_object_done(uint8_t* rdram_, recomp_context* ctx) {
     (void)rdram_; (void)ctx;
     if (drawn_count > 0) drawn_count--;
 }
 
 // Entry of each push function: where it was called from, and its third argument ($a2), which tells apart several
+// Before each push function: where it was called from, and its third argument ($a2), which tells apart several
 // matrices pushed from the same place (a character's weapon parts): camPushModelMtx's transform, camPushFloatModelMtx's
 // source matrix, camPushMuzzleMtx's position, camScaleModelMtx's scale.
 extern "C" void jfg_interp_push(uint8_t* rdram_, recomp_context* ctx) {
@@ -80,6 +81,7 @@ extern "C" void jfg_interp_push(uint8_t* rdram_, recomp_context* ctx) {
 }
 
 // Each push function right after it noted the matrix it wrote (D_800FAB30). A matrix pushed outside an object's
+// Each push function after it wrote the matrix and noted it (D_800FAB30; its wrapper). A matrix pushed outside an object's
 // drawing is tagged with ID 0, so a tag left at that address by an earlier frame cannot apply to it.
 extern "C" void jfg_interp_pushed(uint8_t* rdram_, recomp_context* ctx) {
     (void)ctx;
