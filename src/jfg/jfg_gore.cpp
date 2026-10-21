@@ -24,6 +24,7 @@
 #include <unordered_map>
 
 #include "jfg_api.h"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -41,10 +42,8 @@ constexpr int16_t SPLAT_LIFE = 300;    // what bloodSpurtAdd starts an entry wit
 constexpr int16_t SPLAT_LIFE_LEFT = 40; // at most, once a splat is no longer kept
 constexpr int LIMBS_KEPT = 24;
 constexpr int16_t LIMB_LIFE = 600;
-constexpr uint32_t SPLAT_LIFE_OFFSET = 0x3C, LIMB_LIFE_OFFSET = 0x14, LIMB_TYPE_OFFSET = 0x17;
 // The blood pool: overlay 8 (ROM 0x01EFF168) + 0x17C0, 64 entries of 0x54 bytes; +0x4A is the state, 3 = a splat.
-constexpr uint32_t OVERLAY_8_ROM = 0x01EFF168, BLOOD_POOL = 0x17C0, BLOOD_ENTRIES = 64, BLOOD_ENTRY_SIZE = 0x54;
-constexpr uint32_t BLOOD_STATE_OFFSET = 0x4A;
+constexpr uint32_t OVERLAY_8_ROM = 0x01EFF168, BLOOD_POOL = 0x17C0, BLOOD_ENTRIES = 64; // BloodEntry[BLOOD_ENTRIES]
 
 // Something seen on consecutive ticks, by address: when it first appeared, and when it was last seen (a gap means the
 // address now holds a new one).
@@ -86,12 +85,12 @@ void keep_splats() {
     static uint32_t calls = 0;
     int splats = 0, kept = 0;
     for (uint32_t i = 0; i < BLOOD_ENTRIES; i++) {
-        const uint32_t entry = ovl + BLOOD_POOL + i * BLOOD_ENTRY_SIZE;
-        if (rd8(entry + BLOOD_STATE_OFFSET) != 3) continue;
+        const uint32_t entry = ovl + BLOOD_POOL + i * BloodEntry::Size;
+        if (BloodEntry::State::get(entry) != 3) continue;
         splats++;
-        if (keep_newest(g_splats, entry, BLOOD_KEPT)) { wr16(entry + SPLAT_LIFE_OFFSET, (uint16_t)SPLAT_LIFE); kept++; }
+        if (keep_newest(g_splats, entry, BLOOD_KEPT)) { BloodEntry::Life::set(entry, SPLAT_LIFE); kept++; }
         // One that is no longer among the newest makes room soon, so new drops find free entries.
-        else if ((int16_t)rd16(entry + SPLAT_LIFE_OFFSET) > SPLAT_LIFE_LEFT) wr16(entry + SPLAT_LIFE_OFFSET, (uint16_t)SPLAT_LIFE_LEFT);
+        else if (BloodEntry::Life::get(entry) > SPLAT_LIFE_LEFT) BloodEntry::Life::set(entry, SPLAT_LIFE_LEFT);
     }
     if (stats && ++calls % 300 == 0) std::fprintf(stderr, "[jfg] blood pool: %d splats, %d kept\n", splats, kept);
 }
@@ -101,9 +100,9 @@ extern "C" void jfg_gore_limb(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     if (!g.gore_keep_limbs) return;
     const uint32_t obj = (uint32_t)ctx->r4;
-    const uint32_t data = valid_ptr(obj) ? rd32(obj + 0x68) : 0;
-    if (!valid_ptr(data) || rd8(data + LIMB_TYPE_OFFSET) >= 2) return;
-    if (keep_newest(g_limbs, obj, LIMBS_KEPT) && (int16_t)rd16(data + LIMB_LIFE_OFFSET) > 0) wr16(data + LIMB_LIFE_OFFSET, (uint16_t)LIMB_LIFE);
+    const uint32_t data = valid_ptr(obj) ? Obj::Data::get(obj) : 0;
+    if (!valid_ptr(data) || LimbData::Type::get(data) >= 2) return;
+    if (keep_newest(g_limbs, obj, LIMBS_KEPT) && LimbData::Life::get(data) > 0) LimbData::Life::set(data, LIMB_LIFE);
 }
 
 // jfg_on_blood_spurt / jfg_on_blood_hit handlers: "No blood" cancels, "Blood amount" scales the drops.

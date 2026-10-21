@@ -192,6 +192,19 @@ using State = Field<uint8_t, 0x01>; // 5, 6: going off / removed
 using Armed = Field<uint8_t, 0xAC>; // cleared when it's removed (meaning a guess)
 }
 
+// A severed body part (Obj::Data of the limb's object).
+namespace LimbData {
+using Life = Field<int16_t, 0x14>; // ticks left before it goes
+using Type = Field<uint8_t, 0x17>; // 0, 1: a body part (others are not)
+}
+
+// A blood drop or splat in the blood pool (overlay 8).
+namespace BloodEntry {
+using Life  = Field<int16_t, 0x3C>; // ticks left
+using State = Field<uint8_t, 0x4A>; // 3: a splat on the ground
+constexpr uint32_t Size = 0x54;
+}
+
 // --- the game ---------------------------------------------------------------------------------------------------------
 // A character's saved state (the game's data, ADDR_gameplay, + Game::Characters + character * Character::Size).
 namespace Character {
