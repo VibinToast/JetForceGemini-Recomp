@@ -384,13 +384,6 @@ func = "objSetupObject"
 before_vram = 0x80006E04
 text = "{ void jfg_objsetup_exit(uint8_t*, recomp_context*); jfg_objsetup_exit(rdram, ctx); }"
 
-# mathBreakPoint, the game's assertion ("break"): logged to bin/jfg_error.log and reported in a message box before the
-# process ends (jfg_game_break). Without this the runtime's exit() could crash in its shutdown and leave nothing behind.
-[[patches.hook]]
-func = "mathBreakPoint"
-before_vram = 0x800496AC
-text = "{ void jfg_game_break(uint8_t*, recomp_context*); jfg_game_break(rdram, ctx); }"
-
 # 60 fps (F9 -> Options -> Display -> Frame rate). The scheduler holds back the "frame done" message of each frame
 # until 2 video retraces have passed since the last one (sc->frameCount at OSSched + 0x300, counted up here in
 # __scHandleRetrace; the decomp notes "if you want to make the game 60FPS, change this to 2"), which caps the game at

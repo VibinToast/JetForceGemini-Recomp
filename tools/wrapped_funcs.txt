@@ -32,3 +32,4 @@ mainGetGameFlag
 mainResetRegion
 mmAlloc
 mmAlloc2
+mathBreakPoint
