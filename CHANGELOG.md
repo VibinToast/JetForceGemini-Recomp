@@ -28,11 +28,10 @@ are written here by hand and become that version's notes when it is released.
 - Game Frame Rate: 30 (like the N64) or 60. Game speed stays the same either way.
 - Smooth Motion: adds in-between frames so movement looks smoother, with either Game Frame Rate. Choose Off, 60, 90, 120, 144, 240 or Monitor (your monitor's refresh rate).
 - Changes to either option apply at once, with no restart.
-- The old "60 + Interpolated" choice is gone. To get the same thing, set Game Frame Rate to 60 and Smooth Motion to Monitor.
+- The old "60 + Interpolated" choice is gone: it is now Game Frame Rate 60 with Smooth Motion on Monitor. If you had it chosen, the update switches you to that by itself.
 - Show FPS shows both the game's frame rate and the frame rate on screen.
 - At 60 fps, ants, Tribals and other enemies move on every frame instead of looking like 30 fps.
 - At 60 fps, the slug boss's bolts and the target lock keep their original timing.
-<!-- OWNER: check that "60 with Smooth Motion on Monitor" really matches the old 60 + Interpolated, and what a player who had it chosen in 1.1.8 gets after updating. -->
 
 ### Settings menu
 
@@ -75,7 +74,6 @@ are written here by hand and become that version's notes when it is released.
 - The F10 tools have the game's own menu style, and work with a controller (a Tools button in the Select menu).
 - Level Warp shows the level and entrance you are in, with a Pick button to warp there, and keeps its controls in view above the level list.
 - The Items and Weapons sections open as drawers.
-<!-- OWNER: keep this section for players, or leave it out? Frame step (End / F8) is left out as a testing tool. -->
 
 ### Fixes
 
@@ -85,7 +83,6 @@ are written here by hand and become that version's notes when it is released.
 - Fixed a crash in cutscenes with anti-aliasing and in-between frames on.
 - Weapon reticles drawn by the game (Tri-Rocket, Homing Missiles, mines, grenades and others) show again with Smooth Motion on.
 - The start-up key hint no longer mentions F9 (the debug window).
-<!-- OWNER: the reticle and #3 fixes were made for the old Renderer Framerate / 60 + Interpolated settings. Check they hold with Smooth Motion. -->
 
 ## v1.1.8 (2026-10-18)
 
