@@ -96,6 +96,13 @@ JFG_WRAP(runlinkDownloadCode) {
     g_runlink = prev; g_runlink_loaded = prev_loaded;
 }
 
+JFG_WRAP(runlinkResumeCode) {
+    const int prev = g_runlink; const bool prev_loaded = g_runlink_loaded;
+    g_runlink = 2; g_runlink_loaded = false;
+    runlinkResumeCode_orig(rdram, ctx);
+    g_runlink = prev; g_runlink_loaded = prev_loaded;
+}
+
 JFG_WRAP(romCopy) {
     const gpr fp = ctx->r30;
     if ((g_runlink == 1 || g_runlink == 2) && !g_runlink_loaded && (uint32_t)ctx->r4 == (uint32_t)MEM_W(4, fp) &&
