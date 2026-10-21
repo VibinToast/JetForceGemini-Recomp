@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -25,14 +26,14 @@ extern "C" int jfg_no_blood(void) {
 void apply_damage_taken(uint32_t obj) {
     static uint32_t last_obj = 0;
     static int last_health = -1;
-    const uint32_t hit = obj != 0 ? rd32(obj + 0x4C) : 0;
+    const uint32_t hit = obj != 0 ? Obj::Damage::get(obj) : 0;
     if (!valid_ptr(hit)) { last_obj = 0; last_health = -1; return; }
-    int health = (int16_t)rd16(hit + 6);
+    int health = Damage::Health::get(hit);
     if (obj == last_obj && last_health >= 0 && health < last_health && g.damage_taken != 100 && !g.invulnerable) {
         const int lost = last_health - health;
         const int scaled = (int)std::lround(lost * (double)g.damage_taken / 100.0);
         health = std::max(-0x7FFF, last_health - scaled);
-        wr16(hit + 6, (uint16_t)(int16_t)health);
+        Damage::Health::set(hit, (int16_t)health);
     }
     last_obj = obj;
     last_health = health;
@@ -108,7 +109,7 @@ static uint32_t g_aim_char_slot = 0, g_walk_char = 0;
 
 static void sniper_walk_restore(uint8_t* rdram) {
     if (g_walk_char == 0) return;
-    MEM_B(0x70, (gpr)(int32_t)g_walk_char) = 7;
+    jfg::Character::CurrentWeapon::set(rdram, g_walk_char, 7);
     g_walk_char = 0;
 }
 
@@ -134,8 +135,8 @@ JFG_WRAP(frontGetTargetControl) {
     if (!aim || (uint32_t)ctx->r2 == 0) return;
     const uint32_t ch = (uint32_t)MEM_W(slot, ctx->r29);
     if (ch < 0x80000400u || ch >= 0x80800000u) return;
-    if (MEM_BU(0x70, (gpr)(int32_t)ch) == 7 && jfg_sniper_walk(7) != 7) {
-        MEM_B(0x70, (gpr)(int32_t)ch) = (int8_t)0xFF;
+    if (jfg::Character::CurrentWeapon::get(rdram, ch) == 7 && jfg_sniper_walk(7) != 7) {
+        jfg::Character::CurrentWeapon::set(rdram, ch, jfg::Character::NoWeapon);
         g_walk_char = ch;
     }
 }
@@ -152,12 +153,9 @@ JFG_WRAP(controlGetManualAim) {
     const uint32_t data = (uint32_t)ctx->r5;
     controlGetManualAim_orig(rdram, ctx);
     if (data < 0x80000400u || data >= 0x80800000u) return;
-    uint32_t bits = (uint32_t)MEM_W(0x1EC, (gpr)(int32_t)data);
-    float zoom;
-    std::memcpy(&zoom, &bits, 4);
+    const float zoom = jfg::PlayerData::AimZoom::get(rdram, data);
     const float fixed = jfg_sniper_zoom(zoom);
     if (fixed == zoom) return;
-    std::memcpy(&bits, &fixed, 4);
-    MEM_W(0x1EC, (gpr)(int32_t)data) = (int32_t)bits;
-    MEM_W(0x1F0, (gpr)(int32_t)data) = 0;
+    jfg::PlayerData::AimZoom::set(rdram, data, fixed);
+    jfg::PlayerData::AimZoomRate::set(rdram, data, 0.0f);
 }

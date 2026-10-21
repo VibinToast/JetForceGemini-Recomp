@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <type_traits>
 
 #include "jfg_game.h"
@@ -37,14 +38,23 @@ struct Field {
 
     // With the caller's rdram (recomp.h's MEM_* macros index a variable called rdram; jfg_game.h names it g_rdram).
     static inline T get(uint8_t* rdram, uint32_t base) {
-        static_assert(!std::is_same_v<T, float>, "floats: use get(base)");
-        if constexpr (sizeof(T) == 1) return (T)MEM_BU(Offset, (gpr)(int32_t)base);
+        if constexpr (std::is_same_v<T, float>) {
+            const uint32_t bits = (uint32_t)MEM_W(Offset, (gpr)(int32_t)base);
+            float f;
+            std::memcpy(&f, &bits, 4);
+            return f;
+        }
+        else if constexpr (sizeof(T) == 1) return (T)MEM_BU(Offset, (gpr)(int32_t)base);
         else if constexpr (sizeof(T) == 2) return (T)MEM_HU(Offset, (gpr)(int32_t)base);
         else return (T)MEM_W(Offset, (gpr)(int32_t)base);
     }
     static inline void set(uint8_t* rdram, uint32_t base, T value) {
-        static_assert(!std::is_same_v<T, float>, "floats: use set(base, value)");
-        if constexpr (sizeof(T) == 1) MEM_B(Offset, (gpr)(int32_t)base) = (int8_t)value;
+        if constexpr (std::is_same_v<T, float>) {
+            uint32_t bits;
+            std::memcpy(&bits, &value, 4);
+            MEM_W(Offset, (gpr)(int32_t)base) = (int32_t)bits;
+        }
+        else if constexpr (sizeof(T) == 1) MEM_B(Offset, (gpr)(int32_t)base) = (int8_t)value;
         else if constexpr (sizeof(T) == 2) MEM_H(Offset, (gpr)(int32_t)base) = (int16_t)value;
         else MEM_W(Offset, (gpr)(int32_t)base) = (int32_t)value;
     }
