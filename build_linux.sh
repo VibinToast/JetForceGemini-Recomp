@@ -54,7 +54,8 @@ if [ -z "${JFG_REGENERATE:-}" ] && [ -f "$STAMP" ] && [ -f rsp/aspMain.cpp ] && 
   say "game code is up to date (ROM, recompiler configs and tools unchanged): not generated again"
 else
   say "translating the game code (your ROM -> C)"
-  [ "$ROM" = "$HERE/baserom.us.z64" ] || cp -f "$ROM" baserom.us.z64
+  # -ef: the same file under another path too (the release container mounts this folder's ROM as /rom/baserom.us.z64)
+  [ "$ROM" -ef "$HERE/baserom.us.z64" ] || cp -f "$ROM" baserom.us.z64
   # Recompiler input only: a copy of the ROM with the overlays pre-linked at private addresses. Never used at run time.
   python3 tools/prepare_overlays.py baserom.us.z64 - baserom.us.recomp.z64 - tools/jfg.us.dynamic_relocs.json
   rm -rf RecompiledFuncs && mkdir RecompiledFuncs
