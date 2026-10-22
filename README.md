@@ -3,7 +3,7 @@
 A native 100% playable PC port of Jet Force Gemini (N64, US) for Windows and Linux, made by static recompilation. No emulator:
 the game's code is translated from your ROM and compiled for your PC.
 
-**Current Progress:** Quality of Life features & Mod support. See the [Roadmap](ROADMAP.md) for what's coming next.
+**Current Progress:** Quality of Life features. Mod support is next: see the [Roadmap](ROADMAP.md).
 
 **No game code or assets are included.** You need your own ROM.
 
@@ -18,21 +18,23 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 ## Features
 
 **Controls**
-- Mouse and keyboard controls.
+- Mouse and keyboard controls, including Floyd missions.
 - Dual-stick controls with a camera-relative left stick and a modern button layout.
-- Over-the-shoulder aim with a centred reticle, and adjustable aim speed.
-- Adjustable movement speed
+- Over-the-shoulder aim with a centered reticle, and adjustable aim and movement speed.
+- Sprint on land and in water.
+- Full controller support in the menus, launcher and tools.
 - Rumble Pak support, and rebindable controls.
 
 **Gameplay**
-- Skips cutscenes
-- A Weapons editor for each weapon
-- No blood option.
-- Cheats (Skip Tribals yay!)
+- Auto Save, Unlimited Continues, and Tribals that stay rescued.
+- Profiles: play the original game or a modern setup in one click.
+- Skip cutscenes.
+- A weapons editor for each weapon.
+- Gore options: no blood, or blood and body parts that stay.
 
 **Visuals**
-- 60 FPS
-- HD Texture Pack
+- Smoother, more responsive play: the game can run at 60 ticks per second instead of 30 for quicker controls, and
+  Frame Interpolation fills in extra frames to match your monitor's refresh rate (up to 240 Hz).
 - Widescreen.
 - Ambient occlusion (SSAO) and bloom.
 - Disable LOD and draw distant objects.
@@ -40,7 +42,7 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 - On-screen FPS, level and texture pack.
 
 **Texture packs**
-- The JFG HD texture pack is a separate download. See
+- The official JFG HD texture pack installs and updates from the launcher. See
   [vibintoast.com/projects/jfg-4k](https://vibintoast.com/projects/jfg-4k) for more info.
 - Texture dumping, all in one folder or one folder per level.
 - HD texture packs, picked from a list and switched in-game with F6. A pack is a folder in `bin/texture_packs/<name>`
