@@ -16,7 +16,6 @@ Found something that isn't listed here? See [Reporting bugs](README.md#reporting
   a door-unlock cutscene, and during the Mizar boss intro before the fight starts.
 - **The screen can shake while walking over uneven ground with Frame Interpolation on**, for example at the entrance of
   Mizar's Palace. **Fix planned.**
-- **One cutscene can't be skipped:** the one in level 398 (the level number is shown with Show Level on, in the General tab).
 
 ## Graphics
 
