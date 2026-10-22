@@ -53,13 +53,6 @@ extern "C" int jfg_refuel_amount(int amount) {
     return std::max(1, (int)std::lround(amount * (double)g.refuel_speed / 100.0));
 }
 
-// --- steady reticle --------------------------------------------------------------------------------------------------
-// Hook in frontPlayerTarget (overlay 13) where it works out how far along the aim the reticle goes: with the option it
-// stays at the end of the weapon's range, so it neither jumps nor changes size over near and far surfaces.
-extern "C" int jfg_fixed_reticle(void) {
-    return g.fixed_reticle ? 1 : 0;
-}
-
 // --- sniper zoom -----------------------------------------------------------------------------------------------------
 // Hook in controlGetManualAim where it stores the zoom (1 = none .. 5): with the option the zoom is fixed.
 extern "C" float jfg_sniper_zoom(float zoom) {
