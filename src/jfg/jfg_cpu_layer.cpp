@@ -21,6 +21,7 @@
 #include <cstring>
 #include <string>
 #include <mutex>
+#include <utility>
 #include <vector>
 
 #include "imgui/imgui.h"
@@ -229,36 +230,59 @@ void publish() {
     *slot = std::move(layer);
 }
 
-// Works out each group's step back to the previous layer (present thread, under the layer lock, once per pair). A group
-// drawn the same way in the previous layer (same shape), the nearest one within MAX_STEP pixels, gives the step. A group
-// with no such partner (a digit that changed, a box that is growing or just appeared) moves with the nearest group that
+// Works out each group's step back to the previous layer (present thread, under the layer lock, once per pair). Groups
+// drawn the same way in the previous layer (same shape) within MAX_STEP pixels are candidate partners. The step shared by
+// the most pixels wins first (a reticle's lines all move by the same step, so it moves as one piece even when it swings
+// further than the gap between its own equal-looking parts, as at Game 30), then the next (a target box), and so on. A
+// group with no partner (a digit that changed, a box that is growing or just appeared) moves with the nearest group that
 // has one, within NEAR pixels (the digits ride along with their reticle), or is drawn where it is.
 void match_groups(Layer& cur, const Layer* prev) {
     const uint32_t prev_seq = (prev != nullptr) ? prev->seq : 0;
     if (cur.matched_seq == prev_seq && prev_seq != 0) return;
     cur.matched_seq = prev_seq;
-    constexpr float MAX_STEP = 48.0f, NEAR = 40.0f;
+    constexpr float MAX_STEP = 128.0f, NEAR = 40.0f;
     std::vector<uint8_t> partnered(cur.groups.size(), 0), taken(prev != nullptr ? prev->groups.size() : 0, 0);
     for (Group& g : cur.groups) g.ox = g.oy = 0;
     if (prev == nullptr) return;
-    // Closest pairs first, so of several equal shapes (a reticle's four corners) each takes its own.
-    struct Pair { float d; uint32_t c, p; };
+    struct Pair { float dx, dy, d; uint32_t c, p; };
     std::vector<Pair> pairs;
     for (uint32_t c = 0; c < cur.groups.size(); c++) {
         const Group& a = cur.groups[c];
         for (uint32_t p = 0; p < prev->groups.size(); p++) {
             const Group& b = prev->groups[p];
             if (a.shape != b.shape || a.count != b.count || a.width != b.width || a.height != b.height) continue;
-            const float d = std::hypot(b.cx - a.cx, b.cy - a.cy);
-            if (d <= MAX_STEP) pairs.push_back({ d, c, p });
+            const float dx = b.cx - a.cx, dy = b.cy - a.cy, d = std::hypot(dx, dy);
+            if (d <= MAX_STEP) pairs.push_back({ dx, dy, d, c, p });
         }
     }
-    std::sort(pairs.begin(), pairs.end(), [](const Pair& x, const Pair& y) { return x.d < y.d; });
-    for (const Pair& pr : pairs) {
-        if (partnered[pr.c] || taken[pr.p]) continue;
-        partnered[pr.c] = taken[pr.p] = 1;
-        cur.groups[pr.c].ox = prev->groups[pr.p].cx - cur.groups[pr.c].cx;
-        cur.groups[pr.c].oy = prev->groups[pr.p].cy - cur.groups[pr.c].cy;
+    // Closest first, so of the pairs with one step the nearer ones are taken.
+    // Pairs with the same step next to each other (equal shapes moved by whole pixels: the rounded key is exact).
+    auto key = [](const Pair& x) { return std::make_pair(std::lround(x.dx * 4.0f), std::lround(x.dy * 4.0f)); };
+    std::sort(pairs.begin(), pairs.end(), [&](const Pair& x, const Pair& y) { return key(x) < key(y); });
+    for (;;) {
+        // The open step with the most pixels (a group has at most one partner at a given step); the shorter one on a tie.
+        size_t best = 0, best_end = 0;
+        uint32_t best_pixels = 0;
+        for (size_t start = 0; start < pairs.size(); ) {
+            size_t end = start;
+            uint32_t pixels = 0;
+            while (end < pairs.size() && key(pairs[end]) == key(pairs[start])) {
+                if (!partnered[pairs[end].c] && !taken[pairs[end].p]) pixels += cur.groups[pairs[end].c].count;
+                end++;
+            }
+            if (pixels > best_pixels || (pixels > 0 && pixels == best_pixels && pairs[start].d < pairs[best].d)) {
+                best = start; best_end = end; best_pixels = pixels;
+            }
+            start = end;
+        }
+        if (best_pixels == 0) break;
+        for (size_t i = best; i < best_end; i++) {
+            const Pair& y = pairs[i];
+            if (partnered[y.c] || taken[y.p]) continue;
+            partnered[y.c] = taken[y.p] = 1;
+            cur.groups[y.c].ox = y.dx;
+            cur.groups[y.c].oy = y.dy;
+        }
     }
     // A small group (a digit or letter) goes with the nearest larger partnered group (its reticle's lines) when that is
     // within NEAR: the same digit elsewhere in the readout (125 -> 152) would otherwise give it a false step.
