@@ -1,0 +1,33 @@
+# Known issues
+
+Problems we know about in the current release. Items marked **Fix planned** are on the [Roadmap](ROADMAP.md).
+Found something that isn't listed here? See [Reporting bugs](README.md#reporting-bugs).
+
+## Stability
+
+- **Rare crash or freeze with Frame Interpolation on.** Several causes were fixed in 1.2 and none have been seen
+  since, but if it happens to you, please report it with your `crash.log`. Turning Frame Interpolation off avoids it.
+
+## Cutscenes and camera
+
+- **The camera can move during some cutscenes.** With dual-stick controls the camera can sometimes be turned during
+  a door-unlock cutscene, and during the Mizar boss intro before the fight starts.
+- **One cutscene can't be skipped:** the one in level 398 (the level number is shown with Show FPS on).
+
+## Graphics
+
+- **Shadows look wrong in the intro cutscene of the Tribals level.** **Fix planned.**
+- **The Floyd screen just before a Floyd mission has a visual glitch.** **Fix planned.**
+- **With level of detail turned off, ants in cutscenes still use their low-detail models.**
+
+## Menus and launcher
+
+- **The settings menu can't scroll all the way to the top** on tabs that have text above their options.
+  **Fix planned.**
+- **In the launcher, pressing LB right after RB shows the previous page for about a second.** **Fix planned.**
+
+## Steam Deck
+
+- **The touchscreen doesn't work in the settings menu.** Use the Deck's controls instead. **Fix planned.**
+- **The Modern profiles turn on Mouse and Keyboard Controls.** After choosing one, turn Mouse and Keyboard Controls off
+  again in the Controls tab (see [Steam Deck](README.md#steam-deck)).

@@ -1,7 +1,7 @@
 # Roadmap
 
 What's coming to Jet Force Gemini Recompiled. Plans can change and there are no dates. What has already shipped is in
-[CHANGELOG.md](CHANGELOG.md), and problems we know about are in [KnownIssues.md](KnownIssues.md).
+[CHANGELOG.md](CHANGELOG.md), and problems we know about are in [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ## Now: 1.2 (in final testing)
 
