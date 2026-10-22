@@ -13,7 +13,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <string>
 #include <mutex>
 #include <vector>
 
@@ -38,8 +41,36 @@ struct Layer {
 };
 
 std::mutex g_layer_mutex;
-Layer g_layers[2];         // the two most recent, for the double-buffered screen
+// The most recent layers, one per framebuffer the game draws into: two buffers normally, three in the levels whose blur
+// effect asks for triple buffering (viSetTrippleBuffer(levelGetBlurEffect(level)); seen in level 181, the slug boss
+// tunnel: 0x10FF00, 0x135700, 0x15AF40). With only
+// two kept, a frame presented a little later than the newest two (Smooth Motion above the game's rate) found no layer
+// for its buffer: the reticle was missing or blinked.
+constexpr int LAYER_SLOTS = 4;
+Layer g_layers[LAYER_SLOTS];
 uint32_t g_layer_seq = 0;
+
+// JFG_DEBUG_CPU_LAYER=1: once a second, which framebuffers layers were captured from (and how many pixels) and which
+// the presented frames showed, found or not (the reticle missing when a presented buffer has no layer).
+const bool g_trace = std::getenv("JFG_DEBUG_CPU_LAYER") != nullptr;
+struct TraceCount { uint32_t fb = 0, count = 0, pixels = 0; };
+TraceCount g_trace_published[4], g_trace_found[4], g_trace_missing[4];
+uint32_t g_trace_frames = 0;
+void trace_add(TraceCount (&list)[4], uint32_t fb, uint32_t pixels) {
+    for (TraceCount& t : list) {
+        if (t.count == 0 || t.fb == fb) { t.fb = fb; t.count++; t.pixels += pixels; return; }
+    }
+}
+std::string trace_text(const TraceCount (&list)[4]) {
+    std::string out;
+    char buf[64];
+    for (const TraceCount& t : list) {
+        if (t.count == 0) continue;
+        std::snprintf(buf, sizeof(buf), " %06X x%u (%u px)", t.fb, t.count, t.pixels);
+        out += buf;
+    }
+    return out.empty() ? std::string(" -") : out;
+}
 
 // Game thread only. mainCPUeffects draws rain (rainDraw) and then the lines (fxOutputLines); each is captured on its
 // own (refractOutput, between them, moves pixels instead of adding them and is left as it is) into one pending layer,
@@ -129,8 +160,15 @@ void publish() {
     }
     std::lock_guard<std::mutex> lock(g_layer_mutex);
     layer.seq = ++g_layer_seq;
-    Layer& slot = (g_layers[0].seq <= g_layers[1].seq) ? g_layers[0] : g_layers[1];
-    slot = std::move(layer);
+    if (g_trace) trace_add(g_trace_published, layer.fb, (uint32_t)layer.pixels.size());
+    if (g_trace && (g_layer_seq % 60) == 0 && !layer.pixels.empty()) {
+        int x0 = 9999, y0 = 9999, x1 = -1, y1 = -1, still = 0;
+        for (const LayerPixel& p : layer.pixels) { x0 = std::min(x0, (int)p.x); y0 = std::min(y0, (int)p.y); x1 = std::max(x1, (int)p.x); y1 = std::max(y1, (int)p.y); still += p.still ? 1 : 0; }
+        std::fprintf(stderr, "[cpu-layer] layer %06X: %zu px (%d rain), box %d,%d - %d,%d\n", layer.fb, layer.pixels.size(), still, x0, y0, x1, y1);
+    }
+    Layer* slot = &g_layers[0]; // the oldest
+    for (Layer& l : g_layers) if (l.seq < slot->seq) slot = &l;
+    *slot = std::move(layer);
 }
 
 } // namespace
@@ -167,6 +205,16 @@ bool cpu_layer_build(ImDrawList* list) {
     const Layer* cur = nullptr;
     for (const Layer& l : g_layers) {
         if (l.seq != 0 && l.fb == info.fbAddress && (cur == nullptr || l.seq > cur->seq)) cur = &l;
+    }
+    if (g_trace) {
+        trace_add((cur != nullptr && cur->width == info.fbWidth) ? g_trace_found : g_trace_missing, info.fbAddress,
+                  (cur != nullptr) ? (uint32_t)cur->pixels.size() : 0);
+        if (++g_trace_frames % 120 == 0) {
+            std::fprintf(stderr, "[cpu-layer] captured:%s | presented with layer:%s | without:%s | fb %ux%u\n",
+                         trace_text(g_trace_published).c_str(), trace_text(g_trace_found).c_str(), trace_text(g_trace_missing).c_str(),
+                         info.fbWidth, info.fbHeight);
+            for (auto* list : { &g_trace_published, &g_trace_found, &g_trace_missing }) for (TraceCount& t : *list) t = TraceCount();
+        }
     }
     if (cur == nullptr || cur->pixels.empty() || cur->width != info.fbWidth) return false;
     const Layer* prev = nullptr;
