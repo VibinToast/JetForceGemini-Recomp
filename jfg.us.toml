@@ -162,6 +162,14 @@ func = "bloodSpurtUpdateAll"
 before_vram = 0x82080994
 text = "{ void jfg_gore_splat(uint8_t*, recomp_context*); jfg_gore_splat(rdram, ctx); }"
 
+# "Blood stays", pool full: bloodSpurtAdd before it reads the count of entries in use (overlay 8 + 0x17A0); frees the
+# oldest splat so the new drop is not dropped (src/jfg/jfg_gore.cpp, jfg_blood_make_room). The overlay is relocated, so
+# its start (section_addresses[8], as the function's own RELOC_HI16/LO16 use) is passed in.
+[[patches.hook]]
+func = "bloodSpurtAdd"
+before_vram = 0x82080204
+text = "{ void jfg_blood_make_room(uint8_t*, uint32_t); jfg_blood_make_room(rdram, (uint32_t)section_addresses[8]); }"
+
 # "Body parts stay": entry of severedLimbControl(object, updateRate).
 [[patches.hook]]
 func = "severedLimbControl"
@@ -199,6 +207,31 @@ text = "{ int jfg_hide_object(uint8_t*, recomp_context*); void jfg_interp_object
 func = "objPrintObject"
 before_vram = 0x8000DC20
 text = "{ void jfg_interp_object_done(uint8_t*, recomp_context*); jfg_interp_object_done(rdram, ctx); }"
+
+# Character shadows (src/jfg/jfg_shadow_interp.cpp): func_8001FA24 writes each shadow's triangles; where its scales and
+# the object's place are worked out (before the first triangle) and after the last, the batch and how far its image
+# slides on in-between frames are passed to RT64.
+[[patches.hook]]
+func = "func_8001FA24_20624"
+before_vram = 0x8001FCC4
+text = "{ void jfg_shadow_begin(uint8_t*, recomp_context*); jfg_shadow_begin(rdram, ctx); }"
+
+[[patches.hook]]
+func = "func_8001FA24_20624"
+before_vram = 0x8001FF6C
+text = "{ void jfg_shadow_end(uint8_t*, recomp_context*); jfg_shadow_end(rdram, ctx); }"
+
+# The aim reticle's 3D part is pushed by frontDrawTarget outside any object's drawing; its entry and the return to
+# frontPlayerTarget mark it, so its matrix gets an ID too.
+[[patches.hook]]
+func = "frontDrawTarget"
+before_vram = 0x820D04A8
+text = "{ void jfg_interp_reticle(int); jfg_interp_reticle(1); }"
+
+[[patches.hook]]
+func = "frontPlayerTarget"
+before_vram = 0x820D0458
+text = "{ void jfg_interp_reticle(int); jfg_interp_reticle(0); }"
 
 [[patches.hook]]
 func = "camPushModelMtx"
@@ -695,3 +728,11 @@ text = "{ void jfg_cpu_lines_before(uint8_t*, recomp_context*); jfg_cpu_lines_be
 func = "mainCPUeffects"
 before_vram = 0x80045B78
 text = "{ void jfg_cpu_lines_after(uint8_t*, recomp_context*); jfg_cpu_lines_after(rdram, ctx); }"
+
+# 60 fps: a squadron's member count kept in line with its member chain (src/jfg/jfg_frame_rate.cpp,
+# jfg_squad_count_repair): at 60 fps the Lurg fight's bat squadron counted one bat fewer than it had linked, and a bat
+# freed at the end of the chain stayed linked (crash, GitHub issue #13). Entry of objDoFrees, before TidyLinkedList runs.
+[[patches.hook]]
+func = "objDoFrees"
+before_vram = 0x80007A54
+text = "{ void jfg_squad_count_repair(uint8_t*); jfg_squad_count_repair(rdram); }"
