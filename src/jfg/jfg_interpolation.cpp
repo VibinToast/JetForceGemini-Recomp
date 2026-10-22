@@ -39,6 +39,15 @@ uint32_t object_id(uint32_t object) {
 }
 constexpr uint32_t ADDR_modelMtx = 0x800FAAB0; // D_800FAAB0: the float model matrix the push functions multiply with the camera
 constexpr uint32_t ADDR_lastMtx = 0x800FAB30;  // D_800FAB30: the Mtx the push function just wrote
+// The aim reticle's 3D part (the blaster's star inside its arrows) is pushed by frontDrawTarget (overlay 13) at the aim
+// point, outside any object's drawing. Set while frontDrawTarget runs (jfg_interp_reticle).
+bool drawing_reticle = false;
+constexpr uint32_t RETICLE_ID = 0x7E71C1E5u;
+}
+
+// frontDrawTarget's entry (1) and frontPlayerTarget right after its call of frontDrawTarget (0).
+extern "C" void jfg_interp_reticle(int drawing) {
+    drawing_reticle = drawing != 0;
 }
 
 // Entry of objPrintObject(dList, mtx, vtx, obj). A character's model has no model matrix of its own: its bones are
@@ -93,6 +102,13 @@ extern "C" void jfg_interp_pushed(uint8_t* rdram_, recomp_context* ctx) {
         // The object, the place the matrix was pushed from and what it draws.
         id = object_id(object) ^ (push_caller * 40503u) ^ (push_source * 2246822519u);
         if (id == 0 || id == 0xFFFFFFFFu) id = 1; // RT64's "not interpolated" and "match automatically" values
+    }
+    else if (drawing_reticle) {
+        // The aim reticle's 3D part: without an ID it was not interpolated and stayed at the last game frame's place
+        // while the camera turned on the in-between frames, so it flicked between two places beside the reticle's lines
+        // (issue #8). Its transform (one per player) makes its ID.
+        id = RETICLE_ID ^ (push_source * 2246822519u);
+        if (id == 0 || id == 0xFFFFFFFFu) id = 1;
     }
 
     float model[16];

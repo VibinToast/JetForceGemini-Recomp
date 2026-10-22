@@ -963,11 +963,23 @@ std::unordered_map<SDL_Scancode, std::string> scancode_codepoints {
     {SDL_SCANCODE_NUMLOCKCLEAR, PF_KEYBOARD_NUM_LOCK},
     {SDL_SCANCODE_LSHIFT, "L" PF_KEYBOARD_SHIFT},
     {SDL_SCANCODE_RSHIFT, "R" PF_KEYBOARD_SHIFT},
+    // JFG PORT: Ctrl, Alt and the Windows / Command key showed as their scancode numbers (224 for Left Ctrl, issue #10).
+    {SDL_SCANCODE_LCTRL, "L" PF_KEYBOARD_CONTROL},
+    {SDL_SCANCODE_RCTRL, "R" PF_KEYBOARD_CONTROL},
+    {SDL_SCANCODE_LALT, "L" PF_KEYBOARD_ALT},
+    {SDL_SCANCODE_RALT, "R" PF_KEYBOARD_ALT},
+    {SDL_SCANCODE_LGUI, "L" PF_KEYBOARD_SUPER},
+    {SDL_SCANCODE_RGUI, "R" PF_KEYBOARD_SUPER},
 };
 
 std::string keyboard_input_to_string(SDL_Scancode key) {
     if (scancode_codepoints.find(key) != scancode_codepoints.end()) {
         return scancode_codepoints[key];
+    }
+    // JFG PORT: any other key by SDL's name for it ("Keypad 5", "Right Ctrl"), the number only if it has none.
+    const char* name = SDL_GetScancodeName(key);
+    if (name != nullptr && name[0] != '\0') {
+        return name;
     }
     return std::to_string(key);
 }

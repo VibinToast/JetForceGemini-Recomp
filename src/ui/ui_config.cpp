@@ -733,6 +733,41 @@ Rml::Element* recompui::get_child_by_tag(Rml::Element* parent, const std::string
     return nullptr;
 }
 
+// JFG PORT: what a controller or the keyboard moves the focus to is scrolled into view only as far as needed (RmlUi's
+// navigation, and set_cur_config_index for an option row), so a group's title - or a tab's text - above the first option
+// stayed hidden: the list could not be scrolled back to its top without the mouse. When the focus is moved that way
+// (not by the mouse: focus_visible), the title or text right above the focused row comes into view too, and an element
+// that fits on the list's first screen scrolls the list to its very top.
+class ConfigFocusScrollListener : public Rml::EventListener {
+    void ProcessEvent(Rml::Event& event) override {
+        if (event.GetId() != Rml::EventId::Focus || !event.GetParameter<bool>("focus_visible", false)) return;
+        Rml::Element* target = event.GetTargetElement();
+        if (target == nullptr) return;
+        const Rml::String& tag = target->GetTagName();
+        if (tag != "input" && tag != "button" && tag != "select" && tag != "textarea") return; // the focus chain's leaf only
+        // The scrolling list (a config__wrapper taller inside than out) and the row of it that holds the element.
+        Rml::Element* row = target;
+        Rml::Element* list = target->GetParentNode();
+        while (list != nullptr && !(list->IsClassSet("config__wrapper") && list->GetScrollHeight() > list->GetClientHeight() + 1.0f)) {
+            row = list;
+            list = list->GetParentNode();
+        }
+        if (list == nullptr) return;
+        const float bottom = target->GetAbsoluteOffset(Rml::BoxArea::Border).y + target->GetBox().GetSize(Rml::BoxArea::Border).y -
+            list->GetAbsoluteOffset(Rml::BoxArea::Padding).y + list->GetScrollTop();
+        if (bottom <= list->GetClientHeight()) {
+            list->SetScrollTop(0.0f);
+            return;
+        }
+        Rml::Element* above = row->GetPreviousSibling();
+        if (above != nullptr && above->QuerySelector("input, button, select, textarea") == nullptr) {
+            above->ScrollIntoView(Rml::ScrollIntoViewOptions(Rml::ScrollAlignment::Nearest, Rml::ScrollAlignment::Nearest));
+        }
+        row->ScrollIntoView(Rml::ScrollIntoViewOptions(Rml::ScrollAlignment::Nearest, Rml::ScrollAlignment::Nearest));
+    }
+};
+static ConfigFocusScrollListener config_focus_scroll_listener;
+
 class ConfigTabsetListener : public Rml::EventListener {
     void ProcessEvent(Rml::Event& event) override {
         if (event.GetId() == Rml::EventId::Tabchange) {
@@ -865,6 +900,7 @@ public:
         config_context = recompui::create_context(dino::runtime::get_asset_path("config_menu.rml"));
         recompui::update_mod_list(false);
         recompui::get_config_tabset()->AddEventListener(Rml::EventId::Tabchange, &config_tabset_listener);
+        recompui::get_config_tabset()->AddEventListener(Rml::EventId::Focus, &config_focus_scroll_listener, true); // JFG PORT: capture phase
     }
     void register_events(recompui::UiEventListenerInstancer& listener) override {
         recompui::register_event(listener, "apply_options",
@@ -1104,6 +1140,21 @@ public:
 
         constructor.RegisterTransformFunc("get_input_enum_name", [](const Rml::VariantList& inputs) {
             return Rml::Variant{dino::input::get_input_enum_name(static_cast<dino::input::GameInput>(inputs.at(0).Get<size_t>()))};
+        });
+
+        // JFG PORT: true for a binding shown as a plain text name ("Keypad 1", "F13", "Button 12") instead of a prompt
+        // font symbol (those always have a non-ASCII glyph): the Bindings tab draws them smaller so they fit their box
+        // and the controller picture (class jfg-key-text, config_menu.rml).
+        constructor.RegisterTransformFunc("jfg_key_is_text", [](const Rml::VariantList& inputs) {
+            const std::string name = inputs.empty() ? std::string() : inputs.at(0).Get<std::string>();
+            bool text = name.size() > 1;
+            for (unsigned char ch : name) {
+                if (ch >= 0x80) {
+                    text = false;
+                    break;
+                }
+            }
+            return Rml::Variant{text};
         });
 
         constructor.BindEventCallback("set_input_binding",

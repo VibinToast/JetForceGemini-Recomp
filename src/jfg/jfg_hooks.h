@@ -29,6 +29,7 @@ void jfg_sched_retrace(void);                                          // entry 
 int jfg_sched_task_ready(void);                                        // entry of __scTaskReady
 int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames);     // SquaddieControl, SquadronControl, squadsModuleTick, FlowerBoltControl
 int jfg_cadence_skip(void);                                            // frontPlayerTarget, the target lock countdown
+void jfg_squad_count_repair(uint8_t* rdram);                           // objDoFrees entry: 60 fps squadron count
 void jfg_squad_draw_begin(uint8_t* rdram);                             // func_80045F00, right before trackDraw
 void jfg_dangle(uint8_t* rdram, recomp_context* ctx);                  // replaces dAngle (angle easing)
 void jfg_squad_draw_end(uint8_t* rdram);                               // func_80045F00, right after trackDraw
@@ -63,6 +64,7 @@ int jfg_flag_override(int flag);                                       // entry 
 // jfg_gore.cpp
 void jfg_blood_more(uint8_t* rdram, recomp_context* ctx);              // entry of bloodSpurtAdd (after jfg_no_blood)
 void jfg_gore_splat(uint8_t* rdram, recomp_context* ctx);              // bloodSpurtUpdateAll, a splat's life countdown
+void jfg_blood_make_room(uint8_t* rdram, uint32_t base);              // bloodSpurtAdd, before the count is read
 void jfg_gore_limb(uint8_t* rdram, recomp_context* ctx);               // entry of severedLimbControl
 // jfg_area_progress.cpp
 void jfg_region_reset_begin(uint8_t* rdram, recomp_context* ctx);      // entry of mainResetRegion

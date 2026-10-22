@@ -3,6 +3,29 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
+## Unreleased
+
+### New options
+
+- Smooth Shadows (Graphics, on by default): with Frame Interpolation, character shadows move smoothly with the character instead of trailing behind it.
+
+### Fixes
+
+- Blood Stays: new blood always appears; the oldest stains make room once the screen is full.
+- Game Frame Rate 60 is now marked experimental in the settings menu.
+- The Modern, Modern and Balanced and Extreme profiles now keep the game at its original 30 and smooth it to 60 fps with Frame Interpolation (choose the profile again to get the new settings).
+- The settings menu scrolls all the way to the top with a controller or the keyboard, so the text and titles above the first options show again.
+- Fixed a crash in the Lurg boss fight (Tawfret) at 60 fps.
+- The aiming reticle of the Tri-Rocket, Homing Missiles, mines, grenades and the other weapons whose reticle the game draws itself no longer shakes while you aim and turn with Frame Interpolation above the game's frame rate.
+- With Frame Interpolation, those reticles use the exact in-between point each frame was drawn at, so they stay in step when an in-between frame is dropped (issue #8).
+- At Game Frame Rate 30 with Frame Interpolation on, those reticles no longer flicker between two positions when you swing the aim quickly.
+- The aiming reticle no longer shakes up and down while you aim and turn with Frame Interpolation on (most noticeable with the mouse).
+- The star in the middle of the aiming reticle (e.g. the blaster's) no longer flickers between two places while you aim and turn with Frame Interpolation on.
+- With the game's own Widescreen screen option on, mouse and keyboard controls work again and START opens the pause menu instead of fast-forwarding (#10).
+- In the Bindings tab, Ctrl, Alt and the Windows key show their key symbols instead of a number (such as 224 for Left Ctrl), and keys shown by name (such as Keypad 1) fit their box (#10).
+- START now skips the scene in level 398, the last one that couldn't be skipped.
+- Dual stick: pressing aim after turning the camera now starts the aim where you were looking, up and down included, instead of snapping back to the way the character faces (#14).
+
 ## v1.2.1 (2026-10-22)
 
 ### Fixes

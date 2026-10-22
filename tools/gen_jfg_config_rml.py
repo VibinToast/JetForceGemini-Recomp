@@ -48,7 +48,7 @@ GAMEPLAY = [
     ("group", None, "Gore", None, None),
     ("bool", "no_blood", "No Blood", None, "No blood, as in the Japanese version."),
     ("bool", "gore_keep_blood", "Blood Stays", None,
-     "Blood splats stay on the ground and walls instead of fading away. The newest 40 are kept; older ones still fade so new blood always has room."),
+     "Blood splats stay on the ground and walls instead of fading away. Up to 64 stay; once the screen is full, the oldest makes room for new blood."),
     ("bool", "gore_keep_limbs", "Body Parts Stay", None,
      "Severed limbs and heads stay where they fell instead of fading away. The newest 24 are kept, so the game does not run out of memory in big fights."),
     ("range", "blood_amount", "Blood Amount", (100, 400, "%"), "How much blood a hit sprays. 100% is the original game."),
@@ -124,10 +124,12 @@ GRAPHICS = [
     ("choice", "msaa_option", "Anti-Aliasing (MSAA)", [(0, "None"), (1, "2x"), (2, "4x")],
      "Multisample anti-aliasing: smoother edges at the cost of rendering performance. Not available if your graphics card does not support programmable sample positions (needed to avoid rendering glitches)."),
     ("group", None, "Frame Rate", None, None),
-    ("choice", "frame_rate", "Game Frame Rate", [(0, "30 (Original)"), (1, "60")],
-     "How many times a second the game itself updates: movement, aiming, enemies. <b>30 (Original)</b>: like the N64 (it drops to 20 when busy). <b>60</b>: the quickest response; game speed stays the same."),
+    ("choice", "frame_rate", "Game Frame Rate", [(0, "30 (Original)"), (1, "60 (Experimental)")],
+     "How many times a second the game itself updates: movement, aiming, enemies. <b>30 (Original)</b>: like the N64 (it drops to 20 when busy). <b>60</b>: the quickest response; game speed stays the same. 60 is experimental: some enemies and bosses can behave differently than at 30. Choose <b>30</b> for the original game."),
     ("choice", "smooth_motion", "Frame Interpolation", [(0, "Off"), (60, "60"), (90, "90"), (120, "120"), (144, "144"), (240, "240"), (1, "Monitor")],
-     "How many frames a second you see: the renderer adds in-between frames to the game's own, with either <b>Game Frame Rate</b>. <b>Monitor</b>: up to your monitor's refresh rate; never more than it. Movement looks smoother, with a little more delay; the character's shadow, rain and a few effects still move at the game's rate. A lower setting takes less from the graphics card."),
+     "How many frames a second you see: the renderer adds in-between frames to the game's own, with either <b>Game Frame Rate</b>. <b>Monitor</b>: up to your monitor's refresh rate; never more than it. Movement looks smoother, with a little more delay; rain and a few effects still move at the game's rate. A lower setting takes less from the graphics card."),
+    ("bool", "smooth_shadows", "Smooth Shadows", None,
+     "With <b>Frame Interpolation</b>, character shadows move with the in-between frames instead of at the game's rate, so they no longer trail behind the character."),
     ("group", None, "Picture", None, None),
     ("bool", "widescreen", "Widescreen", None, "During gameplay the 3D view fills the window; the HUD stays in the middle. Things at the far left and right may appear late."),
     ("range", "fov", "Field of View", (75, 140, "%"),
@@ -348,7 +350,7 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
                 </div>
                 <div class="config__wrapper">
                     <p>A profile is a whole set of the port's settings (the General, Gameplay, Controls and Graphics tabs, and the weapon settings of the F10 tools). Choosing one first puts every setting back to the original game, then applies the profile. Before it is applied you are shown what it changes.</p>
-                    <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and visuals at 60 fps. Modern, Modern and Balanced and Extreme turn on dual-stick controls with the Built-in Button Layout, which takes the place of your controller bindings during play; turn on Keep My Controls first to keep your own. <b>Modern and Balanced</b>: Modern with rebalanced weapons (a subjective take on the balance). <b>Extreme</b>: everything turned up, just for fun.</p>
+                    <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and visuals, smoothed to 60 fps with Frame Interpolation (the game itself runs at its original 30; Modern and Balanced and Extreme too). Modern, Modern and Balanced and Extreme turn on dual-stick controls with the Built-in Button Layout, which takes the place of your controller bindings during play; turn on Keep My Controls first to keep your own. <b>Modern and Balanced</b>: Modern with rebalanced weapons (a subjective take on the balance). <b>Extreme</b>: everything turned up, just for fun.</p>
                     <p>Your own profiles are kept in the profiles folder next to the game; changes made while one is active are saved to it. Not part of profiles: cheats, the Textures tab (texture pack, dumping), the volume, the Controller settings, the window, resolution, downsampling and anti-aliasing, and the button bindings.</p>
                     <p>Controller: Up/Down and Left/Right move between buttons, A chooses.</p>
                 </div>
