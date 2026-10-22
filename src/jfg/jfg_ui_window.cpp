@@ -127,7 +127,7 @@ void draw_options() {
                 int smooth_index = 0;
                 for (int i = 0; i < IM_ARRAYSIZE(smooth); i++) if (g.smooth_motion == smooth[i]) smooth_index = i;
                 ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
-                if (ImGui::Combo("Smooth motion", &smooth_index, smooth_names, IM_ARRAYSIZE(smooth_names))) {
+                if (ImGui::Combo("Frame interpolation", &smooth_index, smooth_names, IM_ARRAYSIZE(smooth_names))) {
                     g.smooth_motion = smooth[smooth_index];
                     changed = true;
                 }
