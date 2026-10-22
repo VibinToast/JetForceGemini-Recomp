@@ -5,10 +5,6 @@ are written here by hand and become that version's notes when it is released.
 
 ## Unreleased
 
-### New options
-
-- Steady Reticle (Controls tab; on in the Modern, Modern and Balanced and Extreme profiles): while aiming, the reticle stays at one place and one size instead of jumping and changing size as the aim passes over near and far walls and objects.
-
 ### Fixes
 
 - Blood Stays: new blood always appears; the oldest stains make room once the screen is full.
@@ -20,6 +16,7 @@ are written here by hand and become that version's notes when it is released.
 - With Frame Interpolation, those reticles use the exact in-between point each frame was drawn at, so they stay in step when an in-between frame is dropped (issue #8).
 - At Game Frame Rate 30 with Frame Interpolation on, those reticles no longer flicker between two positions when you swing the aim quickly.
 - The aiming reticle no longer shakes up and down while you aim and turn with Frame Interpolation on (most noticeable with the mouse).
+- The star in the middle of the aiming reticle (e.g. the blaster's) no longer flickers between two places while you aim and turn with Frame Interpolation on.
 - With the game's own Widescreen screen option on, mouse and keyboard controls work again and START opens the pause menu instead of fast-forwarding (#10).
 - In the Bindings tab, Ctrl, Alt and the Windows key show their key symbols instead of a number (such as 224 for Left Ctrl), and keys shown by name (such as Keypad 1) fit their box (#10).
 - START now skips the scene in level 398, the last one that couldn't be skipped.
