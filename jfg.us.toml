@@ -617,6 +617,15 @@ func = "frontPlayerTarget"
 before_vram = 0x820D02BC
 text = "{ int jfg_cadence_skip(void); if (jfg_cadence_skip()) ctx->r24 = ctx->r2; }"
 
+# The aim reticle's place and size (overlay 13, frontPlayerTarget): the game puts the reticle where the aim ray from the
+# gun barrel hits (f6 = hit distance / the weapon's range, about to be stored at 0x80($sp)), then scales it by its
+# depth. Over near and far walls it jumps about and changes size. "Steady Reticle" keeps it at the end of the range
+# (1.0): one place and one size. The target lock was decided before this and is not affected.
+[[patches.hook]]
+func = "frontPlayerTarget"
+before_vram = 0x820D0204
+text = "{ int jfg_fixed_reticle(void); if (jfg_fixed_reticle()) ctx->f6.fl = 1.0f; }"
+
 # Jetpack fuel pads (overlay 100, refuelControl): the fuel added this tick (t3) scaled by the "Refuel speed" option,
 # just before it is stored in the player's data (+0x58C); the game clamps it to the maximum right after.
 [[patches.hook]]
