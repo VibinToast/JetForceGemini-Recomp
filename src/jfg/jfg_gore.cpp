@@ -2,9 +2,11 @@
 //
 // Blood (overlay 8): bloodSpurtAdd puts a drop into a pool of 64 entries (0x54 bytes each). A drop flies (state +0x4A
 // = 1), lands (2) and lies as a splat (3) whose life (+0x3C, s16, 300 at the start) bloodSpurtUpdateAll counts down by
-// the update rate; at 0 the entry is freed. "Blood stays" keeps the life of the newest splats full (hook at that
-// countdown, the entry in $s0). Only BLOOD_KEPT are kept, so the pool always has room for new drops: older splats run
-// out within a second.
+// the update rate; at 0 the entry is freed. When all 64 entries are in use (count at 0x820817A0) bloodSpurtAdd drops the
+// new blood. "Blood stays" keeps the life of every splat full (hook at that countdown, the entry in $s0), and when the
+// pool is full, frees the oldest splat for the new drop (hook in bloodSpurtAdd before the count is read), so new blood
+// always appears and the oldest stains make room. Drops still flying or splashing are never taken. With the option
+// off the game's own behaviour is unchanged.
 //
 // Body parts (objects.c / spranim.c): a severed limb is an object (behaviour severedLimbControl, data at object + 0x68)
 // with a life timer (data + 0x14, s16, counted down by twice the update rate) after which it fades out (object + 0x39)
@@ -16,6 +18,8 @@
 // their direction and speed.
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <random>
 #include <unordered_map>
@@ -29,10 +33,16 @@ extern "C" void bloodSpurtAdd(uint8_t* rdram, recomp_context* ctx);
 
 namespace jfg {
 
+void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
+
 namespace {
-constexpr int BLOOD_KEPT = 40;         // of the pool's 64 entries
+// Overlay 8 is loaded wherever the heap has room, so its data is found from where it is now: the count of entries in
+// use at +0x17A0 and the 64 entries at +0x17C0 from the start of the overlay.
+constexpr uint32_t BLOOD_COUNT_OFFSET = 0x17A0, BLOOD_POOL_OFFSET = 0x17C0;
+constexpr int BLOOD_ENTRIES = 64;
+constexpr uint32_t BLOOD_ENTRY_SIZE = 0x54, BLOOD_STATE_OFFSET = 0x4A;
+constexpr uint8_t BLOOD_SPLAT = 3;      // state: lying on the ground or a wall
 constexpr int16_t SPLAT_LIFE = 300;    // what bloodSpurtAdd starts an entry with
-constexpr int16_t SPLAT_LIFE_LEFT = 40; // at most, once a splat is no longer kept
 constexpr int LIMBS_KEPT = 24;
 constexpr int16_t LIMB_LIFE = 600;
 constexpr uint32_t SPLAT_LIFE_OFFSET = 0x3C, LIMB_LIFE_OFFSET = 0x14, LIMB_TYPE_OFFSET = 0x17;
@@ -66,16 +76,69 @@ bool keep_newest(Tracker& t, uint32_t addr, int keep) {
 }
 
 Tracker g_splats, g_limbs;
+uint32_t g_blood_recycled = 0; // splats freed for new blood, for the test log
+
+// The overlay's start as last seen by a hook (0 = not seen yet).
+uint32_t g_blood_base = 0;
+uint32_t blood_count() { return g_blood_base + BLOOD_COUNT_OFFSET; }
+uint32_t blood_entry(int i) { return g_blood_base + BLOOD_POOL_OFFSET + (uint32_t)i * BLOOD_ENTRY_SIZE; }
+
+// Tests: JFG_DEBUG_BLOOD=1 writes the pool's use to jfg_memory.log about once a second while blood is updated.
+void blood_log() {
+    static const bool on = std::getenv("JFG_DEBUG_BLOOD") != nullptr;
+    static uint32_t last = 0;
+    if (!on || g_blood_base == 0 || g_tick_count - last < 60) return;
+    last = g_tick_count;
+    int splats = 0, moving = 0;
+    for (int i = 0; i < BLOOD_ENTRIES; i++) {
+        const uint8_t state = rd8(blood_entry(i) + BLOOD_STATE_OFFSET);
+        if (state == BLOOD_SPLAT) splats++;
+        else if (state != 0) moving++;
+    }
+    char line[160];
+    std::snprintf(line, sizeof(line), "blood: %d splats, %d flying or splashing, count %d, %u recycled so far (level %d)", splats,
+        moving, (int)rd32(blood_count()), g_blood_recycled, (int)(int16_t)rd16(ADDR_currentLevel));
+    jfg_log_line("jfg_memory.log", line);
+}
 } // namespace
 
-// bloodSpurtUpdateAll, where a splat's life is counted down ($s0 = the pool entry).
+// bloodSpurtUpdateAll, where a splat's life is counted down ($s0 = the pool entry, $s5 = the count's address). Every
+// splat is kept; the tracker only records which is oldest, for jfg_blood_make_room.
 extern "C" void jfg_gore_splat(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     if (!g.gore_keep_blood) return;
+    g_blood_base = (uint32_t)ctx->r21 - BLOOD_COUNT_OFFSET;
     const uint32_t entry = (uint32_t)ctx->r16;
-    if (keep_newest(g_splats, entry, BLOOD_KEPT)) wr16(entry + SPLAT_LIFE_OFFSET, (uint16_t)SPLAT_LIFE);
-    // One that is no longer among the newest makes room soon, so new drops find free entries.
-    else if ((int16_t)rd16(entry + SPLAT_LIFE_OFFSET) > SPLAT_LIFE_LEFT) wr16(entry + SPLAT_LIFE_OFFSET, (uint16_t)SPLAT_LIFE_LEFT);
+    keep_newest(g_splats, entry, BLOOD_ENTRIES);
+    wr16(entry + SPLAT_LIFE_OFFSET, (uint16_t)SPLAT_LIFE);
+    blood_log();
+}
+
+// bloodSpurtAdd, before it reads the count: with "Blood stays" on and every entry in use, free the oldest splat (as
+// bloodSpurtUpdateAll frees one: state 0, count - 1) so the new drop gets its entry. A splat the tracker has not seen
+// yet counts as the oldest. With no splat to take (all flying or splashing) the drop is dropped, as in the game.
+// `base` = where the overlay starts now (section_addresses[8]).
+extern "C" void jfg_blood_make_room(uint8_t* rdram_, uint32_t base) {
+    g_rdram = rdram_;
+    if (!g.gore_keep_blood) return;
+    g_blood_base = base;
+    uint32_t oldest = 0, oldest_first = UINT32_MAX;
+    bool free_entry = false;
+    for (int i = 0; i < BLOOD_ENTRIES; i++) {
+        const uint32_t entry = blood_entry(i);
+        const uint8_t state = rd8(entry + BLOOD_STATE_OFFSET);
+        if (state == 0) { free_entry = true; continue; }
+        if (state != BLOOD_SPLAT) continue;
+        const auto it = g_splats.seen.find(entry);
+        const uint32_t first = it == g_splats.seen.end() ? 0 : it->second.first;
+        if (first < oldest_first) { oldest_first = first; oldest = entry; }
+    }
+    if ((free_entry && (int32_t)rd32(blood_count()) < BLOOD_ENTRIES) || oldest == 0) return;
+    wr8(oldest + BLOOD_STATE_OFFSET, 0);
+    const int32_t count = (int32_t)rd32(blood_count());
+    if (count > 0) wr32(blood_count(), (uint32_t)(count - 1));
+    g_splats.seen.erase(oldest); // the new drop in this entry is a new splat when it lands
+    g_blood_recycled++;
 }
 
 // Entry of severedLimbControl(object, updateRate).

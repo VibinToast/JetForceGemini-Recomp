@@ -63,6 +63,10 @@
 		.jfg-desc__title { display: block; margin-bottom: 18dp; font-size: 30dp; line-height: 38dp; letter-spacing: 2dp; font-weight: bold; color: #ffb21a; }
 		.jfg-desc p { padding: 0dp; font-size: 25dp; line-height: 39dp; letter-spacing: 0.5dp; color: #e8f3ff; }
 		.jfg-desc p b { color: #3cc8ff; }
+		/* JFG PORT: Bindings: keys with no prompt-font symbol show their name as text ("Keypad 1", "F13"; marked by
+		   jfg_key_is_text). In the symbols' size it ran out of the binding box and over the controller picture. */
+		.control-option__binding-icon.jfg-key-text { font-family: LatoLatin; font-weight: 700; font-size: 18dp; line-height: 20dp; text-align: center; }
+		.input-viz__mappings div.jfg-key-text { font-family: LatoLatin; font-weight: 700; font-size: 13dp; line-height: 14dp; text-align: center; }
 		/* JFG PORT: the Textures tab's packs as cards (image, name, version and author from the pack's credits.json), and on
 		   the right the focused pack's details. */
 		.jfg-pack-list { display: block; width: 100%; margin-top: 16dp; }

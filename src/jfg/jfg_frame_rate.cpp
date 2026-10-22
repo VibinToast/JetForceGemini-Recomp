@@ -174,6 +174,37 @@ extern "C" int jfg_cadence_skip(void) {
     return (game_frame_rate() >= 1 && !g.skipping && !g_squad_runs) ? 1 : 0;
 }
 
+// Hook at the entry of objDoFrees (every tick, before squad members being freed are taken out of their squadron's chain
+// by TidyLinkedList): in 60 fps mode, a squadron whose member count (data +0x00, u8) is below the length of its member
+// chain (data +0x58, then member data +0x28) gets the chain length as its count.
+// Found in the Lurg fight (level 195, 2026-10-22): when a bat squadron brought in the first bat of a wave, another
+// squadron's SquadronControl, run right after it in the same tick, set its count back to 0 while the bat stayed linked,
+// so the count stayed one below the chain for the whole wave. TidyLinkedList only searches as far as the count, so a
+// bat freed at the end of the chain stayed linked, and the next walk of the chain read freed memory (the crash of
+// GitHub issue #13; the guard in jfg_diagnostics.cpp, jfg_tidy_linked_list_after, caught it in 1.2). The wave also
+// counted as cleared one bat early. At the original rate the count always equals the chain length; exactly where the
+// other squadron's control writes the count is not known yet (SquadronControl is assembly only).
+extern "C" void jfg_squad_count_repair(uint8_t* rdram) {
+    if (game_frame_rate() < 1) return;
+    g_rdram = rdram;
+    auto ok = [](uint32_t p) { return p >= 0x80000000u && p < 0x80800000u && (p & 3) == 0; };
+    const int count = (int)rd32(0x800FE9F0);  // squadrons
+    const uint32_t list = rd32(0x800A38E4);  // Object* squadrons[count]
+    if (count <= 0 || count > 256 || !ok(list)) return;
+    for (int i = 0; i < count; i++) {
+        const uint32_t squadron = rd32(list + 4u * (uint32_t)i);
+        if (!ok(squadron) || !ok(rd32(squadron + 0x68))) continue;
+        const uint32_t data = rd32(squadron + 0x68);
+        int length = 0;
+        bool whole = true;
+        for (uint32_t member = rd32(data + 0x58); member != 0; length++) {
+            if (length >= 255 || !ok(member) || !ok(rd32(member + 0x68))) { whole = false; break; }
+            member = rd32(rd32(member + 0x68) + 0x28);
+        }
+        if (whole && length > (int)rd8(data)) wr8(data, (uint8_t)length);
+    }
+}
+
 // --- 60 fps: angles that ease towards a target ---------------------------------------------------------------------
 // Replaces dAngle(angle, target, t) (charControl.c): angle + (shortest signed difference * t), the product truncated.
 // Callers ease an angle with t = 1 - damping^frames (Powerf), so with one frame per tick t is about half what it is at
