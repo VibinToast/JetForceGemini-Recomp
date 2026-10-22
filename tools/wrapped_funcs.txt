@@ -36,6 +36,8 @@ mathBreakPoint
 squadsCheckEnemyPointers
 TidyLinkedList
 squadsFireWeapon
+mantisControl
+amSndPlayXYZ
 GalaxianBatsSoundsHandler
 osSyncPrintf
 

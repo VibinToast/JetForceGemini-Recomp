@@ -366,15 +366,22 @@ static uint32_t g_fire_scratch = 0; // the scratch block, in the runtime's heap 
 static uint32_t g_fire_member = 0;  // member data whose weapon object failed in this squadsFireWeapon; 0 = none
 constexpr uint32_t FIRE_SCRATCH_SIZE = 0x100;
 
-static bool fire_weapon_failed(uint8_t* rdram, recomp_context* ctx, uint32_t member) {
-    if (member < 0x80000000u || member >= 0x80800000u || jfg::SquadMemberData::Carried::get(rdram, member) != 0) return false;
+// The scratch block, zeroed, standing in for an object the game could not create; 0 if the runtime's heap has no room.
+static uint32_t scratch_object(uint8_t* rdram) {
     if (g_fire_scratch == 0) {
         void* block = recomp::alloc(rdram, FIRE_SCRATCH_SIZE);
-        if (block == nullptr) return false;
+        if (block == nullptr) return 0;
         g_fire_scratch = 0x80000000u + (uint32_t)((uint8_t*)block - rdram);
     }
     for (uint32_t i = 0; i < FIRE_SCRATCH_SIZE; i += 4) MEM_W(i, (gpr)(int32_t)g_fire_scratch) = 0;
-    ctx->r2 = (gpr)(int32_t)g_fire_scratch;
+    return g_fire_scratch;
+}
+
+static bool fire_weapon_failed(uint8_t* rdram, recomp_context* ctx, uint32_t member) {
+    if (member < 0x80000000u || member >= 0x80800000u || jfg::SquadMemberData::Carried::get(rdram, member) != 0) return false;
+    const uint32_t scratch = scratch_object(rdram);
+    if (scratch == 0) return false;
+    ctx->r2 = (gpr)(int32_t)scratch;
     g_fire_member = member;
     static int logged = 0;
     if (logged++ < 20) {
@@ -399,12 +406,54 @@ JFG_WRAP(squadsFireWeapon) {
     g_fire_member = prev;
 }
 
+// mantisControl (overlay 67, the alien boss in level 210): its five-rock throw makes the rocks in a loop (objSetupObject,
+// setup data at $sp + 0x68, loop counter $a2: 0 for the last rock) and then plays the throw's sound at the last rock
+// without checking it: reading NULL + 0xC crashed when that rock could not be created (object pool full). The NULL
+// becomes the scratch block (its position reads as 0, 0, 0), and the function's next amSndPlayXYZ (that sound) is left
+// out; then the attack ends as it always does (mantis->unk3 = 0, the shared exit).
+static JfgCaller g_mantis;
+static bool g_mantis_no_rock = false;
+
+JFG_WRAP(mantisControl) {
+    const bool prev = g_mantis_no_rock;
+    g_mantis_no_rock = false;
+    {
+        JfgCaller::Scope scope(g_mantis, ctx, 0xE8);
+        mantisControl_orig(rdram, ctx);
+    }
+    g_mantis_no_rock = prev;
+}
+
+JFG_WRAP(amSndPlayXYZ) {
+    if (g_mantis_no_rock && g_mantis.direct(ctx)) {
+        g_mantis_no_rock = false;
+        ctx->r2 = 0;
+        return;
+    }
+    amSndPlayXYZ_orig(rdram, ctx);
+}
+
+static void mantis_rock_failed(uint8_t* rdram, recomp_context* ctx) {
+    const uint32_t scratch = scratch_object(rdram);
+    if (scratch == 0) return;
+    ctx->r2 = (gpr)(int32_t)scratch;
+    g_mantis_no_rock = true;
+    static int logged = 0;
+    if (logged++ < 20) {
+        char line[160];
+        std::snprintf(line, sizeof(line), "alien boss rock could not be created (level %d); throw sound left out",
+            (int)(int16_t)MEM_H(0, (gpr)(int32_t)jfg::ADDR_currentLevel));
+        jfg::jfg_log_line("jfg_memory.log", line);
+    }
+}
+
 // objSetupObject and its steps (see jfg_objsetup_enter).
 JFG_WRAP(objSetupObject) {
     const bool fire = g_fire.direct(ctx);
     if (fire && g_fire_member != 0) { ctx->r2 = 0; return; } // squadsFireWeapon's shot after a failed weapon object
     const bool weapon = fire && (uint32_t)ctx->r4 == (uint32_t)(g_fire.sp + 0x174);
     const uint32_t member = (uint32_t)ctx->r12;
+    const bool last_rock = g_mantis.direct(ctx) && (uint32_t)ctx->r4 == (uint32_t)(g_mantis.sp + 0x68) && (uint32_t)ctx->r6 == 0;
     const int nest = jfg::g_obj_step_nest;
     jfg::g_obj_step_nest = 0;
     jfg_objsetup_enter(rdram, ctx);
@@ -414,6 +463,7 @@ JFG_WRAP(objSetupObject) {
     jfg_objsetup_exit(rdram, ctx, type);
     jfg::g_obj_step_nest = nest;
     if (weapon && (uint32_t)ctx->r2 == 0) fire_weapon_failed(rdram, ctx, member);
+    if (last_rock && (uint32_t)ctx->r2 == 0) mantis_rock_failed(rdram, ctx);
 }
 
 // A step call: noted when objSetupObject is running and made it itself.
