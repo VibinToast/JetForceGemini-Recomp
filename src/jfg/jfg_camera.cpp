@@ -190,7 +190,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         wr16(cam + 2, angle_to_s16(game_pitch + (pitch - game_pitch) * b));
         return;
     }
-    if (flat < 20.0f || flat > 2000.0f) return; // not an ordinary follow camera (first person, a fixed view, ...)
+    if (flat < 20.0f || flat > 2000.0f) { g_cam.view_saved = false; return; } // not an ordinary follow camera (first person, a fixed view, ...)
     const float game_elevation = angle_from_s16(rd16(cam + 2));
     // The game's camera looks at a point above the character's feet; keep looking at that point from the same distance.
     const float pivot = std::clamp((cy - py) - flat * std::tan(game_elevation), 0.0f, 200.0f);
@@ -212,6 +212,26 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     wrf(cam + 0x14, wz);
     wr16(cam + 0, angle_to_s16(-g_cam.heading));
     wr16(cam + 2, angle_to_s16(pitch));
+    g_cam.view_saved = true;
+    g_cam.view_x = wx; g_cam.view_y = wy; g_cam.view_z = wz;
+    g_cam.view_yaw = angle_to_s16(-g_cam.heading);
+    g_cam.view_pitch = angle_to_s16(pitch);
+}
+
+// The first tick of aiming after the free camera: the game's own camera, still where it was (behind the character's
+// old facing), is put where the free camera was showing, so the aiming view starts there instead of swinging round
+// from the old facing (issue #14). While our view is still in RDRAM (overridden) the saved game values are replaced.
+void camera_hand_over_to_aim(uint32_t cam) {
+    if (!g_cam.view_saved) return;
+    wrf(cam + 0x0C, g_cam.view_x);
+    wrf(cam + 0x10, g_cam.view_y);
+    wrf(cam + 0x14, g_cam.view_z);
+    wr16(cam + 0, g_cam.view_yaw);
+    wr16(cam + 2, g_cam.view_pitch);
+    if (g_cam.overridden && g_cam.camera_addr == cam) {
+        for (uint32_t i : { 0x00u, 0x0Cu, 0x10u, 0x14u }) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
+    }
+    g_cam.view_saved = false;
 }
 
 } // namespace jfg

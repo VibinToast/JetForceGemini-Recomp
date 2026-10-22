@@ -33,7 +33,7 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 - Gore options: no blood, or blood and body parts that stay.
 
 **Visuals**
-- Smoother, more responsive play: the game can run at 60 ticks per second instead of 30 for quicker controls, and
+- Smoother, more responsive play: the game can run at 60 ticks per second instead of 30 for quicker controls (experimental), and
   Frame Interpolation fills in extra frames to match your monitor's refresh rate (up to 240 Hz).
 - Widescreen.
 - Ambient occlusion (SSAO) and bloom.
