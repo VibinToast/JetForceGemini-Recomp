@@ -9,7 +9,7 @@ the game's code is translated from your ROM and compiled for your PC.
 
 **Contents:** [ROM](#rom) · [Features](#features) · [Build and run](#build-and-run) · [Steam Deck](#steam-deck) ·
 [Keys](#keys) · [Reporting bugs](#reporting-bugs) · [How it works](#how-it-works) · [AI disclosure](#ai-disclosure) ·
-[Legal](#legal) · [Credits](#credits) · [Roadmap](ROADMAP.md)
+[Legal](#legal) · [Credits](#credits) · [Roadmap](ROADMAP.md) · [Known issues](KNOWN_ISSUES.md)
 
 ## ROM
 
@@ -124,7 +124,7 @@ close the settings menu.
 ## Reporting bugs
 
 Report bugs on the [Issues page](https://github.com/VibinToast/JetForceGemini-Recomp/issues). Check first whether it
-is already reported there or listed in [KnownIssues.md](KnownIssues.md).
+is already reported there or listed in [Known issues](KNOWN_ISSUES.md).
 
 Please include:
 - **What happened and what you expected.** Steps to make it happen again, if you know them.
