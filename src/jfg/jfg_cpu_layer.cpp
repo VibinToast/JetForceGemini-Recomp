@@ -10,6 +10,9 @@
 // them) and kept as a layer for the framebuffer they were drawn into. The render hook (src/debug_ui/backend.cpp) draws
 // that layer on every frame presented for that framebuffer. The reticles' pixels are moved between the previous
 // layer's place and this one's by the frame's weight, the way RT64 moves the scene; rain, new every frame, is not.
+// Each connected group of lit pixels moves by its own step: the layer holds parts that move differently (the weapon's
+// reticle at the aim point, its depth and heading digits that change every tick, the target boxes on enemies), and one
+// step for all of them made the reticle shake while turning (issue #8).
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -30,14 +33,23 @@ extern "C" int jfg_renderer_adds_frames(void); // src/renderer/renderer.cpp
 namespace jfg {
 namespace {
 
-struct LayerPixel { uint16_t x, y; uint8_t r, g, b; bool still; }; // still: drawn where it is, never moved (rain)
+constexpr uint16_t NO_GROUP = 0xFFFF;
+struct LayerPixel { uint16_t x, y; uint8_t r, g, b; bool still; uint16_t group; }; // still: drawn where it is, never moved (rain)
+// A connected (8-neighbour) group of the moving pixels: a reticle's corner or line, a digit, a target box.
+struct Group {
+    float cx = 0, cy = 0;   // centre
+    uint32_t count = 0;
+    uint16_t width = 0, height = 0;
+    uint32_t shape = 0;     // the pixels' places inside the group's box and their colours: equal for the same drawing moved
+    float ox = 0, oy = 0;   // step back to the previous layer's place (filled by match_groups)
+};
 struct Layer {
     uint32_t fb = 0;        // physical address, as RT64's VI reports it
     uint32_t seq = 0;       // 0 = empty slot
     uint32_t width = 0, height = 0;
-    float cx = 0, cy = 0;   // centre of the lit pixels that move with blending (the reticle's lines and text)
-    uint32_t moving = 0;    // how many of those
     std::vector<LayerPixel> pixels;
+    std::vector<Group> groups;
+    uint32_t matched_seq = 0; // the previous layer the groups' steps were worked out against (0 = none)
 };
 
 std::mutex g_layer_mutex;
@@ -78,6 +90,8 @@ std::string trace_text(const TraceCount (&list)[4]) {
 bool g_capturing = false;
 uint32_t g_capture_screen = 0, g_capture_width = 0, g_capture_height = 0;
 std::vector<uint8_t> g_before;
+std::vector<int> g_grid; // pixel index per framebuffer pixel while grouping
+std::vector<int> g_stack, g_members;
 Layer g_pending;
 
 inline uint16_t pixel_at(const uint8_t* raw, uint32_t offset) {
@@ -138,15 +152,62 @@ void capture_end(uint8_t* rdram, bool still) {
             if (dr == 0 && dg == 0 && db == 0) continue;
             const uint32_t index = offset / 2;
             const uint16_t x = (uint16_t)(index % g_capture_width), y = (uint16_t)(index / g_capture_width);
-            g_pending.pixels.push_back({ x, y, (uint8_t)dr, (uint8_t)dg, (uint8_t)db, still });
-            if (!still) {
-                g_pending.cx += x;
-                g_pending.cy += y;
-                g_pending.moving++;
-            }
+            g_pending.pixels.push_back({ x, y, (uint8_t)dr, (uint8_t)dg, (uint8_t)db, still, NO_GROUP });
         }
     }
     std::memcpy(raw, g_before.data(), bytes);
+}
+
+// Splits the layer's moving pixels into their connected groups (game thread, once per layer).
+void make_groups(Layer& layer) {
+    const uint32_t cells = layer.width * layer.height;
+    if (g_grid.size() != cells) g_grid.assign(cells, -1);
+    for (size_t i = 0; i < layer.pixels.size(); i++) {
+        const LayerPixel& p = layer.pixels[i];
+        if (!p.still) g_grid[p.y * layer.width + p.x] = (int)i;
+    }
+    for (size_t i = 0; i < layer.pixels.size(); i++) {
+        LayerPixel& first = layer.pixels[i];
+        if (first.still || first.group != NO_GROUP || layer.groups.size() >= NO_GROUP) continue;
+        const uint16_t id = (uint16_t)layer.groups.size();
+        Group g;
+        int x0 = first.x, y0 = first.y, x1 = first.x, y1 = first.y;
+        g_stack.clear();
+        g_stack.push_back((int)i);
+        g_grid[first.y * layer.width + first.x] = -1;
+        g_members.clear(); // kept for the shape, which needs the box first
+        while (!g_stack.empty()) {
+            const int index = g_stack.back();
+            g_stack.pop_back();
+            LayerPixel& p = layer.pixels[index];
+            p.group = id;
+            g_members.push_back(index);
+            g.cx += p.x; g.cy += p.y;
+            x0 = std::min(x0, (int)p.x); y0 = std::min(y0, (int)p.y); x1 = std::max(x1, (int)p.x); y1 = std::max(y1, (int)p.y);
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    const int x = p.x + dx, y = p.y + dy;
+                    if (x < 0 || y < 0 || x >= (int)layer.width || y >= (int)layer.height) continue;
+                    int& cell = g_grid[y * layer.width + x];
+                    if (cell >= 0) { g_stack.push_back(cell); cell = -1; }
+                }
+            }
+        }
+        g.count = (uint32_t)g_members.size();
+        g.cx /= (float)g.count;
+        g.cy /= (float)g.count;
+        g.width = (uint16_t)(x1 - x0 + 1);
+        g.height = (uint16_t)(y1 - y0 + 1);
+        // Order-free sum of a hash per pixel (place in the box and colour).
+        for (int index : g_members) {
+            const LayerPixel& p = layer.pixels[index];
+            uint32_t h = (uint32_t)(p.x - x0) | ((uint32_t)(p.y - y0) << 10) | ((uint32_t)(p.r ^ (p.g << 5) ^ (p.b << 10)) << 20);
+            h ^= h >> 16; h *= 0x7FEB352Du; h ^= h >> 15; h *= 0x846CA68Bu; h ^= h >> 16;
+            g.shape += h;
+        }
+        layer.groups.push_back(g);
+    }
+    for (const LayerPixel& p : layer.pixels) if (!p.still) g_grid[p.y * layer.width + p.x] = -1; // left clean for the next layer
 }
 
 // The pending layer becomes the layer of its framebuffer.
@@ -154,10 +215,7 @@ void publish() {
     if (g_pending.fb == 0) return;
     Layer layer = std::move(g_pending);
     g_pending = Layer();
-    if (layer.moving > 0) {
-        layer.cx /= (float)layer.moving;
-        layer.cy /= (float)layer.moving;
-    }
+    make_groups(layer);
     std::lock_guard<std::mutex> lock(g_layer_mutex);
     layer.seq = ++g_layer_seq;
     if (g_trace) trace_add(g_trace_published, layer.fb, (uint32_t)layer.pixels.size());
@@ -169,6 +227,58 @@ void publish() {
     Layer* slot = &g_layers[0]; // the oldest
     for (Layer& l : g_layers) if (l.seq < slot->seq) slot = &l;
     *slot = std::move(layer);
+}
+
+// Works out each group's step back to the previous layer (present thread, under the layer lock, once per pair). A group
+// drawn the same way in the previous layer (same shape), the nearest one within MAX_STEP pixels, gives the step. A group
+// with no such partner (a digit that changed, a box that is growing or just appeared) moves with the nearest group that
+// has one, within NEAR pixels (the digits ride along with their reticle), or is drawn where it is.
+void match_groups(Layer& cur, const Layer* prev) {
+    const uint32_t prev_seq = (prev != nullptr) ? prev->seq : 0;
+    if (cur.matched_seq == prev_seq && prev_seq != 0) return;
+    cur.matched_seq = prev_seq;
+    constexpr float MAX_STEP = 48.0f, NEAR = 40.0f;
+    std::vector<uint8_t> partnered(cur.groups.size(), 0), taken(prev != nullptr ? prev->groups.size() : 0, 0);
+    for (Group& g : cur.groups) g.ox = g.oy = 0;
+    if (prev == nullptr) return;
+    // Closest pairs first, so of several equal shapes (a reticle's four corners) each takes its own.
+    struct Pair { float d; uint32_t c, p; };
+    std::vector<Pair> pairs;
+    for (uint32_t c = 0; c < cur.groups.size(); c++) {
+        const Group& a = cur.groups[c];
+        for (uint32_t p = 0; p < prev->groups.size(); p++) {
+            const Group& b = prev->groups[p];
+            if (a.shape != b.shape || a.count != b.count || a.width != b.width || a.height != b.height) continue;
+            const float d = std::hypot(b.cx - a.cx, b.cy - a.cy);
+            if (d <= MAX_STEP) pairs.push_back({ d, c, p });
+        }
+    }
+    std::sort(pairs.begin(), pairs.end(), [](const Pair& x, const Pair& y) { return x.d < y.d; });
+    for (const Pair& pr : pairs) {
+        if (partnered[pr.c] || taken[pr.p]) continue;
+        partnered[pr.c] = taken[pr.p] = 1;
+        cur.groups[pr.c].ox = prev->groups[pr.p].cx - cur.groups[pr.c].cx;
+        cur.groups[pr.c].oy = prev->groups[pr.p].cy - cur.groups[pr.c].cy;
+    }
+    // A small group (a digit or letter) goes with the nearest larger partnered group (its reticle's lines) when that is
+    // within NEAR: the same digit elsewhere in the readout (125 -> 152) would otherwise give it a false step.
+    // Then a group with no partner goes with the nearest partnered group.
+    constexpr uint32_t SMALL = 20;
+    auto follow_nearest = [&](uint32_t c, uint32_t min_count) {
+        Group& g = cur.groups[c];
+        float best = NEAR;
+        for (uint32_t o = 0; o < cur.groups.size(); o++) {
+            if (o == c || !partnered[o] || cur.groups[o].count < min_count) continue;
+            const float d = std::hypot(cur.groups[o].cx - g.cx, cur.groups[o].cy - g.cy);
+            if (d < best) { best = d; g.ox = cur.groups[o].ox; g.oy = cur.groups[o].oy; }
+        }
+    };
+    for (uint32_t c = 0; c < cur.groups.size(); c++) {
+        if (partnered[c] && cur.groups[c].count < SMALL) follow_nearest(c, SMALL);
+    }
+    for (uint32_t c = 0; c < cur.groups.size(); c++) {
+        if (!partnered[c]) follow_nearest(c, 0);
+    }
 }
 
 } // namespace
@@ -202,8 +312,8 @@ bool cpu_layer_build(ImDrawList* list) {
     if (info.fbWidth == 0 || info.viewWidth <= 0.0f || info.viewHeight <= 0.0f) return false;
     if (!jfg_renderer_adds_frames()) return false;
     std::lock_guard<std::mutex> lock(g_layer_mutex);
-    const Layer* cur = nullptr;
-    for (const Layer& l : g_layers) {
+    Layer* cur = nullptr;
+    for (Layer& l : g_layers) {
         if (l.seq != 0 && l.fb == info.fbAddress && (cur == nullptr || l.seq > cur->seq)) cur = &l;
     }
     if (g_trace) {
@@ -219,19 +329,11 @@ bool cpu_layer_build(ImDrawList* list) {
     if (cur == nullptr || cur->pixels.empty() || cur->width != info.fbWidth) return false;
     const Layer* prev = nullptr;
     for (const Layer& l : g_layers) {
-        if (l.seq + 1 == cur->seq) prev = &l;
+        if (l.seq + 1 == cur->seq && l.width == cur->width && l.height == cur->height) prev = &l;
     }
-    // Moved back toward the previous layer's place by the part of the step this frame has not reached yet. Only when
-    // the two look alike (a reticle that appears, or whose shape changes, is drawn where it is).
-    float ox = 0, oy = 0;
-    if (prev != nullptr && prev->moving > 0 && cur->moving > 0) {
-        const float a = (float)prev->moving, b = (float)cur->moving;
-        if (std::fabs(a - b) <= 0.25f * std::max(a, b)) {
-            const float back = 1.0f - std::clamp(info.weight, 0.0f, 1.0f);
-            ox = (prev->cx - cur->cx) * back;
-            oy = (prev->cy - cur->cy) * back;
-        }
-    }
+    match_groups(*cur, prev);
+    // Moved back toward the previous layer's place by the part of the step this frame has not reached yet.
+    const float back = 1.0f - std::clamp(info.weight, 0.0f, 1.0f);
     // Square pixels, centred: in widescreen RT64 stretches the frame across the wider window, but pastes CPU-drawn pixels
     // at the frame's height scale in the middle (RenderTarget::copyFromChanges, "pillarBox"), where the 4:3 picture sits.
     const float sy = info.viewHeight / (float)info.fbHeight, sx = sy;
@@ -242,7 +344,11 @@ bool cpu_layer_build(ImDrawList* list) {
         const int m = std::max({ (int)p.r, (int)p.g, (int)p.b });
         const float alpha = (float)m / 31.0f;
         const ImU32 col = IM_COL32(p.r * 255 / m, p.g * 255 / m, p.b * 255 / m, (int)(alpha * 255.0f + 0.5f));
-        const float px = (float)p.x + (p.still ? 0.0f : ox), py = (float)p.y + (p.still ? 0.0f : oy);
+        float px = (float)p.x, py = (float)p.y;
+        if (!p.still && p.group != NO_GROUP) {
+            px += cur->groups[p.group].ox * back;
+            py += cur->groups[p.group].oy * back;
+        }
         const float x0 = left + px * sx, y0 = info.viewY + py * sy;
         list->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + sx, y0 + sy), col);
     }
