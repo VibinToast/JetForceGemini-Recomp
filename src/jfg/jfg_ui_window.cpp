@@ -133,7 +133,10 @@ void draw_options() {
                     changed = true;
                 }
                 options_help("How many frames a second you see: the renderer adds in-between frames to the game's own. Monitor: "
-                             "up to your monitor's refresh rate. The shadow and a few effects still move at the game's rate.");
+                             "up to your monitor's refresh rate. Rain and a few effects still move at the game's rate.");
+                changed |= ImGui::Checkbox("Smooth shadows", &g.smooth_shadows);
+                options_help("With Frame Interpolation, character shadows move with the in-between frames instead of at the "
+                             "game's rate, so they no longer trail behind the character.");
             }
             ImGui::EndTabItem();
         }

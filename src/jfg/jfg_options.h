@@ -46,6 +46,7 @@ struct State {
                                    // (the old "60 + Interpolated") loads as 1 with Smooth Motion on
     int  smooth_motion = 0;        // "Smooth Motion": in-between frames from RT64, for either game rate. 0 = off, 1 = up to the
                                    // monitor's rate, else at most that many frames a second (one of smooth_motion_values)
+    bool smooth_shadows = true;    // "Smooth Shadows": character shadows follow the in-between frames (jfg_shadow_interp.cpp)
     int  interp_limit = 0;         // only read from older settings files: the old Interpolation Limit, carried over to Smooth Motion
     bool widescreen = false;       // render the 3D view to the full window width, see jfg_widescreen_active()
     int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
