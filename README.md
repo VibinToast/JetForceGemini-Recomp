@@ -127,17 +127,27 @@ Report bugs on the [Issues page](https://github.com/VibinToast/JetForceGemini-Re
 is already reported there or listed in [Known issues](KNOWN_ISSUES.md).
 
 Please include:
+- **Your version.** It's shown in the launcher (for example 1.2.1). If you built the game yourself, the commit.
 - **What happened and what you expected.** Steps to make it happen again, if you know them.
-- **Where.** The level and roughly where in it (Settings > Visuals > Show Level puts the level on screen), or the
-  menu or cutscene.
-- **Your setup.** The release version or commit, Windows or Linux, your GPU, and your monitor's refresh rate.
-- **Your settings**, if they could matter: the profile, Frame Rate, Widescreen, and the Graphics menu's Framerate.
-  `jfg_port_options.txt` and `graphics.json` from the `bin` folder hold them.
+- **Where.** The level and roughly where in it (turn on **Show Level** in the settings menu's **General** tab to put
+  the level number on screen), or the menu or cutscene.
+- **Your setup.** Windows, Linux or Steam Deck, your GPU, and your monitor's refresh rate.
+- **Your settings**, if they could matter: the profile, **Game Frame Rate**, **Frame Interpolation** (Graphics tab),
+  widescreen, and the texture pack, if any.
 - **A screenshot or video**, for anything visual.
-- **Logs**, if the game crashed or stopped with an error: `crash.log`, `jfg_error.log` and `jfg_memory.log` from the
-  `bin` folder, whichever exist.
+- **Logs**, if the game crashed or stopped with an error: `crash.log`, `jfg_error.log` and `jfg_memory.log`,
+  whichever exist. Settings files help too: `jfg_port_options.txt` and `graphics.json`.
 
-Do not attach your ROM, or anything else from `bin` beyond the files above.
+Where those files are:
+
+| Game | Folder |
+|---|---|
+| Windows zip | next to `JetForceGeminiRecompiled.exe` |
+| Linux AppImage and Steam Deck | `~/.local/share/JetForceGeminiRecompiled` |
+| Linux portable (tar.gz) | the game folder |
+| Built yourself | `bin` |
+
+Do not attach your ROM, or any other file from those folders beyond the ones above.
 
 ## How it works
 
