@@ -333,7 +333,7 @@ bool cpu_layer_build(ImDrawList* list) {
     }
     match_groups(*cur, prev);
     // Moved back toward the previous layer's place by the part of the step this frame has not reached yet.
-    const float back = 1.0f - std::clamp(info.weight, 0.0f, 1.0f);
+    const float back = 1.0f - std::clamp(info.frameWeight, 0.0f, 1.0f);
     // Square pixels, centred: in widescreen RT64 stretches the frame across the wider window, but pastes CPU-drawn pixels
     // at the frame's height scale in the middle (RenderTarget::copyFromChanges, "pillarBox"), where the 4:3 picture sits.
     const float sy = info.viewHeight / (float)info.fbHeight, sx = sy;
