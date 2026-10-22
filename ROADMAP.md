@@ -36,6 +36,8 @@ What's coming to Jet Force Gemini Recompiled. Plans can change and there are no 
 - Shadows in the intro cutscene of the Tribals level.
 - The visual glitch on the Floyd screen just before a Floyd mission.
 - In the launcher, pressing LB right after RB no longer shows the old page for a moment.
+- The screen no longer shakes while walking over uneven ground with Frame Interpolation on (for example at the
+  entrance of Mizar's Palace).
 
 ## Planned: online multiplayer
 
