@@ -127,16 +127,19 @@ to `Optimal` at the top of `make_rtz.ps1` if you want a smaller file.
 ## 6. Smaller versions and large packs (optional)
 
 **Half-size copies.** Drag a `.rtz` onto `tools/textures/halve_rtz.bat` to make a copy at half the resolution, for
-example a 2K pack from a 4K one. Drag the 2K onto it again for a 1K. It asks for the new pack's variant (`2K`), and
-writes `<id>-<variant>_v<version>.rtz` next to the pack you dragged, from the `id` and `version` in its `credits.json`
-(for example `Official_Recomp_HD-2K_v1.1.0.rtz`), with the new variant in the copy's `credits.json`. A pack without an
-`id` is asked for one. The pack you drag is not changed.
+example a 2K pack from a 4K one. Drag the 2K onto it again for a 1K. It asks for the new pack's variant (`2K`) and
+version (Enter keeps the pack's own; give a new one, like `1.1.1`, when you make a pack again so the launcher offers it
+as an update), and writes `<id>-<variant>_v<version>.rtz` next to the pack you dragged, from the `id` in its
+`credits.json` (for example `Official_Recomp_HD-2K_v1.1.0.rtz`), with the new variant and version in the copy's
+`credits.json`. A pack without an `id` is asked for one. The pack you drag is not changed.
 
 - DDS textures with mipmaps (what `png_to_dds.bat` makes) drop their largest mipmap. The next one down is the same
   texture at half size, so nothing is compressed again and it takes about a minute for a 3 GB pack.
 - PNG textures are scaled down.
+- Small textures (shorter side under 32 pixels, `$MinSide` at the top of `halve_rtz.ps1`) are copied as they are:
+  they are about the game's own size already, like the HUD's digit strips, and would turn blocky.
 - Only the textures are halved. `credits.json`, `pack_image.png` and `rt64.json` are copied as they are, apart from
-  the variant.
+  the variant and version.
 
 **Splitting a large pack.** GitHub does not accept files of 2 GB or more. Drag a `.rtz` onto
 `tools/textures/split_rtz.bat` to split it into two parts (more if two would still be too big): `<pack>.rtz.001`,
