@@ -75,7 +75,7 @@ static const JfgOptionTitle jfg_option_titles[] = {
     { "res_option", "Resolution", 'c', "", "0:Original|1:Original 2x|2:Auto" },
     { "ds_option", "Downsampling", 'c', "", "1:Off|2:2x|4:4x" },
     { "msaa_option", "Anti-Aliasing (MSAA)", 'c', "", "0:None|1:2x|2:4x" },
-    { "frame_rate", "Game Frame Rate", 'c', "", "0:30 (Original)|1:60" },
+    { "frame_rate", "Game Frame Rate", 'c', "", "0:30 (Original)|1:60 (Experimental)" },
     { "smooth_motion", "Frame Interpolation", 'c', "", "0:Off|60:60|90:90|120:120|144:144|240:240|1:Monitor" },
     { "widescreen", "Widescreen", 'b', "", "" },
     { "fov", "Field of View", 'r', "%", "" },

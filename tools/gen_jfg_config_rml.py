@@ -124,8 +124,8 @@ GRAPHICS = [
     ("choice", "msaa_option", "Anti-Aliasing (MSAA)", [(0, "None"), (1, "2x"), (2, "4x")],
      "Multisample anti-aliasing: smoother edges at the cost of rendering performance. Not available if your graphics card does not support programmable sample positions (needed to avoid rendering glitches)."),
     ("group", None, "Frame Rate", None, None),
-    ("choice", "frame_rate", "Game Frame Rate", [(0, "30 (Original)"), (1, "60")],
-     "How many times a second the game itself updates: movement, aiming, enemies. <b>30 (Original)</b>: like the N64 (it drops to 20 when busy). <b>60</b>: the quickest response; game speed stays the same."),
+    ("choice", "frame_rate", "Game Frame Rate", [(0, "30 (Original)"), (1, "60 (Experimental)")],
+     "How many times a second the game itself updates: movement, aiming, enemies. <b>30 (Original)</b>: like the N64 (it drops to 20 when busy). <b>60</b>: the quickest response; game speed stays the same. 60 is experimental: some enemies and bosses can behave differently than at 30. Choose <b>30</b> for the original game."),
     ("choice", "smooth_motion", "Frame Interpolation", [(0, "Off"), (60, "60"), (90, "90"), (120, "120"), (144, "144"), (240, "240"), (1, "Monitor")],
      "How many frames a second you see: the renderer adds in-between frames to the game's own, with either <b>Game Frame Rate</b>. <b>Monitor</b>: up to your monitor's refresh rate; never more than it. Movement looks smoother, with a little more delay; the character's shadow, rain and a few effects still move at the game's rate. A lower setting takes less from the graphics card."),
     ("group", None, "Picture", None, None),
@@ -348,7 +348,7 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
                 </div>
                 <div class="config__wrapper">
                     <p>A profile is a whole set of the port's settings (the General, Gameplay, Controls and Graphics tabs, and the weapon settings of the F10 tools). Choosing one first puts every setting back to the original game, then applies the profile. Before it is applied you are shown what it changes.</p>
-                    <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and visuals at 60 fps. Modern, Modern and Balanced and Extreme turn on dual-stick controls with the Built-in Button Layout, which takes the place of your controller bindings during play; turn on Keep My Controls first to keep your own. <b>Modern and Balanced</b>: Modern with rebalanced weapons (a subjective take on the balance). <b>Extreme</b>: everything turned up, just for fun.</p>
+                    <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and visuals at 60 fps (Game Frame Rate 60, experimental; Modern and Balanced and Extreme use it too). Modern, Modern and Balanced and Extreme turn on dual-stick controls with the Built-in Button Layout, which takes the place of your controller bindings during play; turn on Keep My Controls first to keep your own. <b>Modern and Balanced</b>: Modern with rebalanced weapons (a subjective take on the balance). <b>Extreme</b>: everything turned up, just for fun.</p>
                     <p>Your own profiles are kept in the profiles folder next to the game; changes made while one is active are saved to it. Not part of profiles: cheats, the Textures tab (texture pack, dumping), the volume, the Controller settings, the window, resolution, downsampling and anti-aliasing, and the button bindings.</p>
                     <p>Controller: Up/Down and Left/Right move between buttons, A chooses.</p>
                 </div>

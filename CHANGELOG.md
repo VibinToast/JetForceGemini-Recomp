@@ -8,6 +8,7 @@ are written here by hand and become that version's notes when it is released.
 ### Fixes
 
 - Blood Stays: new blood always appears; the oldest stains make room once the screen is full.
+- Game Frame Rate 60 is now marked experimental in the settings menu.
 
 ## v1.2.1 (2026-10-22)
 

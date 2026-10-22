@@ -7,6 +7,8 @@ Found something that isn't listed here? See [Reporting bugs](README.md#reporting
 
 - **Rare crash or freeze with Frame Interpolation on.** Several causes were fixed in 1.2 and none have been seen
   since, but if it happens to you, please report it with your `crash.log`. Turning Frame Interpolation off avoids it.
+- **Game Frame Rate 60 is experimental:** some enemy groups and bosses can behave differently than at 30 (for
+  example a wave counts as cleared one enemy early). If something seems off, try 30.
 
 ## Cutscenes and camera
 

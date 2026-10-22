@@ -112,7 +112,7 @@ void draw_options() {
             options_help("Objects normally fade out and disappear beyond a set distance. With this they stay drawn. Takes effect "
                          "for the objects in play; level scenery itself is not affected.");
             if (FRAME_RATE_OPTION) {
-                static const char* const rates[] = { "30 (Original, drops to 20)", "60" };
+                static const char* const rates[] = { "30 (Original, drops to 20)", "60 (experimental)" };
                 ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
                 changed |= ImGui::Combo("Game frame rate", &g.frame_rate, rates, IM_ARRAYSIZE(rates));
                 if (frame_rate_needs_restart()) {
@@ -121,7 +121,8 @@ void draw_options() {
                     if (ImGui::Button("Restart now")) jfg::settings::restart_game();
                 }
                 options_help("How many times a second the game itself updates. 60: the game updates every video frame instead "
-                             "of every second one; game speed stays the same.");
+                             "of every second one; game speed stays the same. 60 is experimental: some enemies and bosses can "
+                             "behave differently than at 30.");
                 static const int smooth[] = { 0, 60, 90, 120, 144, 240, 1 };
                 static const char* const smooth_names[] = { "Off", "60", "90", "120", "144", "240", "Monitor" };
                 int smooth_index = 0;
