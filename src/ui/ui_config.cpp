@@ -1142,6 +1142,21 @@ public:
             return Rml::Variant{dino::input::get_input_enum_name(static_cast<dino::input::GameInput>(inputs.at(0).Get<size_t>()))};
         });
 
+        // JFG PORT: true for a binding shown as a plain text name ("Keypad 1", "F13", "Button 12") instead of a prompt
+        // font symbol (those always have a non-ASCII glyph): the Bindings tab draws them smaller so they fit their box
+        // and the controller picture (class jfg-key-text, config_menu.rml).
+        constructor.RegisterTransformFunc("jfg_key_is_text", [](const Rml::VariantList& inputs) {
+            const std::string name = inputs.empty() ? std::string() : inputs.at(0).Get<std::string>();
+            bool text = name.size() > 1;
+            for (unsigned char ch : name) {
+                if (ch >= 0x80) {
+                    text = false;
+                    break;
+                }
+            }
+            return Rml::Variant{text};
+        });
+
         constructor.BindEventCallback("set_input_binding",
             [](Rml::DataModelHandle model_handle, Rml::Event& event, const Rml::VariantList& inputs) {
                 scanned_input_index = inputs.at(0).Get<size_t>();

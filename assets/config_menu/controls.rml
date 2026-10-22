@@ -79,7 +79,7 @@
                                                     <svg class="control-option__binding-edge-svg" src="icons/RecordBorder.svg" />
                                                 </div>
                                             </div>
-                                            <div class="control-option__binding-icon">{{cur_binding}}</div>
+                                            <div class="control-option__binding-icon" data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                         </button>
                                     </div>
                                     <button
@@ -122,7 +122,7 @@
                                                     class="input-config__visual-mapping"
                                                     data-for="cur_binding, i : inputs.Y_AXIS_POS"
                                                 >
-                                                    <div>{{cur_binding}}</div>
+                                                    <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                 </div>
                                             </div>
                                             <div class="input-viz__dpad-divider" />
@@ -132,7 +132,7 @@
                                                     class="input-config__visual-mapping"
                                                     data-for="cur_binding, i : inputs.Y_AXIS_NEG"
                                                 >
-                                                    <div>{{cur_binding}}</div>
+                                                    <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -143,7 +143,7 @@
                                                     class="input-config__visual-mapping"
                                                     data-for="cur_binding, i : inputs.X_AXIS_NEG"
                                                 >
-                                                    <div>{{cur_binding}}</div>
+                                                    <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                 </div>
                                             </div>
                                             <div class="input-viz__dpad-divider" />
@@ -153,7 +153,7 @@
                                                     class="input-config__visual-mapping"
                                                     data-for="cur_binding, i : inputs.X_AXIS_POS"
                                                 >
-                                                    <div>{{cur_binding}}</div>
+                                                    <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -174,7 +174,7 @@
                                                         class="input-config__visual-mapping"
                                                         data-for="cur_binding, i : inputs.DPAD_UP"
                                                     >
-                                                        <div>{{cur_binding}}</div>
+                                                        <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                     </div>
                                                 </div>
                                                 <div class="input-viz__dpad-divider" />
@@ -184,7 +184,7 @@
                                                         class="input-config__visual-mapping"
                                                         data-for="cur_binding, i : inputs.DPAD_DOWN"
                                                     >
-                                                        <div>{{cur_binding}}</div>
+                                                        <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -195,7 +195,7 @@
                                                         class="input-config__visual-mapping"
                                                         data-for="cur_binding, i : inputs.DPAD_LEFT"
                                                     >
-                                                        <div>{{cur_binding}}</div>
+                                                        <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                     </div>
                                                 </div>
                                                 <div class="input-viz__dpad-divider" />
@@ -205,7 +205,7 @@
                                                         class="input-config__visual-mapping"
                                                         data-for="cur_binding, i : inputs.DPAD_RIGHT"
                                                     >
-                                                        <div>{{cur_binding}}</div>
+                                                        <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -223,7 +223,7 @@
                                                         class="input-config__visual-mapping"
                                                         data-for="cur_binding, i : inputs.START"
                                                     >
-                                                        <div>{{cur_binding}}</div>
+                                                        <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -237,7 +237,7 @@
                                                         class="input-config__visual-mapping"
                                                         data-for="cur_binding, i : inputs.B"
                                                     >
-                                                        <div>{{cur_binding}}</div>
+                                                        <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -251,7 +251,7 @@
                                                         class="input-config__visual-mapping"
                                                         data-for="cur_binding, i : inputs.A"
                                                     >
-                                                        <div>{{cur_binding}}</div>
+                                                        <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -268,7 +268,7 @@
                                                             class="input-config__visual-mapping"
                                                             data-for="cur_binding, i : inputs.C_LEFT"
                                                         >
-                                                            <div>{{cur_binding}}</div>
+                                                            <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -282,7 +282,7 @@
                                                             class="input-config__visual-mapping"
                                                             data-for="cur_binding, i : inputs.C_RIGHT"
                                                         >
-                                                            <div>{{cur_binding}}</div>
+                                                            <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -298,7 +298,7 @@
                                                             class="input-config__visual-mapping"
                                                             data-for="cur_binding, i : inputs.C_DOWN"
                                                         >
-                                                            <div>{{cur_binding}}</div>
+                                                            <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -312,7 +312,7 @@
                                                             class="input-config__visual-mapping"
                                                             data-for="cur_binding, i : inputs.C_UP"
                                                         >
-                                                            <div>{{cur_binding}}</div>
+                                                            <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -332,7 +332,7 @@
                                                 class="input-config__visual-mapping"
                                                 data-for="cur_binding, i : inputs.Z"
                                             >
-                                                <div>{{cur_binding}}</div>
+                                                <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -346,7 +346,7 @@
                                                 class="input-config__visual-mapping"
                                                 data-for="cur_binding, i : inputs.R"
                                             >
-                                                <div>{{cur_binding}}</div>
+                                                <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -360,7 +360,7 @@
                                                 class="input-config__visual-mapping"
                                                 data-for="cur_binding, i : inputs.L"
                                             >
-                                                <div>{{cur_binding}}</div>
+                                                <div data-class-jfg-key-text="cur_binding | jfg_key_is_text">{{cur_binding}}</div>
                                             </div>
                                         </div>
                                     </div> -->
