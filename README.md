@@ -3,13 +3,13 @@
 A native 100% playable PC port of Jet Force Gemini (N64, US) for Windows and Linux, made by static recompilation. No emulator:
 the game's code is translated from your ROM and compiled for your PC.
 
-**Current Progress:** Quality of Life features & Mod support.
+**Current Progress:** Quality of Life features & Mod support. See the [Roadmap](ROADMAP.md) for what's coming next.
 
 **No game code or assets are included.** You need your own ROM.
 
 **Contents:** [ROM](#rom) · [Features](#features) · [Build and run](#build-and-run) · [Steam Deck](#steam-deck) ·
 [Keys](#keys) · [Reporting bugs](#reporting-bugs) · [How it works](#how-it-works) · [AI disclosure](#ai-disclosure) ·
-[Legal](#legal) · [Credits](#credits)
+[Legal](#legal) · [Credits](#credits) · [Roadmap](ROADMAP.md)
 
 ## ROM
 
