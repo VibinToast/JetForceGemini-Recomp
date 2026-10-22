@@ -8,9 +8,10 @@
 //   1. download JFG-<version>-windows-x64-portable.zip from the release, over https;
 //   2. check the zip against its SHA-256 (GitHub's digest of the asset, else an attached .sha256; with neither it is not installed);
 //   3. unpack the files the game needs (the exe, the DLLs, assets/) into <game folder>\update\new;
-//   4. rename each file that is in use (the running exe, loaded DLLs) to <name>.old - Windows allows renaming a running
-//      file, though not overwriting or deleting it - and move the new file into its place. Anything that fails undoes
-//      the renames and leaves the old version as it was;
+//   4. exe first, rename each file that is in use (the running exe, loaded DLLs) to <name>.old - Windows allows renaming a
+//      running file, though not overwriting or deleting it - and move the new file into its place. Anything that fails
+//      undoes the renames and moves the new files back into update\new; when a file was locked, a script copies them all
+//      over once this exe has exited;
 //   5. jfg_update_restart() starts the new exe and the launcher quits. The new exe removes the *.old files.
 // Saves, settings, texture packs and mods are not in the zip and are never touched.
 #include <algorithm>
@@ -499,22 +500,38 @@ void move_file(const fs::path& from, const fs::path& to, std::error_code& ec) {
         ec = std::error_code((int)GetLastError(), std::system_category());
 }
 
-// Moves the unpacked files into the game folder, renaming whatever is there to <name>.old first. Undoes it all on failure.
-bool install_files(const fs::path& new_dir, const fs::path& game_dir, const std::vector<std::string>& files, std::string& error, bool& locked) {
+// Install order: the exe first, then the DLLs and the controller database, then assets/. The exe is the file most likely
+// to be locked, so when it is, nothing has been moved yet.
+int install_rank(const std::string& rel) {
+    std::string l = rel;
+    for (char& c : l) c = (char)std::tolower((unsigned char)c);
+    if (l == "jetforcegeminirecompiled.exe") return 0;
+    if (l.find('/') == std::string::npos && l.size() > 4 && l.compare(l.size() - 4, 4, ".dll") == 0) return 1;
+    if (l == "recompcontrollerdb.txt") return 2;
+    return 3;
+}
+
+// Moves the unpacked files into the game folder, renaming whatever is there to <name>.old first. Undoes it all on failure,
+// moving the new files back into update\new so that a locked install can still copy every one of them (jfg_update_restart).
+bool install_files(const fs::path& new_dir, const fs::path& game_dir, std::vector<std::string> files, std::string& error, bool& locked) {
     locked = false;
-    struct Move { fs::path target, backup; bool had_old; bool placed; };
+    std::stable_sort(files.begin(), files.end(), [](const std::string& a, const std::string& b) { return install_rank(a) < install_rank(b); });
+    struct Move { fs::path target, source, backup; bool had_old; bool placed; };
     std::vector<Move> done;
     auto rollback = [&]() {
         for (auto it = done.rbegin(); it != done.rend(); ++it) {
             std::error_code ec;
-            if (it->placed) fs::remove(it->target, ec);
+            if (it->placed) {
+                move_file(it->target, it->source, ec);
+                if (ec) continue; // the new file stays in place (and the .old next to it, which the new exe removes)
+            }
             if (it->had_old) move_file(it->backup, it->target, ec);
         }
     };
     for (size_t i = 0; i < files.size(); i++) {
         const fs::path rel = fs::path(std::u8string(files[i].begin(), files[i].end()));
         const fs::path target = game_dir / rel, source = new_dir / rel;
-        Move move{ target, fs::path(target.native() + L".old"), false, false };
+        Move move{ target, source, fs::path(target.native() + L".old"), false, false };
         std::error_code ec;
         fs::create_directories(target.parent_path(), ec);
         if (fs::exists(target, ec)) {
