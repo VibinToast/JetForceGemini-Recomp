@@ -703,3 +703,11 @@ text = "{ void jfg_cpu_lines_before(uint8_t*, recomp_context*); jfg_cpu_lines_be
 func = "mainCPUeffects"
 before_vram = 0x80045B78
 text = "{ void jfg_cpu_lines_after(uint8_t*, recomp_context*); jfg_cpu_lines_after(rdram, ctx); }"
+
+# 60 fps: a squadron's member count kept in line with its member chain (src/jfg/jfg_frame_rate.cpp,
+# jfg_squad_count_repair): at 60 fps the Lurg fight's bat squadron counted one bat fewer than it had linked, and a bat
+# freed at the end of the chain stayed linked (crash, GitHub issue #13). Entry of objDoFrees, before TidyLinkedList runs.
+[[patches.hook]]
+func = "objDoFrees"
+before_vram = 0x80007A54
+text = "{ void jfg_squad_count_repair(uint8_t*); jfg_squad_count_repair(rdram); }"
