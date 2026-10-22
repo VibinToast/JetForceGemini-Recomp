@@ -127,9 +127,13 @@ try {
 
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
+    # The order matters to the launcher's updater (1.2.0 and older), which installs the files in zip order and, when it
+    # cannot replace the running exe, loses the files it had already installed. So the exe comes first, then the DLLs and
+    # the controller database, then assets/ and the rest: when the exe is locked, nothing has been installed yet.
+    $order = { param($k) if ($k -ieq "JetForceGeminiRecompiled.exe") { 0 } elseif ($k -notmatch "/" -and $k -like "*.dll") { 1 } elseif ($k -ieq "recompcontrollerdb.txt") { 2 } elseif ($k -like "assets/*") { 3 } else { 4 } }
     $zip = [System.IO.Compression.ZipFile]::Open($zipPath, "Create")
     try {
-        foreach ($key in ($files.Keys | Sort-Object)) {
+        foreach ($key in ($files.Keys | Sort-Object { & $order $_ }, { $_ })) {
             if (-not (Test-Path $files[$key])) { throw "Missing file: $($files[$key])" }
             [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $files[$key], "$name/$($key.Replace('\', '/'))", "Optimal")
         }
