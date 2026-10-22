@@ -340,4 +340,183 @@ void draw_inventory(recomp_context* ctx) {
     }
 }
 
+// The same as the Items tab, as rows for F10's Items window (jfg_ui_tools.cpp). They act on g.edit_character.
+std::vector<ToolField> item_fields() {
+    using F = ToolField;
+    std::vector<F> out;
+    auto ch = []() { return character_ptr(std::clamp(g.edit_character, 0, 2)); };
+    auto heading = [&](const char* text) { out.push_back({ F::Heading, text }); };
+    auto note = [&](const char* text) { out.push_back({ F::Note, text }); };
+    auto action = [&](const char* label, std::function<void(recomp_context*)> act) {
+        out.push_back({ F::Action, label, 0, 1, 1, 1, nullptr, [act](recomp_context* c, int) { act(c); } });
+    };
+    auto flag_toggle = [&](int flag, const std::string& label) {
+        out.push_back({ F::Toggle, label, 0, 1, 1, 1,
+            [flag](recomp_context* c) { return call_game(mainGetGameFlag, c, { (uint32_t)flag }) != 0 ? 1 : 0; },
+            [flag](recomp_context* c, int v) { call_game(mainSetGameFlag, c, { (uint32_t)flag, v ? 1u : 0u }); } });
+    };
+    auto collected_toggle = [&](int n, const char* name) {
+        out.push_back({ F::Toggle, name, 0, 1, 1, 1,
+            [ch, n](recomp_context*) {
+                const uint32_t c = ch();
+                return c != 0 && (rd8(c + CHAR_COLLECTED_OFFSET + (uint32_t)(n >> 3)) & (0x80u >> (n & 7))) ? 1 : 0;
+            },
+            [ch, n](recomp_context*, int v) {
+                const uint32_t c = ch();
+                if (c == 0) return;
+                const uint32_t addr = c + CHAR_COLLECTED_OFFSET + (uint32_t)(n >> 3);
+                const uint8_t mask = (uint8_t)(0x80u >> (n & 7));
+                wr8(addr, (uint8_t)((rd8(addr) & ~mask) | (v ? mask : 0)));
+            } });
+    };
+
+    out.push_back({ F::Note, "", 0, 1, 1, 1, nullptr, nullptr, [ch](recomp_context*) {
+        const uint32_t c = ch();
+        if (c == 0) return std::string("No game loaded.");
+        return std::string("Editing ") + character_names[std::clamp(g.edit_character, 0, 2)] +
+               ", current weapon slot " + std::to_string(rd8(c + CHAR_WEAPON_OFFSET)) + ".";
+    } });
+
+    heading("Weapons and ammo");
+    action("Give all weapons", [ch](recomp_context*) { if (const uint32_t c = ch()) set_owned_weapons(c, 0x7FFF); });
+    action("Fill ammo", [ch](recomp_context*) { if (const uint32_t c = ch()) for (int w = 0; w < 16; w++) wr16(c + CHAR_AMMO_OFFSET + 2 * w, 999); });
+    for (int w = 0; w < 15; w++) {
+        out.push_back({ F::Toggle, std::to_string(w) + "  " + weapon_names[w], 0, 1, 1, 1,
+            [ch, w](recomp_context*) { const uint32_t c = ch(); return c != 0 && ((rd16(c + CHAR_WEAPONS_OFFSET) >> w) & 1) ? 1 : 0; },
+            [ch, w](recomp_context*, int v) {
+                const uint32_t c = ch();
+                if (c == 0) return;
+                const uint16_t owned = rd16(c + CHAR_WEAPONS_OFFSET);
+                set_owned_weapons(c, (uint16_t)((owned & ~(1u << w)) | ((v ? 1u : 0u) << w)));
+            } });
+        out.push_back({ F::Number, std::string("    Ammo: ") + weapon_names[w], 0, 999, 10, 100,
+            [ch, w](recomp_context*) { const uint32_t c = ch(); return c != 0 ? (int)rd16(c + CHAR_AMMO_OFFSET + 2 * w) : 0; },
+            [ch, w](recomp_context*, int v) { if (const uint32_t c = ch()) wr16(c + CHAR_AMMO_OFFSET + 2 * w, (uint16_t)std::clamp(v, 0, 0xFFFF)); } });
+        out.push_back({ F::Action, std::string("    Hold the ") + weapon_names[w], 0, 1, 1, 1, nullptr, [w](recomp_context* c, int) {
+            if (g.edit_character == (int16_t)rd16(ADDR_currentCharacter)) select_weapon(c, w);
+        } });
+    }
+
+    heading("Health");
+    // Game character: +0 s16 health (256 per unit), +2 s16 health level (6..12, 5 * level + 4 units at most). The
+    // character on screen keeps its live health in its object's damage data (object + 0x4C, +6).
+    auto set_health = [ch](recomp_context* c, int units) {
+        const uint32_t p = ch();
+        if (p == 0) return;
+        const int level = (int16_t)rd16(p + CHAR_HEALTH_LEVEL_OFFSET);
+        const uint16_t v = (uint16_t)(std::clamp(units, 1, 5 * level + 4) * 256);
+        wr16(p + CHAR_HEALTH_OFFSET, v);
+        const uint32_t obj = g.edit_character == (int16_t)rd16(ADDR_currentCharacter) ? player_object(c) : 0;
+        if (obj != 0 && valid_ptr(rd32(obj + 0x4C))) wr16(rd32(obj + 0x4C) + 6, v);
+    };
+    auto get_health = [ch](recomp_context* c) {
+        const uint32_t p = ch();
+        if (p == 0) return 0;
+        const uint32_t obj = g.edit_character == (int16_t)rd16(ADDR_currentCharacter) ? player_object(c) : 0;
+        const uint32_t live = (obj != 0 && valid_ptr(rd32(obj + 0x4C))) ? rd32(obj + 0x4C) + 6 : p + CHAR_HEALTH_OFFSET;
+        return (int)(int16_t)rd16(live) / 256;
+    };
+    out.push_back({ F::Number, "Health upgrades", 0, 6, 1, 1,
+        [ch](recomp_context*) { const uint32_t p = ch(); return p != 0 ? (int)(int16_t)rd16(p + CHAR_HEALTH_LEVEL_OFFSET) - 6 : 0; },
+        [ch, set_health](recomp_context* c, int v) {
+            const uint32_t p = ch();
+            if (p == 0) return;
+            const int level = std::clamp(v, 0, 6) + 6;
+            wr16(p + CHAR_HEALTH_LEVEL_OFFSET, (uint16_t)level);
+            set_health(c, 5 * level + 4);
+        } });
+    out.push_back({ F::Number, "Health (units)", 1, 64, 1, 5, get_health, set_health });
+    action("Fill health", [set_health](recomp_context* c) { set_health(c, 99); });
+
+    heading("Keys");
+    for (const NamedFlag& k : key_items) collected_toggle(k.id, k.name);
+    heading("Objects");
+    for (const NamedFlag& k : object_items) collected_toggle(k.id, k.name);
+
+    heading("Tribals");
+    note("For each region the game keeps your best visit: Tribals rescued and killed. When the rescued numbers of all "
+         "regions add up to the total it sets \"All tribals rescued\", which earns the Tribals' ship part; editing the "
+         "numbers here does not run that check, so set the flag as well.");
+    out.push_back({ F::Note, "", 0, 1, 1, 1, nullptr, nullptr, [](recomp_context*) {
+        const uint32_t game = rd32(ADDR_gameplay), table = rd32(ADDR_tribaltable);
+        int total = 0, rescued = 0;
+        if (valid_ptr(game) && valid_ptr(table))
+            for (int r = 0; r < 31; r++) { total += (int8_t)rd8(table + r); rescued += rd8(game + GAME_REGION_STATS_OFFSET + 8 * r); }
+        return "Rescued in total: " + std::to_string(rescued) + " of " + std::to_string(total);
+    } });
+    action("Mark every region fully rescued", [](recomp_context* c) {
+        const uint32_t game = rd32(ADDR_gameplay), table = rd32(ADDR_tribaltable);
+        if (!valid_ptr(game) || !valid_ptr(table)) return;
+        for (int r = 0; r < 31; r++) {
+            wr8(game + GAME_REGION_STATS_OFFSET + 8 * r, (uint8_t)std::max(0, (int)(int8_t)rd8(table + r)));
+            wr8(game + GAME_REGION_STATS_OFFSET + 8 * r + 1, 0);
+        }
+        call_game(mainSetGameFlag, c, { 88u, 1u }); // ALL_TRIBALS_RESCUED, as frontShowRegionStats does
+    });
+    flag_toggle(88, "\"All tribals rescued\" flag (88)");
+    action("Clear all region records", [](recomp_context*) {
+        const uint32_t game = rd32(ADDR_gameplay);
+        if (valid_ptr(game)) for (int r = 0; r < 31; r++) wr16(game + GAME_REGION_STATS_OFFSET + 8 * r, 0);
+    });
+    auto region_count = [](int r) { const uint32_t t = rd32(ADDR_tribaltable); return valid_ptr(t) ? (int)(int8_t)rd8(t + r) : 0; };
+    for (int r = 1; r < 31; r++) {
+        for (int k = 0; k < 2; k++) {
+            ToolField f{ F::Number, "", 0, 20, 1, 5,
+                [r, k](recomp_context*) { const uint32_t game = rd32(ADDR_gameplay); return valid_ptr(game) ? (int)rd8(game + GAME_REGION_STATS_OFFSET + 8 * r + k) : 0; },
+                [r, k, region_count](recomp_context*, int v) {
+                    const uint32_t game = rd32(ADDR_gameplay);
+                    if (valid_ptr(game)) wr8(game + GAME_REGION_STATS_OFFSET + 8 * r + k, (uint8_t)std::clamp(v, 0, std::max(0, region_count(r))));
+                },
+                [r, k, region_count](recomp_context*) {
+                    return std::string(region_names[r]) + (k == 0 ? ": rescued (of " : ": killed (of ") + std::to_string(region_count(r)) + ")";
+                } };
+            out.push_back(f);
+        }
+    }
+    out.push_back({ F::Note, "", 0, 1, 1, 1, nullptr, nullptr, [](recomp_context*) {
+        const int region = current_region();
+        return std::string("This visit: ") + ((region >= 1 && region <= 30) ? region_names[region] : "(no region)");
+    } });
+    const char* const visit_labels[3] = { "Rescued so far", "Killed so far", "Remaining" };
+    for (int k = 0; k < 3; k++) {
+        out.push_back({ F::Number, visit_labels[k], 0, 255, 1, 5,
+            [k](recomp_context*) { const uint32_t game = rd32(ADDR_gameplay); return valid_ptr(game) ? (int)rd8(game + 4 + k) : 0; },
+            [k](recomp_context*, int v) { const uint32_t game = rd32(ADDR_gameplay); if (valid_ptr(game)) wr8(game + 4 + k, (uint8_t)std::clamp(v, 0, 255)); } });
+    }
+
+    heading("Ship parts");
+    action("Give all ship parts", [](recomp_context* c) { for (const NamedFlag& f : ship_part_flags) call_game(mainSetGameFlag, c, { (uint32_t)f.id, 1u }); });
+    for (const NamedFlag& f : ship_part_flags) flag_toggle(f.id, std::string(f.name) + " (" + std::to_string(f.id) + ")");
+    heading("Floyd parts");
+    for (const NamedFlag& f : robot_flags) flag_toggle(f.id, std::string(f.name) + " (" + std::to_string(f.id) + ")");
+
+    heading("Multiplayer unlocks");
+    note("Bonuses that unlock multiplayer characters and levels; shared by all save files.");
+    action("Unlock all", [](recomp_context* c) {
+        for (const MultiUnlock& u : multi_characters) set_multi_unlocked(c, u.flag, true);
+        for (const MultiUnlock& u : multi_levels) set_multi_unlocked(c, u.flag, true);
+    });
+    for (const MultiUnlock* list : { std::begin(multi_characters), std::begin(multi_levels) }) {
+        const MultiUnlock* end = list == std::begin(multi_characters) ? std::end(multi_characters) : std::end(multi_levels);
+        for (const MultiUnlock* u = list; u != end; u++) {
+            const int flag = u->flag;
+            out.push_back({ F::Toggle, u->name, 0, 1, 1, 1,
+                [flag](recomp_context*) { return multi_unlocked(flag) ? 1 : 0; },
+                [flag](recomp_context* c, int v) { set_multi_unlocked(c, flag, v != 0); } });
+        }
+    }
+
+    heading("Progress flags");
+    for (const NamedFlag& f : progress_flags) flag_toggle(f.id, std::string(f.name) + " (" + std::to_string(f.id) + ")");
+
+    heading("Any game flag by number");
+    out.push_back({ F::Number, "Flag number", 0, 127, 1, 10,
+        [](recomp_context*) { return std::clamp(g.raw_flag, 0, 127); },
+        [](recomp_context*, int v) { g.raw_flag = std::clamp(v, 0, 127); } });
+    out.push_back({ F::Toggle, "That flag is set", 0, 1, 1, 1,
+        [](recomp_context* c) { return call_game(mainGetGameFlag, c, { (uint32_t)std::clamp(g.raw_flag, 0, 127) }) != 0 ? 1 : 0; },
+        [](recomp_context* c, int v) { call_game(mainSetGameFlag, c, { (uint32_t)std::clamp(g.raw_flag, 0, 127), v ? 1u : 0u }); } });
+    return out;
+}
+
 } // namespace jfg

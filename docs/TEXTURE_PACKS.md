@@ -60,6 +60,33 @@ pack folder. Some notes:
 The game writes a file called `rt64.json` into the pack folder. It lists every image it found, and you need it for
 the packing steps below, so select the pack in the game at least once.
 
+## Give the pack a version, author and image
+
+Put a file called `credits.json` at the top of the pack folder, next to `rt64.json`:
+
+```json
+{
+  "id": "Official_Recomp_HD",
+  "variant": "4K",
+  "version": "1.1.0",
+  "author": "VibinToast",
+  "website": "https://vibintoast.com/",
+  "description": "My official upscaled Textures for Jet Force Gemini.",
+  "image": "pack_image.png"
+}
+```
+
+Every field is optional. The **Textures** tab (and the launcher's Texture Packs page) lists the pack under its folder or
+file name, with its version and author, and shows the image, the description and a button for the website when the pack
+is highlighted. A version at the end of the name is left out there: `Official_Recomp_HD-4K_v1.1.0.rtz` is listed as
+`Official_Recomp_HD-4K`. `image` is a PNG at the top of the pack, `pack_image.png` if left out; it is shown square, so a
+square picture (64x64 or larger) fits best.
+
+`id` and `variant` name the pack and its size; `halve_rtz.bat` uses them (below). Name the file
+`<id>-<variant>_v<version>.rtz` to match.
+
+`png_to_dds.bat` copies `credits.json` and the image into the `_dds` folder, and `make_rtz.bat` packs them into the `.rtz`.
+
 ## 4. Convert to DDS (optional)
 
 PNG packs work fine. DDS is the format graphics cards read directly, so a DDS pack needs less video memory and
@@ -97,6 +124,53 @@ Put a pack in one place, not both. To change a pack later, edit the folder and r
 By default `make_rtz.bat` stores files without compression, which loads fastest. For a DDS pack, set `$Compression`
 to `Optimal` at the top of `make_rtz.ps1` if you want a smaller file.
 
+## 6. Smaller versions and large packs (optional)
+
+**Half-size copies.** Drag a `.rtz` onto `tools/textures/halve_rtz.bat` to make a copy at half the resolution, for
+example a 2K pack from a 4K one. Drag the 2K onto it again for a 1K. It asks for the new pack's variant (`2K`), and
+writes `<id>-<variant>_v<version>.rtz` next to the pack you dragged, from the `id` and `version` in its `credits.json`
+(for example `Official_Recomp_HD-2K_v1.1.0.rtz`), with the new variant in the copy's `credits.json`. A pack without an
+`id` is asked for one. The pack you drag is not changed.
+
+- DDS textures with mipmaps (what `png_to_dds.bat` makes) drop their largest mipmap. The next one down is the same
+  texture at half size, so nothing is compressed again and it takes about a minute for a 3 GB pack.
+- PNG textures are scaled down.
+- Only the textures are halved. `credits.json`, `pack_image.png` and `rt64.json` are copied as they are, apart from
+  the variant.
+
+**Splitting a large pack.** GitHub does not accept files of 2 GB or more. Drag a `.rtz` onto
+`tools/textures/split_rtz.bat` to split it into two parts (more if two would still be too big): `<pack>.rtz.001`,
+`<pack>.rtz.002`, next to the pack, plus `<pack>.rtz.sha256` with the checksum of the whole pack and of each part.
+
+Players put all the parts in `texture_packs`. When the game (or the launcher) starts, or when **Reload Pack** is
+pressed on the Textures page, it joins them into `<pack>.rtz` by itself, shows the progress on the Textures page,
+checks that the result is a whole pack, and deletes the parts. If a part is missing or not fully downloaded, the parts
+are left as they are and the Textures page says so; Reload Pack tries again once they have changed. If `<pack>.rtz` is
+already there, the parts are left alone.
+
+## The official pack in the launcher
+
+The launcher's Texture Packs page has a box for the official HD pack
+([JetForceGemini-HD_TexturePack](https://github.com/VibinToast/JetForceGemini-HD_TexturePack)). With **Check for
+Updates** on, it reads the latest release on GitHub and offers each size in it: **Download**, **Update** when an
+older version is installed, or **Installed**. A download shows its progress and can be cancelled; one that stops
+(no connection) carries on where it stopped when pressed again. The file is checked against GitHub's SHA-256 before it
+is used. After an update the older version of that size is deleted and, if it was the pack in use, the new one takes
+its place (a first download is chosen too, when no pack is in use).
+
+**Official HD Texture Pack** in the General settings (Launcher group), or `show_official_pack=0` in `jfg_launcher.txt`,
+hides the box; GitHub is then not asked about the pack.
+
+To publish a version, upload the files to a release (marked latest) and nothing else; their names say what they are:
+
+- `Official_Recomp_HD-<variant>_v<version>.rtz`, for example `Official_Recomp_HD-2K_v1.1.0.rtz`;
+- or, for a pack over 2 GB, its parts from `split_rtz.bat`: `Official_Recomp_HD-4K_v1.1.0.rtz.001`, `.002`. The
+  launcher downloads every part and joins them.
+
+Each pack's `credits.json` needs `"id": "Official_Recomp_HD"`, its `variant` and its `version`, so the launcher knows
+which version is installed. The first release (1.0.0, `1K-Toasty-HD.rtz` and `2K-Toasty-HD.rtz`, without
+`credits.json`) is recognised by its exact file sizes.
+
 ## Sharing a pack
 
 The dumped textures are the game's own images, and an upscale of them is still derived from the game. Do not share
@@ -113,3 +187,5 @@ under whatever terms you choose; check what the tool or model you used allows.
 | Test | Textures tab, **F6**, **Reload** |
 | Convert to DDS (optional) | `tools/textures/png_to_dds.bat` (needs `texconv.exe`) |
 | Pack into one file | `tools/textures/make_rtz.bat` |
+| Half-size copy (4K to 2K to 1K) | `tools/textures/halve_rtz.bat` |
+| Split for a GitHub release | `tools/textures/split_rtz.bat` |

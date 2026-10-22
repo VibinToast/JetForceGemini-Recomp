@@ -42,7 +42,7 @@ if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Force }
 
 $level = [System.IO.Compression.CompressionLevel]::$Compression
 $files = @(Get-ChildItem -LiteralPath $src -Recurse -File | Where-Object {
-    $_.Name -eq 'rt64.json' -or $_.Extension -in '.dds', '.png'
+    $_.Name -in 'rt64.json', 'credits.json' -or $_.Extension -in '.dds', '.png'
 })
 Write-Host ('Packing ' + $files.Count + ' files from ' + $src)
 Write-Host ('Into    ' + $out + '  (' + $Compression + ')')

@@ -9,6 +9,9 @@ namespace jfg::settings {
     // Options by their saved key (jfg_port_options.txt), plus "texture_dump" (this session only).
     int get(const std::string& key);
     void set(const std::string& key, int value);
+    // "Frame rate" applies from the next start: true once it was changed while the game runs.
+    bool frame_rate_needs_restart();
+    void restart_game();                   // starts the game again with the same arguments and quits this run
 
     // Profiles (Default, Modern, Modern and Balanced, Extreme, then the player's own).
     std::vector<std::string> profiles();
@@ -17,6 +20,13 @@ namespace jfg::settings {
     bool active_profile_is_builtin();
     bool profile_changed();                // settings differ from the built-in profile as chosen
     void choose_profile(const std::string& name);
+    std::string profile_preview(const std::string& name); // what choosing it changes, as prompt text; "" = nothing
+    bool keep_controls();                  // Keep My Controls: profiles leave the Controls tab as it is
+    void set_keep_controls(bool keep);
+    // The Bindings tab: during play the built-in dual-stick layout takes the place of the controller bindings /
+    // mouse and keyboard controls have the keyboard's own layout in place of the keyboard bindings.
+    bool controller_bindings_unused();
+    bool keyboard_bindings_unused();
     bool save_profile(const std::string& name); // from the current settings; false if the name is not allowed
     void delete_active_profile();
     std::string profile_message();
@@ -24,8 +34,22 @@ namespace jfg::settings {
     // Texture packs: "" = off. Folder ids as stored, with display names.
     std::vector<std::string> texture_packs();
     std::string texture_pack_name(const std::string& folder);
+    // A pack's credits.json (version, variant, author, website, description) and the image it names; empty if it has none.
+    struct TexturePackDetails {
+        bool has_json = false;
+        int serial = 0;          // changes when the pack's files change
+        std::string version, variant, author, website, description;
+        std::vector<char> image; // the image file's bytes
+    };
+    TexturePackDetails texture_pack_details(const std::string& folder);
+    // Split packs (.rtz.001, .002, ...) in texture_packs: poll (Reload Pack; start-up does its own) looks for them and
+    // starts joining a whole set; the text is
+    // its progress or result ("" = none), finished counts the joins done (a new pack to list).
+    void texture_pack_join_poll();
+    std::string texture_pack_join_text(int& finished);
     std::string texture_pack();
     void set_texture_pack(const std::string& folder);
     int texture_pack_count();              // textures loaded from the current pack, -1 if none
     int dumped_texture_files();
+    void open_texture_packs_folder();      // in the file manager
 }

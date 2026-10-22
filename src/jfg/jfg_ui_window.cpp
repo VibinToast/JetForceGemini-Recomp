@@ -3,8 +3,8 @@
 // Opened and closed with F9 or the ` (grave) key. Drawn through the base project's debug UI backend
 // (src/debug_ui), which already owns an ImGui context and renders it on top of the game.
 //
-// This file: the F9 window and the tabs it shares with F10's toolbar (Cheats, Level warp). The other tabs are in
-// jfg_profiles.cpp, jfg_weapons.cpp and jfg_ui_items.cpp.
+// This file: the F9 window and its Cheats and Level warp tabs. The other tabs are in jfg_profiles.cpp, jfg_weapons.cpp
+// and jfg_ui_items.cpp. F10's tools are RmlUi, in jfg_ui_tools.cpp.
 #include <algorithm>
 #include <cfloat>
 #include <cstdio>
@@ -18,6 +18,7 @@
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
+#include "jfg_settings_api.h"
 
 namespace jfg {
 
@@ -64,11 +65,29 @@ void draw_options() {
         if (ImGui::BeginTabItem("General")) {
             options_section("General");
             changed |= ImGui::Checkbox("No blood (as in the Japanese version)", &g.no_blood);
+            ImGui::BeginDisabled(g.no_blood);
+            changed |= ImGui::Checkbox("Blood stays (splats on the ground and walls)", &g.gore_keep_blood);
+            changed |= ImGui::Checkbox("Body parts stay", &g.gore_keep_limbs);
+            changed |= options_slider("Blood amount %", &g.blood_amount, 100, 400);
+            ImGui::EndDisabled();
             changed |= ImGui::Checkbox("START skips cutscenes", &g.start_skips_cutscenes);
             options_help("Also skips the logo screens at start-up and the story intro after creating a file. A skipped cutscene "
                          "still runs to its end at full machine speed, so everything it does (flags, items, the next level) still "
                          "happens.");
             if (g.skipping) ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Skipping...");
+            changed |= ImGui::Checkbox("Pause while the settings menu (Select / Esc) is open", &g.pause_in_menu);
+            changed |= ImGui::Checkbox("Auto save", &g.auto_save);
+            options_help("Saves to the file you are playing a few seconds after arriving in a level, and every few minutes of "
+                         "play, as Z on the pause screen does. Not during cutscenes, races, Floyd missions or while paused.");
+            changed |= options_slider("Minutes between auto saves (0: only on arriving)", &g.auto_save_minutes, 0, 30);
+            changed |= ImGui::Checkbox("Show save notification (\"Game saved\" in the corner)", &g.save_notification);
+            changed |= ImGui::Checkbox("Keep area progress", &g.keep_area_progress);
+            options_help("Saving in the middle of an area also keeps what was done there (Tribals rescued, cleared rooms, "
+                         "continues) and the room you were in; loading the file puts it all back. Off: the game's own "
+                         "behaviour, where an area starts over from its entrance after loading.");
+            changed |= ImGui::Checkbox("Permanent Tribal saves", &g.permanent_tribals);
+            options_help("A Tribal you rescued stays rescued: going back into its area, a game over or loading the file does "
+                         "not bring it back. Kept with each save of the file.");
             if (ImGui::Button("Back to the title screen (F5)")) g_reset_pending = true;
             ImGui::EndTabItem();
         }
@@ -82,20 +101,38 @@ void draw_options() {
             changed |= options_slider("Field of view %", &g.fov, 75, 140);
             options_help("Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, "
                          "menus, the pause screen and zoomed scopes keep the game's own.");
+            changed |= options_slider("Hit flash opacity %", &g.hit_flash, 0, 100);
+            options_help("How strongly the screen turns red when the character is hit. 0: no red flash.");
+            changed |= ImGui::Checkbox("Hide Floyd", &g.hide_floyd);
+            options_help("Floyd, his shadow and his sounds are gone while he follows the character; he still flies along "
+                         "and shoots. Floyd missions and a second player flying him show him as usual.");
             changed |= ImGui::Checkbox("Disable LOD (full-detail models at any distance)", &g.no_lod);
             options_help("Characters and objects normally switch to a simpler model once they are a little way off.");
             changed |= ImGui::Checkbox("Draw distant objects (no object draw distance)", &g.far_objects);
             options_help("Objects normally fade out and disappear beyond a set distance. With this they stay drawn. Takes effect "
                          "for the objects in play; level scenery itself is not affected.");
             if (FRAME_RATE_OPTION) {
-                static const char* const rates[] = { "Original (30, drops to 20)", "60", "60 + interpolated (monitor rate)" };
+                static const char* const rates[] = { "30 (Original, drops to 20)", "60" };
                 ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
-                changed |= ImGui::Combo("Frame rate", &g.frame_rate, rates, IM_ARRAYSIZE(rates));
-                options_help("60: the game updates every video frame instead of every second one; game speed stays the same. If a "
-                             "frame runs long, the game simply advances further in the next one. "
-                             "Interpolated: the renderer also adds in-between frames up to your monitor's refresh rate (like the "
-                             "Graphics menu's Framerate: Display); some moving objects may look off. With Original, the Graphics "
-                             "menu's own Framerate setting applies.");
+                changed |= ImGui::Combo("Game frame rate", &g.frame_rate, rates, IM_ARRAYSIZE(rates));
+                if (frame_rate_needs_restart()) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Used after the game restarts.");
+                    ImGui::SameLine();
+                    if (ImGui::Button("Restart now")) jfg::settings::restart_game();
+                }
+                options_help("How many times a second the game itself updates. 60: the game updates every video frame instead "
+                             "of every second one; game speed stays the same.");
+                static const int smooth[] = { 0, 60, 90, 120, 144, 240, 1 };
+                static const char* const smooth_names[] = { "Off", "60", "90", "120", "144", "240", "Monitor" };
+                int smooth_index = 0;
+                for (int i = 0; i < IM_ARRAYSIZE(smooth); i++) if (g.smooth_motion == smooth[i]) smooth_index = i;
+                ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+                if (ImGui::Combo("Frame interpolation", &smooth_index, smooth_names, IM_ARRAYSIZE(smooth_names))) {
+                    g.smooth_motion = smooth[smooth_index];
+                    changed = true;
+                }
+                options_help("How many frames a second you see: the renderer adds in-between frames to the game's own. Monitor: "
+                             "up to your monitor's refresh rate. The shadow and a few effects still move at the game's rate.");
             }
             ImGui::EndTabItem();
         }
@@ -177,16 +214,8 @@ void draw_options() {
                 changed |= ImGui::Checkbox("Camera collision", &g.camera_collision);
                 options_help("Keeps the camera from going through walls and floors when it is swung round the character, using the "
                              "game's own wall check. With it off the camera can end up outside the level.");
-                changed |= options_slider("Camera left/right %", &g.camera_speed_h, 25, 300);
-                changed |= options_slider("Camera up/down %", &g.camera_speed_v, 25, 300);
-                ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
-                changed |= ImGui::Checkbox("Diagonal speed boost", &g.diagonal_boost);
-                options_help("With the original controls, running forward while sidestepping adds the two speeds together, so "
-                             "going diagonally is about 40% faster. This gives the left stick the same boost when it is pushed "
-                             "diagonally; the slider sets how much the sideways part counts.");
-                ImGui::BeginDisabled(!g.diagonal_boost);
-                changed |= options_slider("Strafe speed %", &g.strafe_speed, 0, 200);
-                ImGui::EndDisabled();
+                changed |= options_slider("Camera left/right %", &g.camera_speed_h, 10, 400);
+                changed |= options_slider("Camera up/down %", &g.camera_speed_v, 10, 400);
                 ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
                 changed |= ImGui::Checkbox("Built-in button layout", &g.dual_layout);
                 options_help("LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. "
@@ -212,7 +241,19 @@ void draw_options() {
         }
         if (ImGui::BeginTabItem("Move & Aim")) {
             options_section("Movement (any control layout)");
-            changed |= options_slider("Movement speed %", &g.move_speed, 50, 300);
+            changed |= options_slider("Movement speed %", &g.move_speed, 25, 400);
+            changed |= ImGui::Checkbox("Sprint", &g.sprint);
+            options_help("Hold the left stick click (controller) or Left Shift (mouse and keyboard) to run faster. In the "
+                         "built-in dual-stick layout the left stick click then sprints instead of crouching (B still crouches).");
+            changed |= options_slider("Sprint speed %", &g.sprint_speed, 100, 300);
+            changed |= ImGui::Checkbox("Sprint while aiming", &g.sprint_aiming);
+            options_help("Sprinting also works while aiming, so the character moves faster with the aim held.");
+            changed |= ImGui::Checkbox("Sprint while swimming", &g.sprint_swimming);
+            options_help("Sprinting also works in the water: Vela swims and dives faster while the sprint button is held.");
+            changed |= options_slider("Swim sprint speed %", &g.sprint_swim_speed, 100, 300);
+            changed |= ImGui::Checkbox("Normalize diagonal speed", &g.normalize_diagonal);
+            options_help("In the game, running forward while sidestepping adds the two speeds together, so going diagonally "
+                         "is about 40% faster. With this on a diagonal is as fast as running straight.");
 
             options_section("Aiming (any control layout)");
             changed |= ImGui::Checkbox("Over-the-shoulder view while aiming", &g.aim_shoulder);
@@ -223,7 +264,7 @@ void draw_options() {
                          "like a normal jump, and it aims again on landing if the aim button is still held. Moving the left "
                          "stick forward while aiming still just walks. The sniper scope zooms with the D-pad (dual stick) or "
                          "1 / 3 (mouse and keyboard); on the original layout C-up jumps instead of zooming.");
-            changed |= options_slider("Aim speed %", &g.aim_speed, 20, 200);
+            changed |= options_slider("Aim speed %", &g.aim_speed, 10, 300);
             changed |= ImGui::Checkbox("Sniper rifle: fixed zoom", &g.sniper_fixed_zoom);
             changed |= options_slider("Sniper zoom %", &g.sniper_zoom, 100, 500);
             options_help("With the fixed zoom the zoom buttons do nothing, so walking forward and back while aiming the "
@@ -231,6 +272,8 @@ void draw_options() {
 
             options_section("Player");
             changed |= options_slider("Damage taken %", &g.damage_taken, 0, 400);
+            changed |= ImGui::Checkbox("Unlimited continues", &g.unlimited_continues);
+            options_help("Dying never uses up the last continue, so an area is never restarted from its entrance.");
             changed |= options_slider("Jetpack refuel speed %", &g.refuel_speed, 25, 1000);
             changed |= options_slider("Vela's dive speed %", &g.dive_speed, 50, 400);
 
@@ -243,9 +286,9 @@ void draw_options() {
         }
         if (ImGui::BeginTabItem("Textures")) {
             options_section("Textures");
-            ImGui::Checkbox("Dump textures to bin\\texture_dump", &g.texture_dump);
+            ImGui::Checkbox("Dump textures to the texture_dump folder", &g.texture_dump);
             changed |= ImGui::Checkbox("One folder per level", &g.dump_by_level);
-            options_help("Dumps into bin\\texture_dump\\<level number> <level name> instead. Each level starts its own set, so "
+            options_help("Dumps into texture_dump\\<level number> <level name> instead. Each level starts its own set, so "
                          "textures used in several levels are saved in each of them.");
             options_help("Saves every texture the game draws, the first time it appears, as <hash>.png. Leave it on while you "
                          "play through the areas you want; it is off again at the next start. Upscale the files without "
@@ -259,7 +302,7 @@ void draw_options() {
                     }
                     dumped = ec ? -1 : n;
                 }
-                if (dumped >= 0) ImGui::TextDisabled("bin\\texture_dump: %d files", dumped);
+                if (dumped >= 0) ImGui::TextDisabled("texture_dump folder: %d files", dumped);
             }
             {
                 static std::vector<std::string> packs;
@@ -280,7 +323,7 @@ void draw_options() {
                 const int n = g_texture_pack_count.load();
                 if (!current.empty() && n >= 0) ImGui::TextDisabled("%s: %d replacement textures loaded", current.c_str(), n);
             }
-            options_help("Put each pack in its own folder (bin\\texture_packs\\<name>) or as a packed .rtz file (bin\\texture_packs\\<name>.rtz). Images named like the dumps replace "
+            options_help("Put each pack in its own folder (texture_packs\\<name>, next to the game) or as a packed .rtz file (texture_packs\\<name>.rtz). Images named like the dumps replace "
                          "those textures, at any size; a suffix after the name (as Upscayl adds) is fine. F6 switches to the "
                          "next pack (and to Off) while playing, to compare. Reload after adding or changing files.");
             ImGui::EndTabItem();

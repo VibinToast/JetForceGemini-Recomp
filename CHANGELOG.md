@@ -1,7 +1,90 @@
 # Changelog
 
-Changes to Jet Force Gemini: Recompiled. Newest first. Entries under "Unreleased" are in the source but not yet
-built and tested, unless marked otherwise.
+Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
+are written here by hand and become that version's notes when it is released.
+
+## Unreleased
+
+### New options
+
+- Auto Save: the game saves itself a few seconds after you arrive in a level and every few minutes, so a crash no longer loses your progress. It is on in every profile except Default (the original game).
+- Keep Area Progress: saving in the middle of an area keeps the rescued Tribals, cleared rooms, continues and the room you were in.
+- Permanent Tribal Saves: a rescued Tribal stays rescued after you leave its area, get a game over or load your file.
+- Unlimited Continues: dying never uses up your continues, so you are never sent back to the start of an area.
+- Sprint: hold the left stick click or Left Shift to run faster. Sprint While Aiming lets you keep sprinting while you aim, and Normalize Diagonal Speed replaces Diagonal Speed Boost and Strafe Speed.
+- Sprint While Swimming: hold the sprint button to make Vela swim and dive faster, with its own Swim Sprint Speed.
+- Gore: Blood Stays, Body Parts Stay and Blood Amount.
+- Hide Floyd: Floyd is not drawn while he follows you, and his shadow and sounds are gone too. He still flies along and shoots.
+- Hit Flash Opacity: how strongly the screen turns red when you are hit. 0% turns the red flash off.
+- Pause in Settings Menu: the game pauses while the settings menu (Select / Esc) is open.
+- Show Save Notification: the "Game saved" message can be turned off.
+- Floyd missions can be flown with mouse and keyboard.
+
+### Frame rate
+
+- Two new options in the Graphics tab replace the old Frame Rate setting:
+- Game Frame Rate: 30 (like the N64) or 60. Game speed stays the same either way.
+- Frame Interpolation: adds in-between frames so movement looks smoother, with either Game Frame Rate. Choose Off, 60, 90, 120, 144, 240 or Monitor (your monitor's refresh rate).
+- Changes to either option apply at once, with no restart.
+- The old "60 + Interpolated" choice is gone: it is now Game Frame Rate 60 with Frame Interpolation on Monitor. If you had it chosen, the update switches you to that by itself.
+- Show FPS shows both the game's frame rate and the frame rate on screen.
+- At 60 fps, ants, Tribals and other enemies move on every frame instead of looking like 30 fps.
+- At 60 fps, the slug boss's bolts and the target lock keep their original timing.
+
+### Settings menu
+
+- Everything is in one menu with 8 tabs: Profiles, General, Gameplay, Controls, Bindings, Graphics, Textures and Mods.
+- New Jet Force Gemini colors, bigger option descriptions with the option's name as a heading, and options grouped under headings.
+- The bumpers switch tabs instead of the triggers, and a controller reaches every option.
+- Choosing a profile shows what it will change before it is applied, and warns you if it would replace your controller bindings. New Keep My Controls option.
+- The Bindings tab tells you when its bindings are not the ones in use, and its note no longer covers the list. The Profiles tab scrolls instead of running off the bottom of the menu.
+
+### Launcher
+
+- Titles and buttons use the Jet Force Gemini font, and the selected button has a gold outline like the in-game menu.
+- New options: Skip the Launcher, Return to Launcher and Check for Updates. The launcher opens on Start Jet Force Gemini.
+- Full controller support: B goes back, LB / RB switch pages, Start jumps to the Start button and the right stick scrolls.
+- New Mods page, and an Open Texture Packs Folder button.
+- The changelogs are easier to read.
+
+### Texture packs
+
+- The launcher can install and update the official HD texture pack.
+- Texture packs show their credits: name, version, author, description, website and picture.
+- Texture packs that come split into several files are joined by the game.
+- Texture packs keep their own settings (such as the texture shift) instead of having them reset when the pack loads.
+- Pack buttons are labelled Folder or .rtz, so two copies of the same pack can be told apart.
+- HUD numbers and text in HD texture packs sit where the original ones do.
+- Texture packs whose file ends in .RTZ (or any other mix of capitals) now load. Before, they were listed but the game ignored them.
+
+### Graphics
+
+- The renderer is updated to the latest RT64: more accurate textures and clipping, and a fix for AMD RDNA4 graphics cards on Vulkan.
+- Ambient occlusion no longer draws a crosshatch pattern on faces, works in the title screen and cutscenes, and no longer darkens flat or very close surfaces.
+- Widescreen: the Tribal counter's heads no longer squeeze together and cover their numbers.
+- Widescreen: reticles for the Tri-Rocket, Homing Missiles, mines, grenades and other weapons are no longer stretched.
+
+### Linux
+
+- Linux releases come as one AppImage that runs on SteamOS (Steam Deck), Fedora and Ubuntu, plus a portable folder.
+- On Linux, options that need a restart now start the game again instead of only closing it.
+
+### Tools (F10)
+
+- The F10 tools have the game's own menu style, and work with a controller (a Tools button in the Select menu).
+- Level Warp shows the level and entrance you are in, with a Pick button to warp there, and keeps its controls in view above the level list.
+- The Items and Weapons sections open as drawers.
+
+### Fixes
+
+- Fixed a crash in the Lurg fight.
+- Fixed the game freezing when the menu was closed twice in a row.
+- Fixed a freeze at start-up, and when going fullscreen or changing the frame rate during play, with in-between frames on (#3).
+- Fixed a crash in cutscenes with anti-aliasing and in-between frames on.
+- Fixed a rare crash in the alien boss fight where the boss throws a volley of rocks.
+- After closing a menu, the mouse buttons fire and aim again, and holding fire (or a Steam Deck screen tap) while closing it no longer keeps you firing.
+- Weapon reticles drawn by the game (Tri-Rocket, Homing Missiles, mines, grenades and others) show again with Frame Interpolation on.
+- The start-up key hint no longer mentions F9 (the debug window).
 
 ## v1.1.8 (2026-10-18)
 
@@ -130,7 +213,7 @@ built and tested, unless marked otherwise.
 - Show the Mods tab again
 - Update JFG 4K texture pack link in README
 - Document HD texture packs in the README
-- Add a launcher in Jet Force Gemini colours
+- Add a launcher in Jet Force Gemini colors
 - Document the features and keys in the README
 - Add automatic releases
 - Add the Gameplay, Visuals, Profiles and Textures tabs to the settings menu

@@ -43,6 +43,10 @@
 #include <bcrypt.h>
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "bcrypt.lib")
+#elif defined(__linux__)
+#include <spawn.h>
+#include <unistd.h>
+extern char** environ;
 #endif
 
 namespace fs = std::filesystem;
@@ -53,7 +57,7 @@ constexpr const char* COMMITS_URL = "https://api.github.com/repos/VibinToast/Jet
 constexpr const char* ZIP_SUFFIX = "-windows-x64-portable.zip";
 
 struct Release {
-    std::string tag, version, body, zip_name, zip_url, sha_url, zip_digest; // zip_digest: GitHub's own SHA-256 of the zip, lower case hex
+    std::string tag, version, date, body, zip_name, zip_url, sha_url, zip_digest; // zip_digest: GitHub's own SHA-256 of the zip, lower case hex; date: YYYY-MM-DD
 };
 
 std::mutex g_mutex;
@@ -128,7 +132,10 @@ std::wstring widen(const std::string& s) {
     return w;
 }
 
-bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progress) {
+// range_from > 0 asks for the rest of the file from that byte (206); a server that sends the whole file instead (200)
+// is told to on_status, which is called with the status before the body.
+bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progress, uint64_t range_from = 0,
+              const std::function<void(DWORD status)>& on_status = nullptr) {
     wchar_t host[256] = {}, path[2048] = {}, extra[2048] = {};
     URL_COMPONENTS parts = {};
     parts.dwStructSize = sizeof(parts);
@@ -145,15 +152,18 @@ bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progre
     WinHttpSetTimeouts(session, 8000, 8000, 20000, 30000);
     HINTERNET connection = WinHttpConnect(session, host, parts.nPort, 0);
     HINTERNET request = connection == nullptr ? nullptr : WinHttpOpenRequest(connection, L"GET", target.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+    std::wstring headers = L"Accept: application/vnd.github+json, application/octet-stream\r\n";
+    if (range_from > 0) headers += L"Range: bytes=" + std::to_wstring(range_from) + L"-\r\n";
     if (request != nullptr &&
-        WinHttpSendRequest(request, L"Accept: application/vnd.github+json, application/octet-stream\r\n", (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+        WinHttpSendRequest(request, headers.c_str(), (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
         WinHttpReceiveResponse(request, nullptr)) {
         DWORD status = 0, size = sizeof(status);
         WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX);
         DWORD length = 0;
         size = sizeof(length);
         if (!WinHttpQueryHeaders(request, WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &length, &size, WINHTTP_NO_HEADER_INDEX)) length = 0;
-        if (status == 200) {
+        if (status == 200 || (status == 206 && range_from > 0)) {
+            if (on_status) on_status(status);
             ok = true;
             std::vector<char> buffer(64 * 1024);
             uint64_t done = 0;
@@ -213,9 +223,9 @@ bool is_bot_commit(const nlohmann::json& c) {
 bool changelog_ignored_file(const std::string& path) {
     static const char* const files[] = {
         "README.md", "LICENSE", "CHANGELOG.md", "version.txt", ".gitignore", ".gitattributes", ".recomp.json",
-        "tools/package_release.ps1", "tools/package_release.bat", "tools/set_version.py",
+        "tools/package_release.ps1", "tools/package_release.bat", "tools/package_release.sh", "tools/set_version.py",
     };
-    static const char* const folders[] = { ".github/", "docs/", "images/" };
+    static const char* const folders[] = { ".github/", "docs/", "images/", "tools/linux-build/" };
     for (const char* f : files) if (path == f) return true;
     for (const char* f : folders) if (path.rfind(f, 0) == 0) return true;
     return false;
@@ -278,12 +288,24 @@ void commits_thread() {
     }
     std::lock_guard<std::mutex> lock(g_mutex);
     // Only what has been pushed to GitHub is listed there; commits that are only on a computer are not.
-    g_commits = text.empty() ? "Since the last release: no new commits on GitHub yet.\n\n"
-                             : "Since the last release (not in a version yet)\n" + text + "\n";
+    g_commits = text.empty() ? "## Since the last release\nNo new changes on GitHub yet.\n\n"
+                             : "## Since the last release\nOn GitHub, not in a version yet.\n" + text + "\n";
 }
 
 // ---- finding releases ---------------------------------------------------------------------------------------------------
 void check_thread(std::string current) {
+    // Test: JFG_DEBUG_FAKE_UPDATE=<version> (Recomp-Docs/REFERENCE.md) reports that version as available without
+    // asking GitHub, with made-up notes; it cannot be installed (the dialog says why), so nothing is downloaded.
+    if (const char* fake = std::getenv("JFG_DEBUG_FAKE_UPDATE"); fake != nullptr && *fake != '\0') {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_info.version = strip_v(fake);
+        g_info.changelog = "## v" + g_info.version + " (test)\n- This update is not real: JFG_DEBUG_FAKE_UPDATE is set.\n"
+            "- It shows what the launcher and the in-game notice look like when a newer release exists.\n";
+        g_info.can_install = false;
+        g_info.unavailable = "This is a test update (JFG_DEBUG_FAKE_UPDATE), so there is nothing to install.";
+        g_found = true;
+        return;
+    }
     std::string body;
     if (!http_get_string(RELEASES_URL, body)) return;
     const nlohmann::json list = nlohmann::json::parse(body, nullptr, false);
@@ -299,6 +321,7 @@ void check_thread(std::string current) {
         release.version = strip_v(release.tag);
         if (parse_version(release.version).empty()) continue;
         release.body = json_string(r, "body");
+        release.date = json_string(r, "published_at").substr(0, 10);
         const auto assets = r.find("assets");
         if (assets != r.end() && assets->is_array()) {
             for (const nlohmann::json& a : *assets) {
@@ -332,7 +355,18 @@ void check_thread(std::string current) {
         notes.erase(std::remove(notes.begin(), notes.end(), '\r'), notes.end());
         while (!notes.empty() && std::isspace((unsigned char)notes.back())) notes.pop_back();
         if (notes.empty()) notes = "(no notes)";
-        changelog += "v" + release.version + "\n" + notes + "\n\n";
+        // Markdown for jfg_changelog_rml: a heading per release; headings inside the notes become subheadings.
+        std::string body, line;
+        for (size_t i = 0; i <= notes.size(); i++) {
+            if (i < notes.size() && notes[i] != '\n') { line += notes[i]; continue; }
+            if (!line.empty() && line[0] == '#') {
+                const size_t text_start = line.find_first_not_of("# ");
+                line = "### " + (text_start == std::string::npos ? std::string() : line.substr(text_start));
+            }
+            body += line + "\n";
+            line.clear();
+        }
+        changelog += "## v" + release.version + (release.date.empty() ? "" : " (" + release.date + ")") + "\n" + body + "\n";
     }
 
     std::lock_guard<std::mutex> lock(g_mutex);
@@ -572,31 +606,127 @@ void cleanup_thread() {
 #endif
 } // namespace
 
+// ---- shared with the texture pack installer (jfg_pack_install.cpp) ---------------------------------------------------------
+bool jfg_http_get_text(const std::string& url, std::string& out) { return http_get_string(url, out); }
+
+int jfg_http_download(const std::string& url, const fs::path& file, uint64_t expected_size,
+                      const std::function<bool(uint64_t done, uint64_t total)>& progress) {
+    std::error_code ec;
+    uint64_t have = fs::exists(file, ec) ? fs::file_size(file, ec) : 0;
+    if (ec || (expected_size > 0 && have > expected_size)) have = 0;
+    if (expected_size > 0 && have == expected_size) return 1; // already all there
+    bool cancelled = false, write_ok = true;
+#ifdef _WIN32
+    std::FILE* f = _wfopen(file.c_str(), have > 0 ? L"ab" : L"wb");
+    if (f == nullptr) return 0;
+    uint64_t start = have;
+    const bool ok = http_get(url,
+        [&](const char* data, size_t n) {
+            if (cancelled) return false;
+            if (std::fwrite(data, 1, n, f) != n) { write_ok = false; return false; }
+            return true;
+        },
+        [&](uint64_t done, uint64_t length) {
+            const uint64_t total = expected_size > 0 ? expected_size : start + length;
+            if (progress && !progress(start + done, total)) cancelled = true;
+        },
+        have,
+        [&](DWORD status) {
+            if (status == 200 && start > 0) { // the server sent the whole file: start again
+                f = _wfreopen(file.c_str(), L"wb", f);
+                start = 0;
+            }
+        });
+    if (f != nullptr) std::fclose(f);
+#else
+    // curl writes the rest of the file (-C -: from the size it already has) and reports nothing back; the size of the
+    // file is the progress.
+    if (url.rfind("https://", 0) != 0 || url.find('\'') != std::string::npos || file.string().find('\'') != std::string::npos) return 0;
+    const std::string command = "curl -fsSL -C - -o '" + file.string() + "' '" + url + "' 2>/dev/null";
+    std::atomic<int> result{ -1 };
+    std::thread worker([&] { result = std::system(command.c_str()); });
+    while (result.load() == -1) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        const uint64_t size = fs::exists(file, ec) ? fs::file_size(file, ec) : 0;
+        if (progress && !progress(size, expected_size)) cancelled = true; // noted; curl finishes the file
+    }
+    worker.join();
+    const bool ok = result.load() == 0;
+#endif
+    if (cancelled) return -1;
+    return ok && write_ok ? 1 : 0;
+}
+
+bool jfg_sha256_file(const fs::path& file, std::string& hex) {
+#ifdef _WIN32
+    return sha256_of_file(file, hex);
+#else
+    if (file.string().find('\'') != std::string::npos) return false;
+    FILE* pipe = popen(("sha256sum '" + file.string() + "' 2>/dev/null").c_str(), "r");
+    if (pipe == nullptr) return false;
+    char buffer[128] = {};
+    const size_t got = std::fread(buffer, 1, 64, pipe);
+    const bool ok = pclose(pipe) == 0 && got == 64;
+    if (ok) hex.assign(buffer, 64);
+    return ok;
+#endif
+}
+
 // ---- the launcher's settings (bin\jfg_launcher.txt) -----------------------------------------------------------------------
 namespace {
 bool g_check_updates = true;
+bool g_skip_launcher = false;
+bool g_show_official_pack = true;
+std::string g_current_version;          // this build, for a check started later (jfg_launcher_set_check_updates)
+std::atomic<bool> g_check_started{ false };
 std::string g_config_rom;
+fs::path g_config_folder;
 constexpr const char* LAUNCHER_CONFIG_FILE = "jfg_launcher.txt";
+#define SKIP_LAUNCHER_COMMENT \
+    "# 1: the game starts straight away with the ROM you loaded in the launcher (the launcher's Play page sets this).\n" \
+    "# 0: the launcher opens first. Starting the game with --launcher opens it anyway.\n"
+#define OFFICIAL_PACK_COMMENT \
+    "# 1: the launcher's Texture Packs page shows the official HD texture pack, to download or update (it asks GitHub\n" \
+    "# for its latest version, with check_for_updates=1). 0: hidden, and not asked for. The General settings set this.\n"
+#define CHECK_UPDATES_COMMENT \
+    "# 1: the game looks for a newer release on GitHub when it starts (the launcher's Play page and a note in the game\n" \
+    "# show one). 0: it never contacts GitHub (no update check, no list of recent changes). The General settings set this.\n"
 constexpr const char* LAUNCHER_CONFIG_TEMPLATE =
     "# Jet Force Gemini: Recompiled - launcher settings. Lines starting with # are ignored.\n"
     "\n"
-    "# 1: the launcher looks for a newer release on GitHub when it opens (a banner on the Play page shows one).\n"
-    "# 0: it never contacts GitHub (no update check, no list of recent changes).\n"
+    CHECK_UPDATES_COMMENT
     "check_for_updates=1\n"
     "\n"
     "# Path to your Jet Force Gemini (US) ROM, e.g. rom=C:\\Games\\jfg.z64 (a path without a drive is relative to this\n"
     "# folder). When it is set and the ROM checks out, the game starts straight away without the launcher. Leave it\n"
     "# empty to use the launcher. Start the game with --launcher to get the launcher anyway. The first seconds of play can\n"
     "# stutter a little, since the launcher otherwise gives the renderer time to prepare its shaders.\n"
-    "rom=\n";
+    "rom=\n"
+    "\n"
+    SKIP_LAUNCHER_COMMENT
+    "skip_launcher=0\n"
+    "\n"
+    OFFICIAL_PACK_COMMENT
+    "show_official_pack=1\n";
 
 std::string trim(const std::string& s) {
     const size_t a = s.find_first_not_of(" \t\r\n"), b = s.find_last_not_of(" \t\r\n");
     return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
 }
+
+// The release check and the recent-changes list, on background threads, at most once per run.
+void start_check_threads() {
+    if (g_check_started.exchange(true)) return;
+    try {
+        std::thread(check_thread, g_current_version).detach();
+        std::thread(commits_thread).detach();
+    }
+    catch (...) {}
+}
 } // namespace
 
 void jfg_launcher_config_load(const fs::path& app_folder) {
+    g_config_folder = app_folder;
     const fs::path file = app_folder / LAUNCHER_CONFIG_FILE;
     std::ifstream in(file, std::ios::binary);
     if (!in) {
@@ -614,6 +744,8 @@ void jfg_launcher_config_load(const fs::path& app_folder) {
         std::string value = trim(line.substr(eq + 1));
         if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size() - 2);
         if (key == "check_for_updates") g_check_updates = value != "0" && value != "false" && value != "no";
+        else if (key == "skip_launcher") g_skip_launcher = value == "1" || value == "true" || value == "yes";
+        else if (key == "show_official_pack") g_show_official_pack = value != "0" && value != "false" && value != "no";
         else if (key == "rom" && !value.empty()) {
             fs::path rom{ std::u8string(value.begin(), value.end()) };
             if (rom.is_relative()) rom = app_folder / rom;
@@ -625,18 +757,72 @@ void jfg_launcher_config_load(const fs::path& app_folder) {
     }
 }
 bool jfg_launcher_check_updates() { return g_check_updates; }
+bool jfg_launcher_skip() { return g_skip_launcher; }
+bool jfg_launcher_show_official_pack() { return g_show_official_pack; }
+
+// Writes key=value into the file: the existing line is replaced (the rest of the file, comments included, is kept), or
+// the setting is added at the end with its explanation (`comment`).
+static void write_launcher_setting(const std::string& key, const std::string& value, const char* comment) {
+    const fs::path file = g_config_folder / LAUNCHER_CONFIG_FILE;
+    std::string text;
+    {
+        std::ifstream in(file, std::ios::binary);
+        text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    const std::string line = key + "=" + value;
+    bool replaced = false;
+    std::string out;
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t end = text.find('\n', pos);
+        if (end == std::string::npos) end = text.size();
+        std::string cur = text.substr(pos, end - pos);
+        const std::string t = trim(cur);
+        if (!replaced && t.rfind(key, 0) == 0 && t.find('=') != std::string::npos && trim(t.substr(0, t.find('='))) == key) {
+            cur = line + (!cur.empty() && cur.back() == '\r' ? "\r" : "");
+            replaced = true;
+        }
+        out += cur;
+        if (end < text.size()) out += '\n';
+        pos = end + 1;
+    }
+    if (!replaced) {
+        if (!out.empty() && out.back() != '\n') out += '\n';
+        out += std::string("\n") + comment + line + "\n";
+    }
+    std::ofstream o(file, std::ios::binary | std::ios::trunc);
+    o << out;
+}
+
+void jfg_launcher_set_skip(bool skip) {
+    g_skip_launcher = skip;
+    write_launcher_setting("skip_launcher", skip ? "1" : "0", SKIP_LAUNCHER_COMMENT);
+}
+
+// The check itself runs once, at start-up: turning it on takes effect the next time the game starts; turning it off
+// also stops the in-game notice of an update already found this run (jfg_tick.cpp asks jfg_launcher_check_updates).
+void jfg_launcher_set_show_official_pack(bool show) {
+    g_show_official_pack = show;
+    write_launcher_setting("show_official_pack", show ? "1" : "0", OFFICIAL_PACK_COMMENT);
+}
+
+void jfg_launcher_set_check_updates(bool check) {
+    g_check_updates = check;
+    write_launcher_setting("check_for_updates", check ? "1" : "0", CHECK_UPDATES_COMMENT);
+    // Turned on in a run that started with it off: check now rather than at the next start.
+    if (check && !g_current_version.empty()) start_check_threads();
+}
 std::string jfg_launcher_config_rom() { return g_config_rom; }
 
 void jfg_update_check_start(const std::string& current) {
     static bool started = false;
     if (started) return;
     started = true;
+    g_current_version = current;
     try {
-        // check_for_updates=0: no requests to GitHub at all. Finishing an installed update (removing the old files) still runs.
-        if (g_check_updates) {
-            std::thread(check_thread, current).detach();
-            std::thread(commits_thread).detach();
-        }
+        // check_for_updates=0: no requests to GitHub at all (turning the setting on later starts the check then:
+        // jfg_launcher_set_check_updates). Finishing an installed update (removing the old files) still runs.
+        if (g_check_updates) start_check_threads();
 #ifdef _WIN32
         std::thread(cleanup_thread).detach();
 #endif
@@ -686,19 +872,61 @@ std::string jfg_changelog_text() {
         while ((n = std::fread(buffer, 1, sizeof(buffer), f)) > 0) text.append(buffer, n);
         std::fclose(f);
     }
-    if (text.empty()) return "The changelog was not found next to the game. It is on the release page.";
+    if (text.empty()) return "The changelog was not found next to the game. It is on the release page.\n";
     text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
-    text.erase(std::remove(text.begin(), text.end(), '`'), text.end());
-    // Start at the first version heading (the file opens with a few lines about itself); headings lose their # marks.
+    // Start at the first version heading (the file opens with a few lines about itself).
     const size_t first = text.find("\n## ");
     if (first != std::string::npos) text.erase(0, first + 1);
+    return text;
+}
+
+// Markdown (as CHANGELOG.md and the release notes write it) to RML for the launcher's dialogs: "## v1.2.3 (date)" is a
+// version heading, tagged Installed / New against this build; "### x" a subheading; "- x" / "* x" an item; any other
+// line a note. The styles are the .rl-cl-* classes in assets/launcher.rml.
+std::string jfg_changelog_rml(const std::string& markdown, const std::string& installed) {
+    auto escape = [](const std::string& in) {
+        std::string out;
+        for (size_t i = 0; i < in.size(); i++) {
+            const char c = in[i];
+            const bool bold_mark = c == '*' && ((i + 1 < in.size() && in[i + 1] == '*') || (i > 0 && in[i - 1] == '*'));
+            if (c == '`' || bold_mark) continue;
+            if (c == '&') out += "&amp;";
+            else if (c == '<') out += "&lt;";
+            else if (c == '>') out += "&gt;";
+            else if (c == '{' && i + 1 < in.size() && in[i + 1] == '{') out += "{ "; // never a data binding
+            else out += c;
+        }
+        return out;
+    };
     std::string out, line;
-    for (size_t i = 0; i <= text.size(); i++) {
-        if (i < text.size() && text[i] != '\n') { line += text[i]; continue; }
-        if (line.rfind("## ", 0) == 0) { if (!out.empty()) out += "\n"; out += line.substr(3) + "\n"; }
-        else if (line.rfind("### ", 0) == 0) out += line.substr(4) + ":\n";
-        else out += line + "\n";
+    bool first_heading = true;
+    for (size_t i = 0; i <= markdown.size(); i++) {
+        if (i < markdown.size() && markdown[i] != '\n') { line += markdown[i]; continue; }
+        const size_t start = line.find_first_not_of(" \t");
+        size_t end = line.find_last_not_of(" \t");
+        const std::string t = start == std::string::npos ? std::string() : line.substr(start, end - start + 1);
         line.clear();
+        if (t.rfind("## ", 0) == 0) {
+            std::string title = t.substr(3), date;
+            const size_t open = title.find(" (");
+            if (open != std::string::npos && title.back() == ')') {
+                date = title.substr(open + 2, title.size() - open - 3);
+                title = title.substr(0, open);
+            }
+            const std::string version = strip_v(title);
+            std::string tag;
+            if (!parse_version(version).empty() && !parse_version(installed).empty()) {
+                const int cmp = compare_versions(version, installed);
+                if (cmp == 0) tag = "<span class=\"rl-cl-tag\">Installed</span>";
+                else if (cmp > 0) tag = "<span class=\"rl-cl-tag rl-cl-new\">New</span>";
+            }
+            out += std::string("<div class=\"rl-cl-version") + (first_heading ? " rl-cl-first" : "") + "\"><span class=\"rl-cl-ver\">" + escape(title) +
+                "</span>" + (date.empty() ? "" : "<span class=\"rl-cl-date\">" + escape(date) + "</span>") + tag + "</div>";
+            first_heading = false;
+        }
+        else if (t.rfind("### ", 0) == 0) out += "<div class=\"rl-cl-sub\">" + escape(t.substr(4)) + "</div>";
+        else if (t.rfind("- ", 0) == 0 || t.rfind("* ", 0) == 0) out += "<div class=\"rl-cl-item\"><span class=\"rl-cl-dot\">&gt;</span>" + escape(t.substr(2)) + "</div>";
+        else if (!t.empty() && t[0] != '#') out += "<div class=\"rl-cl-note\">" + escape(t) + "</div>";
     }
     return out;
 }
@@ -762,5 +990,56 @@ void jfg_update_restart() {
         CloseHandle(process.hProcess);
         CloseHandle(process.hThread);
     }
+#elif defined(__linux__)
+    // Nothing is installed from here on Linux (the dialog points to the release page), so this only starts the game
+    // again: this binary with the same arguments as this run (/proc/self/cmdline), in the same folder.
+    std::error_code ec;
+    const fs::path exe = fs::read_symlink("/proc/self/exe", ec);
+    if (ec) return;
+    const std::string path = exe.string();
+    std::vector<std::string> args;
+    if (std::FILE* f = std::fopen("/proc/self/cmdline", "rb")) {
+        std::string arg;
+        for (int c; (c = std::fgetc(f)) != EOF;) {
+            if (c != '\0') { arg += (char)c; continue; }
+            args.push_back(arg);
+            arg.clear();
+        }
+        std::fclose(f);
+    }
+    std::vector<char*> argv{ const_cast<char*>(path.c_str()) };
+    for (size_t i = 1; i < args.size(); i++) argv.push_back(args[i].data()); // [0] is this program as it was started
+    argv.push_back(nullptr);
+    pid_t pid = 0;
+    posix_spawn(&pid, path.c_str(), nullptr, nullptr, argv.data(), environ);
+#endif
+}
+
+// The settings menu's "Return to Launcher": the runtime cannot go back from the game to the launcher, so this starts the
+// game again with the same arguments plus --launcher (which opens the launcher even with skip_launcher=1 or a rom=
+// path). The caller then quits this run, as after an update.
+bool jfg_restart_into_launcher() {
+#ifdef _WIN32
+    const fs::path exe = exe_folder() / L"JetForceGeminiRecompiled.exe";
+    std::wstring command_line = std::wstring(GetCommandLineW()) + L" --launcher";
+    STARTUPINFOW startup = {};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process = {};
+    const std::wstring folder = exe_folder().wstring();
+    if (!CreateProcessW(exe.c_str(), command_line.data(), nullptr, nullptr, FALSE, 0, nullptr, folder.c_str(), &startup, &process)) return false;
+    CloseHandle(process.hProcess);
+    CloseHandle(process.hThread);
+    return true;
+#elif defined(__linux__)
+    std::error_code ec;
+    const fs::path exe = fs::read_symlink("/proc/self/exe", ec);
+    if (ec) return false;
+    const std::string path = exe.string();
+    char launcher_arg[] = "--launcher";
+    char* argv[] = { const_cast<char*>(path.c_str()), launcher_arg, nullptr };
+    pid_t pid = 0;
+    return posix_spawn(&pid, path.c_str(), nullptr, nullptr, argv, environ) == 0;
+#else
+    return false; // macOS: not yet (the button then only says so)
 #endif
 }
