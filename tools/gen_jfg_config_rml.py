@@ -95,6 +95,8 @@ CONTROLS = [
     ("bool", "aim_shoulder", "Over-the-Shoulder Aiming", None, "While aiming, the view is from over the character's right shoulder."),
     ("bool", "aim_centered", "Keep the Reticle Centered", None,
      "While aiming, the view turns as soon as the stick moves and the reticle stays in the middle (instead of the reticle first travelling to the edge of a box and drifting back)."),
+    ("bool", "fixed_reticle", "Steady Reticle", None,
+     "While aiming, the reticle stays at one place and one size instead of jumping and changing size as the aim passes over near and far walls and objects. Lock-on and shooting are unchanged."),
     ("bool", "aim_jump", "Jump While Aiming", None,
      "The jump button jumps while aiming, also while walking or strafing: the character leaves the aim for the jump and aims again on landing if the aim button is still held. The sniper scope then zooms with the D-pad (dual stick) or 1 / 3 (mouse and keyboard)."),
     ("range", "aim_speed", "Aim Speed", (10, 300, "%"), "How fast the stick turns the view / moves the reticle while aiming."),

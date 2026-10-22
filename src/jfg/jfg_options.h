@@ -87,6 +87,7 @@ struct State {
     int  camera_speed_v = 100;     // dual stick: camera speed up/down, percent
     bool aim_shoulder = false;     // aiming: view from over the character's right shoulder
     bool aim_centered = false;     // aiming: the view turns at once and the reticle stays in the middle
+    bool fixed_reticle = false;    // aiming: the reticle sits at the weapon's range (one place, one size), see jfg_fixed_reticle
     bool aim_jump = false;         // aiming: the jump button (C-up) jumps instead of zooming, see aim_jump()
     int  aim_speed = 70;           // aiming: how fast the stick turns the view / moves the reticle, percent
     bool invert_camera_y = false;  // dual stick: right stick up lowers the camera instead of raising the view
