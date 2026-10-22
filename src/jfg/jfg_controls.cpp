@@ -604,8 +604,10 @@ void jfg_camera_controls(recomp_context* ctx) {
 
     if (aiming) {
         // The game's aiming view takes over; it looks the way the character is facing. By default the character is
-        // first turned to face where the free camera was looking, so the aim starts on what the player was looking
-        // at; with the option, the character is left alone and the view jumps round to its facing instead.
+        // first turned to face where the free camera was looking, the aim's up/down is set to the free camera's tilt,
+        // and the game's own camera (which stayed behind the old facing) is put where the free camera was showing, so
+        // the aim starts on what the player was looking at; with the option, the character is left alone and the view
+        // jumps round to its facing instead.
         // While aiming, follow the game's camera so the free camera continues from it afterwards.
         if (!g_cam.was_aiming && was_active && !g.aim_from_character) {
             const uint16_t yaw = angle_to_s16(g_cam.heading + PI_F);
@@ -613,12 +615,23 @@ void jfg_camera_controls(recomp_context* ctx) {
             const uint32_t data = rd32(obj + 0x68);
             // the object's yaw and the copies the control code keeps and writes back every tick
             if (valid_ptr(data)) { for (uint32_t k : { 0x106u, 0x11Cu, 0x122u, 0x1C6u, 0x1CAu }) wr16(data + k, yaw); }
+            constexpr int PITCH_LIMIT = 0x2AAA; // as aim_controls
+            // the camera tilted up (elevation below 0) is the aim looking up (a larger view pitch)
+            g_cam.aim_pitch_pending = std::clamp((int)(int16_t)angle_to_s16(-g_cam.elevation), -PITCH_LIMIT, PITCH_LIMIT) & 0xFFFF;
+            camera_hand_over_to_aim(cam);
+        }
+        else if (g_cam.aim_pitch_pending >= 0 && aim_state(obj)) {
+            // The game resets the aim's up/down when its aiming starts (the tick after the button): set it then.
+            const uint32_t data = rd32(obj + 0x68);
+            if (valid_ptr(data)) wr16(data + PD_VIEW_PITCH, (uint16_t)g_cam.aim_pitch_pending);
+            g_cam.aim_pitch_pending = -1;
         }
         g_cam.was_aiming = true;
         g_cam.heading = game_heading;
         g_cam.elevation = 0;
         return;
     }
+    g_cam.aim_pitch_pending = -1;
     const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
     const float lx = g_stick_lx, ly = g_stick_ly, rx = g_stick_rx, ry = g_stick_ry;
     if (g_cam.face_reset) { // somewhere new: start behind the character, looking the way it faces

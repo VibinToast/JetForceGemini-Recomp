@@ -87,7 +87,14 @@ struct CameraControl {
     uint32_t last_player = 0;
     float last_x = 0, last_z = 0;
     int showing = 0;            // ticks the game's camera has been pointed away from the character (a camera "shot")
+    // The free camera's view as last drawn (camera position, and the game camera's angles: yaw at +0, pitch at +2), so
+    // aiming can start from it: the game's own camera stays behind the character's old facing meanwhile.
+    bool view_saved = false;
+    float view_x = 0, view_y = 0, view_z = 0;
+    uint16_t view_yaw = 0, view_pitch = 0;
+    int aim_pitch_pending = -1; // the free camera's tilt for the aim, set once the game's aiming has started (-1: none)
 };
+void camera_hand_over_to_aim(uint32_t cam); // jfg_camera.cpp
 extern CameraControl g_cam;
 // Sticks as last read by the input thread (jfg_dual_stick), up/right positive.
 extern std::atomic<float> g_stick_lx, g_stick_ly, g_stick_rx, g_stick_ry;
