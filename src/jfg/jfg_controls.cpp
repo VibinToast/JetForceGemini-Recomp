@@ -77,6 +77,12 @@ float g_sign_move = -1.0f, g_sign_cam = -1.0f;
 
 bool control_mods_blocked() { return in_cutscene() || rd8(ADDR_robotMission) != 0; } // see ADDR_robotMission
 
+// Sprint (src/input/controls.cpp): the sprint button as last read by the input thread. With the option off the left
+// stick click keeps its crouch in the dual-stick layout.
+std::atomic<bool> g_sprint_held{ false };
+extern "C" int jfg_sprint_enabled(void) { return g.sprint ? 1 : 0; }
+extern "C" void jfg_sprint_input(int held) { g_sprint_held.store(held != 0, std::memory_order_relaxed); }
+
 // Levels played with the game's own controls even with dual stick / mouse and keyboard on: the Mizar race (the ship
 // steers with the stick, which the dual-stick camera and movement would take over) and the multiplayer races.
 bool level_uses_original_controls(int level) {
@@ -96,11 +102,21 @@ extern "C" int jfg_dual_stick_layout(void) {
     return g.dual_layout ? 1 : 0;
 }
 
+// Floyd missions with mouse and keyboard on: the dual-stick controls stay off (they are built around the character, and
+// a controller keeps the game's own Floyd controls), but the mouse and keyboard fly Floyd: their own keyboard layout
+// (src/input/controls.cpp) and the mouse steering (jfg_floyd_steer).
+extern "C" int jfg_floyd_mouse_active(void) {
+    if (!g.mouse_keyboard || g_fly.active || g_rdram == nullptr) return 0;
+    if (rd32(ADDR_mainGameMode) != 0 || rd8(ADDR_pauseMode) != 0 || rd8(ADDR_robotMission) == 0 || in_cutscene()) return 0;
+    return dino::debug_ui::game_has_input() ? 1 : 0;
+}
+
 // Mouse and keyboard (src/input/controls.cpp, src/input/input.cpp): 1 while the mouse and keyboard play the game -
-// the option is on, the dual-stick controls are in charge (gameplay, not paused, no cutscene) and the debug UI is
-// closed (or F10's toolbar is open but handed the mouse and keyboard to the game with Alt / a click outside it).
-// The cursor is captured (relative mouse mode) exactly then.
+// the option is on, the dual-stick controls are in charge (gameplay, not paused, no cutscene) or a Floyd mission is
+// under way, and the debug UI is closed (or F10's toolbar is open but handed the mouse and keyboard to the game with
+// Alt / a click outside it). The cursor is captured (relative mouse mode) exactly then.
 extern "C" int jfg_mouse_keyboard_active(void) {
+    if (jfg_floyd_mouse_active()) return 1;
     return (g.mouse_keyboard || g_fly.active) && jfg_dual_stick_active() && dino::debug_ui::game_has_input() ? 1 : 0;
 }
 
@@ -112,6 +128,16 @@ extern "C" void jfg_mouse_wheel(int notches) {
 }
 
 extern "C" void jfg_mouse_motion(int dx, int dy) {
+    {
+        // JFG_DEBUG_MOUSE=1: every mouse report, with the time since the one before (does the mouse arrive in bursts?).
+        static const bool log_reports = std::getenv("JFG_DEBUG_MOUSE") != nullptr;
+        if (log_reports) {
+            static auto last = std::chrono::steady_clock::now();
+            const auto now = std::chrono::steady_clock::now();
+            std::fprintf(stderr, "[report] %.2f ms dx %d dy %d\n", std::chrono::duration<double, std::milli>(now - last).count(), dx, dy);
+            last = now;
+        }
+    }
     if (dino::input::game_input_disabled()) return; // a menu is open: the mouse belongs to it, the camera and aim stay still
     g_mouse_dx.fetch_add(dx, std::memory_order_relaxed);
     g_mouse_dy.fetch_add(dy, std::memory_order_relaxed);
@@ -187,7 +213,6 @@ static bool aim_state(uint32_t obj) {
 
 static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
     constexpr uint16_t BTN_R = 0x0010, C_UP = 0x0008;
-    constexpr int STATE_JUMP = 3;
     static int phase = 0, ticks = 0;
     static bool jump_was_held = false;
     const bool jump_held = g_jump_button.load(std::memory_order_relaxed);
@@ -219,7 +244,7 @@ static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
     const uint32_t data = rd32(obj + 0x68);
     const int state = valid_ptr(data) ? rd8(data + PD_STATE) : -1;
     ticks++;
-    if ((state != STATE_JUMP && ticks > 2) || ticks > 300) { finish(); return; }
+    if ((state != PD_STATE_JUMP && ticks > 2) || ticks > 300) { finish(); return; }
     wr16(pad, (uint16_t)(cur & ~BTN_R));
     wr16(pressed, (uint16_t)(down & ~BTN_R));
 }
@@ -352,6 +377,55 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     last_tick = g_tick_count;
 }
 
+// --- Floyd missions --------------------------------------------------------------------------------------------------
+// Floyd flies like a plane (sidekickControl, data = Floyd's object + 0x68): the stick sets a turn rate (+0x66) and a
+// pitch rate (+0x68) that ease in and out and are added to the heading (+0x60, stick right lowers it) and the pitch
+// (+0x62, clamped to 90 degrees either way); the roll (+0x64) eases towards the turn rate (-20 x rate). N64 A is thrust,
+// B brakes, Z fires at the crosshair, which springs to where the stick points. In one mode (player data + 0x10D = 3) the
+// pitch drifts back to level every tick. Through the stick the mouse would fight all that easing (its movement comes
+// in lumps, as in the boss fights), so it turns and pitches Floyd directly: by exactly how far it moved, with the
+// game's stick left as it is (the A / D keys and a controller still turn Floyd the game's way). The levelling drift is
+// left out while the mouse flies, and the roll gets a bank of its own from the mouse's turn rate.
+//
+// Two hooks in sidekickControl, s0 = Floyd's data, sp + 0x124 = the tick's frames. Phase 0 (0x8002FC28, before the roll
+// is eased): the bank added last tick is taken off again, so the game eases its own roll. Phase 1 (0x8002FC70, after the
+// roll, before heading, pitch and roll are copied to the object): the mouse's turn, pitch and bank are put in.
+extern "C" void jfg_floyd_steer(uint8_t* rdram_, recomp_context* ctx, int phase) {
+    g_rdram = rdram_;
+    constexpr uint32_t FLOYD_YAW = 0x60, FLOYD_PITCH = 0x62, FLOYD_ROLL = 0x64, FLOYD_PITCH_RATE = 0x68;
+    constexpr int PITCH_LIMIT = 0x4000, ROLL_LIMIT = 520 * 20; // the game's own limits (full stick: rate 520)
+    static uint32_t bank_data = 0, pitch_data = 0, pitch_tick = 0;
+    static int bank_added = 0, pitch = 0;
+    static float bank = 0.0f;
+    const uint32_t data = (uint32_t)ctx->r16;
+    if (!valid_ptr(data)) return;
+    if (phase == 0) {
+        if (bank_added != 0 && data == bank_data) wr16(data + FLOYD_ROLL, (uint16_t)(rd16(data + FLOYD_ROLL) - bank_added));
+        bank_added = 0;
+        return;
+    }
+    if (!jfg_floyd_mouse_active()) { bank = 0.0f; pitch_data = 0; return; }
+    const int frames = std::clamp((int)rd32((uint32_t)ctx->r29 + 0x124), 1, 6);
+    // Heading: right lowers it, as with the stick.
+    wr16(data + FLOYD_YAW, (uint16_t)(rd16(data + FLOYD_YAW) - g_mouse_aim_x));
+    // Pitch: carried on from what was written last tick plus what the game's own pitch rate added (a controller's stick),
+    // so the levelling drift does not pull it back. Taken from the game afresh when Floyd or the mission is new.
+    if (data != pitch_data || g_tick_count - pitch_tick > 1) pitch = (int16_t)rd16(data + FLOYD_PITCH);
+    else pitch += (int16_t)rd16(data + FLOYD_PITCH_RATE) * frames;
+    static const int pitch_sign = std::getenv("JFG_FLOYD_PITCH_SIGN") ? std::atoi(std::getenv("JFG_FLOYD_PITCH_SIGN")) : 1; // tests
+    pitch = std::clamp(pitch + pitch_sign * g_mouse_aim_y, -PITCH_LIMIT, PITCH_LIMIT);
+    wr16(data + FLOYD_PITCH, (uint16_t)(int16_t)pitch);
+    pitch_data = data;
+    pitch_tick = g_tick_count;
+    // Bank: as the game banks for a turn rate (roll = -20 x rate per frame; the mouse's rate is minus its step per frame),
+    // smoothed, since the mouse's steps come in lumps.
+    const float target = std::clamp(20.0f * (float)g_mouse_aim_x / (float)frames, (float)-ROLL_LIMIT, (float)ROLL_LIMIT);
+    bank += (target - bank) * std::min(1.0f, 0.2f * (float)frames);
+    bank_added = (int)std::lround(bank);
+    bank_data = data;
+    wr16(data + FLOYD_ROLL, (uint16_t)(rd16(data + FLOYD_ROLL) + bank_added));
+}
+
 // Tests: JFG_DEBUG_PLAYER=<ticks> logs the player's state every that many ticks.
 void debug_player_log(uint32_t obj) {
     {
@@ -397,6 +471,14 @@ void jfg_camera_controls(recomp_context* ctx) {
     {
         // Mouse movement for this tick (always taken, so nothing piles up in menus).
         const int mx = g_mouse_dx.exchange(0, std::memory_order_relaxed), my = g_mouse_dy.exchange(0, std::memory_order_relaxed);
+        // JFG_DEBUG_MOUSE=1 logs each tick's mouse movement and the time since the tick before (smoothness tests).
+        static const bool log_mouse = std::getenv("JFG_DEBUG_MOUSE") != nullptr;
+        if (log_mouse) {
+            static auto last = std::chrono::steady_clock::now();
+            const auto now = std::chrono::steady_clock::now();
+            std::fprintf(stderr, "[mouse] %.2f ms dx %d dy %d\n", std::chrono::duration<double, std::milli>(now - last).count(), mx, my);
+            last = now;
+        }
         const bool mouse = jfg_mouse_keyboard_active() != 0 && !dino::input::game_input_disabled();
         const float cam = MOUSE_RADIANS_PER_COUNT * (float)g.mouse_camera_speed / 100.0f;
         const float aim = MOUSE_RADIANS_PER_COUNT * (32768.0f / PI_F) * (float)g.mouse_aim_speed / 100.0f;
@@ -416,6 +498,23 @@ void jfg_camera_controls(recomp_context* ctx) {
     apply_damage_taken(obj);
     debug_player_log(obj);
     g_cam.move_factor = (float)g.move_speed / 100.0f;
+    g_cam.sprint_factor = 1.0f;
+    static const bool sprint_test = std::getenv("JFG_DEBUG_SPRINT") != nullptr; // tests: sprint on and held
+    if (((g.sprint && g_sprint_held.load(std::memory_order_relaxed)) || sprint_test) && obj != 0 && !dino::input::game_input_disabled()) {
+        // On foot, and while aiming (the aim walk) only with "Sprint while aiming". Swimming (Vela, state 4: in the
+        // water she is always in it, at the surface and below) has its own option and speed; jfg_move_scale applies
+        // it to the whole 3D step, as it does the Dive speed.
+        const uint32_t data = rd32(obj + 0x68);
+        constexpr uint8_t STATE_SWIM = 4;
+        const int state = valid_ptr(data) ? rd8(data + PD_STATE) : -1;
+        if (state == STATE_SWIM) {
+            if (g.sprint_swimming) g_cam.sprint_factor = (float)g.sprint_swim_speed / 100.0f;
+        }
+        else if (state >= 0 && (state != PD_STATE_AIMING || g.sprint_aiming)) {
+            g_cam.sprint_factor = (float)g.sprint_speed / 100.0f;
+            g_cam.move_factor *= g_cam.sprint_factor;
+        }
+    }
     {
         // Mouse wheel: each notch is one press of the game's own weapon buttons (N64 A: next, B: previous - what RB /
         // LB give in the dual-stick layout), so the switch has its sound and the weapon list scrolls on screen. The
@@ -553,13 +652,6 @@ void jfg_camera_controls(recomp_context* ctx) {
     const float deflection = std::min(1.0f, std::sqrt(lx * lx + ly * ly));
     int stick_x = 0, stick_y = 0;
     if (deflection > 0.12f) {
-        if (g.diagonal_boost) {
-            // Forward and sideways parts as the original's "stick forward + C button" would give them: the larger one
-            // counts in full, so straight is 1, a full diagonal is the square root of 2 at 100%.
-            const float larger = std::max(std::fabs(lx), std::fabs(ly));
-            const float forward = ly / larger, sideways = lx / larger * (float)g.strafe_speed / 100.0f;
-            g_cam.move_factor *= std::sqrt(forward * forward + sideways * sideways);
-        }
         const float wanted = g_cam.heading + g_sign_move * std::atan2(lx, ly); // world heading to run along
         const float relative = wrap_angle(wanted - game_heading);
         stick_x = (int)std::lround(std::sin(relative) * deflection * 78.0f * g_sign_move);
@@ -582,13 +674,29 @@ extern "C" void jfg_move_scale(uint8_t* rdram_, recomp_context* ctx) {
     if (busy || g_platform_move || g_cam.player == 0 || (uint32_t)ctx->r4 != g_cam.player) return;
     const uint32_t obj = g_cam.player, data = rd32(obj + 0x68);
     if (!valid_ptr(data)) return;
-    // Underwater (character state 4, Vela's swimming) the "Dive speed" option scales the whole 3D step, up and down too.
+    // Underwater (character state 4, Vela's swimming) the "Dive speed" option, and swim sprinting, scale the whole 3D
+    // step, up and down too. (On foot sprint_factor is already part of move_factor.)
     constexpr uint8_t STATE_SWIM = 4;
     const bool swim = rd8(data + PD_STATE) == STATE_SWIM;
-    const float dive = swim ? (float)g.dive_speed / 100.0f : 1.0f;
-    const float factor_xz = g_cam.move_factor * dive, factor_y = dive;
-    if (factor_xz == 1.0f && factor_y == 1.0f) return;
+    const float dive = swim ? (float)g.dive_speed / 100.0f * g_cam.sprint_factor : 1.0f;
     auto as_float = [](gpr reg) { const uint32_t bits = (uint32_t)reg; float f; std::memcpy(&f, &bits, 4); return f; };
+    // "Normalize diagonal speed": running while sidestepping (C-left / C-right, also what the left stick gives while
+    // aiming) adds the two speeds together. The step is split into its forward and sideways parts (relative to the way
+    // the character faces) and shortened to the larger part alone, so a diagonal is as fast as either direction.
+    float normalize = 1.0f;
+    if (g.normalize_diagonal && !swim) {
+        constexpr uint16_t C_LEFT = 0x0002, C_RIGHT = 0x0001;
+        const uint32_t pad = ADDR_sControllerCurrData + 6u * (rd8(ADDR_sPlayerID) & 3u);
+        if ((rd16(pad) & (C_LEFT | C_RIGHT)) != 0) {
+            const float heading = angle_from_s16(rd16(obj)) + PI_F; // the way the character runs
+            const float sx = as_float(ctx->r5), sz = as_float(ctx->r7);
+            const float forward = sx * std::sin(heading) + sz * std::cos(heading), sideways = sx * std::cos(heading) - sz * std::sin(heading);
+            const float length = std::sqrt(forward * forward + sideways * sideways);
+            if (length > 0.0f) normalize = std::max(std::fabs(forward), std::fabs(sideways)) / length;
+        }
+    }
+    const float factor_xz = g_cam.move_factor * dive * normalize, factor_y = dive;
+    if (factor_xz == 1.0f && factor_y == 1.0f) return;
     auto as_bits = [](float f) { uint32_t bits; std::memcpy(&bits, &f, 4); return bits; };
     const float dx = as_float(ctx->r5) * (factor_xz - 1.0f), dz = as_float(ctx->r7) * (factor_xz - 1.0f);
     const float dy = swim ? as_float(ctx->r6) * (factor_y - 1.0f) : 0.0f;

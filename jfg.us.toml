@@ -150,15 +150,114 @@ before_vram = 0x800457BC
 text = "{ uint32_t jfg_frame_sync(uint8_t*, uint32_t); ctx->r2 = (int32_t)jfg_frame_sync(rdram, (uint32_t)ctx->r2); }"
 
 # "No blood" option: overlay 8's bloodSpurtAdd and bloodHitSpriteAdd (both return nothing) do nothing when it is on.
+# Gore options (src/jfg/jfg_gore.cpp): bloodSpurtAdd also makes the extra drops of "Blood amount" (jfg_blood_more).
 [[patches.hook]]
 func = "bloodSpurtAdd"
 before_vram = 0x820801CC
-text = "{ int jfg_no_blood(void); if (jfg_no_blood()) { recomp_exit_function(); return; } }"
+text = "{ int jfg_no_blood(void); if (jfg_no_blood()) { recomp_exit_function(); return; } void jfg_blood_more(uint8_t*, recomp_context*); jfg_blood_more(rdram, ctx); }"
+
+# "Blood stays": bloodSpurtUpdateAll where a splat's life (+0x3C) is counted down, $s0 = the pool entry.
+[[patches.hook]]
+func = "bloodSpurtUpdateAll"
+before_vram = 0x82080994
+text = "{ void jfg_gore_splat(uint8_t*, recomp_context*); jfg_gore_splat(rdram, ctx); }"
+
+# "Body parts stay": entry of severedLimbControl(object, updateRate).
+[[patches.hook]]
+func = "severedLimbControl"
+before_vram = 0x80027844
+text = "{ void jfg_gore_limb(uint8_t*, recomp_context*); jfg_gore_limb(rdram, ctx); }"
 
 [[patches.hook]]
 func = "bloodHitSpriteAdd"
 before_vram = 0x82080334
 text = "{ int jfg_no_blood(void); if (jfg_no_blood()) { recomp_exit_function(); return; } }"
+
+# "Hit flash opacity" option (src/jfg/jfg_visuals.cpp): entry of frontFlashScreen(arg0, player, color), the red screen
+# when the character is hit (color in $a2). Returns the colour to use, 0 = no flash (the function returns nothing).
+[[patches.hook]]
+func = "frontFlashScreen"
+before_vram = 0x80059864
+text = "{ uint32_t jfg_hit_flash(uint32_t); const uint32_t c = jfg_hit_flash((uint32_t)ctx->r6); if (c == 0) { recomp_exit_function(); return; } ctx->r6 = (gpr)(int32_t)c; }"
+
+# "Hide Floyd" option (src/jfg/jfg_visuals.cpp): the entry of sidekickControl(obj, ...) notes Floyd's object kind, and
+# the entry of objPrintObject(dList, mtx, vtx, obj) skips drawing an object of that kind (the function returns nothing).
+[[patches.hook]]
+func = "sidekickControl"
+before_vram = 0x8002F728
+text = "{ void jfg_floyd_seen(uint8_t*, recomp_context*); jfg_floyd_seen(rdram, ctx); }"
+
+[[patches.hook]]
+func = "objPrintObject"
+before_vram = 0x8000DB94
+text = "{ int jfg_hide_object(uint8_t*, recomp_context*); void jfg_interp_object(uint8_t*, recomp_context*); if (jfg_hide_object(rdram, ctx)) { recomp_exit_function(); return; } jfg_interp_object(rdram, ctx); }"
+
+# Frame interpolation (src/jfg/jfg_interpolation.cpp): the entry of objPrintObject above and its return (below) keep
+# track of the object being drawn. Each of the four functions that write a model matrix notes where it was called
+# from at its entry, and right after it stores the matrix it wrote in D_800FAB30 the matrix is tagged for RT64.
+[[patches.hook]]
+func = "objPrintObject"
+before_vram = 0x8000DC20
+text = "{ void jfg_interp_object_done(uint8_t*, recomp_context*); jfg_interp_object_done(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushModelMtx"
+before_vram = 0x80041CA0
+text = "{ void jfg_interp_push(uint8_t*, recomp_context*); jfg_interp_push(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushModelMtx"
+before_vram = 0x80041D58
+text = "{ void jfg_interp_pushed(uint8_t*, recomp_context*); jfg_interp_pushed(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushFloatModelMtx"
+before_vram = 0x800419AC
+text = "{ void jfg_interp_push(uint8_t*, recomp_context*); jfg_interp_push(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushFloatModelMtx"
+before_vram = 0x80041A48
+text = "{ void jfg_interp_pushed(uint8_t*, recomp_context*); jfg_interp_pushed(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushMuzzleMtx"
+before_vram = 0x80041A90
+text = "{ void jfg_interp_push(uint8_t*, recomp_context*); jfg_interp_push(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camPushMuzzleMtx"
+before_vram = 0x80041B90
+text = "{ void jfg_interp_pushed(uint8_t*, recomp_context*); jfg_interp_pushed(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camScaleModelMtx"
+before_vram = 0x80041BE0
+text = "{ void jfg_interp_push(uint8_t*, recomp_context*); jfg_interp_push(rdram, ctx); }"
+
+[[patches.hook]]
+func = "camScaleModelMtx"
+before_vram = 0x80041C58
+text = "{ void jfg_interp_pushed(uint8_t*, recomp_context*); jfg_interp_pushed(rdram, ctx); }"
+
+# His shadow: shadowGenerate's object loop, after `lw $s6, 0x50($s7)` (the object's shadow data) and before the
+# `beq $s6, $zero` that skips an object without any.
+[[patches.hook]]
+func = "shadowGenerate"
+before_vram = 0x8001DB6C
+text = "{ void jfg_hide_shadow(uint8_t*, recomp_context*); jfg_hide_shadow(rdram, ctx); }"
+
+# His sounds: amSndPlay(id, handle) plays nothing from the entry of sidekickControl (jfg_floyd_seen) to its only
+# return (`jr $ra`), so the sounds Floyd's own code starts are muted.
+[[patches.hook]]
+func = "sidekickControl"
+before_vram = 0x80031088
+text = "{ void jfg_floyd_done(void); jfg_floyd_done(); }"
+
+[[patches.hook]]
+func = "amSndPlay"
+before_vram = 0x80001248
+text = "{ int jfg_floyd_mute(uint32_t); if (jfg_floyd_mute((uint32_t)ctx->r4)) { recomp_exit_function(); return; } }"
 
 # Cutscene skip (src/jfg/jfg_cutscene_skip.cpp, jfg_frame_rate.cpp): after joyRead() in the main loop tick, and at the entry of viFrameSync.
 [[patches.hook]]
@@ -281,6 +380,37 @@ func = "squadsCheckEnemyPointers"
 before_vram = 0x800515D0
 text = "{ void jfg_squads_check_enemy(uint8_t*, recomp_context*); jfg_squads_check_enemy(rdram, ctx); recomp_exit_function(); return; }"
 
+# TidyLinkedList (overlay 3; a squad member being freed is taken out of its squadron's chain) only looks as far as the
+# squadron's member count, and in the Lurg fight a chain held one member more than the count: the member it missed stayed
+# linked after being freed, and the next walk of the chain crashed. At its one exit the whole chain is checked and a
+# member it left there is taken out and logged (src/jfg/jfg_diagnostics.cpp, jfg_tidy_linked_list_after).
+[[patches.hook]]
+func = "TidyLinkedList"
+before_vram = 0x82029A08
+text = "{ void jfg_tidy_linked_list_after(uint8_t*, recomp_context*); jfg_tidy_linked_list_after(rdram, ctx); }"
+
+# GalaxianBatsSoundsHandler (overlay 143, the bats in the Lurg fight) walks its squadron's members the same way, without
+# checks, and crashed on a member freed while still linked. Before a member's data (+0x68) and its next link (+0x28) are
+# read, the pointer is checked (src/jfg/jfg_diagnostics.cpp, jfg_bats_link_ok); a bad one ends the walk with no bat
+# picked ($t0 = 0: the function's own "none" exit) and is logged to bin/jfg_memory.log.
+[[patches.hook]]
+func = "GalaxianBatsSoundsHandler"
+before_vram = 0x828E24B8
+text = "{ int jfg_bats_link_ok(uint8_t*, uint32_t, int, int); if (!jfg_bats_link_ok(rdram, (uint32_t)ctx->r6, 0, (int)ctx->r3)) { ctx->r8 = 0; goto L_828E24D0; } }"
+
+[[patches.hook]]
+func = "GalaxianBatsSoundsHandler"
+before_vram = 0x828E24C0
+text = "{ int jfg_bats_link_ok(uint8_t*, uint32_t, int, int); if (!jfg_bats_link_ok(rdram, (uint32_t)ctx->r4, 1, (int)ctx->r3)) { ctx->r8 = 0; goto L_828E24D0; } }"
+
+# mantisControl (overlay 67, the alien boss in level 210): the five-rock throw plays its sound at the last rock spawned
+# ($t0) without checking it, and crashed reading NULL+0xC when that rock could not be created (object pool full). With
+# no rock, the sound is skipped and the attack ends as it normally does (mantis->unk3 = 0, then the shared exit).
+[[patches.hook]]
+func = "mantisControl"
+before_vram = 0x82412A54
+text = "if (ctx->r8 == 0) { MEM_B(0X3, ctx->r16) = 0; goto L_82412BDC; }"
+
 # objSetupObject returning NULL (an object could not be created): which step failed, with object counts and free heap,
 # logged to bin/jfg_memory.log (src/jfg/jfg_diagnostics.cpp, jfg_objsetup_*). Entry, the return of each call that can
 # fail, and the one exit.
@@ -333,6 +463,19 @@ text = "{ void jfg_objsetup_step(uint8_t*, recomp_context*, int); jfg_objsetup_s
 func = "objSetupObject"
 before_vram = 0x80006E04
 text = "{ void jfg_objsetup_exit(uint8_t*, recomp_context*); jfg_objsetup_exit(rdram, ctx); }"
+
+# Keep Area Progress (src/jfg/jfg_area_progress.cpp): mainResetRegion clears an area's progress when it is entered.
+# At its entry the progress loaded with the file is noted; before it returns (the jr $ra, reached on both paths) it
+# is put back when the option is on and it matches what was kept with that save.
+[[patches.hook]]
+func = "mainResetRegion"
+before_vram = 0x80048630
+text = "{ void jfg_region_reset_begin(uint8_t*, recomp_context*); jfg_region_reset_begin(rdram, ctx); }"
+
+[[patches.hook]]
+func = "mainResetRegion"
+before_vram = 0x800487B0
+text = "{ void jfg_region_reset_end(uint8_t*, recomp_context*); jfg_region_reset_end(rdram, ctx); }"
 
 # mathBreakPoint, the game's assertion ("break"): logged to bin/jfg_error.log and reported in a message box before the
 # process ends (jfg_game_break). Without this the runtime's exit() could crash in its shutdown and leave nothing behind.
@@ -437,6 +580,35 @@ func = "girlBossControl"
 before_vram = 0x82330000
 text = "{ void jfg_boss_tick(void); jfg_boss_tick(); }"
 
+# Floyd missions with the mouse (src/jfg/jfg_controls.cpp, jfg_floyd_steer): sidekickControl (s0 = Floyd's data), before
+# the roll is eased (phase 0) and after it, before heading, pitch and roll are copied to Floyd's object (phase 1).
+[[patches.hook]]
+func = "sidekickControl"
+before_vram = 0x8002FC28
+text = "{ void jfg_floyd_steer(uint8_t*, recomp_context*, int); jfg_floyd_steer(rdram, ctx, 0); }"
+
+[[patches.hook]]
+func = "sidekickControl"
+before_vram = 0x8002FC70
+text = "{ void jfg_floyd_steer(uint8_t*, recomp_context*, int); jfg_floyd_steer(rdram, ctx, 1); }"
+
+# 60 fps: steps the game takes once per call whatever the frame count, outside the squad system (found by the decomp,
+# its docs/PORT_FINDINGS.md). They keep the game's 30 fps cadence (src/jfg/jfg_frame_rate.cpp, jfg_cadence_skip).
+# The slug boss's homing bolts (overlay 149, FlowerBoltControl): turn limit, steering smoothing and speed growth per call,
+# so at 60 fps they homed and sped up about twice as hard. Run with the squad system (drawn in between like its members).
+[[patches.hook]]
+func = "FlowerBoltControl"
+before_vram = 0x82941450
+text = "{ int jfg_squad_frames(uint8_t*, uint32_t, int); int r = jfg_squad_frames(rdram, (uint32_t)ctx->r4, (int32_t)ctx->r5); if (r == 0) { recomp_exit_function(); return; } ctx->r5 = (gpr)r; }"
+
+# The aim reticle's target lock (overlay 13, frontPlayerTarget): while the aim is off the target it counts down 10
+# calls (player +0x541, high nibble) before letting go, so at 60 fps the lock was dropped after 1/6 s instead of 1/3 s.
+# At the store of the decremented value (t8 = new, v0 = old byte) the old value is kept on the ticks left out.
+[[patches.hook]]
+func = "frontPlayerTarget"
+before_vram = 0x820D02BC
+text = "{ int jfg_cadence_skip(void); if (jfg_cadence_skip()) ctx->r24 = ctx->r2; }"
+
 # Jetpack fuel pads (overlay 100, refuelControl): the fuel added this tick (t3) scaled by the "Refuel speed" option,
 # just before it is stored in the player's data (+0x58C); the game clamps it to the maximum right after.
 [[patches.hook]]
@@ -499,3 +671,27 @@ text = "{ int jfg_flag_override(int); if (jfg_flag_override((int)ctx->r4)) { ctx
 func = "func_80045F00_46B00"
 before_vram = 0x80046058
 text = "{ int jfg_freeze_world(void); if (jfg_freeze_world()) ctx->r3 = 1; }"
+
+# CPU-drawn rain and reticles with in-between frames (src/jfg/jfg_cpu_layer.cpp): what rainDraw and fxOutputLines add to
+# the finished frame is taken out again and drawn on every presented frame by the render hook, while RT64 adds
+# in-between frames (Smooth Motion). Four hooks, kept together: rain (mainCPUeffects, before the rainDraw call through
+# TrapDanglingJump at 0x80045B1C, and after it, where the paths without rain join too), then the lines.
+[[patches.hook]]
+func = "mainCPUeffects"
+before_vram = 0x80045B08
+text = "{ void jfg_cpu_rain_before(uint8_t*, recomp_context*); jfg_cpu_rain_before(rdram, ctx); }"
+
+[[patches.hook]]
+func = "mainCPUeffects"
+before_vram = 0x80045B2C
+text = "{ void jfg_cpu_rain_after(uint8_t*, recomp_context*); jfg_cpu_rain_after(rdram, ctx); }"
+
+[[patches.hook]]
+func = "fxOutputLines"
+before_vram = 0x8006E188
+text = "{ void jfg_cpu_lines_before(uint8_t*, recomp_context*); jfg_cpu_lines_before(rdram, ctx); }"
+
+[[patches.hook]]
+func = "mainCPUeffects"
+before_vram = 0x80045B78
+text = "{ void jfg_cpu_lines_after(uint8_t*, recomp_context*); jfg_cpu_lines_after(rdram, ctx); }"

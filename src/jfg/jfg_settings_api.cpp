@@ -7,11 +7,24 @@
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 #include "jfg_settings_api.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
+#include "jfg_update_check.h"
+#include "ultramodern/ultramodern.hpp"
 
 namespace jfg::settings {
 int get(const std::string& key) {
@@ -36,6 +49,16 @@ void set(const std::string& key, int value) {
     apply_option(key.c_str(), value);
     push_render_options();
     save_options();
+}
+
+bool frame_rate_needs_restart() {
+    return jfg::frame_rate_needs_restart();
+}
+
+void restart_game() {
+    save_options();
+    jfg_update_restart(); // with no update waiting it only starts this exe again
+    ultramodern::quit();
 }
 
 std::vector<std::string> profiles() {
@@ -69,6 +92,13 @@ void choose_profile(const std::string& name) {
     jfg::choose_profile(name);
 }
 
+std::string profile_preview(const std::string& name) { load_options(); return profile_preview_text(name); }
+bool keep_controls() { load_profile_choice(); return g_profile_keep_controls; }
+void set_keep_controls(bool keep) { set_profile_keep_controls(keep); }
+
+bool controller_bindings_unused() { load_options(); return (g.dual_stick || g.mouse_keyboard) && g.dual_layout; }
+bool keyboard_bindings_unused() { load_options(); return g.mouse_keyboard; }
+
 bool save_profile(const std::string& name) {
     load_profile_choice();
     if (!valid_profile_name(name) || builtin_profile(name) != nullptr) {
@@ -98,13 +128,27 @@ void delete_active_profile() {
 std::string profile_message() { return g_profile_message; }
 
 std::vector<std::string> texture_packs() {
+    load_texture_pack_choice();
     std::vector<std::string> out{ "" };
     const std::vector<std::string> packs = list_texture_packs();
     out.insert(out.end(), packs.begin(), packs.end());
     return out;
 }
 std::string texture_pack_name(const std::string& folder) { return pack_display_name(folder); }
-std::string texture_pack() { std::lock_guard lock(g_pack_mutex); return g_pack_folder; }
+void texture_pack_join_poll() { join_split_packs(); }
+std::string texture_pack_join_text(int& finished) { return pack_join_text(finished); }
+TexturePackDetails texture_pack_details(const std::string& folder) {
+    PackInfo info = texture_pack_info(folder);
+    return { info.has_json, info.serial, info.version, info.variant, info.author, info.website, info.description, std::move(info.image) };
+}
+// The pack in use; "" (Off) also when it was removed or renamed while the game runs.
+std::string texture_pack() {
+    load_texture_pack_choice();
+    std::string folder;
+    { std::lock_guard lock(g_pack_mutex); folder = g_pack_folder; }
+    std::error_code ec;
+    return !folder.empty() && std::filesystem::exists(std::filesystem::u8path(folder), ec) ? folder : std::string();
+}
 void set_texture_pack(const std::string& folder) { jfg::set_texture_pack(folder); }
 int texture_pack_count() { return g_texture_pack_count.load(); }
 int dumped_texture_files() {
@@ -113,5 +157,18 @@ int dumped_texture_files() {
         if (it->is_regular_file(ec)) n++;
     }
     return ec ? -1 : n;
+}
+// Opens the texture_packs folder (next to the game; made if it is not there yet) in the file manager.
+void open_texture_packs_folder() {
+    std::error_code ec;
+    std::filesystem::create_directories("texture_packs", ec);
+    const std::filesystem::path folder = std::filesystem::absolute("texture_packs", ec);
+#if defined(_WIN32)
+    ShellExecuteW(NULL, L"open", folder.wstring().c_str(), NULL, NULL, SW_SHOWDEFAULT);
+#elif defined(__APPLE__)
+    std::system(("open \"" + folder.string() + "\"").c_str());
+#else
+    std::system(("xdg-open \"" + folder.string() + "\" &").c_str());
+#endif
 }
 } // namespace jfg::settings

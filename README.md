@@ -1,37 +1,40 @@
-# Jet Force Gemini: Recompiled
-
 ![Recomp Banner](images/jfg-logo-recomp-transparent.png)
 
 A native 100% playable PC port of Jet Force Gemini (N64, US) for Windows and Linux, made by static recompilation. No emulator:
 the game's code is translated from your ROM and compiled for your PC.
 
-**Current Progress:** Got mostly everything I wanted, just quality of life stuff now.
+**Current Progress:** Quality of Life features. Mod support is next: see the [Roadmap](ROADMAP.md).
 
 **No game code or assets are included.** You need your own ROM.
 
+**Contents:** [ROM](#rom) · [Features](#features) · [Build and run](#build-and-run) · [Steam Deck](#steam-deck) ·
+[Keys](#keys) · [Reporting bugs](#reporting-bugs) · [How it works](#how-it-works) · [AI disclosure](#ai-disclosure) ·
+[Legal](#legal) · [Credits](#credits) · [Roadmap](ROADMAP.md) · [Known issues](KNOWN_ISSUES.md)
+
 ## ROM
 
-Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630cf23a023`. Save it as
-`baserom.us.z64` in this folder.
+Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630cf23a023`.
 
 ## Features
 
 **Controls**
-- Mouse and keyboard controls.
+- Mouse and keyboard controls, including Floyd missions.
 - Dual-stick controls with a camera-relative left stick and a modern button layout.
-- Over-the-shoulder aim with a centred reticle, and adjustable aim speed.
-- Adjustable movement speed
+- Over-the-shoulder aim with a centered reticle, and adjustable aim and movement speed.
+- Sprint on land and in water.
+- Full controller support in the menus, launcher and tools.
 - Rumble Pak support, and rebindable controls.
 
 **Gameplay**
-- Skips cutscenes
-- A Weapons editor for each weapon
-- No blood option.
-- Cheats (Skip Tribals yay!)
+- Auto Save, Unlimited Continues, and Tribals that stay rescued.
+- Profiles: play the original game or a modern setup in one click.
+- Skip cutscenes.
+- A weapons editor for each weapon.
+- Gore options: no blood, or blood and body parts that stay.
 
 **Visuals**
-- 60 FPS
-- HD Texture Pack
+- Smoother, more responsive play: the game can run at 60 ticks per second instead of 30 for quicker controls, and
+  Frame Interpolation fills in extra frames to match your monitor's refresh rate (up to 240 Hz).
 - Widescreen.
 - Ambient occlusion (SSAO) and bloom.
 - Disable LOD and draw distant objects.
@@ -39,7 +42,7 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 - On-screen FPS, level and texture pack.
 
 **Texture packs**
-- The JFG HD texture pack is a separate download. See
+- The official JFG HD texture pack installs and updates from the launcher. See
   [vibintoast.com/projects/jfg-4k](https://vibintoast.com/projects/jfg-4k) for more info.
 - Texture dumping, all in one folder or one folder per level.
 - HD texture packs, picked from a list and switched in-game with F6. A pack is a folder in `bin/texture_packs/<name>`
@@ -58,20 +61,54 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 
 ## Build and run
 
+ Save your rom as
+`baserom.us.z64` in this folder.
+
 **Windows** (10/11, Direct3D 12 GPU): install Visual Studio 2022 (Desktop development with C++, plus C++ Clang
 tools), Git and Python 3. Run `build_windows.bat` (the first build takes 10-40 minutes, about 15 GB), then
 `run_windows.bat`.
 
-**Linux** (Vulkan GPU):
+**Linux** (Vulkan GPU). The release files run on Ubuntu 22.04 or newer, Debian 12 or newer, current Fedora and SteamOS
+3: the AppImage (on a Steam Deck: make it executable, then "Add a Non-Steam Game"; saves go to
+`~/.local/share/JetForceGeminiRecompiled`) or the portable `.tar.gz` (saves stay in its folder). Older systems
+(Ubuntu 20.04, Debian 11) are not supported. The update check and the HD pack download need `curl`, and the Open
+Folder buttons need `xdg-open` (xdg-utils).
 
+To build it yourself, install the packages for your system, then run `./build_linux.sh && ./run_linux.sh`. The build
+needs clang 15 or newer and a recent CMake, so on Ubuntu 22.04 and Debian 12 use the release files instead (or the
+build container, see `tools/package_release.sh`). On SteamOS, use the AppImage.
+
+Ubuntu 24.04 or newer, Debian 13 or newer:
 ```
-sudo apt install git cmake ninja-build clang lld python3 libsdl2-dev libvulkan-dev libgtk-3-dev libdbus-1-dev libfreetype6-dev
-./build_linux.sh && ./run_linux.sh
+sudo apt install git cmake ninja-build clang lld python3 libsdl2-dev libvulkan-dev libgtk-3-dev libdbus-1-dev libfreetype-dev zlib1g curl
+```
+Fedora:
+```
+sudo dnf install git cmake ninja-build clang lld python3 SDL2-devel vulkan-loader-devel gtk3-devel dbus-devel freetype-devel libatomic-static zlib curl
 ```
 
 The game ends up in `bin`, together with its saves and settings. The build also creates empty `bin/mods` and `bin/texture_packs` folders for mods and texture packs (see
-[docs/TEXTURE_PACKS.md](docs/TEXTURE_PACKS.md)); anything already in them is kept. The `build` folder is only needed for building.
+[docs/TEXTURE_PACKS.md](docs/TEXTURE_PACKS.md)); anything already in them is kept. The build itself happens in this folder
+(`lib`, `build-tools`, `build-windows` / `build-linux`, `RecompiledFuncs`), none of which is committed.
 Keep `bin` private, because it holds a copy of the ROM.
+
+## Steam Deck
+
+Use the Linux AppImage, and always start the game **through Steam**, in Desktop Mode too:
+
+1. In Desktop Mode, make the AppImage executable (right-click it, Properties > Permissions), then add it to Steam
+   (right-click > Add to Steam, or "Add a Non-Steam Game" in Steam).
+2. Start it from your Steam library, in Game Mode or Desktop Mode.
+3. Choose your ROM the first time in Desktop Mode: Game Mode may have no file picker. Or write its path in
+   `~/.local/share/JetForceGeminiRecompiled/jfg_launcher.txt` as `rom=/home/deck/path/to/baserom.us.z64`.
+
+Keep **Mouse and Keyboard Controls** (settings menu, **Controls** tab) **Off** on the Deck. The Modern profiles turn
+it on, so set it back to Off after choosing one, or turn on **Keep My Controls** (Profiles tab) first.
+
+Why: started from the file manager, Steam turns the Deck's controls into a keyboard and mouse as well as a controller,
+so every press counts twice (Start opens the settings menu, and menu moves skip a button). With Mouse and Keyboard
+Controls on, the touchscreen and trackpads act as a mouse that aims and fires, and firing can stay stuck after you
+close the settings menu.
 
 ## Keys
 
@@ -84,18 +121,40 @@ Keep `bin` private, because it holds a copy of the ROM.
 | F7 | Fly camera |
 | F11 / Alt+Enter | Fullscreen |
 
+## Reporting bugs
+
+Report bugs on the [Issues page](https://github.com/VibinToast/JetForceGemini-Recomp/issues). Check first whether it
+is already reported there or listed in [Known issues](KNOWN_ISSUES.md).
+
+Please include:
+- **What happened and what you expected.** Steps to make it happen again, if you know them.
+- **Where.** The level and roughly where in it (Settings > Visuals > Show Level puts the level on screen), or the
+  menu or cutscene.
+- **Your setup.** The release version or commit, Windows or Linux, your GPU, and your monitor's refresh rate.
+- **Your settings**, if they could matter: the profile, Frame Rate, Widescreen, and the Graphics menu's Framerate.
+  `jfg_port_options.txt` and `graphics.json` from the `bin` folder hold them.
+- **A screenshot or video**, for anything visual.
+- **Logs**, if the game crashed or stopped with an error: `crash.log`, `jfg_error.log` and `jfg_memory.log` from the
+  `bin` folder, whichever exist.
+
+Do not attach your ROM, or anything else from `bin` beyond the files above.
+
 ## How it works
 
 The port uses [N64Recomp](https://github.com/N64Recomp/N64Recomp) to translate the game's code (configured by
 `jfg.us.toml` and `jfg.us.syms.toml`), [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime) in place
 of the N64 operating system, and [RT64](https://github.com/rt64/rt64) for rendering. It is built on
-[cyscott/dkr-recomp](https://github.com/cyscott/dkr-recomp), which the build scripts download and patch with
-`patches/`. The port's own code is in `src/jfg/`.
+[cyscott/dkr-recomp](https://github.com/cyscott/dkr-recomp), whose history is merged into this repository: its files
+are edited here directly. The port's own code is in `src/jfg/`.
+
+N64Recomp, N64ModernRuntime and RT64 (and RT64's plume) are git submodules in `lib/`, each pointing at the port's
+fork on its `jfg` branch: the base project's fixes and the port's own changes are commits there. To change one,
+commit on that fork's `jfg` branch and commit the new submodule commit here; the build scripts check out the
+commits this repository pins (set `JFG_KEEP_LIBS=1` to build with `lib/` as it is).
 
 ## AI disclosure
 
-This project was built with heavy help from AI (Claude), under the direction of the project owner. It has not had
-an independent code review.
+This project is AI-assisted (Claude) and directed by a software developer who reviews the modding API and some of the port's own code. This dev (hello 🙂) has limited knowledge of recompiled MIPS game code and the low-level patches so these are tested and checked by hand.
 
 ## Legal
 

@@ -2,7 +2,8 @@
 //
 // jfg_debug_frame() is called once per game tick on the game's main thread, from a hook at the entry of the main
 // loop tick func_80044FAC_45BAC (see [[patches.hook]] in jfg.us.toml). It keeps the options and cheats applied, runs
-// the scripted test switches (JFG_DEBUG_*), draws the on-screen notes and the debug UI (F9 window, F10 toolbar), and
+// the scripted test switches (JFG_DEBUG_*), draws the on-screen notes and the F9 debug window, runs what F10's tools
+// asked for, and
 // carries out what was asked for: F5 (back to the title screen), level warps, the story intro skip.
 #include <algorithm>
 #include <cfloat>
@@ -21,6 +22,7 @@
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
+#include "jfg_update_check.h"
 
 namespace jfg {
 
@@ -37,7 +39,7 @@ void apply_flag(bool want, bool& applied, uint32_t addr) {
 }
 
 static float toolbar_offset() {
-    return (dino::debug_ui::is_open() && dino::debug_ui::backend::toolbar_mode()) ? g_toolbar_height : 0.0f;
+    return g_toolbar_height.load(std::memory_order_relaxed);
 }
 } // namespace
 
@@ -50,6 +52,10 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     apply_no_lod(ctx);
     apply_weapons();
     debug_profile_tick();
+    auto_save_tick(ctx);
+    gameplay_tick();
+    tribal_saves_tick();
+    tools_game_tick(ctx); // F10's requests and the values it shows
 
     // Cheats keep applying while the menu is closed.
     apply_flag(g.invulnerable, g.applied_invulnerable, ADDR_invulnerabilityCheat);
@@ -62,19 +68,22 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     // start. With the fifth number, F5 (back to the title screen) is done first at that time: warping from the start-up
     // screens does not stay in the level (the splash sequence takes over again). The sixth replaces the front-end mode
     // passed on (from the title it is 3, the title backdrop, with no player). JFG_DEBUG_WARP2="seconds,level,character,
-    // entrance" warps a second time, the way a level exit does (an arrival through a door).
+    // entrance" warps a second time, the way a level exit does (an arrival through a door); JFG_DEBUG_WARP3, same
+    // fields, a third time after that.
     {
         static uint32_t tick = 0;
         static const auto start = std::chrono::steady_clock::now();
-        static bool warped = false, warped2 = false, reset_done = false;
+        static bool warped = false, warped2 = false, warped3 = false, reset_done = false;
         static const char* warp = std::getenv("JFG_DEBUG_WARP");
         static const char* warp2 = std::getenv("JFG_DEBUG_WARP2");
+        static const char* warp3 = std::getenv("JFG_DEBUG_WARP3");
         static const bool cheats = std::getenv("JFG_DEBUG_CHEATS") != nullptr;
-        static int w[6] = { -1, 0, 1, 0, -1, -1 }, w2[4] = { -1, 0, 1, 0 };
+        static int w[6] = { -1, 0, 1, 0, -1, -1 }, w2[4] = { -1, 0, 1, 0 }, w3[4] = { -1, 0, 1, 0 };
         if (tick == 0) {
             if (cheats) g.invulnerable = g.infinite_ammo = g.all_weapons = g.all_levels = true;
             if (warp != nullptr) std::sscanf(warp, "%d,%d,%d,%d,%d,%d", &w[0], &w[1], &w[2], &w[3], &w[4], &w[5]);
             if (warp2 != nullptr) std::sscanf(warp2, "%d,%d,%d,%d", &w2[0], &w2[1], &w2[2], &w2[3]);
+            if (warp3 != nullptr) std::sscanf(warp3, "%d,%d,%d,%d", &w3[0], &w3[1], &w3[2], &w3[3]);
         }
         tick++;
         const auto now = std::chrono::steady_clock::now();
@@ -90,6 +99,10 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         else if (warped && !warped2 && w2[0] >= 0 && now - start >= std::chrono::seconds(w2[0])) {
             warped2 = true;
             g.warp_level = w2[1]; g.warp_character = w2[2]; g.warp_entrance = w2[3]; g.pending_warp = true;
+        }
+        else if (warped2 && !warped3 && w3[0] >= 0 && now - start >= std::chrono::seconds(w3[0])) {
+            warped3 = true;
+            g.warp_level = w3[1]; g.warp_character = w3[2]; g.warp_entrance = w3[3]; g.pending_warp = true;
         }
     }
 
@@ -150,7 +163,21 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     const bool hint_active = !hint_done && hint_t >= HINT_DELAY;
     const float pack_toast_t = std::chrono::duration<float>(std::chrono::steady_clock::now() - g_pack_toast).count();
     const bool pack_toast = g_pack_toast.time_since_epoch().count() != 0 && pack_toast_t < 3.0f;
-    dino::debug_ui::backend::set_overlay(hint_active || g.show_fps || g.show_level || g.show_pack || pack_toast);
+    const float save_toast_t = std::chrono::duration<float>(std::chrono::steady_clock::now() - g_save_toast).count();
+    const bool save_toast = g.save_notification && g_save_toast.time_since_epoch().count() != 0 && save_toast_t < 2.5f;
+    // A newer release (src/jfg/jfg_update_check.cpp): shown once per run in the game too, for players who skip the
+    // launcher, where it is otherwise only shown. Polled once a second; shown from 3 s after start, for 10 s.
+    static std::chrono::steady_clock::time_point update_seen{}, update_poll{};
+    static std::string update_version;
+    if (update_version.empty() && std::chrono::steady_clock::now() >= update_poll) {
+        update_poll = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+        JfgUpdateInfo info;
+        if (jfg_update_available(info)) { update_version = info.version; update_seen = std::chrono::steady_clock::now(); }
+    }
+    const float update_t = update_version.empty() ? -1.0f
+        : std::chrono::duration<float>(std::chrono::steady_clock::now() - std::max(update_seen, hint_start + std::chrono::seconds(3))).count();
+    const bool update_toast = update_t >= 0.0f && update_t < 10.0f && jfg_launcher_check_updates(); // not once turned off
+    dino::debug_ui::backend::set_overlay(hint_active || g.show_fps || g.show_level || g.show_pack || pack_toast || save_toast || update_toast);
 
     dino::debug_ui::ui_frame_begin();
     if (hint_active && dino::debug_ui::backend::in_ui_frame()) {
@@ -159,7 +186,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         if (t < 0.5f) alpha = t / 0.5f;
         else if (t > HINT_HOLD) alpha = std::max(0.0f, 1.0f - (t - HINT_HOLD) / HINT_FADE);
         const ImVec2 size = ImGui::GetIO().DisplaySize;
-        const char* text = "Settings: Select / Esc  -  Tools: F10  -  Debug window: F9";
+        const char* text = "Settings: Select / Esc  -  Tools: F10"; // F9 (debug window) is named in the settings menu instead
         ImFont* font = ImGui::GetFont();
         const float font_size = std::max(18.0f, size.y / 32.0f);
         const ImVec2 extent = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, text);
@@ -189,6 +216,43 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
             ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.6f * alpha)), pad * 0.5f);
         dl->AddText(font, font_size, pos, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, alpha)), text.c_str());
     }
+    if (update_toast && dino::debug_ui::backend::in_ui_frame()) {
+        // Top middle, out of the way of the start-up key hint at the bottom: two lines in the launcher's gold.
+        const std::string line1 = "Update v" + update_version + " is available";
+        const char* line2 = "Select / Esc, then the launcher button next to Quit, to install it";
+        const ImVec2 size = ImGui::GetIO().DisplaySize;
+        ImFont* font = ImGui::GetFont();
+        const float font_size = std::max(18.0f, size.y / 34.0f), small = font_size * 0.75f;
+        const ImVec2 e1 = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, line1.c_str());
+        const ImVec2 e2 = font->CalcTextSizeA(small, FLT_MAX, 0.0f, line2);
+        const float pad = font_size * 0.5f, width = std::max(e1.x, e2.x), height = e1.y + pad * 0.3f + e2.y;
+        const ImVec2 box0(size.x * 0.5f - width * 0.5f - pad, size.y * 0.05f), box1(size.x * 0.5f + width * 0.5f + pad, size.y * 0.05f + height + pad * 2.0f);
+        float alpha = update_t > 9.0f ? 10.0f - update_t : 1.0f;
+        if (update_t < 0.3f) alpha = update_t / 0.3f;
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+        dl->AddRectFilled(box0, box1, ImGui::GetColorU32(ImVec4(5 / 255.0f, 11 / 255.0f, 28 / 255.0f, 0.85f * alpha)), pad * 0.4f);
+        dl->AddRect(box0, box1, ImGui::GetColorU32(ImVec4(1.0f, 178 / 255.0f, 26 / 255.0f, alpha)), pad * 0.4f, 0, 2.0f);
+        dl->AddText(font, font_size, ImVec2(size.x * 0.5f - e1.x * 0.5f, box0.y + pad),
+            ImGui::GetColorU32(ImVec4(1.0f, 178 / 255.0f, 26 / 255.0f, alpha)), line1.c_str());
+        dl->AddText(font, small, ImVec2(size.x * 0.5f - e2.x * 0.5f, box0.y + pad + e1.y + pad * 0.3f),
+            ImGui::GetColorU32(ImVec4(232 / 255.0f, 243 / 255.0f, 1.0f, alpha)), line2);
+    }
+    if (save_toast && dino::debug_ui::backend::in_ui_frame()) {
+        // Auto save: a small note in the bottom right corner, out of the way of the HUD's middle.
+        const char* text = "Game saved";
+        const ImVec2 size = ImGui::GetIO().DisplaySize;
+        ImFont* font = ImGui::GetFont();
+        const float font_size = std::max(16.0f, size.y / 40.0f);
+        const ImVec2 extent = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, text);
+        const float pad = font_size * 0.4f;
+        const ImVec2 pos(size.x - extent.x - pad * 3.0f, size.y - extent.y - pad * 3.0f);
+        float alpha = save_toast_t > 2.0f ? (2.5f - save_toast_t) / 0.5f : 1.0f;
+        if (save_toast_t < 0.2f) alpha = save_toast_t / 0.2f;
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+        dl->AddRectFilled(ImVec2(pos.x - pad, pos.y - pad * 0.5f), ImVec2(pos.x + extent.x + pad, pos.y + extent.y + pad * 0.5f),
+            ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.55f * alpha)), pad * 0.5f);
+        dl->AddText(font, font_size, pos, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, alpha)), text);
+    }
     if ((g.show_fps || g.show_level || g.show_pack) && dino::debug_ui::backend::in_ui_frame()) {
         // Top right corner, one line each: frame rate (main loop ticks per second, measured in jfg_frame_sync), the
         // level, the texture pack.
@@ -196,8 +260,10 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         std::vector<Line> lines;
         if (g.show_fps) {
             char text[64];
-            if (FRAME_RATE_OPTION) std::snprintf(text, sizeof(text), "%.0f FPS  (screen %.0f)", g_fps.load(std::memory_order_relaxed), g_screen_fps.load(std::memory_order_relaxed));
-            else std::snprintf(text, sizeof(text), "%.0f FPS", g_fps.load(std::memory_order_relaxed));
+            // Game: the game's own updates a second (its logic). Screen: the frames shown a second (the renderer's
+            // presents, in-between frames included).
+            std::snprintf(text, sizeof(text), "Game %.0f FPS  Screen %.0f FPS", g_fps.load(std::memory_order_relaxed),
+                          g_screen_fps.load(std::memory_order_relaxed));
             lines.push_back({ text, ImVec4(1.0f, 1.0f, 0.4f, 1.0f) });
         }
         if (g.show_level && g_rdram != nullptr) {
@@ -227,11 +293,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
             y += extent.y + pad * 1.4f;
         }
     }
-    if (dino::debug_ui::is_open() && dino::debug_ui::backend::in_ui_frame() && dino::debug_ui::backend::toolbar_mode()) {
-        load_level_names();
-        draw_toolbar(ctx);
-    }
-    else if (dino::debug_ui::is_open() && dino::debug_ui::backend::in_ui_frame()) {
+    if (dino::debug_ui::is_open() && dino::debug_ui::backend::in_ui_frame()) {
         load_level_names();
         draw_debug_window(ctx);
     }
@@ -239,7 +301,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
 
     // 60 fps: viFrameSync paces the game by gVideoDeltaTime (2 video frames, 3 when it falls behind); the game's own
     // runInOneFrame flag makes it 1. viFrameRateReset() clears the flag again (level changes), so set it every tick.
-    if (g.frame_rate >= 1) wr32(ADDR_runInOneFrame, 1);
+    if (game_frame_rate() >= 1) wr32(ADDR_runInOneFrame, 1);
 
     // F5: back to the title screen (F1-F4 belong to RT64's developer tools), the way the game itself gets there (mainTitlePageInit: game mode 1, then
     // mainChangeLevel(title level, 0, 0, 3, 1, 0)). Not while a skip runs. From the pause screen the title level
@@ -291,7 +353,10 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         // Same argument pattern as the game's own level exits (controlPlayer): the front-end mode is passed
         // through unchanged - passing 0 there starts the level without its HUD and weapon selection.
         const uint32_t mode = g_warp_mode >= 0 ? (uint32_t)g_warp_mode : call_game(frontGetMode, ctx, {}) & 0xFFu;
-        if (g_warp_mode == 0) wr32(ADDR_mainGameMode, 0); // from the title: in game, as starting a game does
+        if (rd32(ADDR_mainGameMode) != 0) auto_save_forget_file(); // not from inside a game: no file to auto save to
+        // From the title with a front-end mode other than the title's own (3): in game, as starting a game does. 16 is the
+        // in-game HUD (frontInstruments), as in a game loaded from a file; 0 has no HUD.
+        if (g_warp_mode >= 0 && g_warp_mode != 3) wr32(ADDR_mainGameMode, 0);
         g_warp_mode = -1;
         std::fprintf(stderr, "[jfg] debug menu: mainChangeLevel(%d, %d, %d, %u, 1, 0)\n", g.warp_level, g.warp_character, g.warp_entrance, mode);
         call_game(mainChangeLevel, ctx, { (uint32_t)g.warp_level, (uint32_t)g.warp_character, (uint32_t)g.warp_entrance, mode, 1u, 0u });
