@@ -26,12 +26,16 @@ What's coming to Jet Force Gemini Recompiled. Plans can change and there are no 
 - Touch support on the Steam Deck's screen.
 - A better way to use the F10 tools with a controller.
 
+**Gameplay**
+- Settings for Floyd's fuel in Floyd missions.
+
 **Visuals**
 - In widescreen, the HUD moves out to the corners of the screen.
 
 **Fixes**
 - The menu can scroll all the way to the top when a tab has text above its options.
 - Shadows in the intro cutscene of the Tribals level.
+- The visual glitch on the Floyd screen just before a Floyd mission.
 - In the launcher, pressing LB right after RB no longer shows the old page for a moment.
 
 ## Planned: online multiplayer

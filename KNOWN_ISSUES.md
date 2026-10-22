@@ -12,7 +12,7 @@ Found something that isn't listed here? See [Reporting bugs](README.md#reporting
 
 - **The camera can move during some cutscenes.** With dual-stick controls the camera can sometimes be turned during
   a door-unlock cutscene, and during the Mizar boss intro before the fight starts.
-- **One cutscene can't be skipped:** the one in level 398 (the level number is shown with Show FPS on).
+- **One cutscene can't be skipped:** the one in level 398 (the level number is shown with Show Level on, in the General tab).
 
 ## Graphics
 
