@@ -3,7 +3,7 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
-## Unreleased
+## v1.2.0 (2026-10-22)
 
 ### New options
 
