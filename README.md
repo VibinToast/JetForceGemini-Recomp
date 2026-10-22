@@ -7,6 +7,10 @@ the game's code is translated from your ROM and compiled for your PC.
 
 **No game code or assets are included.** You need your own ROM.
 
+**Contents:** [ROM](#rom) · [Features](#features) · [Build and run](#build-and-run) · [Steam Deck](#steam-deck) ·
+[Keys](#keys) · [Reporting bugs](#reporting-bugs) · [How it works](#how-it-works) · [AI disclosure](#ai-disclosure) ·
+[Legal](#legal) · [Credits](#credits)
+
 ## ROM
 
 Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630cf23a023`.
@@ -85,6 +89,24 @@ The game ends up in `bin`, together with its saves and settings. The build also 
 [docs/TEXTURE_PACKS.md](docs/TEXTURE_PACKS.md)); anything already in them is kept. The build itself happens in this folder
 (`lib`, `build-tools`, `build-windows` / `build-linux`, `RecompiledFuncs`), none of which is committed.
 Keep `bin` private, because it holds a copy of the ROM.
+
+## Steam Deck
+
+Use the Linux AppImage, and always start the game **through Steam**, in Desktop Mode too:
+
+1. In Desktop Mode, make the AppImage executable (right-click it, Properties > Permissions), then add it to Steam
+   (right-click > Add to Steam, or "Add a Non-Steam Game" in Steam).
+2. Start it from your Steam library, in Game Mode or Desktop Mode.
+3. Choose your ROM the first time in Desktop Mode: Game Mode may have no file picker. Or write its path in
+   `~/.local/share/JetForceGeminiRecompiled/jfg_launcher.txt` as `rom=/home/deck/path/to/baserom.us.z64`.
+
+Keep **Mouse and Keyboard Controls** (settings menu, **Controls** tab) **Off** on the Deck. The Modern profiles turn
+it on, so set it back to Off after choosing one, or turn on **Keep My Controls** (Profiles tab) first.
+
+Why: started from the file manager, Steam turns the Deck's controls into a keyboard and mouse as well as a controller,
+so every press counts twice (Start opens the settings menu, and menu moves skip a button). With Mouse and Keyboard
+Controls on, the touchscreen and trackpads act as a mouse that aims and fires, and firing can stay stuck after you
+close the settings menu.
 
 ## Keys
 
