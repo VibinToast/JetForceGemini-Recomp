@@ -14,6 +14,7 @@ struct RT64JfgPresentInfo {
     float weight;        // (i + 1) / frames presented for that game frame, 1 without in-between frames
     float viewX, viewY, viewWidth, viewHeight; // where the framebuffer lands in the window, in pixels
     uint32_t fbWidth, fbHeight; // 0 when nothing is shown
+    float frameWeight;   // the weight RT64 rendered this frame with (between the game frame before and this one)
 };
 extern RT64JfgPresentInfo rt64_jfg_present_info;
 extern std::atomic<int> rt64_jfg_ssao;            // lib/rt64/src/render/rt64_framebuffer_renderer.cpp (JFG patch)

@@ -13,6 +13,8 @@ are written here by hand and become that version's notes when it is released.
 - The settings menu scrolls all the way to the top with a controller or the keyboard, so the text and titles above the first options show again.
 - Fixed a crash in the Lurg boss fight (Tawfret) at 60 fps.
 - The aiming reticle of the Tri-Rocket, Homing Missiles, mines, grenades and the other weapons whose reticle the game draws itself no longer shakes while you aim and turn with Frame Interpolation above the game's frame rate.
+- With Frame Interpolation, those reticles use the exact in-between point each frame was drawn at, so they stay in step when an in-between frame is dropped (issue #8).
+- The camera no longer bobs up and down over uneven ground with dual-stick or mouse controls (it looked like a shake with Frame Interpolation, e.g. at Mizar's Palace entrance).
 
 ## v1.2.1 (2026-10-22)
 
