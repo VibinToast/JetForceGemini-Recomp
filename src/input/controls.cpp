@@ -90,6 +90,17 @@ void set_input_binding(GameInput input, size_t binding_index, InputDevice device
     }
 }
 
+// JFG PORT: mouse buttons that are held when a menu closes count only once they have been let go. They are read from
+// SDL's state, which can miss a release while a menu has the cursor (on the Steam Deck a tap on the screen or a
+// trackpad click is a mouse click), and the character then kept firing by itself. The next click clears it.
+static uint32_t mouse_wait_for_release = 0;
+
+static uint32_t game_mouse_buttons() {
+    const uint32_t buttons = SDL_GetMouseState(nullptr, nullptr);
+    mouse_wait_for_release &= buttons; // a button seen up counts again
+    return buttons & ~mouse_wait_for_release;
+}
+
 bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, float* y_out) {
     uint16_t cur_buttons = 0;
     float cur_x = 0.0f;
@@ -191,7 +202,7 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
             for (const KeyEntry& entry : keys) {
                 if (key(entry.key)) cur_buttons |= entry.n64;
             }
-            const uint32_t mouse_buttons = SDL_GetMouseState(nullptr, nullptr);
+            const uint32_t mouse_buttons = game_mouse_buttons();
             if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) cur_buttons |= 0x2000;  // fire (Z)
             if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) cur_buttons |= 0x0010; // N64 R
             const float kx = (key(SDL_SCANCODE_D) ? 1.0f : 0.0f) - (key(SDL_SCANCODE_A) ? 1.0f : 0.0f);
@@ -217,7 +228,7 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
             for (const KeyEntry& entry : keys) {
                 if (key(entry.key)) cur_buttons |= entry.n64;
             }
-            const uint32_t mouse_buttons = SDL_GetMouseState(nullptr, nullptr);
+            const uint32_t mouse_buttons = game_mouse_buttons();
             if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) cur_buttons |= 0x0010; // aim (R)
             if (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) cur_buttons |= 0x2000;  // fire (Z)
 
@@ -265,6 +276,7 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
 
     else {
         jfg_dual_stick_release(); // a menu has the input: let go of the sticks the game logic remembers
+        mouse_wait_for_release = SDL_BUTTON(SDL_BUTTON_LEFT) | SDL_BUTTON(SDL_BUTTON_RIGHT); // fire, aim
         jfg_sprint_input(0);
     }
 
