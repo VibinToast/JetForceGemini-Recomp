@@ -403,6 +403,14 @@ func = "GalaxianBatsSoundsHandler"
 before_vram = 0x828E24C0
 text = "{ int jfg_bats_link_ok(uint8_t*, uint32_t, int, int); if (!jfg_bats_link_ok(rdram, (uint32_t)ctx->r4, 1, (int)ctx->r3)) { ctx->r8 = 0; goto L_828E24D0; } }"
 
+# mantisControl (overlay 67, the alien boss in level 210): the five-rock throw plays its sound at the last rock spawned
+# ($t0) without checking it, and crashed reading NULL+0xC when that rock could not be created (object pool full). With
+# no rock, the sound is skipped and the attack ends as it normally does (mantis->unk3 = 0, then the shared exit).
+[[patches.hook]]
+func = "mantisControl"
+before_vram = 0x82412A54
+text = "if (ctx->r8 == 0) { MEM_B(0X3, ctx->r16) = 0; goto L_82412BDC; }"
+
 # objSetupObject returning NULL (an object could not be created): which step failed, with object counts and free heap,
 # logged to bin/jfg_memory.log (src/jfg/jfg_diagnostics.cpp, jfg_objsetup_*). Entry, the return of each call that can
 # fail, and the one exit.
