@@ -9,6 +9,7 @@ are written here by hand and become that version's notes when it is released.
 
 - Blood Stays: new blood always appears; the oldest stains make room once the screen is full.
 - Game Frame Rate 60 is now marked experimental in the settings menu.
+- The Modern, Modern and Balanced and Extreme profiles now keep the game at its original 30 and smooth it to 60 fps with Frame Interpolation (choose the profile again to get the new settings).
 - The settings menu scrolls all the way to the top with a controller or the keyboard, so the text and titles above the first options show again.
 - Fixed a crash in the Lurg boss fight (Tawfret) at 60 fps.
 - The aiming reticle of the Tri-Rocket, Homing Missiles, mines, grenades and the other weapons whose reticle the game draws itself no longer shakes while you aim and turn with Frame Interpolation above the game's frame rate.
