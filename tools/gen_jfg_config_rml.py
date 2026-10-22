@@ -48,7 +48,7 @@ GAMEPLAY = [
     ("group", None, "Gore", None, None),
     ("bool", "no_blood", "No Blood", None, "No blood, as in the Japanese version."),
     ("bool", "gore_keep_blood", "Blood Stays", None,
-     "Blood splats stay on the ground and walls instead of fading away. The newest 40 are kept; older ones still fade so new blood always has room."),
+     "Blood splats stay on the ground and walls instead of fading away. Up to 64 stay; once the screen is full, the oldest makes room for new blood."),
     ("bool", "gore_keep_limbs", "Body Parts Stay", None,
      "Severed limbs and heads stay where they fell instead of fading away. The newest 24 are kept, so the game does not run out of memory in big fights."),
     ("range", "blood_amount", "Blood Amount", (100, 400, "%"), "How much blood a hit sprays. 100% is the original game."),
