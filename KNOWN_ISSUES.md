@@ -24,8 +24,6 @@ Found something that isn't listed here? See [Reporting bugs](README.md#reporting
 
 ## Menus and launcher
 
-- **The settings menu can't scroll all the way to the top** on tabs that have text above their options.
-  **Fix planned.**
 - **In the launcher, pressing LB right after RB shows the previous page for about a second.** **Fix planned.**
 
 ## Steam Deck
