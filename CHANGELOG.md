@@ -3,6 +3,13 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
+## Unreleased
+
+### Fixes
+
+- In-app updates now install completely, even when the game can't swap its own exe straight away. Before, the menus and launcher could stay on the old version.
+- If you updated to 1.2.0 inside the game and your launcher or menus look old, update to 1.2.1, or download it from the release page.
+
 ## v1.2.0 (2026-10-22)
 
 ### New options
