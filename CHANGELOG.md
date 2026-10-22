@@ -5,6 +5,10 @@ are written here by hand and become that version's notes when it is released.
 
 ## Unreleased
 
+### New options
+
+- Steady Reticle (Controls tab; on in the Modern, Modern and Balanced and Extreme profiles): while aiming, the reticle stays at one place and one size instead of jumping and changing size as the aim passes over near and far walls and objects.
+
 ### Fixes
 
 - Blood Stays: new blood always appears; the oldest stains make room once the screen is full.
