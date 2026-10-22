@@ -22,6 +22,8 @@ Found something that isn't listed here? See [Reporting bugs](README.md#reporting
 - **Shadows look wrong in the intro cutscene of the Tribals level.** **Fix planned.**
 - **The Floyd screen just before a Floyd mission has a visual glitch.** **Fix planned.**
 - **With level of detail turned off, ants in cutscenes still use their low-detail models.**
+- **With Frame Interpolation on, the character's shadow moves at the game's frame rate and can look like it trails.**
+  It's least noticeable at Game Frame Rate 60. **Fix planned.**
 - **Uneven frame times with Frame Interpolation on a high-end GPU when anti-aliasing (MSAA) is off.** Keep MSAA on (2x is the default), or set NVIDIA's "Power management mode" to "Prefer maximum performance" for the game.
 
 ## Menus and launcher
