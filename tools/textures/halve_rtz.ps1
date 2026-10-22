@@ -4,12 +4,19 @@
 # - DDS textures with mipmaps lose their largest level: the next level down is the same texture at half size, so
 #   nothing is recompressed (fast, and no extra quality loss).
 # - PNG textures are scaled to half size.
+# - Small textures are copied as they are: one whose shorter side is under $MinSide pixels is about the game's own size
+#   already (the HUD's digit strips are 14 and 22 pixels tall), and halving it again makes it blocky.
 # - Only files named by a texture hash are halved. credits.json, pack_image.png, rt64.json and anything else are copied
-#   as they are, apart from credits.json's "variant", which you are asked for (e.g. 2K).
+#   as they are, apart from credits.json's "variant" and "version", which you are asked for (e.g. 2K, 1.1.1).
 #
-# Result, next to the pack you dragged: <id>-<variant>_v<version>.rtz, from credits.json's "id" and "version" and the
-# variant you give, e.g. Official_Recomp_HD-2K_v1.1.0.rtz. The game shows it as Official_Recomp_HD-2K.
+# Result, next to the pack you dragged: <id>-<variant>_v<version>.rtz, from credits.json's "id" and the variant and
+# version you give, e.g. Official_Recomp_HD-2K_v1.1.0.rtz. The game shows it as Official_Recomp_HD-2K.
 param([string]$Pack)
+
+# ---- Settings ---------------------------------------------------------------------------------------------------
+# A texture whose shorter side is under this many pixels is not halved (see above).
+$MinSide = 32
+# -----------------------------------------------------------------------------------------------------------------
 
 $ErrorActionPreference = 'Stop'
 
@@ -58,6 +65,9 @@ try {
     while (-not $variant) {
         $variant = (Read-Host 'Variant of the half-size pack (e.g. 2K)').Trim()
     }
+    # A new version when the pack is made again (the launcher offers it as an update to the older one).
+    $answer = (Read-Host ('Version of the half-size pack [' + $(if ($version) { $version } else { 'none' }) + ']')).Trim()
+    if ($answer) { $version = $answer -replace '^[vV]', '' }
     $fileName = $id + '-' + $variant
     if ($version) { $fileName += '_v' + ($version -replace '^[vV]', '') }
     $fileName += '.rtz'
@@ -80,7 +90,7 @@ try {
 
     # ---- Copy, halving the textures -----------------------------------------------------------------------------
     $zip = [System.IO.Compression.ZipFile]::Open($out, [System.IO.Compression.ZipArchiveMode]::Create)
-    $halved = 0; $kept = 0; $skipped = New-Object System.Collections.Generic.List[string]
+    $halved = 0; $kept = 0; $small = 0; $skipped = New-Object System.Collections.Generic.List[string]
     $n = 0; $total = $in.Entries.Count
     try {
         foreach ($entry in $in.Entries) {
@@ -102,6 +112,10 @@ try {
                 else { $credits | Add-Member -NotePropertyName id -NotePropertyValue $id }
                 if ($credits.PSObject.Properties['variant']) { $credits.variant = $variant }
                 else { $credits | Add-Member -NotePropertyName variant -NotePropertyValue $variant }
+                if ($version) {
+                    if ($credits.PSObject.Properties['version']) { $credits.version = $version }
+                    else { $credits | Add-Member -NotePropertyName version -NotePropertyValue $version }
+                }
                 # Written field by field, in the file's own order, two spaces in (Windows PowerShell's ConvertTo-Json
                 # pads the colons and writes ' & < > as \u escapes, which are put back).
                 $fields = foreach ($p in $credits.PSObject.Properties) {
@@ -113,6 +127,7 @@ try {
             }
             elseif ($isTexture -and $ext -eq '.dds') {
                 $result = $null
+                $isSmall = $false
                 # DDS: "DDS " + 124-byte header (+ 20-byte DX10 header). Height at 12, width at 16, linear size at 20,
                 # mip count at 28, pixel format's FourCC at 84; DX10's DXGI format at 128.
                 if ($bytes.Length -ge 128 -and [System.Text.Encoding]::ASCII.GetString($bytes, 0, 4) -eq 'DDS ') {
@@ -131,7 +146,8 @@ try {
                     }
                     elseif ($fourcc -in 'DXT1', 'ATI1', 'BC4U') { $blockBytes = 8 }
                     elseif ($fourcc -in 'DXT3', 'DXT5', 'ATI2', 'BC5U') { $blockBytes = 16 }
-                    if ($blockBytes -gt 0 -and $mips -ge 2) {
+                    if ([math]::Min($width, $height) -lt $MinSide) { $isSmall = $true }
+                    elseif ($blockBytes -gt 0 -and $mips -ge 2) {
                         # The size of a mip level: whole 4x4 blocks.
                         $top = [int]([math]::Max(1, [math]::Ceiling($width / 4)) * [math]::Max(1, [math]::Ceiling($height / 4)) * $blockBytes)
                         $newWidth = [int][math]::Max(1, [math]::Floor($width / 2))
@@ -148,26 +164,31 @@ try {
                         }
                     }
                 }
-                if ($result -ne $null) { $bytes = $result; $halved++ } else { $skipped.Add($entry.FullName); $kept++ }
+                if ($isSmall) { $small++ } # small: as it is
+                elseif ($result -ne $null) { $bytes = $result; $halved++ }
+                else { $skipped.Add($entry.FullName); $kept++ }
             }
             elseif ($isTexture -and $ext -eq '.png') {
                 $image = [System.Drawing.Image]::FromStream((New-Object System.IO.MemoryStream(, $bytes)))
                 try {
-                    $newWidth = [math]::Max(1, [math]::Floor($image.Width / 2))
-                    $newHeight = [math]::Max(1, [math]::Floor($image.Height / 2))
-                    $small = New-Object System.Drawing.Bitmap($newWidth, $newHeight, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-                    $g = [System.Drawing.Graphics]::FromImage($small)
-                    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-                    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-                    $g.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
-                    $g.DrawImage($image, 0, 0, $newWidth, $newHeight)
-                    $g.Dispose()
-                    $png = New-Object System.IO.MemoryStream
-                    $small.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
-                    $small.Dispose()
-                    $bytes = $png.ToArray()
-                    $png.Dispose()
-                    $halved++
+                    if ([math]::Min($image.Width, $image.Height) -lt $MinSide) { $small++ } # small: as it is
+                    else {
+                        $newWidth = [math]::Max(1, [math]::Floor($image.Width / 2))
+                        $newHeight = [math]::Max(1, [math]::Floor($image.Height / 2))
+                        $smallImage = New-Object System.Drawing.Bitmap($newWidth, $newHeight, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+                        $g = [System.Drawing.Graphics]::FromImage($smallImage)
+                        $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                        $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+                        $g.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+                        $g.DrawImage($image, 0, 0, $newWidth, $newHeight)
+                        $g.Dispose()
+                        $png = New-Object System.IO.MemoryStream
+                        $smallImage.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
+                        $smallImage.Dispose()
+                        $bytes = $png.ToArray()
+                        $png.Dispose()
+                        $halved++
+                    }
                 } finally { $image.Dispose() }
             }
             elseif ($isTexture) { $skipped.Add($entry.FullName); $kept++ }
@@ -188,10 +209,11 @@ $mb = [math]::Round((Get-Item -LiteralPath $out).Length / 1MB, 1)
 Write-Host ''
 Write-Host ('Done: ' + $out + '  (' + $mb + ' MB)')
 Write-Host ($halved.ToString() + ' textures halved.')
+if ($small -gt 0) { Write-Host ($small.ToString() + ' small textures (under ' + $MinSide + ' pixels on a side) copied at their own size.') }
 if ($kept -gt 0) {
     Write-Host ($kept.ToString() + ' textures copied at their own size (no mipmaps, or a format this script does not know):')
     $skipped | Select-Object -First 20 | ForEach-Object { Write-Host ('  ' + $_) }
     if ($kept -gt 20) { Write-Host '  ...' }
 }
-Write-Host ('Its credits.json: id ' + $id + ', variant ' + $variant + '.')
+Write-Host ('Its credits.json: id ' + $id + ', variant ' + $variant + $(if ($version) { ', version ' + $version } else { '' }) + '.')
 Done 0
