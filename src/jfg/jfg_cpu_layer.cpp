@@ -51,6 +51,9 @@ struct Layer {
     std::vector<LayerPixel> pixels;
     std::vector<Group> groups;
     uint32_t matched_seq = 0; // the previous layer the groups' steps were worked out against (0 = none)
+    // Where this layer is drawn relative to where the game drew it (at most DEAD_ZONE pixels each way, see match_groups),
+    // and the previous layer's, which the in-between frames start from.
+    float bias_x = 0, bias_y = 0, prev_bias_x = 0, prev_bias_y = 0;
 };
 
 std::mutex g_layer_mutex;
@@ -243,6 +246,7 @@ void match_groups(Layer& cur, const Layer* prev) {
     constexpr float MAX_STEP = 128.0f, NEAR = 40.0f;
     std::vector<uint8_t> partnered(cur.groups.size(), 0), taken(prev != nullptr ? prev->groups.size() : 0, 0);
     for (Group& g : cur.groups) g.ox = g.oy = 0;
+    cur.bias_x = cur.bias_y = cur.prev_bias_x = cur.prev_bias_y = 0;
     if (prev == nullptr) return;
     struct Pair { float dx, dy, d; uint32_t c, p; };
     std::vector<Pair> pairs;
@@ -259,6 +263,7 @@ void match_groups(Layer& cur, const Layer* prev) {
     // Pairs with the same step next to each other (equal shapes moved by whole pixels: the rounded key is exact).
     auto key = [](const Pair& x) { return std::make_pair(std::lround(x.dx * 4.0f), std::lround(x.dy * 4.0f)); };
     std::sort(pairs.begin(), pairs.end(), [&](const Pair& x, const Pair& y) { return key(x) < key(y); });
+    bool first = true;
     for (;;) {
         // The open step with the most pixels (a group has at most one partner at a given step); the shorter one on a tie.
         size_t best = 0, best_end = 0;
@@ -276,6 +281,18 @@ void match_groups(Layer& cur, const Layer* prev) {
             start = end;
         }
         if (best_pixels == 0) break;
+        if (first) {
+            // Dead zone on the main step (the reticle's): a move of a pixel or so is taken up by the bias instead of being
+            // shown, and shown once the bias is used up. While aiming and turning, the game moves the reticle up and down
+            // by a pixel from tick to tick (it follows the view pitch, which the mouse nudges); with in-between frames
+            // that read as a shake against the smooth picture. Real moves still show, at most DEAD_ZONE pixels late.
+            constexpr float DEAD_ZONE = 1.0f;
+            first = false;
+            cur.prev_bias_x = prev->bias_x;
+            cur.prev_bias_y = prev->bias_y;
+            cur.bias_x = std::clamp(prev->bias_x + pairs[best].dx, -DEAD_ZONE, DEAD_ZONE);
+            cur.bias_y = std::clamp(prev->bias_y + pairs[best].dy, -DEAD_ZONE, DEAD_ZONE);
+        }
         for (size_t i = best; i < best_end; i++) {
             const Pair& y = pairs[i];
             if (partnered[y.c] || taken[y.p]) continue;
@@ -369,9 +386,11 @@ bool cpu_layer_build(ImDrawList* list) {
         const float alpha = (float)m / 31.0f;
         const ImU32 col = IM_COL32(p.r * 255 / m, p.g * 255 / m, p.b * 255 / m, (int)(alpha * 255.0f + 0.5f));
         float px = (float)p.x, py = (float)p.y;
-        if (!p.still && p.group != NO_GROUP) {
-            px += cur->groups[p.group].ox * back;
-            py += cur->groups[p.group].oy * back;
+        if (!p.still) {
+            // From the previous layer's drawn place to this one's (each where the game drew it plus its bias).
+            const float ox = (p.group != NO_GROUP) ? cur->groups[p.group].ox : 0.0f, oy = (p.group != NO_GROUP) ? cur->groups[p.group].oy : 0.0f;
+            px += cur->bias_x + (ox + cur->prev_bias_x - cur->bias_x) * back;
+            py += cur->bias_y + (oy + cur->prev_bias_y - cur->bias_y) * back;
         }
         const float x0 = left + px * sx, y0 = info.viewY + py * sy;
         list->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + sx, y0 + sy), col);
