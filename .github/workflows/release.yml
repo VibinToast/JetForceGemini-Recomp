@@ -20,8 +20,9 @@
 # - Puts them at the top of CHANGELOG.md (the game shows that file under Changelogs), writes the version into version.txt
 #   (the launcher shows it), commits both to main and makes a DRAFT release vX.Y.Z on that commit. Players do not see a
 #   draft, and the launcher's update check skips it.
-# - Merges main back into dev, rt64-update and any open release/* branch, so the release commit, the release branch's
-#   fixes and any hotfix are there too (BACK_MERGE below). A hotfix made while a release is in testing reaches it this way.
+# - Merges main back into dev and rt64-update, so the release commit and any hotfix are there too (BACK_MERGE below).
+#   release/* branches are never touched: once released, a release branch stays parked as it was. Fixes for a
+#   released version go on hotfix/<x.y.z> from main.
 #
 # It does not build the game: the game's code is translated from the owner's own ROM, which never goes to GitHub. The
 # builds are made on the owner's PC: tools\package_release.bat (Windows) and tools/package_release.sh (Linux) find the
@@ -53,8 +54,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BACK_MERGE: dev rt64-update   # branches that get main merged back into them after a release (missing ones are skipped),
-                                # plus every release/* branch on GitHub
+  BACK_MERGE: dev rt64-update   # branches that get main merged back into them after a release (missing ones are skipped).
+                                # Never release/*: released branches stay parked.
 
 jobs:
   release:
@@ -295,8 +296,7 @@ jobs:
         if: ${{ steps.version.outputs.version != '' }}
         run: |
           main=$(git rev-parse HEAD)
-          releases=$(git ls-remote --heads origin 'release/*' | sed 's#.*refs/heads/##')
-          for branch in $BACK_MERGE $releases; do
+          for branch in $BACK_MERGE; do
             if ! git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
               echo "No branch $branch, skipped."
               continue
