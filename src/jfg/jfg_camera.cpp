@@ -207,6 +207,24 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     float wy = py + pivot + boom * std::sin(elevation);
     float wz = pz - std::cos(g_cam.heading) * boom * std::cos(elevation);
     camera_collide(ctx, px, py + pivot, pz, wx, wy, wz);
+    // The height eases towards the wanted one instead of jumping to it. The wanted height follows the character and
+    // the game's camera, which step over uneven ground: in Mizar's Palace entrance (level 155) it jumped 5-22 units
+    // in single ticks while walking, so the picture bobbed (a shake with Frame Interpolation). Rising is quick, so the
+    // camera does not sink into the ground; sinking is slower. Per video frame, so the same at Game 30 and 60.
+    {
+        const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
+        const bool fresh = g_cam.height_reset || g_cam.height_tick + 1 != g_tick_count || std::fabs(wy - g_cam.height) > 300.0f;
+        if (fresh) {
+            g_cam.height = wy;
+        }
+        else {
+            const float keep = (wy > g_cam.height) ? 0.5f : 0.75f; // of the gap left after each video frame
+            g_cam.height = wy + (g_cam.height - wy) * std::pow(keep, frames);
+        }
+        g_cam.height_reset = false;
+        g_cam.height_tick = g_tick_count;
+        wy = g_cam.height;
+    }
     wrf(cam + 0x0C, wx);
     wrf(cam + 0x10, wy);
     wrf(cam + 0x14, wz);
