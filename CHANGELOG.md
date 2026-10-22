@@ -81,6 +81,7 @@ are written here by hand and become that version's notes when it is released.
 - Fixed the game freezing when the menu was closed twice in a row.
 - Fixed a freeze at start-up, and when going fullscreen or changing the frame rate during play, with in-between frames on (#3).
 - Fixed a crash in cutscenes with anti-aliasing and in-between frames on.
+- Fixed a rare crash in the alien boss fight where the boss throws a volley of rocks.
 - Weapon reticles drawn by the game (Tri-Rocket, Homing Missiles, mines, grenades and others) show again with Smooth Motion on.
 - The start-up key hint no longer mentions F9 (the debug window).
 
