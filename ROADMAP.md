@@ -6,7 +6,7 @@ What's coming to Jet Force Gemini Recompiled. Plans can change and there are no 
 ## Now: 1.2 (in final testing)
 
 - New frame rate settings: Game Frame Rate (30 or 60) and Smooth Motion up to your monitor's refresh rate.
-- Auto Save, a reorganised settings menu and an improved launcher.
+- Auto Save, a reorganized settings menu and an improved launcher.
 - Linux builds (AppImage and portable) and Steam Deck support.
 - Many fixes, including crashes in boss fights and texture packs whose names are in capitals.
 
