@@ -259,9 +259,6 @@ void draw_options() {
             options_section("Aiming (any control layout)");
             changed |= ImGui::Checkbox("Over-the-shoulder view while aiming", &g.aim_shoulder);
             changed |= ImGui::Checkbox("Keep the reticle centered", &g.aim_centered);
-            changed |= ImGui::Checkbox("Steady reticle", &g.fixed_reticle);
-            options_help("The reticle stays at one place and one size while aiming, instead of jumping and changing size as "
-                         "the aim passes over near and far walls and objects. Lock-on and shooting are unchanged.");
             changed |= ImGui::Checkbox("Jump while aiming", &g.aim_jump);
             options_help("The jump button (C-up; A in the dual-stick layout, Space with mouse and keyboard) jumps while aiming, "
                          "also while walking or strafing: the character leaves the aim for the jump, the left stick steers it "

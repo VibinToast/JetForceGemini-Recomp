@@ -123,7 +123,6 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "camera_speed_v") == 0) g.camera_speed_v = std::clamp(value, 10, 400);
     else if (std::strcmp(key, "aim_shoulder") == 0) g.aim_shoulder = value != 0;
     else if (std::strcmp(key, "aim_centered") == 0) g.aim_centered = value != 0;
-    else if (std::strcmp(key, "fixed_reticle") == 0) g.fixed_reticle = value != 0;
     else if (std::strcmp(key, "aim_jump") == 0) g.aim_jump = value != 0;
     else if (std::strcmp(key, "aim_speed") == 0) g.aim_speed = std::clamp(value, 10, 300);
     else if (std::strcmp(key, "mouse_keyboard") == 0) g.mouse_keyboard = value != 0;
@@ -176,7 +175,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "camera_collision=%d\n", s.camera_collision ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "move_speed=%d\nnormalize_diagonal=%d\n", s.move_speed, s.normalize_diagonal ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "camera_speed_h=%d\ncamera_speed_v=%d\naim_shoulder=%d\naim_centered=%d\naim_speed=%d\n", s.camera_speed_h, s.camera_speed_v, s.aim_shoulder ? 1 : 0, s.aim_centered ? 1 : 0, s.aim_speed); out += buf;
-    std::snprintf(buf, sizeof(buf), "aim_jump=%d\nfixed_reticle=%d\n", s.aim_jump ? 1 : 0, s.fixed_reticle ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "aim_jump=%d\n", s.aim_jump ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "mouse_keyboard=%d\nmouse_camera_speed=%d\nmouse_aim_speed=%d\ninvert_mouse_y=%d\n", s.mouse_keyboard ? 1 : 0, s.mouse_camera_speed, s.mouse_aim_speed, s.invert_mouse_y ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "refuel_speed=%d\nsniper_fixed_zoom=%d\nsniper_zoom=%d\ndamage_taken=%d\ndive_speed=%d\n", s.refuel_speed, s.sniper_fixed_zoom ? 1 : 0, s.sniper_zoom, s.damage_taken, s.dive_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "fly_speed=%d\nfly_freeze=%d\nfly_hide_hud=%d\n", s.fly_speed, s.fly_freeze ? 1 : 0, s.fly_hide_hud ? 1 : 0); out += buf;
