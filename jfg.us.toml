@@ -208,6 +208,19 @@ func = "objPrintObject"
 before_vram = 0x8000DC20
 text = "{ void jfg_interp_object_done(uint8_t*, recomp_context*); jfg_interp_object_done(rdram, ctx); }"
 
+# Character shadows (src/jfg/jfg_shadow_interp.cpp): func_8001FA24 writes each shadow's triangles; where its scales and
+# the object's place are worked out (before the first triangle) and after the last, the batch and how far its image
+# slides on in-between frames are passed to RT64.
+[[patches.hook]]
+func = "func_8001FA24_20624"
+before_vram = 0x8001FCC4
+text = "{ void jfg_shadow_begin(uint8_t*, recomp_context*); jfg_shadow_begin(rdram, ctx); }"
+
+[[patches.hook]]
+func = "func_8001FA24_20624"
+before_vram = 0x8001FF6C
+text = "{ void jfg_shadow_end(uint8_t*, recomp_context*); jfg_shadow_end(rdram, ctx); }"
+
 # The aim reticle's 3D part is pushed by frontDrawTarget outside any object's drawing; its entry and the return to
 # frontPlayerTarget mark it, so its matrix gets an ID too.
 [[patches.hook]]
