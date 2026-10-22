@@ -24,9 +24,9 @@ are written here by hand and become that version's notes when it is released.
 
 - Two new options in the Graphics tab replace the old Frame Rate setting:
 - Game Frame Rate: 30 (like the N64) or 60. Game speed stays the same either way.
-- Smooth Motion: adds in-between frames so movement looks smoother, with either Game Frame Rate. Choose Off, 60, 90, 120, 144, 240 or Monitor (your monitor's refresh rate).
+- Frame Interpolation: adds in-between frames so movement looks smoother, with either Game Frame Rate. Choose Off, 60, 90, 120, 144, 240 or Monitor (your monitor's refresh rate).
 - Changes to either option apply at once, with no restart.
-- The old "60 + Interpolated" choice is gone: it is now Game Frame Rate 60 with Smooth Motion on Monitor. If you had it chosen, the update switches you to that by itself.
+- The old "60 + Interpolated" choice is gone: it is now Game Frame Rate 60 with Frame Interpolation on Monitor. If you had it chosen, the update switches you to that by itself.
 - Show FPS shows both the game's frame rate and the frame rate on screen.
 - At 60 fps, ants, Tribals and other enemies move on every frame instead of looking like 30 fps.
 - At 60 fps, the slug boss's bolts and the target lock keep their original timing.
@@ -83,7 +83,7 @@ are written here by hand and become that version's notes when it is released.
 - Fixed a crash in cutscenes with anti-aliasing and in-between frames on.
 - Fixed a rare crash in the alien boss fight where the boss throws a volley of rocks.
 - After closing a menu, the mouse buttons fire and aim again, and holding fire (or a Steam Deck screen tap) while closing it no longer keeps you firing.
-- Weapon reticles drawn by the game (Tri-Rocket, Homing Missiles, mines, grenades and others) show again with Smooth Motion on.
+- Weapon reticles drawn by the game (Tri-Rocket, Homing Missiles, mines, grenades and others) show again with Frame Interpolation on.
 - The start-up key hint no longer mentions F9 (the debug window).
 
 ## v1.1.8 (2026-10-18)

@@ -126,7 +126,7 @@ GRAPHICS = [
     ("group", None, "Frame Rate", None, None),
     ("choice", "frame_rate", "Game Frame Rate", [(0, "30 (Original)"), (1, "60")],
      "How many times a second the game itself updates: movement, aiming, enemies. <b>30 (Original)</b>: like the N64 (it drops to 20 when busy). <b>60</b>: the quickest response; game speed stays the same."),
-    ("choice", "smooth_motion", "Smooth Motion", [(0, "Off"), (60, "60"), (90, "90"), (120, "120"), (144, "144"), (240, "240"), (1, "Monitor")],
+    ("choice", "smooth_motion", "Frame Interpolation", [(0, "Off"), (60, "60"), (90, "90"), (120, "120"), (144, "144"), (240, "240"), (1, "Monitor")],
      "How many frames a second you see: the renderer adds in-between frames to the game's own, with either <b>Game Frame Rate</b>. <b>Monitor</b>: up to your monitor's refresh rate; never more than it. Movement looks smoother, with a little more delay; the character's shadow, rain and a few effects still move at the game's rate. A lower setting takes less from the graphics card."),
     ("group", None, "Picture", None, None),
     ("bool", "widescreen", "Widescreen", None, "During gameplay the 3D view fills the window; the HUD stays in the middle. Things at the far left and right may appear late."),
