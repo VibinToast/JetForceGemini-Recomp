@@ -77,6 +77,9 @@ struct CameraControl {
     uint32_t camera_addr = 0;
     uint8_t saved[CAMERA_SIZE] = {};
     float collide_scale = 1.0f; // how much of the way from the character to the wanted camera spot is free (eases back out)
+    float height = 0;           // the follow camera's height as last placed (eased, see jfg_camera_override)
+    uint32_t height_tick = 0;   // g_tick_count when it was placed; anything older starts again from the wanted height
+    bool height_reset = true;   // somewhere new: start from the wanted height
     // Arriving somewhere new (another room through a door, a respawn, a teleport): the free camera starts again
     // behind the character, looking the way it faces, instead of keeping the heading from the place it came from.
     bool face_reset = true;

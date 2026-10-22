@@ -560,7 +560,7 @@ void jfg_camera_controls(recomp_context* ctx) {
         const int level = (int16_t)rd16(ADDR_currentLevel);
         const float x = rdf(obj + 0x0C), z = rdf(obj + 0x14);
         const float moved = std::sqrt((x - g_cam.last_x) * (x - g_cam.last_x) + (z - g_cam.last_z) * (z - g_cam.last_z));
-        if (level != g_cam.level || obj != g_cam.last_player || moved > 400.0f) g_cam.face_reset = true;
+        if (level != g_cam.level || obj != g_cam.last_player || moved > 400.0f) g_cam.face_reset = g_cam.height_reset = true;
         g_cam.level = level; g_cam.last_player = obj; g_cam.last_x = x; g_cam.last_z = z;
         // JFG_DEBUG_ARRIVE=1 logs the first 120 ticks in each new place: the character, the game's camera and ours.
         static const bool log_arrive = std::getenv("JFG_DEBUG_ARRIVE") != nullptr;
