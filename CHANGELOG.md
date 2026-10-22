@@ -5,6 +5,10 @@ are written here by hand and become that version's notes when it is released.
 
 ## Unreleased
 
+### New options
+
+- Smooth Shadows (Graphics, on by default): with Frame Interpolation, character shadows move smoothly with the character instead of trailing behind it.
+
 ### Fixes
 
 - Blood Stays: new blood always appears; the oldest stains make room once the screen is full.
