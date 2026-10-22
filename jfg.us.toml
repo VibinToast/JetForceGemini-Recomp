@@ -208,6 +208,18 @@ func = "objPrintObject"
 before_vram = 0x8000DC20
 text = "{ void jfg_interp_object_done(uint8_t*, recomp_context*); jfg_interp_object_done(rdram, ctx); }"
 
+# The aim reticle's 3D part is pushed by frontDrawTarget outside any object's drawing; its entry and the return to
+# frontPlayerTarget mark it, so its matrix gets an ID too.
+[[patches.hook]]
+func = "frontDrawTarget"
+before_vram = 0x820D04A8
+text = "{ void jfg_interp_reticle(int); jfg_interp_reticle(1); }"
+
+[[patches.hook]]
+func = "frontPlayerTarget"
+before_vram = 0x820D0458
+text = "{ void jfg_interp_reticle(int); jfg_interp_reticle(0); }"
+
 [[patches.hook]]
 func = "camPushModelMtx"
 before_vram = 0x80041CA0
