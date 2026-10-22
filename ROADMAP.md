@@ -34,6 +34,10 @@ What's coming to Jet Force Gemini Recompiled. Plans can change and there are no 
 - Shadows in the intro cutscene of the Tribals level.
 - In the launcher, pressing LB right after RB no longer shows the old page for a moment.
 
+## Planned: online multiplayer
+
+A larger update after 1.3: play the multiplayer modes online with friends, not only on one screen.
+
 ## Later (ideas, not scheduled)
 
 - Save and load states.
@@ -43,7 +47,7 @@ What's coming to Jet Force Gemini Recompiled. Plans can change and there are no 
 - Other languages.
 - Choosing different character models.
 - Two-player co-op in the story.
-- Multiplayer improvements.
+- Other multiplayer improvements.
 - A randomizer and a rogue-like mode (likely as mods).
 - Full-detail ants in cutscenes when level of detail is turned off.
 
