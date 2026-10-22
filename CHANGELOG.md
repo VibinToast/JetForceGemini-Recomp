@@ -24,6 +24,7 @@ are written here by hand and become that version's notes when it is released.
 - With the game's own Widescreen screen option on, mouse and keyboard controls work again and START opens the pause menu instead of fast-forwarding (#10).
 - In the Bindings tab, Ctrl, Alt and the Windows key show their key symbols instead of a number (such as 224 for Left Ctrl), and keys shown by name (such as Keypad 1) fit their box (#10).
 - START now skips the scene in level 398, the last one that couldn't be skipped.
+- Dual stick: pressing aim after turning the camera now starts the aim where you were looking, up and down included, instead of snapping back to the way the character faces (#14).
 
 ## v1.2.1 (2026-10-22)
 
