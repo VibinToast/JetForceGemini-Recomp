@@ -15,8 +15,9 @@ are written here by hand and become that version's notes when it is released.
 - The aiming reticle of the Tri-Rocket, Homing Missiles, mines, grenades and the other weapons whose reticle the game draws itself no longer shakes while you aim and turn with Frame Interpolation above the game's frame rate.
 - With Frame Interpolation, those reticles use the exact in-between point each frame was drawn at, so they stay in step when an in-between frame is dropped (issue #8).
 - At Game Frame Rate 30 with Frame Interpolation on, those reticles no longer flicker between two positions when you swing the aim quickly.
+- The aiming reticle no longer shakes up and down while you aim and turn with Frame Interpolation on (most noticeable with the mouse).
 - With the game's own Widescreen screen option on, mouse and keyboard controls work again and START opens the pause menu instead of fast-forwarding (#10).
-- In the Bindings tab, Ctrl, Alt and the Windows key show their key symbols instead of a number (such as 224 for Left Ctrl) (#10).
+- In the Bindings tab, Ctrl, Alt and the Windows key show their key symbols instead of a number (such as 224 for Left Ctrl), and keys shown by name (such as Keypad 1) fit their box (#10).
 - START now skips the scene in level 398, the last one that couldn't be skipped.
 
 ## v1.2.1 (2026-10-22)
