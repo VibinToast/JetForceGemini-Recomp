@@ -221,11 +221,6 @@ void draw_options() {
                 changed |= options_slider("Camera left/right %", &g.camera_speed_h, 10, 400);
                 changed |= options_slider("Camera up/down %", &g.camera_speed_v, 10, 400);
                 changed |= options_slider("Camera distance %", &g.camera_distance, 50, 250);
-                changed |= options_slider("Aim drag margin %", &g.aim_drag_margin, 0, 50);
-                changed |= options_slider("Aim drag return speed %", &g.aim_drag_return, 0, 400);
-                changed |= options_slider("Aim offset left/right", &g.aim_offset_x, -50, 50);
-                changed |= options_slider("Aim offset up/down", &g.aim_offset_y, -50, 50);
-                changed |= options_slider("Aim zoom", &g.aim_offset_z, 0, 300);
                 ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
                 changed |= ImGui::Checkbox("Built-in button layout", &g.dual_layout);
                 options_help("LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. "
@@ -267,6 +262,23 @@ void draw_options() {
 
             options_section("Aiming (any control layout)");
             changed |= ImGui::Checkbox("Over-the-shoulder view while aiming", &g.aim_shoulder);
+            {
+                // The dual-stick aiming view (aim_view): the player's sliders, or with the box above ticked its fixed
+                // shoulder view, shown greyed out (the player's own values stay saved underneath).
+                AimView shown = aim_view();
+                ImGui::BeginDisabled(g.aim_shoulder);
+                int* margin = g.aim_shoulder ? &shown.drag_margin : &g.aim_drag_margin;
+                int* back = g.aim_shoulder ? &shown.drag_return : &g.aim_drag_return;
+                int* x = g.aim_shoulder ? &shown.offset_x : &g.aim_offset_x;
+                int* y = g.aim_shoulder ? &shown.offset_y : &g.aim_offset_y;
+                int* zoom = g.aim_shoulder ? &shown.zoom : &g.aim_offset_z;
+                changed |= options_slider("Aim drag margin %", margin, 0, 50);
+                changed |= options_slider("Aim drag return speed %", back, 0, 400);
+                changed |= options_slider("Aim offset left/right", x, -50, 50);
+                changed |= options_slider("Aim offset up/down", y, -50, 50);
+                changed |= options_slider("Aim zoom", zoom, 0, 300);
+                ImGui::EndDisabled();
+            }
             changed |= ImGui::Checkbox("Keep the reticle centered", &g.aim_centered);
             changed |= ImGui::Checkbox("Jump while aiming", &g.aim_jump);
             options_help("The jump button (C-up; A in the dual-stick layout, Space with mouse and keyboard) jumps while aiming, "

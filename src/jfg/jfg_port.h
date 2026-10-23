@@ -62,6 +62,10 @@ extern bool g_audio_catch_up; // a music player's event queue is nearly full: le
 extern int g_skip_real_frames;
 
 // --- jfg_controls.cpp --------------------------------------------------------------------------------------------
+// 1 brings back the former dual-stick over-the-shoulder view (a fixed glide to the shoulder); Over-the-Shoulder Aiming is
+// now a preset of the aiming view's sliders (aim_view in jfg_options.h).
+#define JFG_OLD_SHOULDER_GLIDE 0
+
 struct CameraControl {
     bool active = false;        // the right stick owns the camera this tick
     bool was_aiming = false;

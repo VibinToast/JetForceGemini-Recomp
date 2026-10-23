@@ -85,11 +85,6 @@ CONTROLS = [
     ("range", "camera_speed_h", "Camera Left/Right", (10, 400, "%"), "Dual stick: how fast the right stick turns the camera sideways."),
     ("range", "camera_speed_v", "Camera Up/Down", (10, 400, "%"), "Dual stick: how fast the right stick moves the camera up and down."),
     ("range", "camera_distance", "Camera Distance", (50, 250, "%"), "Dual stick: how far back the camera is from the character, as a share of the game's own distance. Lower is closer."),
-    ("range", "aim_drag_margin", "Aim Drag Margin", (0, 50, "%"), "Dual stick, aiming with Over-the-Shoulder off: how far the character may step aside from the middle of the screen before the camera follows, as a share of half the screen's width. 0 keeps the camera on the character."),
-    ("range", "aim_drag_return", "Aim Drag Return Speed", (0, 400, "%"), "Dual stick, aiming with Over-the-Shoulder off: how fast the camera keeps coming back onto the character, moving or not. 100% takes about a third of a second; 0 leaves it where it is."),
-    ("range", "aim_offset_x", "Aim Offset Left/Right", (-50, 50, ""), "Dual stick, aiming with Over-the-Shoulder off: the point the camera turns round moves this far to the right of the character (negative: left) while aiming, so the view can look past a shoulder."),
-    ("range", "aim_offset_y", "Aim Offset Up/Down", (-50, 50, ""), "Dual stick, aiming with Over-the-Shoulder off: the point the camera turns round moves this far up from the middle of the character (negative: down) while aiming."),
-    ("range", "aim_offset_z", "Aim Zoom", (0, 300, ""), "Dual stick, aiming with Over-the-Shoulder off: the camera moves this much closer in while aiming."),
     ("bool", "camera_collision", "Camera Collision", None, "Dual stick: the camera stays inside the level (the game's own wall check) instead of going through walls."),
     ("group", None, "Mouse & Keyboard", None, None),
     ("bool", "mouse_keyboard", "Mouse and Keyboard Controls", None,
@@ -98,7 +93,12 @@ CONTROLS = [
     ("range", "mouse_aim_speed", "Mouse Aim Speed", (10, 400, "%"), "How fast the mouse aims."),
     ("bool", "invert_mouse_y", "Invert Mouse Up/Down", None, "Mouse forward looks down."),
     ("group", None, "Aiming (any control layout)", None, None),
-    ("bool", "aim_shoulder", "Over-the-Shoulder Aiming", None, "While aiming, the view is from over the character's right shoulder."),
+    ("bool", "aim_shoulder", "Over-the-Shoulder Aiming", None, "While aiming, the view is from over the character's right shoulder. With the dual stick this sets the aiming view's sliders below to a fixed shoulder view (greyed out); off, they are yours to set."),
+    ("range", "aim_drag_margin", "Aim Drag Margin", (0, 50, "%"), "Dual stick, aiming: how far the character may step aside from the middle of the screen before the camera follows, as a share of half the screen's width. 0 keeps the camera on the character. Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_drag_return", "Aim Drag Return Speed", (0, 400, "%"), "Dual stick, aiming: how fast the camera keeps coming back onto the character, moving or not. 100% takes about a third of a second; 0 leaves it where it is. Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_offset_x", "Aim Offset Left/Right", (-50, 50, ""), "Dual stick, aiming: the point the camera turns round moves this far to the right of the character (negative: left), so the view can look past a shoulder. Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_offset_y", "Aim Offset Up/Down", (-50, 50, ""), "Dual stick, aiming: the point the camera turns round moves this far up from the middle of the character (negative: down). Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_offset_z", "Aim Zoom", (0, 300, ""), "Dual stick, aiming: the camera moves this much closer in. Fixed while Over-the-Shoulder Aiming is on."),
     ("bool", "aim_centered", "Keep the Reticle Centered", None,
      "While aiming, the view turns as soon as the stick moves and the reticle stays in the middle (instead of the reticle first travelling to the edge of a box and drifting back)."),
     ("bool", "aim_jump", "Jump While Aiming", None,
@@ -179,6 +179,10 @@ TEXTURES = [
     ("bool", "dump_by_level", "One Folder per Level", None, "Dumps into texture_dump\\&lt;level number&gt; &lt;level name&gt; instead."),
 ]
 
+# Options shown greyed out and locked while another (a bool) is on: the aiming view's sliders follow Over-the-Shoulder
+# Aiming's fixed view then (jfg_options.h, aim_view; jfg_settings_api.cpp shows its values and ignores changes).
+LOCKED_BY = {k: "aim_shoulder" for k in ("aim_drag_margin", "aim_drag_return", "aim_offset_x", "aim_offset_y", "aim_offset_z")}
+
 def row_ids(kind, key, extra):
     """The focusable ids of one option row, left to right."""
     if kind == "bool": return [f"jfg_{key}_on", f"jfg_{key}_off"]
@@ -205,7 +209,9 @@ def option_markup(items, first_nav_up):
             continue
         ev = f'data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index({idx})"'
         ids = rows[idx]
-        out.append(f'                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index({idx})">')
+        lock = LOCKED_BY.get(key)
+        locked_style = (' data-style-opacity="' + lock + " == 1 ? '0.4' : '1'" + '"') if lock else ''
+        out.append(f'                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index({idx})"{locked_style}>')
         out.append(f'                        <label class="config-option__title">{t}</label>')
         if kind == "bool":
             out.append('                        <div class="config-option__list">')
@@ -225,7 +231,8 @@ def option_markup(items, first_nav_up):
             lo, hi, suffix = extra
             out.append('                        <div class="config-option__range-wrapper config-option__list">')
             out.append(f'                            <label class="config-option__range-label">{{{{{key}}}}}{suffix}</label>')
-            out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}" data-value="{key}"/>')
+            locked_attr = f' data-attrif-disabled="{lock} == 1"' if lock else ''
+            out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}" data-value="{key}"{locked_attr}/>')
             out.append('                        </div>')
         out.append('                    </div>')
         # The focused option's description: its name as a heading, then the text (styled by .jfg-desc in config_menu.rml
