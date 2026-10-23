@@ -117,7 +117,18 @@ static void jfg_fill_pack_entry(JfgPackEntry& e) {
 }
 
 // Rebuilds the lists and marks every port value as changed (settings can also change from the F9 menu and profiles).
+static bool jfg_config_menu_created = false; // set once the menu's context exists (load_document below)
+
 void jfg_config_menu_refresh() {
+    // The Quit tab (Return to Launcher, Quit Game) only while the game runs: from the launcher there is nothing to go back to.
+    // (Not before the menu exists: the refresh also runs when the launcher fills its pages.)
+    if (jfg_config_menu_created) {
+        Rml::ElementDocument* doc = recompui::get_config_context_id().get_document();
+        if (Rml::Element* quit_tab = doc != nullptr ? doc->GetElementById("tab_jfg_quit") : nullptr) {
+            if (ultramodern::is_game_started()) quit_tab->RemoveProperty(Rml::PropertyId::Display);
+            else quit_tab->SetProperty(Rml::PropertyId::Display, Rml::Style::Display::None);
+        }
+    }
     jfg_profile_entries.clear();
     const std::string active = jfg::settings::active_profile();
     for (const std::string& n : jfg::settings::profiles()) jfg_profile_entries.push_back({ n, n == active });
@@ -423,7 +434,7 @@ void close_config_menu() {
     close_config_menu_impl();
 }
 
-void dino::config::open_quit_game_prompt() {
+void dino::config::open_quit_game_prompt(const std::string& return_focus_id) {
     recompui::open_choice_prompt(
         "Are you sure you want to quit?",
         "Any progress since your last save will be lost.",
@@ -436,7 +447,7 @@ void dino::config::open_quit_game_prompt() {
         recompui::ButtonVariant::Error,
         recompui::ButtonVariant::Tertiary,
         true,
-        "config__quit-game-button"
+        return_focus_id
     );
 }
 
@@ -898,6 +909,7 @@ public:
     }
     void load_document() override {
         config_context = recompui::create_context(dino::runtime::get_asset_path("config_menu.rml"));
+        jfg_config_menu_created = true; // JFG PORT
         recompui::update_mod_list(false);
         recompui::get_config_tabset()->AddEventListener(Rml::EventId::Tabchange, &config_tabset_listener);
         recompui::get_config_tabset()->AddEventListener(Rml::EventId::Focus, &config_focus_scroll_listener, true); // JFG PORT: capture phase
@@ -937,7 +949,9 @@ public:
 
         recompui::register_event(listener, "open_quit_game_prompt",
             [](const std::string& param, Rml::Event& event) {
-                dino::config::open_quit_game_prompt();
+                // JFG PORT: "open_quit_game_prompt:<id>" (the Quit tab's button) gives the focus back to <id> on Cancel.
+                if (param.size() > 1) dino::config::open_quit_game_prompt(param.substr(1));
+                else dino::config::open_quit_game_prompt();
             });
         // JFG PORT: the tools button: this menu closes and F10's tools bar opens (src/jfg/jfg_ui_tools.cpp), the controller
         // on its first menu; with the mouse and keys a bar already up is hidden instead. Not while closing waits on the
@@ -971,7 +985,7 @@ public:
                     recompui::ButtonVariant::Primary,
                     recompui::ButtonVariant::Tertiary,
                     true,
-                    "config__launcher-button"
+                    param.size() > 1 ? param.substr(1) : std::string("jfg_quit_launcher") // ":<id>": the button to focus again
                 );
             });
 
