@@ -468,6 +468,10 @@ static void draw_lighting() {
     flag = s.debug_normal.load();
     if (ImGui::Checkbox("Show surface directions", &flag)) s.debug_normal = flag;
     options_help("Colours every 3D surface by which way it faces: red east-west, green up, blue north-south.");
+    flag = s.debug_shadow.load();
+    if (ImGui::Checkbox("Show shadows from the lights", &flag)) s.debug_shadow = flag;
+    options_help("Paints red where characters and objects block a torch, lamp or flash, at full darkness, whatever the "
+                 "shadow slider says.");
     flag = s.log.load();
     if (ImGui::Checkbox("Log lights to jfg_lighting.log", &flag)) s.log = flag;
     ImGui::PopStyleVar();

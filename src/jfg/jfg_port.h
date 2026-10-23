@@ -178,6 +178,7 @@ struct LightingSettings {
     std::atomic<bool> no_game_shadows{ false }; // drop the game's blob shadows under characters (still casters here)
     std::atomic<bool> debug_world{ false };  // show the world position as colour
     std::atomic<bool> debug_normal{ false }; // show the surface direction as colour
+    std::atomic<bool> debug_shadow{ false }; // paint the casters' shadows red
     std::atomic<bool> log{ false };          // jfg_lighting.log
     std::atomic<int> sent_level_lights{ 0 }, sent_object_lights{ 0 }; // what the last frame sent
 };

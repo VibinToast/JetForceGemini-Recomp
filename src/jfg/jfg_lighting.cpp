@@ -41,6 +41,7 @@ void rt64_jfg_frame_objects(uint32_t dlStart, const uint32_t* ranges, uint32_t r
 extern std::atomic<int> rt64_jfg_pixel_lights; // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 extern std::atomic<int> rt64_jfg_debug_world;  // ...
 extern std::atomic<int> rt64_jfg_debug_normal; // ...
+extern std::atomic<int> rt64_jfg_debug_shadow; // ...
 extern std::atomic<float> rt64_jfg_facing;     // ...
 extern std::atomic<float> rt64_jfg_shadows;    // ...
 extern std::atomic<float> rt64_jfg_level_ambient; // ...
@@ -94,6 +95,7 @@ LightingSettings& lighting_settings() {
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS")) settings.mode = std::clamp(std::atoi(env), 0, 2);
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS_FACING")) settings.facing = std::clamp(std::atoi(env), 0, 100);
         if (const char* env = std::getenv("JFG_PIXEL_SHADOWS")) settings.shadows = std::clamp(std::atoi(env), 0, 100);
+        if (const char* env = std::getenv("JFG_CASTER_SIZE")) settings.caster_size = std::clamp(std::atoi(env), 25, 300);
         if (const char* env = std::getenv("JFG_LEVEL_AMBIENT")) settings.level_ambient = std::clamp(std::atoi(env), 0, 199);
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS_STRENGTH")) {
             settings.object_strength = std::clamp((int)std::lround(std::atof(env) * 100.0), 0, 200);
@@ -105,6 +107,7 @@ LightingSettings& lighting_settings() {
         if (const char* env = std::getenv("JFG_CHARACTER_LIGHTS")) settings.character_lights = std::clamp(std::atoi(env), 0, 100);
         settings.debug_world = std::getenv("RT64_JFG_DEBUG_WORLD") != nullptr;
         settings.debug_normal = std::getenv("RT64_JFG_DEBUG_NORMAL") != nullptr;
+        settings.debug_shadow = std::getenv("RT64_JFG_DEBUG_SHADOW") != nullptr;
         settings.log = std::getenv("JFG_DEBUG_LIGHTS") != nullptr;
     });
     return settings;
@@ -310,6 +313,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     rt64_jfg_pixel_lights.store(mode > 0 ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_debug_world.store(s.debug_world.load() ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_debug_normal.store(s.debug_normal.load() ? 1 : 0, std::memory_order_relaxed);
+    rt64_jfg_debug_shadow.store(s.debug_shadow.load() ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_facing.store(std::clamp(s.facing.load(), 0, 100) / 100.0f, std::memory_order_relaxed);
     rt64_jfg_shadows.store(std::clamp(s.shadows.load(), 0, 100) / 100.0f, std::memory_order_relaxed);
     rt64_jfg_level_ambient.store(std::clamp(s.level_ambient.load(), 0, 199) / 100.0f, std::memory_order_relaxed);
