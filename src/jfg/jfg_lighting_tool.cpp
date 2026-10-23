@@ -17,6 +17,7 @@
 // Changes apply at once and are saved a moment later. Game thread only: the tool is drawn from jfg_debug_frame's UI
 // frame, its tick runs every game tick, and the lighting reads the lights at rcpFast3d, all on the game thread.
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cctype>
 #include <cmath>
@@ -36,6 +37,7 @@ extern std::atomic<int> rt64_jfg_material_files;  // lib/rt64 src/render/rt64_fr
 extern std::atomic<int> rt64_jfg_material_loaded;  // ...
 void rt64_jfg_glow_ranges(const uint32_t* ranges, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
 uint32_t rt64_jfg_glow_hashes(uint32_t start, uint32_t end, uint64_t* hashes, uint32_t max_hashes); // ...
+bool rt64_jfg_emission_colour(uint64_t hash, float* rgb); // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 
 namespace dino::debug_ui::backend {
 bool lighting_tool_open();           // F12
@@ -145,6 +147,15 @@ std::vector<Setting>& settings_table() {
         { "glow", "Glow and emission (%)", &s.glow, nullptr, 0, 200, Group::Surfaces, false,
           "How much the marked textures (and specular maps' blue) keep their own colours however dark the level is, and "
           "how bright emission maps (materials/<texture hash>_e.png) shine. 0 is off." },
+        { "emission_lights", "Emission maps light the level", nullptr, &s.emission_lights, 0, 1, Group::Surfaces, false,
+          "Places lights where the level's textures with emission maps are, in their colour, so the glow falls on the "
+          "walls, floor and characters around them. Nearby spots of one texture share a light." },
+        { "emission_light", "Light from emission (%)", &s.emission_light, nullptr, 0, 400, Group::Surfaces, false,
+          "How bright those lights are." },
+        { "emission_reach", "Emission light reach (units)", &s.emission_reach, nullptr, 50, 1500, Group::Surfaces, false,
+          "How far they reach from a 64 x 64 patch; larger glowing areas reach further (up to twice), smaller less." },
+        { "emission_shadows", "Emission lights cast shadows", nullptr, &s.emission_shadows, 0, 1, Group::Surfaces, false,
+          "They take shadow maps like other lights (only the nearest lights get one)." },
         { "detail_characters", "Detail on characters (%)", &s.detail_characters, nullptr, 0, 200, Group::Surfaces, false,
           "How much of the surface detail characters and objects get. Their textures are mostly painted features (faces, "
           "clothes), which don't make good bumps; carved objects do." },
@@ -212,6 +223,18 @@ uint32_t g_glow_tab_tick = 0;  // the Glow tab was showing
 bool g_glow_preview = true;    // the texture under the crosshair pulses
 int g_glow_pick = 0;           // texture number typed in
 bool g_open_glow_tab = false;  // test switch: show the Glow tab once
+// Lights from emission maps: the level textures found to have one (their average colour), patches of them grouped by
+// texture in cells, and the lights made from those.
+struct EmissionPatch {
+    int texture;
+    float x = 0, y = 0, z = 0; // area-weighted centre (sums while grouping)
+    float area = 0;
+};
+std::vector<int> g_emission_checked;      // per level texture: 0 not yet, 1 has an emission map (patches made)
+std::vector<std::array<float, 3>> g_emission_colour; // ... its map's average colour
+std::vector<EmissionPatch> g_emission_patches;
+std::vector<PlacedLight> g_emission_lights;
+uint32_t g_emission_scan_tick = 0;
 
 bool use_files() { return std::getenv("JFG_LIGHTING_NO_FILES") == nullptr; }
 // Test switch: JFG_LIGHTING_TOOL=open opens the tool at start, =place with "place with fire" on (JFG_DEBUG_INPUT can
@@ -351,6 +374,10 @@ void load_level(int level) {
     g_placed.clear();
     g_overrides.clear();
     g_glow.clear();
+    g_emission_checked.clear();
+    g_emission_colour.clear();
+    g_emission_patches.clear();
+    g_emission_lights.clear();
     g_aimed_texture = -1;
     g_selected = -1;
     g_selected_game = 0;
@@ -470,7 +497,7 @@ void draw_group(Group group) {
     for (const Setting& t : settings_table()) {
         if (t.group != group) continue;
         if (group == Group::Sun && (std::strcmp(t.key, "sun_g") == 0 || std::strcmp(t.key, "sun_b") == 0)) continue;
-        if (std::strcmp(t.key, "glow") == 0) continue; // the Glow tab's
+        if (std::strcmp(t.key, "glow") == 0 || std::strncmp(t.key, "emission_", 9) == 0) continue; // the Glow tab's
         if (group == Group::Sun && std::strcmp(t.key, "sun_r") == 0) {
             LightingSettings& s = lighting_settings();
             float c[3] = { s.sun_r.load() / 255.0f, s.sun_g.load() / 255.0f, s.sun_b.load() / 255.0f };
@@ -786,6 +813,16 @@ void send_glow() {
         ranges.push_back((uint32_t)std::clamp(strength * 255 / 100, 1, 255));
     };
     for (const GlowMark& m : g_glow) add(m.texture, m.strength);
+    // Every level texture not yet found with an emission map, so RT64 notes their hashes (strength 0: no glow).
+    if (lighting_settings().emission_lights.load() && lighting_active()) {
+        for (int t = 0; t < level_texture_count() && t < 1024; t++) {
+            uint32_t start, end;
+            if ((t < (int)g_emission_checked.size() && g_emission_checked[t]) || !level_texture_range(t, &start, &end)) continue;
+            ranges.push_back(start);
+            ranges.push_back(end);
+            ranges.push_back(0);
+        }
+    }
     const bool tab = dino::debug_ui::backend::lighting_tool_open() && g_tick_count - g_glow_tab_tick <= 3;
     if (tab && g_glow_preview && g_aimed_texture >= 0 && !glow_mark(g_aimed_texture)) {
         add(g_aimed_texture, 40 + (int)(60.0f * (0.5f + 0.5f * std::sin(g_tick_count * 0.2f))));
@@ -796,6 +833,129 @@ void send_glow() {
 }
 
 void draw_crosshair(bool on_something);
+
+// A level texture's emission map colour (the average over the hashes RT64 has seen for it), false when none has one.
+bool texture_emission(int texture, float* rgb) {
+    uint32_t start, end;
+    uint64_t hashes[64];
+    if (!level_texture_range(texture, &start, &end)) return false;
+    const uint32_t count = std::min(rt64_jfg_glow_hashes(start, end, hashes, 64), 64u);
+    float sum[3] = { 0, 0, 0 };
+    int found = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        float c[3];
+        if (!rt64_jfg_emission_colour(hashes[i], c)) continue;
+        for (int k = 0; k < 3; k++) sum[k] += c[k];
+        found++;
+    }
+    if (found == 0) return false;
+    for (int k = 0; k < 3; k++) rgb[k] = sum[k] / found;
+    return true;
+}
+
+// The patches of a texture: its level triangles grouped in 128-unit cells, each with its area-weighted centre.
+void add_emission_patches(int texture) {
+    constexpr float CELL = 128.0f;
+    const uint32_t track = rd32(ADDR_track);
+    if (!valid_ptr(track)) return;
+    const uint32_t segments = rd32(track + TRACK_SEGMENTS);
+    const int32_t segment_count = std::min((int32_t)(int16_t)rd16(track + TRACK_SEGMENT_COUNT), (int32_t)1024);
+    if (!valid_ptr(segments)) return;
+    std::vector<std::pair<int64_t, EmissionPatch>> cells;
+    for (int32_t i = 0; i < segment_count; i++) {
+        const uint32_t seg = segments + (uint32_t)i * SEGMENT_SIZE;
+        const uint32_t verts = rd32(seg + SEGMENT_VERTICES), tris = rd32(seg + SEGMENT_TRIANGLES), batches = rd32(seg + SEGMENT_BATCHES);
+        const int32_t vertex_count = (int16_t)rd16(seg + SEGMENT_VERTEX_COUNT);
+        const int32_t batch_count = (int16_t)rd16(seg + SEGMENT_BATCH_COUNT);
+        if (!valid_ptr(verts) || !valid_ptr(tris) || !valid_ptr(batches)) continue;
+        for (int32_t b = 0; b < batch_count && b < 4096; b++) {
+            const uint32_t batch = batches + (uint32_t)b * BATCH_SIZE;
+            if (rd8(batch) != texture) continue;
+            const int32_t first_vertex = (int16_t)rd16(batch + BATCH_FIRST_VERTEX);
+            const int32_t t0 = (int16_t)rd16(batch + BATCH_FIRST_TRIANGLE);
+            const int32_t t1 = (int16_t)rd16(batch + BATCH_SIZE + BATCH_FIRST_TRIANGLE);
+            for (int32_t t = t0; t < t1 && t - t0 < 4096; t++) {
+                const uint32_t tri = tris + (uint32_t)t * TRIANGLE_SIZE;
+                float v[3][3];
+                bool ok = true;
+                for (uint32_t k = 0; k < 3 && ok; k++) {
+                    const int32_t index = first_vertex + rd8(tri + 1 + k);
+                    if (index < 0 || index >= vertex_count) ok = false;
+                    else for (uint32_t c = 0; c < 3; c++) v[k][c] = (float)(int16_t)rd16(verts + (uint32_t)index * VERTEX_SIZE + c * 2);
+                }
+                if (!ok) continue;
+                const float e1[3] = { v[1][0] - v[0][0], v[1][1] - v[0][1], v[1][2] - v[0][2] };
+                const float e2[3] = { v[2][0] - v[0][0], v[2][1] - v[0][1], v[2][2] - v[0][2] };
+                const float n[3] = { e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] };
+                const float area = 0.5f * std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+                if (area < 1.0f) continue;
+                const float c[3] = { (v[0][0] + v[1][0] + v[2][0]) / 3.0f, (v[0][1] + v[1][1] + v[2][1]) / 3.0f, (v[0][2] + v[1][2] + v[2][2]) / 3.0f };
+                const int64_t key = ((int64_t)std::floor(c[0] / CELL) & 0xFFFFF) | (((int64_t)std::floor(c[1] / CELL) & 0xFFFFF) << 20) |
+                                    (((int64_t)std::floor(c[2] / CELL) & 0xFFFFF) << 40);
+                auto it = std::find_if(cells.begin(), cells.end(), [key](const auto& e) { return e.first == key; });
+                if (it == cells.end()) {
+                    cells.push_back({ key, EmissionPatch{ texture } });
+                    it = cells.end() - 1;
+                }
+                it->second.x += c[0] * area;
+                it->second.y += c[1] * area;
+                it->second.z += c[2] * area;
+                it->second.area += area;
+            }
+        }
+    }
+    for (auto& e : cells) {
+        if (g_emission_patches.size() >= 512) break;
+        EmissionPatch p = e.second;
+        p.x /= p.area;
+        p.y /= p.area;
+        p.z /= p.area;
+        g_emission_patches.push_back(p);
+    }
+}
+
+// Looks for the level textures' emission maps now and then (RT64 knows a texture's hash once it has been drawn, and
+// its map's colour once that is loaded), and makes the lights from the patches with the settings.
+void update_emission_lights() {
+    LightingSettings& s = lighting_settings();
+    const int count = std::min(level_texture_count(), 1024);
+    if ((int)g_emission_checked.size() != count) {
+        g_emission_checked.assign((size_t)count, 0);
+        g_emission_colour.assign((size_t)count, { 0, 0, 0 });
+        g_emission_patches.clear();
+    }
+    if (s.emission_lights.load() && lighting_active() && g_tick_count - g_emission_scan_tick >= 30) {
+        g_emission_scan_tick = g_tick_count;
+        for (int t = 0; t < count; t++) {
+            float rgb[3];
+            if (g_emission_checked[t] || !texture_emission(t, rgb)) continue;
+            g_emission_checked[t] = 1;
+            g_emission_colour[t] = { rgb[0], rgb[1], rgb[2] };
+            add_emission_patches(t);
+        }
+    }
+    g_emission_lights.clear();
+    if (!s.emission_lights.load()) return;
+    for (const EmissionPatch& p : g_emission_patches) {
+        const std::array<float, 3>& c = g_emission_colour[(size_t)p.texture];
+        const float peak = std::max({ c[0], c[1], c[2] });
+        if (peak < 0.002f) continue;
+        // The hue of the map at full, as bright as how much of it glows (a map a quarter lit gives a full light).
+        const float lum = std::min(1.0f, (0.299f * c[0] + 0.587f * c[1] + 0.114f * c[2]) * 4.0f);
+        PlacedLight l;
+        l.x = p.x;
+        l.y = p.y;
+        l.z = p.z;
+        l.r = (int)std::lround(c[0] / peak * 255.0f);
+        l.g = (int)std::lround(c[1] / peak * 255.0f);
+        l.b = (int)std::lround(c[2] / peak * 255.0f);
+        l.intensity = (int)std::lround(lum * s.emission_light.load());
+        l.radius = (int)std::lround(s.emission_reach.load() * std::clamp(std::sqrt(p.area) / 64.0f, 0.5f, 2.0f));
+        l.inner = 10;
+        l.shadows = s.emission_shadows.load();
+        g_emission_lights.push_back(l);
+    }
+}
 
 // A level texture's hash as texture dumps and material maps name it (<16 hex digits>, the first of an animated one's
 // frames RT64 has seen), "" until it has been drawn while the Glow tab or a mark asks RT64 to note it.
@@ -840,6 +1000,17 @@ void draw_glow() {
                        "pulses to show which) and mark it. Every place the level uses that texture glows. Kept for this "
                        "level.");
     if (!lighting_active()) ImGui::TextColored(ImVec4(1, 0.7f, 0.3f, 1), "Modern lighting is off: nothing glows.");
+    if (ImGui::CollapsingHeader("Emission maps", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextWrapped("materials/<texture hash>_e.png next to the game (or in a texture pack): the light the texture "
+                           "gives off, black where none. Copy the name from a texture below.");
+        for (const Setting& t : settings_table()) {
+            if (std::strncmp(t.key, "emission_", 9) == 0) draw_setting(t);
+        }
+        int textures = 0;
+        for (int c : g_emission_checked) textures += c;
+        ImGui::TextDisabled("%d textures here have emission maps (found once drawn): %zu lights from them", textures, g_emission_lights.size());
+    }
+    ImGui::SeparatorText("Glow marks");
     ImGui::Checkbox("Pulse the texture under the crosshair", &g_glow_preview);
     draw_crosshair(g_aimed_texture >= 0);
     if (g_aimed_texture >= 0) {
@@ -1048,6 +1219,7 @@ void draw_presets() {
 
 // --- what the lighting reads --------------------------------------------------------------------------------------
 const std::vector<PlacedLight>& lighting_placed_lights() { return g_placed; }
+const std::vector<PlacedLight>& lighting_emission_lights() { return g_emission_lights; }
 
 const LightOverride* lighting_override_for(uint32_t light) {
     if (g_overrides.empty()) return nullptr;
@@ -1168,7 +1340,38 @@ void lighting_tool_tick(recomp_context* ctx) {
                       level_texture_count(), aimed_before, texture_hash(aimed_before).c_str());
         jfg_log_line("jfg_lighting.log", line);
     }
+    update_emission_lights();
     send_glow();
+
+    // JFG_LIGHTING_LOG_AIM also lists the level's textures once, ten seconds into a level: hash, area and centre, for
+    // picking one to give an emission map in scripted runs.
+    static int listed_level = -32768;
+    static uint32_t level_tick = 0;
+    if (g_level != listed_level) {
+        listed_level = g_level;
+        level_tick = g_tick_count;
+    }
+    if (log_aim && level_tick != 0 && g_tick_count - level_tick == 300) {
+        const size_t before = g_emission_patches.size();
+        for (int t = 0; t < std::min(level_texture_count(), 1024); t++) {
+            add_emission_patches(t);
+            float area = 0, x = 0, y = 0, z = 0;
+            const size_t cells = g_emission_patches.size() - before;
+            for (size_t i = before; i < g_emission_patches.size(); i++) {
+                const EmissionPatch& p = g_emission_patches[i];
+                area += p.area;
+                x += p.x * p.area;
+                y += p.y * p.area;
+                z += p.z * p.area;
+            }
+            g_emission_patches.resize(before);
+            if (area <= 0) continue;
+            char line[200];
+            std::snprintf(line, sizeof(line), "texture %d: hash %s, %zu cells, area %.0f, centre %.0f, %.0f, %.0f", t,
+                          texture_hash(t).c_str(), cells, area, x / area, y / area, z / area);
+            jfg_log_line("jfg_lighting.log", line);
+        }
+    }
 
     // "Place with fire": each shot places the light being made.
     if (dino::debug_ui::backend::lighting_tool_open() && g_placing) {

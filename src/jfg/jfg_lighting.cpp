@@ -541,6 +541,16 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
             p.shadows);
         placed_sent++;
     }
+    // Lights where the level's emission-mapped textures are (the lighting tool's Glow tab).
+    const std::vector<PlacedLight>& emitted = lighting_emission_lights();
+    for (size_t i = 0; mode >= 1 && i < emitted.size(); i++) {
+        const PlacedLight& p = emitted[i];
+        const float scale = p.intensity / 100.0f;
+        const float colour[3] = { p.r / 255.0f * scale, p.g / 255.0f * scale, p.b / 255.0f * scale };
+        add(0xE0000000u + (uint32_t)i, p.x, p.y, p.z, (float)p.radius, p.radius * std::clamp(p.inner, 0, 95) / 100.0f, colour, false,
+            p.shadows);
+        placed_sent++;
+    }
     s.sent_placed_lights = placed_sent;
 
     const size_t max_lights = (size_t)std::clamp(s.max_lights.load(), 0, (int)MAX_FRAME_LIGHTS);

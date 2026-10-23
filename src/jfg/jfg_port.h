@@ -197,6 +197,10 @@ struct LightingSettings {
     std::atomic<int> sharpness_characters{ 24 }; // how tight their highlights are
     std::atomic<int> material_maps{ 100 };   // % of the authored normal and specular maps (materials/<hash>_n.png, _s.png)
     std::atomic<int> glow{ 100 };            // % glowing textures (the tool's Glow tab, a specular map's blue) and emission maps
+    std::atomic<bool> emission_lights{ true }; // lights placed where the level's emission-mapped textures are
+    std::atomic<int> emission_light{ 100 };  // % their brightness
+    std::atomic<int> emission_reach{ 300 };  // their reach for a 64 x 64 unit patch (world units)
+    std::atomic<bool> emission_shadows{ false }; // they cast shadows
     std::atomic<bool> debug_world{ false };  // show the world position as colour
     std::atomic<bool> debug_normal{ false }; // show the surface direction as colour
     std::atomic<bool> debug_shadow{ false }; // paint the lights' shadows red
@@ -231,6 +235,7 @@ struct LightOverride {
     int nth = 0;          // which of the game's lights at this spot (several can stand on one), in the game's order
 };
 const std::vector<PlacedLight>& lighting_placed_lights();
+const std::vector<PlacedLight>& lighting_emission_lights(); // where the level's emission maps are (the Glow tab)
 const LightOverride* lighting_override_for(uint32_t light); // a game light's changes (its object light); nullptr: its own look
 float lighting_flicker(uint32_t seed, int amount, int speed);        // 1 = full, down to 1 - amount
 int lighting_pulse_light();                    // the placed light the tool pulses to show it (-1 = none)
