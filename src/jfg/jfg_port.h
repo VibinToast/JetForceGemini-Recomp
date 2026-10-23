@@ -196,7 +196,7 @@ struct LightingSettings {
     std::atomic<int> shine_characters{ 20 };   // % shine on characters and objects (new character lighting)
     std::atomic<int> sharpness_characters{ 24 }; // how tight their highlights are
     std::atomic<int> material_maps{ 100 };   // % of the authored normal and specular maps (materials/<hash>_n.png, _s.png)
-    std::atomic<int> glow{ 100 };            // % how much glowing textures glow (the tool's Glow tab, a specular map's blue)
+    std::atomic<int> glow{ 100 };            // % glowing textures (the tool's Glow tab, a specular map's blue) and emission maps
     std::atomic<bool> debug_world{ false };  // show the world position as colour
     std::atomic<bool> debug_normal{ false }; // show the surface direction as colour
     std::atomic<bool> debug_shadow{ false }; // paint the lights' shadows red

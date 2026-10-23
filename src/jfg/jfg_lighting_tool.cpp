@@ -35,6 +35,7 @@
 extern std::atomic<int> rt64_jfg_material_files;  // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 extern std::atomic<int> rt64_jfg_material_loaded;  // ...
 void rt64_jfg_glow_ranges(const uint32_t* ranges, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
+uint32_t rt64_jfg_glow_hashes(uint32_t start, uint32_t end, uint64_t* hashes, uint32_t max_hashes); // ...
 
 namespace dino::debug_ui::backend {
 bool lighting_tool_open();           // F12
@@ -141,9 +142,9 @@ std::vector<Setting>& settings_table() {
           "Authored normal and specular maps: materials/<texture hash>_n.png (normal, green up) and _s.png (red: shine, "
           "green: sharpness) next to the game, named like texture dumps. Where a texture has them they replace the "
           "detail and shine worked out from it. Read at start." },
-        { "glow", "Glowing textures (%)", &s.glow, nullptr, 0, 100, Group::Surfaces, false,
-          "How much the marked textures (and specular maps' blue) keep their own colours however dark the level is. 0 "
-          "is off." },
+        { "glow", "Glow and emission (%)", &s.glow, nullptr, 0, 200, Group::Surfaces, false,
+          "How much the marked textures (and specular maps' blue) keep their own colours however dark the level is, and "
+          "how bright emission maps (materials/<texture hash>_e.png) shine. 0 is off." },
         { "detail_characters", "Detail on characters (%)", &s.detail_characters, nullptr, 0, 200, Group::Surfaces, false,
           "How much of the surface detail characters and objects get. Their textures are mostly painted features (faces, "
           "clothes), which don't make good bumps; carved objects do." },
@@ -796,6 +797,39 @@ void send_glow() {
 
 void draw_crosshair(bool on_something);
 
+// A level texture's hash as texture dumps and material maps name it (<16 hex digits>, the first of an animated one's
+// frames RT64 has seen), "" until it has been drawn while the Glow tab or a mark asks RT64 to note it.
+std::string texture_hash(int texture, int* frames = nullptr) {
+    uint32_t start, end;
+    uint64_t hashes[64];
+    if (!level_texture_range(texture, &start, &end)) return "";
+    const uint32_t count = rt64_jfg_glow_hashes(start, end, hashes, 64);
+    if (frames) *frames = (int)count;
+    if (count == 0) return "";
+    std::sort(hashes, hashes + std::min(count, 64u));
+    char text[24];
+    std::snprintf(text, sizeof(text), "%016llX", (unsigned long long)hashes[0]);
+    return text;
+}
+
+// The texture's hash with a button that copies its emission map's name.
+void draw_texture_hash(int texture) {
+    int frames = 0;
+    const std::string hash = texture_hash(texture, &frames);
+    if (hash.empty()) {
+        ImGui::TextDisabled("hash: not seen yet");
+        return;
+    }
+    ImGui::TextDisabled("hash %s%s", hash.c_str(), frames > 1 ? " (+ other frames)" : "");
+    ImGui::SameLine();
+    ImGui::PushID(texture);
+    if (ImGui::SmallButton("Copy _e.png name")) {
+        ImGui::SetClipboardText((hash + "_e.png").c_str());
+        say("Copied " + hash + "_e.png: an emission map with that name goes in materials/ next to the game.");
+    }
+    ImGui::PopID();
+}
+
 void draw_glow() {
     g_glow_tab_tick = g_tick_count;
     for (const Setting& t : settings_table()) {
@@ -811,6 +845,7 @@ void draw_glow() {
     if (g_aimed_texture >= 0) {
         const uint32_t header = level_texture(g_aimed_texture);
         ImGui::Text("Crosshair on texture %d (%dx%d)", g_aimed_texture, header ? rd8(header) : 0, header ? rd8(header + 1) : 0);
+        draw_texture_hash(g_aimed_texture);
     }
     else ImGui::TextDisabled("Crosshair on no texture of the level (characters and objects can't be marked yet).");
     ImGui::BeginDisabled(g_aimed_texture < 0 || glow_mark(g_aimed_texture) != nullptr);
@@ -843,6 +878,9 @@ void draw_glow() {
             ImGui::PopID();
             break;
         }
+        ImGui::Indent();
+        draw_texture_hash(m.texture);
+        ImGui::Unindent();
         ImGui::PopID();
     }
 }
@@ -1126,7 +1164,8 @@ void lighting_tool_tick(recomp_context* ctx) {
         uint32_t start = 0, end = 0;
         level_texture_range(g_aimed_texture, &start, &end);
         char line[160];
-        std::snprintf(line, sizeof(line), "aim: level %d texture %d (%08X-%08X) of %d", g_level, g_aimed_texture, start, end, level_texture_count());
+        std::snprintf(line, sizeof(line), "aim: level %d texture %d (%08X-%08X) of %d, hash of texture %d: %s", g_level, g_aimed_texture, start, end,
+                      level_texture_count(), aimed_before, texture_hash(aimed_before).c_str());
         jfg_log_line("jfg_lighting.log", line);
     }
     send_glow();
