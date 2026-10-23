@@ -34,6 +34,7 @@
 namespace jfg {
 void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
 }
+std::vector<std::pair<int, std::vector<uint8_t>>> jfg_locale_replacements(std::string& error); // jfg_locale_import.cpp
 
 namespace {
 
@@ -197,6 +198,18 @@ extern "C" void jfg_register_asset_mods(void) {
 extern "C" void jfg_apply_asset_mods(void) {
     std::vector<Replacement> reps = std::move(g_pending);
     g_pending.clear();
+    // Languages the launcher built from the player's European ROM (jfg_locale_import.cpp): below every mod.
+    std::string locale_error;
+    for (auto& [index, data] : jfg_locale_replacements(locale_error)) {
+        Replacement r;
+        r.order = SIZE_MAX;
+        r.mod_id = "languages (locale folder)";
+        r.file = "locale";
+        r.asset = index;
+        r.data = std::move(data);
+        reps.push_back(std::move(r));
+    }
+    if (!locale_error.empty()) log("assets: " + locale_error);
     if (reps.empty()) return;
     std::stable_sort(reps.begin(), reps.end(), [](const Replacement& a, const Replacement& b) { return a.order < b.order; });
 

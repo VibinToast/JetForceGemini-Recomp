@@ -39,6 +39,8 @@ static constexpr int TOAST_FRAMES = 180, TOAST_FPS = 30;
 void jfg_launcher_commit_settings();  // ui_config.cpp: applies pending graphics changes and saves the settings
 void jfg_config_menu_refresh();       // ui_config.cpp: refreshes the port's tabs (profiles, texture packs)
 void jfg_config_clear_option_focus(); // ui_config.cpp: no option's description shown
+std::string jfg_locale_import_europe(const std::filesystem::path& path); // jfg_locale_import.cpp: "" or what went wrong
+std::string jfg_locale_installed();   // jfg_locale_import.cpp: the languages built so far, or ""
 void jfg_open_url_prompt(const std::string& url, const std::string& return_id); // ui_config.cpp: asks, then opens it
 
 struct LauncherPageInfo { const char* id; const char* title; const char* subtitle; const char* nav_id; };
@@ -596,6 +598,26 @@ public:
         });
         constructor.BindEventCallback("browse_rom", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
             open_rom_select_dialog();
+        });
+        // Languages (Play page): French, German and Spanish built from the player's European ROM.
+        constructor.BindFunc("locale_text", [](Rml::Variant& out) {
+            const std::string installed = jfg_locale_installed();
+            out = Rml::String(installed.empty() ? "Languages: English. Add French, German and Spanish from your own European ROM."
+                                                : "Languages: English, " + installed + ".");
+        });
+        constructor.BindFunc("locale_label", [](Rml::Variant& out) {
+            out = Rml::String(jfg_locale_installed().empty() ? "Add from European ROM..." : "Rebuild from European ROM...");
+        });
+        constructor.BindEventCallback("locale_browse", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            dino::runtime::open_file_dialog([](bool success, const std::filesystem::path& path) {
+                if (!success) return;
+                const std::string error = jfg_locale_import_europe(path);
+                model_handle.DirtyVariable("locale_text");
+                model_handle.DirtyVariable("locale_label");
+                recompui::message_box(error.empty() ? "French, German and Spanish are ready. Choose the language in General (or the "
+                                                      "settings menu in the game)."
+                                                    : error.c_str());
+            });
         });
         // "Skip the launcher" (Play page, once a ROM is loaded): saved to bin\jfg_launcher.txt as skip_launcher.
         constructor.BindFunc("skip_launcher", [](Rml::Variant& out) { out = jfg_launcher_skip(); });
