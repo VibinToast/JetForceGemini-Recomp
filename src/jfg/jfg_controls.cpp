@@ -657,9 +657,12 @@ void jfg_camera_controls(recomp_context* ctx) {
         g_cam.free_aim = aiming && was_active && g_cam.orbit_valid && jfg_dual_stick_active() && !boss_control_active() &&
                          !sniper && !g.aim_from_character;
         if (was_free_aim && !g_cam.free_aim) { g_cam.orbit_easing = true; g_cam.orbit_settle = 60; } // see jfg_camera_override
-        // Over-the-shoulder aiming then glides the free camera to the shoulder spot (and back) in a tenth of a second.
+#if JFG_OLD_SHOULDER_GLIDE
+        // The former dual-stick over-the-shoulder view: the free camera glided to a fixed shoulder spot (and back) in a
+        // tenth of a second. Over-the-Shoulder Aiming is now a preset of the aiming view's sliders (aim_view).
         const float glide_step = tick_frames / 6.0f;
         g_cam.glide = (g_cam.free_aim && g.aim_shoulder) ? std::min(1.0f, g_cam.glide + glide_step) : std::max(0.0f, g_cam.glide - glide_step);
+#endif
     }
     if (aim_state(obj) && !g_cam.free_aim) {
         g_cam.shoulder = g.aim_shoulder;

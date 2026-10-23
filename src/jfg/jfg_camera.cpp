@@ -201,7 +201,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         return;
     }
     // The camera orbits the middle of the character's body, ORBIT_CENTRE above its feet, at ORBIT_DISTANCE (times
-    // "Camera Distance"), and always looks at it, while aiming too (Over-the-Shoulder off). Only the starting tilt comes
+    // "Camera Distance"), and always looks at it, while aiming too. Only the starting tilt comes
     // from the game's camera: its distance moves in and out with aiming, walls and the start of a level, and does not
     // always come back to the same value (161 before an aim, 144 after, in the first level), so taking it made the
     // view, and every aim's zoom, differ from one time to the next with the same settings.
@@ -250,7 +250,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         static const bool log = std::getenv("JFG_DEBUG_FOLLOW_CAM") != nullptr; // tests: the height orbited and the character's
         if (log) std::fprintf(stderr, "[cam] tick %u placed %.1f air %d player y %.1f\n", g_tick_count, py + pivot, (int)air, py);
     }
-    // Where the point orbited is across the ground: on the character, except while aiming with Over-the-Shoulder off,
+    // Where the point orbited is across the ground: on the character, except while aiming (dual stick),
     // when it has drag margins (as a 2D camera's): the character steps sideways across the middle of the screen, and the
     // point only follows once it is "Aim Drag Margin" of the half screen out, holding it there; all the while the point
     // also comes back towards it, moving or not. Turning the view while aiming leads the point the same way, sideways,
@@ -267,11 +267,12 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         float side = g_cam.orbit_dx * rx + g_cam.orbit_dz * rz, up = g_cam.orbit_dy;
         const bool fresh = !g_cam.orbit_drag_valid || std::fabs(px - g_cam.orbit_last_x) + std::fabs(pz - g_cam.orbit_last_z) > 300.0f;
         if (fresh) side = up = 0.0f;
-        if (g_cam.free_aim && g_cam.glide <= 0.0f && !g.aim_shoulder) {
+        const AimView aim = aim_view(); // the sliders, or Over-the-Shoulder Aiming's fixed view
+        if (g_cam.free_aim && g_cam.glide <= 0.0f) {
             // tan of half the view's width and height (about 74 and 46 degrees across)
             constexpr float HALF_SCREEN = 0.75f, HALF_SCREEN_UP = 0.42f;
-            const float margin = (float)g.aim_drag_margin / 100.0f * HALF_SCREEN * boom * distance; // "Aim Drag Margin"
-            const float margin_up = (float)g.aim_drag_margin / 100.0f * HALF_SCREEN_UP * boom * distance;
+            const float margin = (float)aim.drag_margin / 100.0f * HALF_SCREEN * boom * distance; // "Aim Drag Margin"
+            const float margin_up = (float)aim.drag_margin / 100.0f * HALF_SCREEN_UP * boom * distance;
             // The character's sideways step since the last frame leaves the point where it was, up to the margin.
             const float step = (px - g_cam.orbit_last_x) * rx + (pz - g_cam.orbit_last_z) * rz;
             side -= step;
@@ -281,7 +282,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
             // and tilting it up or down (the pitch grows looking down) moves it up or down
             if (!fresh) up -= (pitch - g_cam.orbit_last_pitch) * boom * distance;
             // and all the while it comes back over ("Aim Drag Return Speed", 100%: in about a third of a second)
-            const float keep = std::pow(0.9f, frames * (float)g.aim_drag_return / 100.0f);
+            const float keep = std::pow(0.9f, frames * (float)aim.drag_return / 100.0f);
             side = std::clamp(side * keep, -margin, margin);
             up = std::clamp(up * keep, -margin_up, margin_up);
         }
@@ -306,22 +307,23 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         qz = pz + g_cam.orbit_dz;
         pivot += up;
     }
-    // "Aim Offset" (Over-the-Shoulder off): while aiming the point orbited moves right/up of the character and the
-    // camera closer in ("Aim Zoom") by the options, gliding there and back in a tenth of a second, so the view can be set up like
-    // an over-the-shoulder one. The crosshair stays in the middle of the screen (jfg_aim_along_view uses the view drawn).
+    // "Aim Offset" (aim_view: the sliders, or Over-the-Shoulder Aiming's fixed view): while aiming the point orbited
+    // moves right/up of the character and the camera closer in ("Aim Zoom"), gliding there and back in a tenth of a
+    // second. The crosshair stays in the middle of the screen (jfg_aim_along_view uses the view drawn).
     float reach = boom * distance;
     {
         const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
-        const bool on = g_cam.free_aim && g_cam.glide <= 0.0f && !g.aim_shoulder;
+        const bool on = g_cam.free_aim && g_cam.glide <= 0.0f;
+        const AimView aim = aim_view();
         g_cam.aim_offset_blend = on ? std::min(1.0f, g_cam.aim_offset_blend + frames / 6.0f) : std::max(0.0f, g_cam.aim_offset_blend - frames / 6.0f);
         const float b = g_cam.aim_offset_blend;
-        const float right = (float)g.aim_offset_x * b;
+        const float right = (float)aim.offset_x * b;
         g_cam.aim_offset_wx = -std::cos(g_cam.heading) * right; // screen-right
         g_cam.aim_offset_wz = std::sin(g_cam.heading) * right;
         qx += g_cam.aim_offset_wx;
         qz += g_cam.aim_offset_wz;
-        pivot += (float)g.aim_offset_y * b;
-        reach = std::max(20.0f, reach - (float)g.aim_offset_z * b); // "Aim Zoom": closer in
+        pivot += (float)aim.offset_y * b;
+        reach = std::max(20.0f, reach - (float)aim.zoom * b); // "Aim Zoom": closer in
         g_cam.orbit_pivot = pivot;
     }
     const float elevation = pitch;
@@ -343,6 +345,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     g_cam.view_x = wx; g_cam.view_y = wy; g_cam.view_z = wz;
     g_cam.view_yaw = angle_to_s16(-look);
     g_cam.view_pitch = angle_to_s16(look_pitch);
+#if JFG_OLD_SHOULDER_GLIDE // the former dual-stick over-the-shoulder view, see jfg_camera_controls
     if (g_cam.glide > 0.0f) {
         // Over-the-shoulder aiming with the dual stick: glide to a spot at head height, a little behind and to the
         // right, still looking at a point well ahead on the view's centre line (near the one the character aims at,
@@ -363,6 +366,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         look += wrap_angle(shoulder_look - look) * b;
         look_pitch += (shoulder_pitch - look_pitch) * b;
     }
+#endif
     wrf(cam + 0x0C, wx);
     wrf(cam + 0x10, wy);
     wrf(cam + 0x14, wz);

@@ -46,6 +46,21 @@ void push_render_options() {
 // apply_option: the frame_rate just read was the old "60 + Interpolated" (2), see below.
 static bool g_old_interpolated = false;
 
+AimView aim_view() {
+    if (g.aim_shoulder) return AIM_SHOULDER_VIEW;
+    return { g.aim_drag_margin, g.aim_drag_return, g.aim_offset_x, g.aim_offset_y, g.aim_offset_z };
+}
+
+bool aim_view_key(const char* key, int* preset_value) {
+    const AimView& p = AIM_SHOULDER_VIEW;
+    const struct { const char* key; int value; } keys[] = { { "aim_drag_margin", p.drag_margin }, { "aim_drag_return", p.drag_return },
+        { "aim_offset_x", p.offset_x }, { "aim_offset_y", p.offset_y }, { "aim_offset_z", p.zoom } };
+    for (const auto& k : keys) {
+        if (std::strcmp(key, k.key) == 0) { if (preset_value != nullptr) *preset_value = k.value; return true; }
+    }
+    return false;
+}
+
 void apply_option(const char* key, int value) {
     if (std::strcmp(key, "no_blood") == 0) g.no_blood = value != 0;
     else if (std::strcmp(key, "gore_keep_blood") == 0) g.gore_keep_blood = value != 0;
