@@ -51,6 +51,7 @@ struct State {
     int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
     int  hit_flash = 100;          // red screen when the character is hit: strength, percent (jfg_hit_flash)
     bool hide_floyd = false;       // Floyd is not drawn while he follows the character (jfg_hide_object)
+    int  language = 0;             // "Language": 0 English, 1 French, 2 German, 3 Spanish (jfg_locale.cpp); not part of profiles
     bool vignette = false;        // darker screen edges in RT64 (src/shaders/VignettePS.hlsl), see push_render_options()
     int  vignette_strength = 40;   // vignette: how dark the corners get, percent
     int  vignette_size = 45;       // vignette: how far from the centre the darkening starts, percent of the way to the corners

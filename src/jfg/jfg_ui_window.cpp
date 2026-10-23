@@ -104,6 +104,12 @@ void draw_options() {
                          "menus, the pause screen and zoomed scopes keep the game's own.");
             changed |= options_slider("Hit flash opacity %", &g.hit_flash, 0, 100);
             options_help("How strongly the screen turns red when the character is hit. 0: no red flash.");
+            {
+                const char* languages[] = { "English", "French", "German", "Spanish" };
+                changed |= ImGui::Combo("Language", &g.language, languages, IM_ARRAYSIZE(languages));
+                options_help("The language of menus, subtitles and hints. The US game has French and German menus only; "
+                             "a locale pack (Mods) adds the rest. Text a language lacks is shown in English.");
+            }
             changed |= ImGui::Checkbox("Hide Floyd", &g.hide_floyd);
             options_help("Floyd, his shadow and his sounds are gone while he follows the character; he still flies along "
                          "and shoots. Floyd missions and a second player flying him show him as usual.");

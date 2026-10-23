@@ -12,6 +12,9 @@ import html, os
 GENERAL = [
     ("group", None, "Sound", None, None),
     ("range", "main_volume", "Master Volume", (0, 100, "%"), "The volume of all of the game's sound."),
+    ("group", None, "Language", None, None),
+    ("choice", "language", "Language", [(0, "English"), (1, "French"), (2, "German"), (3, "Spanish")],
+     "The language of menus, subtitles and hints. The US game has French and German menus only; a locale pack (Mods tab) adds the rest. Text a language lacks is shown in English. Not part of profiles."),
     ("group", None, "Menu & Cutscenes", None, None),
     ("bool", "pause_in_menu", "Pause in Settings Menu", None,
      "The game stands still while the settings menu (Select / Esc) is open during play, as on the pause screen. Cutscenes keep playing."),

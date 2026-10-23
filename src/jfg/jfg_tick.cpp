@@ -58,6 +58,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     auto_save_tick(ctx);
     gameplay_tick();
     tribal_saves_tick();
+    jfg_locale_tick(ctx);
     tools_game_tick(ctx); // F10's requests and the values it shows
 
     // Cheats keep applying while the menu is closed.
