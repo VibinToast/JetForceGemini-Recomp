@@ -89,6 +89,9 @@ struct State {
     int  camera_distance = 100;    // dual stick: the camera's distance from the character, percent of the game's
     int  aim_drag_margin = 10;     // dual stick, aiming: how far the character may step aside before the camera follows, percent of the half screen
     int  aim_drag_return = 100;    // dual stick, aiming: how fast the camera comes back onto a character standing still, percent (0: never)
+    int  aim_offset_x = 0;         // dual stick, aiming: the point the camera orbits, moved right of the character (units)
+    int  aim_offset_y = 0;         // ... up
+    int  aim_offset_z = 0;         // ... and the camera this much closer in (a zoom)
     bool aim_shoulder = false;     // aiming: view from over the character's right shoulder
     bool aim_centered = false;     // aiming: the view turns at once and the reticle stays in the middle
     bool aim_jump = false;         // aiming: the jump button (C-up) jumps instead of zooming, see aim_jump()

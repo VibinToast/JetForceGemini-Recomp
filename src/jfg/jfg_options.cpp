@@ -125,6 +125,9 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "camera_distance") == 0) g.camera_distance = std::clamp(value, 50, 250);
     else if (std::strcmp(key, "aim_drag_margin") == 0) g.aim_drag_margin = std::clamp(value, 0, 50);
     else if (std::strcmp(key, "aim_drag_return") == 0) g.aim_drag_return = std::clamp(value, 0, 400);
+    else if (std::strcmp(key, "aim_offset_x") == 0) g.aim_offset_x = std::clamp(value, -50, 50);
+    else if (std::strcmp(key, "aim_offset_y") == 0) g.aim_offset_y = std::clamp(value, -50, 50);
+    else if (std::strcmp(key, "aim_offset_z") == 0) g.aim_offset_z = std::clamp(value, 0, 300);
     else if (std::strcmp(key, "aim_shoulder") == 0) g.aim_shoulder = value != 0;
     else if (std::strcmp(key, "aim_centered") == 0) g.aim_centered = value != 0;
     else if (std::strcmp(key, "aim_jump") == 0) g.aim_jump = value != 0;
@@ -179,6 +182,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "invert_aim_normal=%d\ninvert_camera_y=%d\naim_from_character=%d\n", s.invert_aim_normal ? 1 : 0, s.invert_camera_y ? 1 : 0, s.aim_from_character ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "camera_collision=%d\ncamera_distance=%d\n", s.camera_collision ? 1 : 0, s.camera_distance); out += buf;
     std::snprintf(buf, sizeof(buf), "aim_drag_margin=%d\naim_drag_return=%d\n", s.aim_drag_margin, s.aim_drag_return); out += buf;
+    std::snprintf(buf, sizeof(buf), "aim_offset_x=%d\naim_offset_y=%d\naim_offset_z=%d\n", s.aim_offset_x, s.aim_offset_y, s.aim_offset_z); out += buf;
     std::snprintf(buf, sizeof(buf), "move_speed=%d\nnormalize_diagonal=%d\n", s.move_speed, s.normalize_diagonal ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "camera_speed_h=%d\ncamera_speed_v=%d\naim_shoulder=%d\naim_centered=%d\naim_speed=%d\n", s.camera_speed_h, s.camera_speed_v, s.aim_shoulder ? 1 : 0, s.aim_centered ? 1 : 0, s.aim_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "aim_jump=%d\n", s.aim_jump ? 1 : 0); out += buf;
