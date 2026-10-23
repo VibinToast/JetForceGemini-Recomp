@@ -398,6 +398,12 @@ static void draw_lighting() {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, ImGui::GetFontSize() * 0.55f));
     ImGui::TextDisabled("Work in progress (JFG-125). Changes apply at once and are not saved.");
 
+    options_section("Level ambient");
+    live_slider("Level ambient (%)", s.level_ambient, 0, 199);
+    options_help("How bright the level's own colours are: its ambient light, painted in by the developers. 100 is the "
+                 "original; lower makes the levels darker so lights stand out more. Works with per-pixel lighting off too. "
+                 "Later this becomes a per-level adjustment.");
+
     options_section("Per-pixel lighting");
     static const char* const modes[] = { "Off (the game's own lighting)", "The game's level lights per pixel",
                                          "Also torches and lamps on the level" };

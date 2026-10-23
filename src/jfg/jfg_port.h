@@ -163,6 +163,7 @@ std::string depth_fog_status();         // the F9 menu's depth fog status line
 // Modern lighting, in progress (JFG-125): the F9 Lighting tab edits these live; they start from the JFG_* test switches.
 struct LightingSettings {
     std::atomic<int> mode{ 0 };              // 0 off, 1 the game's level lights per pixel, 2 also torches and lamps
+    std::atomic<int> level_ambient{ 100 };   // % of the level's own colours, its ambient light (later per level)
     std::atomic<int> level_strength{ 100 };  // % of the game's level lights (shots, flashes)
     std::atomic<int> object_strength{ 35 };  // % of the torch and lamp lights on the level (mode 2)
     std::atomic<int> object_radius{ 125 };   // % of a torch or lamp light's radius (the game's own conversion: 125)

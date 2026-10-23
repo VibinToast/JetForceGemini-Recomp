@@ -41,6 +41,7 @@ extern std::atomic<int> rt64_jfg_debug_world;  // ...
 extern std::atomic<int> rt64_jfg_debug_normal; // ...
 extern std::atomic<float> rt64_jfg_facing;     // ...
 extern std::atomic<float> rt64_jfg_shadows;    // ...
+extern std::atomic<float> rt64_jfg_level_ambient; // ...
 
 namespace jfg {
 
@@ -91,6 +92,7 @@ LightingSettings& lighting_settings() {
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS")) settings.mode = std::clamp(std::atoi(env), 0, 2);
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS_FACING")) settings.facing = std::clamp(std::atoi(env), 0, 100);
         if (const char* env = std::getenv("JFG_PIXEL_SHADOWS")) settings.shadows = std::clamp(std::atoi(env), 0, 100);
+        if (const char* env = std::getenv("JFG_LEVEL_AMBIENT")) settings.level_ambient = std::clamp(std::atoi(env), 0, 199);
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS_STRENGTH")) {
             settings.object_strength = std::clamp((int)std::lround(std::atof(env) * 100.0), 0, 200);
         }
@@ -182,6 +184,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     rt64_jfg_debug_normal.store(s.debug_normal.load() ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_facing.store(std::clamp(s.facing.load(), 0, 100) / 100.0f, std::memory_order_relaxed);
     rt64_jfg_shadows.store(std::clamp(s.shadows.load(), 0, 100) / 100.0f, std::memory_order_relaxed);
+    rt64_jfg_level_ambient.store(std::clamp(s.level_ambient.load(), 0, 199) / 100.0f, std::memory_order_relaxed);
     if (s.log.load()) log_object_lights();
     send_level_vertices();
     // Every candidate light (id = its slot's address, so RT64 can match it with the last frame's for interpolation),
