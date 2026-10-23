@@ -140,6 +140,7 @@ GRAPHICS = [
      "With <b>Frame Interpolation</b>, character shadows move with the in-between frames instead of at the game's rate, so they no longer trail behind the character."),
     ("group", None, "Picture", None, None),
     ("bool", "widescreen", "Widescreen", None, "During gameplay the 3D view fills the window; the HUD stays in the middle. Things at the far left and right may appear late."),
+    ("bool", "hud_corners", "HUD in Screen Corners", None, "With <b>Widescreen</b>, the HUD moves from the middle out to the left and right edges of the window."),
     ("range", "fov", "Field of View", (75, 140, "%"),
      "Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, menus, the pause screen and zoomed scopes keep the game's own."),
     ("choice", "texture_filter", "Texture Filtering", [(0, "N64 Three-Point"), (1, "Bilinear")],

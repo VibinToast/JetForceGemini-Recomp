@@ -98,6 +98,8 @@ void draw_options() {
             changed |= ImGui::Checkbox("Show texture pack", &g.show_pack);
             changed |= ImGui::Checkbox("Widescreen (fill the window)", &g.widescreen);
             options_help("During gameplay only; the HUD stays in the middle. Things at the far left and right may appear late.");
+            changed |= ImGui::Checkbox("HUD in screen corners", &g.hud_corners);
+            options_help("With Widescreen, the HUD moves out to the left and right edges of the window.");
             changed |= options_slider("Field of view %", &g.fov, 75, 140);
             options_help("Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, "
                          "menus, the pause screen and zoomed scopes keep the game's own.");
