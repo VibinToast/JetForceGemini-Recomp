@@ -422,6 +422,10 @@ static void draw_lighting() {
     options_help("How much a surface turned away from a light gets less of it, which gives walls and corners depth. The "
                  "game never does this: 0 keeps its look. Surfaces get one direction per triangle, so low-detail ones look "
                  "faceted.");
+    live_slider("Shadows of characters and objects (%)", s.shadows, 0, 100);
+    options_help("Characters and objects that have a shadow also block these lights: they throw a soft shadow away from "
+                 "a torch or a flash. 0 is off, as in the game.");
+    live_slider("Shadow caster size (%)", s.caster_size, 25, 300);
     live_slider("Most lights per frame", s.max_lights, 0, 32);
     ImGui::TextDisabled("Last frame: %d level lights, %d torches and lamps", s.sent_level_lights.load(),
                         s.sent_object_lights.load());

@@ -84,6 +84,7 @@ extern "C" void jfg_shadow_begin(uint8_t* rdram_, recomp_context* ctx) {
     batch_ult = -dt / 8.0f;
     batch_start = (uint32_t)ctx->r7 & 0x00FFFFFFu;
     batch_open = true;
+    lighting_add_caster(object, x, z, ctx->f22.fl); // modern lighting: it casts shadows from the lights too
 }
 
 // func_8001FA24 after its last triangle ($a3: the end). Batches are registered even with the option off (no shift),

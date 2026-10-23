@@ -35,10 +35,12 @@
 
 void rt64_jfg_frame_lights(uint32_t dlStart, const float* data, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
 void rt64_jfg_level_vertices(const uint32_t* ranges, uint32_t count);            // lib/rt64 src/hle/rt64_rsp.cpp
+void rt64_jfg_frame_casters(uint32_t dlStart, const float* data, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
 extern std::atomic<int> rt64_jfg_pixel_lights; // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 extern std::atomic<int> rt64_jfg_debug_world;  // ...
 extern std::atomic<int> rt64_jfg_debug_normal; // ...
 extern std::atomic<float> rt64_jfg_facing;     // ...
+extern std::atomic<float> rt64_jfg_shadows;    // ...
 
 namespace jfg {
 
@@ -88,6 +90,7 @@ LightingSettings& lighting_settings() {
     std::call_once(once, [] {
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS")) settings.mode = std::clamp(std::atoi(env), 0, 2);
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS_FACING")) settings.facing = std::clamp(std::atoi(env), 0, 100);
+        if (const char* env = std::getenv("JFG_PIXEL_SHADOWS")) settings.shadows = std::clamp(std::atoi(env), 0, 100);
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS_STRENGTH")) {
             settings.object_strength = std::clamp((int)std::lround(std::atof(env) * 100.0), 0, 200);
         }
@@ -97,6 +100,25 @@ LightingSettings& lighting_settings() {
         settings.log = std::getenv("JFG_DEBUG_LIGHTS") != nullptr;
     });
     return settings;
+}
+
+// Shadow casters: the objects the game draws a shadow for this frame, as spheres resting on the ground at their place.
+// A shadow image's scale is its size in texels (s10.5) over its size in the world, so the radius is CASTER_UNITS over
+// it (calibrated on the player, JFG_DEBUG_LIGHTS logs the scales), times the caster size setting.
+struct Caster {
+    uint32_t object;
+    float x, y, z, radius;
+};
+std::vector<Caster> g_casters; // game thread: added by func_8001FA24, sent and cleared at rcpFast3d
+constexpr float CASTER_UNITS = 384.0f; // the player: a radius of about 20
+constexpr uint32_t OBJ_Y = 0x10; // ObjectTransform: f32 x, y, z at +0x0C
+constexpr size_t MAX_CASTERS = 64;
+
+void lighting_add_caster(uint32_t object, float x, float z, float scale) {
+    if (!valid_ptr(object) || scale <= 0.0f || g_casters.size() >= MAX_CASTERS) return;
+    const float radius = CASTER_UNITS / scale * (lighting_settings().caster_size.load() / 100.0f);
+    const float y = rdf(object + OBJ_Y);
+    g_casters.push_back({ object, x, y + radius, z, radius });
 }
 
 // The level's vertex arrays as physical [start, end) pairs, as RT64 sees vertex loads.
@@ -158,6 +180,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     rt64_jfg_debug_world.store(s.debug_world.load() ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_debug_normal.store(s.debug_normal.load() ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_facing.store(std::clamp(s.facing.load(), 0, 100) / 100.0f, std::memory_order_relaxed);
+    rt64_jfg_shadows.store(std::clamp(s.shadows.load(), 0, 100) / 100.0f, std::memory_order_relaxed);
     if (s.log.load()) log_object_lights();
     send_level_vertices();
     // Every candidate light (id = its slot's address, so RT64 can match it with the last frame's for interpolation),
@@ -234,6 +257,29 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     s.sent_level_lights = level_lights;
     s.sent_object_lights = (int)found.size() - level_lights;
     rt64_jfg_frame_lights((uint32_t)ctx->r4 & RDRAM_MASK, data, (uint32_t)found.size());
+
+    float casters[MAX_CASTERS * 5];
+    for (size_t i = 0; i < g_casters.size(); i++) {
+        const Caster& c = g_casters[i];
+        casters[i * 5] = c.x;
+        casters[i * 5 + 1] = c.y;
+        casters[i * 5 + 2] = c.z;
+        casters[i * 5 + 3] = c.radius;
+        std::memcpy(&casters[i * 5 + 4], &c.object, 4);
+    }
+    if (s.log.load()) {
+        static uint32_t frames = 0, logged = 0;
+        if ((frames++ % 120) == 0 && logged < 40 && !g_casters.empty()) {
+            logged++;
+            char line[200];
+            const Caster& c = g_casters[0];
+            std::snprintf(line, sizeof(line), "%zu casters; first: object %08X at %.0f %.0f %.0f radius %.1f", g_casters.size(),
+                          c.object, c.x, c.y - c.radius, c.z, c.radius);
+            jfg_log_line("jfg_lighting.log", line);
+        }
+    }
+    rt64_jfg_frame_casters((uint32_t)ctx->r4 & RDRAM_MASK, casters, (uint32_t)g_casters.size());
+    g_casters.clear();
 }
 
 // Entry of trackLightAsm(track, light, visible). Returns non-zero to skip it.

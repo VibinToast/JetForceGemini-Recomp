@@ -169,12 +169,17 @@ struct LightingSettings {
     std::atomic<int> max_lights{ 32 };       // lights sent per frame (RT64 takes at most 32)
     std::atomic<bool> no_game_lighting{ false }; // skip the game's per-vertex level lighting without replacing it
     std::atomic<int> facing{ 0 };            // % the level lighting depends on a surface facing its light (0 = as the game)
+    std::atomic<int> shadows{ 0 };           // % how dark characters' and objects' shadows from these lights are
+    std::atomic<int> caster_size{ 100 };     // % of the size worked out from each one's own shadow
     std::atomic<bool> debug_world{ false };  // show the world position as colour
     std::atomic<bool> debug_normal{ false }; // show the surface direction as colour
     std::atomic<bool> log{ false };          // jfg_lighting.log
     std::atomic<int> sent_level_lights{ 0 }, sent_object_lights{ 0 }; // what the last frame sent
 };
 LightingSettings& lighting_settings();
+// A shadow the game draws this frame (func_8001FA24): its object, where it is (x, z), and the shadow image's scale
+// (image size over shadow size), from which the caster's size is worked out.
+void lighting_add_caster(uint32_t object, float x, float z, float scale);
 
 // --- jfg_weapons.cpp ---------------------------------------------------------------------------------------------
 extern bool g_weapon_orig_read;            // the weapon table's original values have been read
