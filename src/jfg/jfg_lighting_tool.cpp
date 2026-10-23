@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "imgui/imgui.h"
+#include "imgui/imgui_internal.h"
 #include "jfg_game.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
@@ -42,6 +43,8 @@ void rt64_jfg_material_rescan();                         // ...
 void rt64_jfg_pick(bool on);                             // lib/rt64 src/hle/rt64_state.cpp
 bool rt64_jfg_picked(uint64_t* hash, uint32_t* width, uint32_t* height, uint32_t* address); // ...
 void rt64_jfg_highlight(uint64_t hash, float amount);    // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
+void rt64_jfg_preview_request(uint64_t hash);             // lib/rt64 src/hle/rt64_state.cpp
+bool rt64_jfg_preview(uint64_t hash, uint32_t* width, uint32_t* height, std::vector<uint8_t>& rgba); // ...
 
 namespace dino::debug_ui::backend {
 bool lighting_tool_open();           // F12
@@ -892,6 +895,60 @@ std::string texture_hash(int texture, int* frames = nullptr) {
     return text;
 }
 
+// The shown texture itself, enlarged with sharp pixels over a checkerboard (its see-through parts): RT64 decodes the
+// original from TMEM the next time it is drawn (a pack's replacement isn't shown). One 256 x 256 ImGui texture, the
+// picture in its top-left corner.
+constexpr int PREVIEW_SIZE = 256;
+ImTextureData* g_preview_tex = nullptr;
+uint64_t g_preview_hash = 0;
+uint32_t g_preview_w = 0, g_preview_h = 0;
+
+void draw_texture_preview(uint64_t hash) {
+    rt64_jfg_preview_request(hash);
+    if (g_preview_tex == nullptr) {
+        g_preview_tex = IM_NEW(ImTextureData)();
+        g_preview_tex->Create(ImTextureFormat_RGBA32, PREVIEW_SIZE, PREVIEW_SIZE);
+        ImGui::RegisterUserTexture(g_preview_tex);
+    }
+    if (hash != g_preview_hash) {
+        uint32_t w = 0, h = 0;
+        std::vector<uint8_t> rgba;
+        if (rt64_jfg_preview(hash, &w, &h, rgba) && w <= (uint32_t)PREVIEW_SIZE && h <= (uint32_t)PREVIEW_SIZE) {
+            for (uint32_t y = 0; y < h; y++) {
+                std::memcpy(g_preview_tex->GetPixelsAt(0, (int)y), &rgba[(size_t)y * w * 4], (size_t)w * 4);
+            }
+            ImTextureDataQueueUpload(g_preview_tex, 0, 0, (int)w, (int)h);
+            g_preview_hash = hash;
+            g_preview_w = w;
+            g_preview_h = h;
+        }
+    }
+    if (hash == 0 || hash != g_preview_hash) {
+        ImGui::TextDisabled(hash == 0 ? "" : "(the texture shows once it is drawn again)");
+        return;
+    }
+    // Whole-number enlargement up to 256 pixels on the long side (the tool's font scale on top).
+    const float unit = ImGui::GetFontSize() / 13.0f;
+    const int longest = (int)std::max(g_preview_w, g_preview_h);
+    const float scale = std::max(1, 256 / std::max(longest, 1)) * unit;
+    const ImVec2 size(g_preview_w * scale, g_preview_h * scale);
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float cell = 8.0f * unit;
+    for (float y = 0; y < size.y; y += cell) {
+        for (float x = 0; x < size.x; x += cell) {
+            const bool dark = ((int)(x / cell) + (int)(y / cell)) & 1;
+            dl->AddRectFilled(ImVec2(at.x + x, at.y + y), ImVec2(at.x + std::min(x + cell, size.x), at.y + std::min(y + cell, size.y)),
+                              dark ? IM_COL32(70, 70, 70, 255) : IM_COL32(110, 110, 110, 255));
+        }
+    }
+    ImGuiPlatformIO& pio = ImGui::GetPlatformIO();
+    if (pio.DrawCallback_SetSamplerNearest) dl->AddCallback(pio.DrawCallback_SetSamplerNearest, nullptr);
+    ImGui::Image(g_preview_tex->GetTexRef(), size, ImVec2(0, 0),
+                 ImVec2(g_preview_w / (float)PREVIEW_SIZE, g_preview_h / (float)PREVIEW_SIZE));
+    if (pio.DrawCallback_SetSamplerLinear) dl->AddCallback(pio.DrawCallback_SetSamplerLinear, nullptr);
+}
+
 // Any texture under the crosshair (level, characters, objects, effects drawn in 3D; RT64 finds it): its hash, size,
 // which material maps it has, buttons to copy the names, and a rescan for new files.
 void draw_picked_texture() {
@@ -948,6 +1005,7 @@ void draw_picked_texture() {
             ImGui::SetClipboardText((std::string(text) + "_n.png\n" + text + "_s.png").c_str());
             say("Copied the normal and specular map names.");
         }
+        draw_texture_preview(hash);
     }
     if (ImGui::Button(g_fly.active ? "Fly camera: ON" : "Fly camera: off")) g_fly_toggle_request = true;
     help("Fly anywhere to aim at textures (F7; WASD / left stick to fly, mouse / right stick to look). Alt gives the "

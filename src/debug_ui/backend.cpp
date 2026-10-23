@@ -70,6 +70,14 @@ static std::atomic<bool> b_fly_requested{ false };
 
 static ImGuiContext *prev_ctx;
 static std::unique_ptr<plume::RenderDescriptorSet> descriptor_set;
+#ifdef _WIN32
+// JFG PORT: the debug UI's DX12 texture slots (descriptor_set): the font atlas and the lighting tool's texture preview.
+static constexpr uint32_t D3D12_SRV_SLOTS = 8;
+static D3D12_CPU_DESCRIPTOR_HANDLE d3d12_srv_cpu = {};
+static D3D12_GPU_DESCRIPTOR_HANDLE d3d12_srv_gpu = {};
+static UINT d3d12_srv_step = 0;
+static bool d3d12_srv_used[D3D12_SRV_SLOTS] = {};
+#endif
 static std::unique_ptr<plume::RenderCommandQueue> d3d12_upload_queue; // JFG PORT: ImGui's DX12 backend uploads its textures through a queue of its own
 static std::mutex frame_mutex;
 static moodycamel::ConcurrentQueue<SDL_Event> event_queue{};
@@ -268,7 +276,9 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
         case RT64::UserConfiguration::GraphicsAPI::D3D12: {
 #ifdef _WIN32
             plume::D3D12Device *interface_device = static_cast<plume::D3D12Device *>(device);
-            plume::RenderDescriptorRange descriptor_range(plume::RenderDescriptorRangeType::TEXTURE, 0, 1);
+            // JFG PORT: room for a few textures (the font atlas, the lighting tool's texture preview), handed out by
+            // the alloc / free functions below.
+            plume::RenderDescriptorRange descriptor_range(plume::RenderDescriptorRangeType::TEXTURE, 0, D3D12_SRV_SLOTS);
             descriptor_set = interface_device->createDescriptorSet(plume::RenderDescriptorSetDesc(&descriptor_range, 1));
 
             plume::D3D12DescriptorSet *interface_descriptor_set = static_cast<plume::D3D12DescriptorSet *>(descriptor_set.get());
@@ -282,8 +292,23 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
             init_info.NumFramesInFlight = 2;
             init_info.RTVFormat = DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM;
             init_info.SrvDescriptorHeap = interface_device->viewHeapAllocator->heap;
-            init_info.LegacySingleSrvCpuDescriptor = cpu_handle;
-            init_info.LegacySingleSrvGpuDescriptor = gpu_handle;
+            d3d12_srv_cpu = cpu_handle;
+            d3d12_srv_gpu = gpu_handle;
+            d3d12_srv_step = interface_device->d3d->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            init_info.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu) {
+                for (uint32_t i = 0; i < D3D12_SRV_SLOTS; i++) {
+                    if (d3d12_srv_used[i]) continue;
+                    d3d12_srv_used[i] = true;
+                    out_cpu->ptr = d3d12_srv_cpu.ptr + SIZE_T(i) * d3d12_srv_step;
+                    out_gpu->ptr = d3d12_srv_gpu.ptr + UINT64(i) * d3d12_srv_step;
+                    return;
+                }
+                IM_ASSERT(false && "out of debug UI texture slots");
+            };
+            init_info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpu, D3D12_GPU_DESCRIPTOR_HANDLE) {
+                const SIZE_T i = (cpu.ptr - d3d12_srv_cpu.ptr) / d3d12_srv_step;
+                if (i < D3D12_SRV_SLOTS) d3d12_srv_used[i] = false;
+            };
             ImGui_ImplDX12_Init(&init_info);
 #else
             assert(false && "Unsupported Graphics API.");
