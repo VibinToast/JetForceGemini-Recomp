@@ -38,6 +38,10 @@ extern std::atomic<int> rt64_jfg_material_loaded;  // ...
 void rt64_jfg_glow_ranges(const uint32_t* ranges, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
 uint32_t rt64_jfg_glow_hashes(uint32_t start, uint32_t end, uint64_t* hashes, uint32_t max_hashes); // ...
 bool rt64_jfg_emission_colour(uint64_t hash, float* rgb); // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
+uint32_t rt64_jfg_material_kinds(uint64_t hash);          // ...
+void rt64_jfg_material_rescan();                         // ...
+void rt64_jfg_pick(bool on);                             // lib/rt64 src/hle/rt64_state.cpp
+bool rt64_jfg_picked(uint64_t* hash, uint32_t* width, uint32_t* height, uint32_t* address); // ...
 
 namespace dino::debug_ui::backend {
 bool lighting_tool_open();           // F12
@@ -223,6 +227,7 @@ uint32_t g_glow_tab_tick = 0;  // the Glow tab was showing
 bool g_glow_preview = true;    // the texture under the crosshair pulses
 int g_glow_pick = 0;           // texture number typed in
 bool g_open_glow_tab = false;  // test switch: show the Glow tab once
+bool g_fly_test = false;       // test switch: turn the fly camera on in the first level
 // Lights from emission maps: the level textures found to have one (their average colour), patches of them grouped by
 // texture in cells, and the lights made from those.
 struct EmissionPatch {
@@ -238,7 +243,8 @@ uint32_t g_emission_scan_tick = 0;
 
 bool use_files() { return std::getenv("JFG_LIGHTING_NO_FILES") == nullptr; }
 // Test switch: JFG_LIGHTING_TOOL=open opens the tool at start, =place with "place with fire" on (JFG_DEBUG_INPUT can
-// then fire), =mouse with the mouse and keyboard on the tool, =glow on the Glow tab.
+// then fire), =mouse with the mouse and keyboard on the tool, =glow on the Glow tab, =fly on the Glow tab with the fly
+// camera turned on two seconds into the first level.
 void test_switch() {
     static bool done = false;
     if (done) return;
@@ -246,7 +252,8 @@ void test_switch() {
     if (const char* env = std::getenv("JFG_LIGHTING_TOOL")) {
         dino::debug_ui::backend::set_lighting_tool_open(true);
         g_placing = std::strcmp(env, "place") == 0;
-        g_open_glow_tab = std::strcmp(env, "glow") == 0;
+        g_open_glow_tab = std::strcmp(env, "glow") == 0 || std::strcmp(env, "fly") == 0;
+        g_fly_test = std::strcmp(env, "fly") == 0;
         dino::debug_ui::backend::set_lighting_tool_playing(std::strcmp(env, "mouse") != 0);
     }
 }
@@ -972,6 +979,54 @@ std::string texture_hash(int texture, int* frames = nullptr) {
     return text;
 }
 
+// Any texture under the crosshair (level, characters, objects, effects drawn in 3D; RT64 finds it): its hash, size,
+// which material maps it has, buttons to copy the names, and a rescan for new files.
+void draw_picked_texture() {
+    ImGui::SeparatorText("Texture under the crosshair");
+    uint64_t hash = 0;
+    uint32_t width = 0, height = 0, address = 0;
+    if (!rt64_jfg_picked(&hash, &width, &height, &address)) {
+        ImGui::TextDisabled("Nothing textured in 3D under the crosshair.");
+    }
+    else {
+        char text[24];
+        std::snprintf(text, sizeof(text), "%016llX", (unsigned long long)hash);
+        ImGui::Text("%s  (%ux%u)", text, width, height);
+        const uint32_t kinds = rt64_jfg_material_kinds(hash);
+        std::string has;
+        if (kinds & 1) has += " normal";
+        if (kinds & 2) has += " specular";
+        if (kinds & 4) has += " emission";
+        ImGui::SameLine();
+        ImGui::TextDisabled("maps:%s", has.empty() ? " none" : has.c_str());
+        if (ImGui::SmallButton("Copy _e.png name")) {
+            ImGui::SetClipboardText((std::string(text) + "_e.png").c_str());
+            say(std::string("Copied ") + text + "_e.png");
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Copy hash")) {
+            ImGui::SetClipboardText(text);
+            say(std::string("Copied ") + text);
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Copy _n / _s names")) {
+            ImGui::SetClipboardText((std::string(text) + "_n.png\n" + text + "_s.png").c_str());
+            say("Copied the normal and specular map names.");
+        }
+    }
+    if (ImGui::Button(g_fly.active ? "Fly camera: ON" : "Fly camera: off")) g_fly_toggle_request = true;
+    help("Fly anywhere to aim at textures (F7; WASD / left stick to fly, mouse / right stick to look). Alt gives the "
+         "mouse back to the tool for its buttons.");
+    ImGui::SameLine();
+    if (ImGui::Button("Rescan material maps")) {
+        rt64_jfg_material_rescan();
+        say("Material maps scanned again: new and changed files load the next time their texture is drawn.");
+    }
+    help("After adding or changing files in materials/ (or a texture pack): finds them without restarting. Each "
+         "rescan loads the maps again, up to 512 maps a session.");
+    ImGui::Spacing();
+}
+
 // The texture's hash with a button that copies its emission map's name.
 void draw_texture_hash(int texture) {
     int frames = 0;
@@ -1000,6 +1055,8 @@ void draw_glow() {
                        "pulses to show which) and mark it. Every place the level uses that texture glows. Kept for this "
                        "level.");
     if (!lighting_active()) ImGui::TextColored(ImVec4(1, 0.7f, 0.3f, 1), "Modern lighting is off: nothing glows.");
+    draw_crosshair(g_aimed_texture >= 0);
+    draw_picked_texture();
     if (ImGui::CollapsingHeader("Emission maps", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextWrapped("materials/<texture hash>_e.png next to the game (or in a texture pack): the light the texture "
                            "gives off, black where none. Copy the name from a texture below.");
@@ -1012,7 +1069,6 @@ void draw_glow() {
     }
     ImGui::SeparatorText("Glow marks");
     ImGui::Checkbox("Pulse the texture under the crosshair", &g_glow_preview);
-    draw_crosshair(g_aimed_texture >= 0);
     if (g_aimed_texture >= 0) {
         const uint32_t header = level_texture(g_aimed_texture);
         ImGui::Text("Crosshair on texture %d (%dx%d)", g_aimed_texture, header ? rd8(header) : 0, header ? rd8(header + 1) : 0);
@@ -1276,9 +1332,10 @@ namespace {
 void update_aim(recomp_context* ctx) {
     constexpr float REACH = AIM_REACH;
     const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
-    const float heading = -angle_from_s16(rd16(cam)), pitch = angle_from_s16(rd16(cam + 2));
+    const bool fly = g_fly.active && g_fly.started; // the fly camera's view: it is put in the game's camera only to draw
+    const float heading = fly ? g_fly.heading : -angle_from_s16(rd16(cam)), pitch = fly ? g_fly.pitch : angle_from_s16(rd16(cam + 2));
     const float dir[3] = { std::sin(heading) * std::cos(pitch), -std::sin(pitch), std::cos(heading) * std::cos(pitch) };
-    const float from[3] = { rdf(cam + 0x0C), rdf(cam + 0x10), rdf(cam + 0x14) };
+    const float from[3] = { fly ? g_fly.x : rdf(cam + 0x0C), fly ? g_fly.y : rdf(cam + 0x10), fly ? g_fly.z : rdf(cam + 0x14) };
     const uint32_t base = ((uint32_t)ctx->r29 - 0xA0u) & ~0xFu;
     const uint32_t start = base, end = base + 0x10, result = base + 0x20;
     for (uint32_t c = 0; c < 3; c++) {
@@ -1342,6 +1399,24 @@ void lighting_tool_tick(recomp_context* ctx) {
     }
     update_emission_lights();
     send_glow();
+    rt64_jfg_pick((dino::debug_ui::backend::lighting_tool_open() && g_tick_count - g_glow_tab_tick <= 3) || log_aim);
+    if (log_aim) {
+        static uint64_t logged = 0;
+        uint64_t hash = 0;
+        uint32_t w = 0, h = 0, address = 0;
+        if (rt64_jfg_picked(&hash, &w, &h, &address) && hash != logged) {
+            logged = hash;
+            char line[160];
+            int level_texture = -1;
+            for (int t = 0; t < std::min(level_texture_count(), 1024) && level_texture < 0; t++) {
+                uint32_t start, end;
+                if (level_texture_range(t, &start, &end) && (address & RDRAM_MASK) >= start && (address & RDRAM_MASK) < end) level_texture = t;
+            }
+            std::snprintf(line, sizeof(line), "pick: %016llX %ux%u from %08X (level texture %d; %s)", (unsigned long long)hash, w, h,
+                          address, level_texture, level_texture < 0 ? "not the level's: a character, object or effect" : "the level's");
+            jfg_log_line("jfg_lighting.log", line);
+        }
+    }
 
     // JFG_LIGHTING_LOG_AIM also lists the level's textures once, ten seconds into a level: hash, area and centre, for
     // picking one to give an emission map in scripted runs.
@@ -1350,6 +1425,10 @@ void lighting_tool_tick(recomp_context* ctx) {
     if (g_level != listed_level) {
         listed_level = g_level;
         level_tick = g_tick_count;
+    }
+    if (g_fly_test && g_have_player && level_tick != 0 && g_tick_count - level_tick == 60) {
+        g_fly_test = false;
+        g_fly_toggle_request = true;
     }
     if (log_aim && level_tick != 0 && g_tick_count - level_tick == 300) {
         const size_t before = g_emission_patches.size();
