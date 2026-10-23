@@ -332,6 +332,82 @@ void dino::input::config_menu_set_cont_or_kb(bool cont_interacted) {
     }
 }
 
+// JFG PORT: each tab remembers the option that had the focus on it and how far its list was scrolled, and comes back to
+// them when switched to with the bumpers; the menu opened in game (Esc or the menu button) comes back on the tab it was
+// closed on (for this run of the game only). An option is focused again only with a controller or the keyboard in use;
+// with the mouse just the tab and the scrolling come back.
+struct JfgTabPlace {
+    bool saved = false;
+    std::string focus_id;
+    float scroll = 0.0f;
+};
+static std::vector<JfgTabPlace> jfg_tab_places;
+static int jfg_menu_closed_tab = -1;
+
+// The scrolling options list that holds element (a config__wrapper taller inside than out), or nullptr.
+static Rml::Element* jfg_scroll_list_of(Rml::Element* element) {
+    for (Rml::Element* e = element; e != nullptr; e = e->GetParentNode()) {
+        if (e->IsClassSet("config__wrapper") && e->GetScrollHeight() > e->GetClientHeight() + 1.0f) return e;
+    }
+    return nullptr;
+}
+
+// The scrolling options list of tab index, or nullptr (the tab has none, or it is not laid out).
+static Rml::Element* jfg_tab_list(int index) {
+    Rml::Element* panels = recompui::get_child_by_tag(recompui::get_config_tabset(), "panels");
+    Rml::Element* panel = panels != nullptr ? panels->GetChild(index) : nullptr;
+    if (panel == nullptr) return nullptr;
+    Rml::ElementList lists;
+    panel->GetElementsByClassName(lists, "config__wrapper");
+    for (Rml::Element* l : lists) {
+        if (l->GetScrollHeight() > l->GetClientHeight() + 1.0f) return l;
+    }
+    return nullptr;
+}
+
+// Notes where the open tab is (call before it is left). A focus outside its list (the tabs, the mouse) keeps the option
+// noted before.
+static void jfg_save_tab_place() {
+    Rml::ElementDocument* doc = recompui::get_config_context_id().get_document();
+    if (doc == nullptr) return;
+    const int index = recompui::get_config_tabset()->GetActiveTab();
+    if (index < 0) return;
+    if ((size_t)index >= jfg_tab_places.size()) jfg_tab_places.resize(index + 1);
+    JfgTabPlace& place = jfg_tab_places[index];
+    Rml::Element* list = jfg_tab_list(index);
+    if (list == nullptr) return;
+    place.saved = true;
+    place.scroll = list->GetScrollTop();
+    Rml::Element* focused = doc->GetFocusLeafNode();
+    if (focused != nullptr && jfg_scroll_list_of(focused) == list && !focused->GetId().empty()) place.focus_id = focused->GetId();
+}
+
+// Puts the open tab back where it was. Returns whether an option got the focus.
+static bool jfg_restore_tab_place() {
+    Rml::ElementDocument* doc = recompui::get_config_context_id().get_document();
+    if (doc == nullptr) return false;
+    const int index = recompui::get_config_tabset()->GetActiveTab();
+    if (index < 0 || (size_t)index >= jfg_tab_places.size() || !jfg_tab_places[index].saved) return false;
+    const JfgTabPlace& place = jfg_tab_places[index];
+    doc->UpdateDocument(); // lay the tab out, so its list can be scrolled
+    if (Rml::Element* list = jfg_tab_list(index)) list->SetScrollTop(place.scroll);
+    if (!recompui::get_cont_active() || place.focus_id.empty()) return false;
+    Rml::Element* target = doc->GetElementById(place.focus_id);
+    if (target == nullptr || target->HasAttribute("disabled") || !target->IsVisible(true)) return false;
+    target->Focus(true);
+    return true;
+}
+
+void jfg_restore_menu_place() {
+    if (jfg_menu_closed_tab < 0) return;
+    recompui::get_config_tabset()->SetActiveTab(jfg_menu_closed_tab);
+    if (jfg_restore_tab_place()) return;
+    if (!recompui::get_cont_active()) return;
+    if (Rml::Element* tabs = recompui::get_child_by_tag(recompui::get_config_tabset(), "tabs")) {
+        if (Rml::Element* tab = tabs->GetChild(jfg_menu_closed_tab)) tab->Focus(true);
+    }
+}
+
 void close_config_menu_impl() {
     dino::config::save_config();
 
@@ -342,6 +418,10 @@ void close_config_menu_impl() {
     	recompui::hide_context(sub_menu_context);
     }
     else if (recompui::is_context_shown(config_context)) {
+        if (ultramodern::is_game_started()) { // JFG PORT
+            jfg_save_tab_place();
+            jfg_menu_closed_tab = recompui::get_config_tabset()->GetActiveTab();
+        }
     	recompui::hide_context(config_context);
     }
     else {
@@ -803,7 +883,8 @@ class ConfigTabsetListener : public Rml::EventListener {
 };
 
 // JFG PORT: the controller's bumpers switch tabs (LB the one to the left, RB to the right, wrapping round), skipping
-// hidden ones. The new tab gets the focus, so Down goes into its options.
+// hidden ones. The new tab comes back to the option it had the focus on last (see jfg_save_tab_place); without one the
+// tab gets the focus, so Down goes into its options.
 void jfg_config_step_tab(int dir) {
     if (recompui::is_prompt_open()) return;
     Rml::ElementTabSet* tabset = recompui::get_config_tabset();
@@ -815,8 +896,9 @@ void jfg_config_step_tab(int dir) {
         const int i = ((cur + dir * k) % n + n) % n;
         Rml::Element* tab = tabs->GetChild(i);
         if (tab == nullptr || tab->GetComputedValues().display() == Rml::Style::Display::None) continue;
+        jfg_save_tab_place();
         tabset->SetActiveTab(i);
-        tab->Focus();
+        if (!jfg_restore_tab_place()) tab->Focus();
         return;
     }
 }
