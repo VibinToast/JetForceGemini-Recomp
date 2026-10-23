@@ -85,7 +85,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "fov") == 0) g.fov = std::clamp(value, 75, 140);
     else if (std::strcmp(key, "hit_flash") == 0) g.hit_flash = std::clamp(value, 0, 100);
     else if (std::strcmp(key, "hide_floyd") == 0) g.hide_floyd = value != 0;
-    else if (std::strcmp(key, "language") == 0) g.language = std::clamp(value, 0, 3);
+    else if (std::strcmp(key, "language") == 0) g.language = std::clamp(value, 0, 4);
     else if (std::strcmp(key, "vignette") == 0) g.vignette = value != 0;
     else if (std::strcmp(key, "vignette_strength") == 0) g.vignette_strength = std::clamp(value, 0, 100);
     else if (std::strcmp(key, "vignette_size") == 0) g.vignette_size = std::clamp(value, 0, 90);

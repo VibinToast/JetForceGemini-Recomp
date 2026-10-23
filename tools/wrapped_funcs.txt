@@ -47,15 +47,18 @@ amSndPlay
 frontFlashScreen
 sidekickControl
 
-# Language option and translated text: menu text buffer, subtitles and hints per language (jfg_locale.cpp)
+# Locales (jfg_locale.cpp): the menu text buffer, the language slot, subtitles, fonts 4-7 and page fonts
 initFront
 setLanguage
 subtitleStart
-hinttextStart
-func_overlay_7_00000988_1EFBAB0
-func_overlay_7_00000B00_1EFBC28
-func_overlay_7_00000C90_1EFBDB8
-frontGetLanguage
+fontInit
+func_8006FD98_70998
+func_80071388_71F88
+
+# Runtime assets (jfg_assets.cpp): the game's asset loaders
+piRomLoad
+piRomLoadSection
+piRomGetFileSize
 
 # Hide Floyd: his shadow (jfg_visuals.cpp)
 shadowGenerate

@@ -12,9 +12,6 @@ import html, os
 GENERAL = [
     ("group", None, "Sound", None, None),
     ("range", "main_volume", "Master Volume", (0, 100, "%"), "The volume of all of the game's sound."),
-    ("group", None, "Language", None, None),
-    ("choice", "language", "Language", [(0, "English"), (1, "French"), (2, "German"), (3, "Spanish")],
-     "The language of menus, subtitles and hints. The US game has French and German menus only; a locale pack (Mods tab) adds the rest. Text a language lacks is shown in English. Not part of profiles."),
     ("group", None, "Menu & Cutscenes", None, None),
     ("bool", "pause_in_menu", "Pause in Settings Menu", None,
      "The game stands still while the settings menu (Select / Esc) is open during play, as on the pause screen. Cutscenes keep playing."),
@@ -361,13 +358,23 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
 </template>
 '''
 
+# The Language list (General tab): English, the game's own languages and every locale mod, from the jfg_general_model's
+# "locales" (src/ui/ui_config.cpp). Locale mods load with the game, so the launcher lists only what is built in.
+LANGUAGE_LIST = '''                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Language</label></div>
+                    <div class="config-option jfg-option">
+                        <div class="config-option__list" style="flex-wrap: wrap;">
+                            <button class="button" data-for="l : locales" data-attr-id="'jfg_locale_' + it_index" data-event-click="set_locale(l.id)" data-class-jfg-selected="l.selected" style="display: inline-block; margin: 6dp; nav-up: auto; nav-down: auto;">{{l.name}}</button>
+                        </div>
+                    </div>
+                    <div class="jfg-note" style="display: block; margin: 4dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Menus, subtitles and hints. More languages come as locale mods (Mods); text a language lacks is shown in English.</div>'''
+
 # In a wrapper the launcher hides (it has no F10 or F9: it is the game's menu that has them).
 GENERAL_NOTE = '''                    <div class="jfg-keys-note"><div class="jfg-note" style="display: block; margin: 32dp 12dp 16dp; font-size: 18dp; line-height: 26dp;">F10: the tools bar (cheats, level warp, items, weapons, texture packs). F9 or ` (backquote): the all-in-one debug window.</div></div>'''
 
 # (name, items, extra markup after the options, markup before them). Each is assets/config_menu/<name>.rml, bound to the
 # data model <name>_model, its tab is tab_<name>.
 OPTION_TABS = (
-    ("jfg_general", GENERAL, GENERAL_NOTE, ""),
+    ("jfg_general", GENERAL, LANGUAGE_LIST + "\n" + GENERAL_NOTE, ""),
     ("jfg_gameplay", GAMEPLAY, "", ""),
     ("jfg_controls", CONTROLS, "", ""),
     ("jfg_graphics", GRAPHICS, "", ""),

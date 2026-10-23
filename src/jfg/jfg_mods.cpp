@@ -216,6 +216,7 @@ extern "C" void jfg_register_mod_exports(void) {
     jfg_register_wrapped(recomp::overlays::register_base_wrapper); // mods patch and hook the originals, not the wrappers
     jfg::api::register_api(); // the JFG mod API's events and helpers (jfg_api.cpp)
     jfg_register_asset_mods(); // mods that replace game data (jfg_assets.json)
+    jfg_register_locale_mods(); // mods that add a language (jfg_locale.json)
 }
 
 // --- mods replacing a function a port feature needs as the caller ---------------------------------------------------
@@ -234,9 +235,7 @@ void func_overlay_16_00004440_1F22458(uint8_t* rdram, recomp_context* ctx);
 void func_overlay_17_00004614_1F2C15C(uint8_t* rdram, recomp_context* ctx);
 void squadsFireWeapon(uint8_t* rdram, recomp_context* ctx);
 void initFront(uint8_t* rdram, recomp_context* ctx);
-void subtitleStart(uint8_t* rdram, recomp_context* ctx);
-void hinttextStart(uint8_t* rdram, recomp_context* ctx);
-void func_overlay_7_00000988_1EFBAB0(uint8_t* rdram, recomp_context* ctx);
+void func_8006FD98_70998(uint8_t* rdram, recomp_context* ctx);
 }
 
 namespace {
@@ -261,10 +260,7 @@ const CallerFeatures g_caller_features[] = {
     { squadsFireWeapon, "squadsFireWeapon",
       "the fix for the crash when an enemy's weapon can't be created (low memory)" },
     { initFront, "initFront", "room for menu text longer than the original (translations)" },
-    { subtitleStart, "subtitleStart", "English subtitles in languages a locale pack has none for" },
-    { hinttextStart, "hinttextStart", "English hints in languages a locale pack has none for" },
-    { func_overlay_7_00000988_1EFBAB0, "func_overlay_7_00000988_1EFBAB0 (hint text)",
-      "English hints in languages a locale pack has none for" },
+    { func_8006FD98_70998, "func_8006FD98_70998 (text drawing)", "locales with their own character pages (Japanese)" },
 };
 
 // Mod id -> the text for its page in the Mods menu.
