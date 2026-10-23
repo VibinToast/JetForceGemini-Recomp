@@ -41,6 +41,7 @@ uint32_t rt64_jfg_material_kinds(uint64_t hash);          // ...
 void rt64_jfg_material_rescan();                         // ...
 void rt64_jfg_pick(bool on);                             // lib/rt64 src/hle/rt64_state.cpp
 bool rt64_jfg_picked(uint64_t* hash, uint32_t* width, uint32_t* height, uint32_t* address); // ...
+void rt64_jfg_highlight(uint64_t hash, float amount);    // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 
 namespace dino::debug_ui::backend {
 bool lighting_tool_open();           // F12
@@ -215,6 +216,14 @@ bool g_confirm_clear = false;
 bool g_confirm_reset = false;  // asking before Reset
 uint32_t g_glow_tab_tick = 0;  // the Emission tab was showing
 bool g_open_glow_tab = false;  // test switch: show the Emission tab once
+// The picker: a texture selected (locked, it stays shown wherever the crosshair goes) and whether the shown one pulses.
+struct PickedTexture {
+    uint64_t hash = 0;
+    uint32_t width = 0, height = 0;
+};
+PickedTexture g_pick_selected;   // hash 0: none, the picker follows the crosshair
+PickedTexture g_pick_shown;      // what the Emission tab shows: the selected one, else the one under the crosshair
+bool g_pick_pulse = true;
 bool g_fly_test = false;       // test switch: turn the fly camera on in the first level
 // Lights from emission maps: the level textures found to have one (their average colour), patches of them grouped by
 // texture in cells, and the lights made from those.
@@ -364,6 +373,8 @@ void load_level(int level) {
     g_emission_colour.clear();
     g_emission_patches.clear();
     g_emission_lights.clear();
+    g_pick_selected = {};
+    g_pick_shown = {};
     g_selected = -1;
     g_selected_game = 0;
     g_confirm_reset = false; // a pending Reset was about the level before
@@ -877,13 +888,33 @@ void draw_picked_texture() {
     uint32_t width = 0, height = 0, address = 0;
     const bool picked = rt64_jfg_picked(&hash, &width, &height, &address);
     draw_crosshair(picked);
-    if (!picked) {
+    const bool selected = g_pick_selected.hash != 0;
+    if (selected) {
+        hash = g_pick_selected.hash;
+        width = g_pick_selected.width;
+        height = g_pick_selected.height;
+    }
+    g_pick_shown = (selected || picked) ? PickedTexture{ hash, width, height } : PickedTexture{};
+    if (!selected) {
+        ImGui::BeginDisabled(!picked);
+        if (ImGui::Button("Select")) g_pick_selected = g_pick_shown;
+        ImGui::EndDisabled();
+        help("Locks the texture under the crosshair: it stays shown (and pulses) wherever you look, until Clear.");
+    }
+    else {
+        if (ImGui::Button("Clear")) g_pick_selected = {};
+        help("Back to the texture under the crosshair.");
+    }
+    ImGui::SameLine();
+    ImGui::Checkbox("Pulse it", &g_pick_pulse);
+    help("The shown texture pulses brighter everywhere it is drawn, so you can see which one it is.");
+    if (g_pick_shown.hash == 0) {
         ImGui::TextDisabled("Nothing textured in 3D under the crosshair.");
     }
     else {
         char text[24];
         std::snprintf(text, sizeof(text), "%016llX", (unsigned long long)hash);
-        ImGui::Text("%s  (%ux%u)", text, width, height);
+        ImGui::Text("%s%s  (%ux%u)", selected ? "Selected: " : "", text, width, height);
         const uint32_t kinds = rt64_jfg_material_kinds(hash);
         std::string has;
         if (kinds & 1) has += " normal";
@@ -1208,7 +1239,11 @@ void lighting_tool_tick(recomp_context* ctx) {
     static const bool log_aim = std::getenv("JFG_LIGHTING_LOG_AIM") != nullptr;
     update_emission_lights();
     send_glow();
-    rt64_jfg_pick((dino::debug_ui::backend::lighting_tool_open() && g_tick_count - g_glow_tab_tick <= 3) || log_aim);
+    const bool emission_tab = dino::debug_ui::backend::lighting_tool_open() && g_tick_count - g_glow_tab_tick <= 3;
+    rt64_jfg_pick(emission_tab || log_aim);
+    // The shown texture pulses while the Emission tab shows: brighter and back, about twice a second.
+    const bool pulse = emission_tab && g_pick_pulse && g_pick_shown.hash != 0;
+    rt64_jfg_highlight(pulse ? g_pick_shown.hash : 0, pulse ? 0.5f + 0.5f * std::sin(g_tick_count * 0.4f) : 0.0f);
     if (log_aim) {
         static uint64_t logged = 0;
         uint64_t hash = 0;
