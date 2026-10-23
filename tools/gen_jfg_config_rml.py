@@ -69,6 +69,8 @@ GAMEPLAY = [
     ("range", "sprint_swim_speed", "Swim Sprint Speed", (100, 300, "%"), "How fast Vela swims while sprinting, on top of Vela's Dive Speed."),
     ("bool", "normalize_diagonal", "Normalize Diagonal Speed", None,
      "In the game, running forward while sidestepping adds the two speeds together, so going diagonally is about 40% faster. With this on a diagonal is as fast as running straight."),
+    ("bool", "aim_even_speed", "Same Aim-Walk Speed in All Directions", None,
+     "While aiming the game walks forward fastest: backwards is about 25% slower and sideways about 40% slower. With this on the character walks as fast in every direction, diagonals included."),
 ]
 
 # The port's control options; the button bindings are the Bindings tab (controls.rml).

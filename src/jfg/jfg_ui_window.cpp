@@ -259,6 +259,9 @@ void draw_options() {
             changed |= ImGui::Checkbox("Normalize diagonal speed", &g.normalize_diagonal);
             options_help("In the game, running forward while sidestepping adds the two speeds together, so going diagonally "
                          "is about 40% faster. With this on a diagonal is as fast as running straight.");
+            changed |= ImGui::Checkbox("Same aim-walk speed in all directions", &g.aim_even_speed);
+            options_help("While aiming the game walks forward fastest: backwards is about 25% slower and sideways about 40% "
+                         "slower. With this on the character walks as fast in every direction, diagonals included.");
 
             options_section("Aiming (any control layout)");
             changed |= ImGui::Checkbox("Over-the-shoulder view while aiming", &g.aim_shoulder);
