@@ -240,7 +240,7 @@ struct LightOverride {
     int nth = 0;          // which of the game's lights at this spot (several can stand on one), in the game's order
 };
 const std::vector<PlacedLight>& lighting_placed_lights();
-const std::vector<PlacedLight>& lighting_emission_lights(); // where the level's emission maps are (the Glow tab)
+const std::vector<PlacedLight>& lighting_emission_lights(); // where the level's emission maps are (the lighting tool's Surfaces tab)
 const LightOverride* lighting_override_for(uint32_t light); // a game light's changes (its object light); nullptr: its own look
 float lighting_flicker(uint32_t seed, int amount, int speed);        // 1 = full, down to 1 - amount
 int lighting_pulse_light();                    // the placed light the tool pulses to show it (-1 = none)

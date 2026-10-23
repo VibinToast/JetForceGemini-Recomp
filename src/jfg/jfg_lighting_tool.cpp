@@ -225,15 +225,15 @@ std::string g_message;
 uint32_t g_message_tick = 0;
 bool g_confirm_clear = false;
 bool g_confirm_reset = false;  // asking before Reset
-uint32_t g_glow_tab_tick = 0;  // the Emission tab was showing
-bool g_open_glow_tab = false;  // test switch: show the Emission tab once
+uint32_t g_glow_tab_tick = 0;  // the Textures tab (the picker) was showing
+bool g_open_glow_tab = false;  // test switch: show the Textures tab once
 // The picker: a texture selected (locked, it stays shown wherever the crosshair goes) and whether the shown one pulses.
 struct PickedTexture {
     uint64_t hash = 0;
     uint32_t width = 0, height = 0;
 };
 PickedTexture g_pick_selected;   // hash 0: none, the picker follows the crosshair
-PickedTexture g_pick_shown;      // what the Emission tab shows: the selected one, else the one under the crosshair
+PickedTexture g_pick_shown;      // what the Textures tab shows: the selected one, else the one under the crosshair
 bool g_pick_pulse = true;
 bool g_fly_test = false;       // test switch: turn the fly camera on in the first level
 // Lights from emission maps: the level textures found to have one (their average colour), patches of them grouped by
@@ -251,8 +251,8 @@ uint32_t g_emission_scan_tick = 0;
 
 bool use_files() { return std::getenv("JFG_LIGHTING_NO_FILES") == nullptr; }
 // Test switch: JFG_LIGHTING_TOOL=open opens the tool at start, =place with "place with fire" on (JFG_DEBUG_INPUT can
-// then fire), =mouse with the mouse and keyboard on the tool, =emission (or glow) on the Emission tab, =fly on the
-// Emission tab with the fly camera turned on two seconds into the first level.
+// then fire), =mouse with the mouse and keyboard on the tool, =textures (or emission, glow) on the Textures tab, =fly on
+// the Textures tab with the fly camera turned on two seconds into the first level.
 void test_switch() {
     static bool done = false;
     if (done) return;
@@ -260,7 +260,7 @@ void test_switch() {
     if (const char* env = std::getenv("JFG_LIGHTING_TOOL")) {
         dino::debug_ui::backend::set_lighting_tool_open(true);
         g_placing = std::strcmp(env, "place") == 0;
-        g_open_glow_tab = std::strcmp(env, "emission") == 0 || std::strcmp(env, "glow") == 0 || std::strcmp(env, "fly") == 0;
+        g_open_glow_tab = std::strcmp(env, "textures") == 0 || std::strcmp(env, "emission") == 0 || std::strcmp(env, "glow") == 0 || std::strcmp(env, "fly") == 0;
         g_fly_test = std::strcmp(env, "fly") == 0;
         dino::debug_ui::backend::set_lighting_tool_playing(std::strcmp(env, "mouse") != 0);
     }
@@ -504,7 +504,6 @@ void draw_group(Group group) {
     for (const Setting& t : settings_table()) {
         if (t.group != group) continue;
         if (group == Group::Sun && (std::strcmp(t.key, "sun_g") == 0 || std::strcmp(t.key, "sun_b") == 0)) continue;
-        if (std::strcmp(t.key, "glow") == 0 || std::strncmp(t.key, "emission_", 9) == 0) continue; // the Emission tab's
         if (group == Group::Sun && std::strcmp(t.key, "sun_r") == 0) {
             LightingSettings& s = lighting_settings();
             float c[3] = { s.sun_r.load() / 255.0f, s.sun_g.load() / 255.0f, s.sun_b.load() / 255.0f };
@@ -879,7 +878,7 @@ void update_emission_lights() {
 }
 
 // A level texture's hash as texture dumps and material maps name it (<16 hex digits>, the first of an animated one's
-// frames RT64 has seen), "" until it has been drawn while the Glow tab or a mark asks RT64 to note it.
+// frames RT64 has seen), "" until it has been drawn while the lights from emission maps ask RT64 to note it.
 std::string texture_hash(int texture, int* frames = nullptr) {
     uint32_t start, end;
     uint64_t hashes[64];
@@ -963,24 +962,60 @@ void draw_picked_texture() {
     ImGui::Spacing();
 }
 
-void draw_glow() {
-    g_glow_tab_tick = g_tick_count;
+// A setting by its key (the settings table's own widget and help).
+void draw_key(const char* key) {
     for (const Setting& t : settings_table()) {
-        if (std::strcmp(t.key, "emission_maps") == 0 || std::strcmp(t.key, "glow") == 0) draw_setting(t);
+        if (std::strcmp(t.key, key) == 0) draw_setting(t);
     }
-    ImGui::TextWrapped("Textures glow with emission maps: materials/<texture hash>_e.png next to the game (or anywhere in "
-                       "a texture pack), the light the texture gives off, black where none. Point the crosshair at a "
-                       "texture to get its name.");
-    if (!lighting_active()) ImGui::TextColored(ImVec4(1, 0.7f, 0.3f, 1), "Modern lighting is off: nothing glows.");
+}
+
+// The Surfaces tab, in sections: the level's surface directions, the surface detail and shine worked out from the
+// textures, and the authored material maps (normal, specular, emission, with the lights emission maps make).
+void draw_surfaces() {
+    draw_key("smooth_surfaces");
+    ImGui::SeparatorText("Surface detail (from the textures)");
+    draw_key("detail");
+    draw_key("detail_characters");
+    ImGui::SeparatorText("Shine (textures without a specular map)");
+    draw_key("shine");
+    draw_key("sharpness");
+    draw_key("shine_characters");
+    draw_key("sharpness_characters");
+    ImGui::SeparatorText("Material maps");
+    ImGui::TextDisabled("materials/<texture hash>_n.png, _s.png, _e.png next to the game or in a texture pack (the "
+                        "Textures tab names a texture). %d textures have them, %d maps loaded.",
+                        rt64_jfg_material_files.load(), rt64_jfg_material_loaded.load());
+    draw_key("normal_maps");
+    ImGui::BeginDisabled(!lighting_settings().normal_maps.load());
+    draw_key("normal_strength");
+    ImGui::EndDisabled();
+    draw_key("specular_maps");
+    ImGui::BeginDisabled(!lighting_settings().specular_maps.load());
+    draw_key("specular_strength");
+    ImGui::EndDisabled();
+    draw_key("emission_maps");
+    ImGui::BeginDisabled(!lighting_settings().emission_maps.load());
+    draw_key("glow");
+    ImGui::Indent();
+    draw_key("emission_lights");
+    ImGui::BeginDisabled(!lighting_settings().emission_lights.load());
+    draw_key("emission_light");
+    draw_key("emission_reach");
+    draw_key("emission_shadows");
+    ImGui::EndDisabled();
+    int textures = 0;
+    for (int c : g_emission_checked) textures += c;
+    ImGui::TextDisabled("%d textures here have emission maps (found once drawn): %zu lights from them", textures, g_emission_lights.size());
+    ImGui::Unindent();
+    ImGui::EndDisabled();
+}
+
+// The Textures tab: the texture picker.
+void draw_textures() {
+    g_glow_tab_tick = g_tick_count;
+    ImGui::TextWrapped("Point the crosshair at any texture (level, characters, objects) to get its hash: the name for its "
+                       "material maps. Select keeps it while you look around; it pulses where it is drawn.");
     draw_picked_texture();
-    if (ImGui::CollapsingHeader("Lights from emission maps", ImGuiTreeNodeFlags_DefaultOpen)) {
-        for (const Setting& t : settings_table()) {
-            if (std::strncmp(t.key, "emission_", 9) == 0 && std::strcmp(t.key, "emission_maps") != 0) draw_setting(t);
-        }
-        int textures = 0;
-        for (int c : g_emission_checked) textures += c;
-        ImGui::TextDisabled("%d textures here have emission maps (found once drawn): %zu lights from them", textures, g_emission_lights.size());
-    }
 }
 
 // --- presets -----------------------------------------------------------------------------------------------------
@@ -1254,7 +1289,7 @@ void lighting_tool_tick(recomp_context* ctx) {
     send_glow();
     const bool emission_tab = dino::debug_ui::backend::lighting_tool_open() && g_tick_count - g_glow_tab_tick <= 3;
     rt64_jfg_pick(emission_tab || log_aim);
-    // The shown texture pulses while the Emission tab shows: brighter and back, about twice a second.
+    // The shown texture pulses while the Textures tab shows: brighter and back, about twice a second.
     const bool pulse = emission_tab && g_pick_pulse && g_pick_shown.hash != 0;
     rt64_jfg_highlight(pulse ? g_pick_shown.hash : 0, pulse ? 0.5f + 0.5f * std::sin(g_tick_count * 0.4f) : 0.0f);
     if (log_aim) {
@@ -1423,13 +1458,13 @@ void draw_lighting_tool(recomp_context* ctx) {
             if (ImGui::BeginTabItem("Lights")) { draw_group(Group::Lights); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Shadows")) { draw_group(Group::Shadows); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Directional")) { draw_group(Group::Sun); ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Surfaces")) {
-                draw_group(Group::Surfaces);
-                ImGui::TextDisabled("Material maps: %d textures have them, %d maps loaded", rt64_jfg_material_files.load(),
-                                    rt64_jfg_material_loaded.load());
-                ImGui::EndTabItem();
-            }
-            if (ImGui::BeginTabItem("Emission", nullptr, g_open_glow_tab ? ImGuiTabItemFlags_SetSelected : 0)) { draw_glow(); ImGui::EndTabItem(); }
+            // Test switch: JFG_LIGHTING_TAB=<tab name> shows that tab first (scripted runs).
+            static const char* first_tab = std::getenv("JFG_LIGHTING_TAB");
+            auto tab_flags = [](const char* name) {
+                return (first_tab != nullptr && std::strcmp(first_tab, name) == 0 && ImGui::GetFrameCount() < 120) ? ImGuiTabItemFlags_SetSelected : 0;
+            };
+            if (ImGui::BeginTabItem("Surfaces", nullptr, tab_flags("Surfaces"))) { draw_surfaces(); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Textures", nullptr, g_open_glow_tab ? ImGuiTabItemFlags_SetSelected : 0)) { draw_textures(); ImGui::EndTabItem(); }
             g_open_glow_tab = false;
             if (ImGui::BeginTabItem("Characters")) { draw_group(Group::Characters); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Placed lights")) { draw_placed(); ImGui::EndTabItem(); }

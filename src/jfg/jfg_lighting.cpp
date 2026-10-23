@@ -562,7 +562,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
             p.shadows);
         placed_sent++;
     }
-    // Lights where the level's emission-mapped textures are (the lighting tool's Glow tab).
+    // Lights where the level's emission-mapped textures are (the lighting tool's Surfaces tab).
     const std::vector<PlacedLight>& emitted = lighting_emission_lights();
     for (size_t i = 0; mode >= 1 && i < emitted.size(); i++) {
         const PlacedLight& p = emitted[i];
