@@ -203,6 +203,35 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         // The game's camera looks at a point above the character's feet; keep looking at that point from the same distance.
         pivot = std::clamp((cy - py) - flat * std::tan(game_elevation), 0.0f, 200.0f);
         boom = std::sqrt(flat * flat + (cy - py - pivot) * (cy - py - pivot));
+        {
+            // The game's camera does not follow a jump up and down: the height it looks at stays put. When Lupus's jets
+            // come on (a hover) it catches up about 50 units in a third of a second, and the free camera followed it,
+            // so Lupus seemed to drop (issue #16). From the jets coming on that height eases over instead, for at least
+            // about a second and until it has caught up (per video frame, so the same at Game 30 and 60). Walking,
+            // slopes and ordinary jumps follow the game's camera as before. The jets: control data + 0x14A non-zero
+            // while in the jump state, the game's own test for hovering.
+            const uint32_t data = rd32(obj + 0x68);
+            const bool jet = valid_ptr(data) && rd8(data + 0x14A) != 0 && (rd8(data + PD_STATE) & ~0x20u) == PD_STATE_JUMP;
+            const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
+            const float look = py + pivot;
+            const bool fresh = g_cam.follow_tick == 0 || g_cam.follow_tick + 1 != g_tick_count || std::fabs(look - g_cam.follow_look) > 300.0f;
+            if (jet && !g_cam.hover_jet && !fresh) { g_cam.hover_ease = true; g_cam.hover_frames = 60.0f; }
+            g_cam.hover_jet = jet;
+            if (fresh) g_cam.hover_ease = false;
+            if (g_cam.hover_ease) {
+                g_cam.follow_look = look + (g_cam.follow_look - look) * std::pow(0.92f, frames);
+                g_cam.hover_frames -= frames;
+                if (g_cam.hover_frames <= 0.0f && std::fabs(g_cam.follow_look - look) < 1.0f) g_cam.hover_ease = false;
+                pivot = std::clamp(g_cam.follow_look - py, -100.0f, 300.0f);
+            }
+            else {
+                g_cam.follow_look = look;
+            }
+            g_cam.follow_tick = g_tick_count;
+            static const bool log = std::getenv("JFG_DEBUG_FOLLOW_CAM") != nullptr; // tests: the height looked at, the game's and ours
+            if (log) std::fprintf(stderr, "[cam] tick %u look %.1f placed %.1f jet %d easing %d player y %.1f\n", g_tick_count, look, py + pivot, (int)jet,
+                                  (int)g_cam.hover_ease, py);
+        }
         if (g_cam.orbit_valid && g_cam.orbit_easing) {
             // Just after aiming the game's camera is still in close and swings back out: the kept orbit stays until the
             // game's is near it again (at most orbit_settle frames), then eases over to it, so the view neither zooms in

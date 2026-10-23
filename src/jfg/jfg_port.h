@@ -102,6 +102,13 @@ struct CameraControl {
     bool orbit_easing = false;  // after aiming: the orbit goes back over to the game camera's (jfg_camera_override)
     int orbit_settle = 0;       // frames left in which it waits for the game's camera to swing back out
     float glide = 0;            // 0..1: how far the view has glided to the over-the-shoulder spot while aiming
+    // Hovering (Lupus's jets, a jetpack): the height the free camera looks at eases towards the game camera's, which
+    // catches up all at once as the hover starts (issue #16). Elsewhere it is the game camera's, as before.
+    bool hover_jet = false;     // the jets were on last tick
+    bool hover_ease = false;    // easing: from the jets coming on until it has caught up, at least hover_frames
+    float hover_frames = 0;     // video frames left of the at least ~1 s of easing after the jets came on
+    float follow_look = 0;      // the height looked at, as last placed
+    uint32_t follow_tick = 0;   // g_tick_count when it was placed; anything older starts again from the game's
 };
 void camera_hand_over_to_aim(uint32_t cam); // jfg_camera.cpp
 // Dual-stick aiming: the character aims at the first surface on the view's centre line (from o along the unit vector
