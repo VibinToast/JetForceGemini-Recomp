@@ -384,6 +384,14 @@ void draw_warp() {
                         "AlphaSewer = Sekhmet, ...). Entries ending in Seq are cutscenes. Use from inside a game.");
 }
 
+// A slider straight on a live setting: stored on every change (options_slider reports only the release, and the value
+// is read back from the setting each frame, so the drag would snap back).
+static void live_slider(const char* label, std::atomic<int>& setting, int lo, int hi) {
+    int value = setting.load();
+    ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+    if (ImGui::SliderInt(label, &value, lo, hi)) setting = value;
+}
+
 // Lighting tab: modern lighting, in progress (jfg_lighting.cpp). Changes apply at once; nothing is saved.
 static void draw_lighting() {
     LightingSettings& s = lighting_settings();
@@ -400,21 +408,17 @@ static void draw_lighting() {
                  "triangles. Per pixel, the same lights make smooth pools. The game only does this for shots, flashes and "
                  "the like; torches and lamps light characters and objects only, and their glow on the walls is painted "
                  "into the level. The third mode lets them light the level too, which the original never does.");
-    int value = s.level_strength.load();
-    if (options_slider("Level lights (%)", &value, 0, 200)) s.level_strength = value;
+    live_slider("Level lights (%)", s.level_strength, 0, 200);
     options_help("Shots, flashes and other lights the game puts on the level. 100 is the original brightness.");
     ImGui::BeginDisabled(mode < 2);
-    value = s.object_strength.load();
-    if (options_slider("Torches and lamps (%)", &value, 0, 200)) s.object_strength = value;
+    live_slider("Torches and lamps (%)", s.object_strength, 0, 200);
     options_help("How strongly torches and lamps light the level. Their glow is already painted into the walls, so high "
                  "values light them twice.");
-    value = s.object_radius.load();
-    if (options_slider("Torch and lamp reach (%)", &value, 25, 400)) s.object_radius = value;
+    live_slider("Torch and lamp reach (%)", s.object_radius, 25, 400);
     options_help("How far their light reaches, as a share of the light's own radius. 125 is what the game uses when it "
                  "turns one of its object lights into a level light.");
     ImGui::EndDisabled();
-    value = s.max_lights.load();
-    if (options_slider("Most lights per frame", &value, 0, 32)) s.max_lights = value;
+    live_slider("Most lights per frame", s.max_lights, 0, 32);
     ImGui::TextDisabled("Last frame: %d level lights, %d torches and lamps", s.sent_level_lights.load(),
                         s.sent_object_lights.load());
 
