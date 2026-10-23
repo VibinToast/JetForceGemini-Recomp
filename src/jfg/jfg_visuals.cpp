@@ -28,6 +28,13 @@ extern "C" int jfg_widescreen_active(void) {
     return rd32(ADDR_mainGameMode) == 0 ? 1 : 0;
 }
 
+// "Shadow Opacity": the alpha func_8001B8E0 draws a shadow batch with (gDPSetPrimColor; the object's fade times the
+// batch's vertex alpha, >> 8), scaled by the option. 0 skips the batch, as the game does when a shadow fades out.
+extern "C" int jfg_shadow_alpha(int alpha) {
+    if (g.shadow_opacity == 100 || alpha <= 0) return alpha;
+    return std::min(255, (alpha * g.shadow_opacity + 50) / 100);
+}
+
 // "Hit flash opacity": entry of frontFlashScreen. The characters' control code (overlays 15-17) calls it with red
 // (0xFF0000FF) for a few ticks after a hit; fxScreenEffect then draws the picture again multiplied by that colour
 // (combiner TEXEL0 * PRIMITIVE), which leaves only its red. Raising green and blue towards white weakens the tint
