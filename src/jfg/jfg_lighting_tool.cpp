@@ -665,62 +665,83 @@ void apply_preset(const std::string& name) {
         std::to_string(applied) + " settings).");
 }
 
+// The presets bar, always at the top of the tool: pick a preset to apply or delete, save the current settings under a
+// name; which groups a save keeps and an apply takes are chosen in the "Groups" popup.
+std::string g_preset_selected;
+
 void draw_presets() {
     if (!g_presets_listed) list_presets();
-    ImGui::TextWrapped("Save the current settings as a preset to use again on other levels. Applying one changes %s.",
-                       g_level_own ? "this level's own settings" : "the defaults (this level has no settings of its own)");
-
-    ImGui::SeparatorText("Save");
-    ImGui::TextDisabled("Groups to keep in it:");
-    for (int g = 0; g < PRESET_GROUPS; g++) {
-        if (g > 0) ImGui::SameLine();
-        ImGui::PushID(g);
-        ImGui::Checkbox(PRESET_GROUP_NAMES[g], &g_preset_save_groups[g]);
-        ImGui::PopID();
+    if (!g_preset_selected.empty() && std::find(g_presets.begin(), g_presets.end(), g_preset_selected) == g_presets.end()) {
+        g_preset_selected.clear();
     }
-    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14.0f);
-    ImGui::InputText("Name", g_preset_name, sizeof(g_preset_name));
+    const float unit = ImGui::GetFontSize();
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Preset");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(unit * 11.0f);
+    if (ImGui::BeginCombo("##preset", g_preset_selected.empty() ? (g_presets.empty() ? "(none saved)" : "(choose)") : g_preset_selected.c_str())) {
+        for (const std::string& p : g_presets) {
+            if (ImGui::Selectable(p.c_str(), p == g_preset_selected)) {
+                g_preset_selected = p;
+                g_preset_delete.clear();
+                std::snprintf(g_preset_name, sizeof(g_preset_name), "%s", p.c_str());
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(g_preset_selected.empty());
+    if (ImGui::Button("Apply")) apply_preset(g_preset_selected);
+    help(g_level_own ? "Sets this level's own settings from the preset (the groups ticked under Groups)."
+                     : "Sets the defaults from the preset (this level has no settings of its own; the groups ticked under Groups).");
+    ImGui::SameLine();
+    if (g_preset_delete == g_preset_selected && !g_preset_selected.empty()) {
+        if (ImGui::Button("Yes, delete")) {
+            std::error_code ec;
+            std::filesystem::remove(presets_dir() / (g_preset_selected + ".txt"), ec);
+            g_preset_delete.clear();
+            g_preset_selected.clear();
+            list_presets();
+            say("Preset deleted.");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Keep")) g_preset_delete.clear();
+    }
+    else if (ImGui::Button("Delete")) g_preset_delete = g_preset_selected;
+    ImGui::EndDisabled();
+
+    ImGui::SetNextItemWidth(unit * 11.0f);
+    ImGui::InputTextWithHint("##presetname", "name to save as", g_preset_name, sizeof(g_preset_name));
     const std::string name = preset_file_name(g_preset_name);
     const bool exists = std::find(g_presets.begin(), g_presets.end(), name) != g_presets.end();
     ImGui::SameLine();
     ImGui::BeginDisabled(name.empty());
-    if (ImGui::Button(exists ? "Overwrite" : "Save preset")) save_preset(name);
+    if (ImGui::Button(exists ? "Overwrite" : "Save current")) {
+        save_preset(name);
+        g_preset_selected = name;
+    }
     ImGui::EndDisabled();
-
-    ImGui::SeparatorText("Apply");
-    ImGui::TextDisabled("Groups to take from it:");
-    for (int g = 0; g < PRESET_GROUPS; g++) {
-        if (g > 0) ImGui::SameLine();
-        ImGui::PushID(100 + g);
-        ImGui::Checkbox(PRESET_GROUP_NAMES[g], &g_preset_apply_groups[g]);
-        ImGui::PopID();
-    }
-    if (g_presets.empty()) ImGui::TextDisabled("No presets saved yet.");
-    for (const std::string& p : g_presets) {
-        ImGui::PushID(p.c_str());
-        if (ImGui::Button("Apply")) apply_preset(p);
-        ImGui::SameLine();
-        if (g_preset_delete == p) {
-            if (ImGui::Button("Yes, delete")) {
-                std::error_code ec;
-                std::filesystem::remove(presets_dir() / (p + ".txt"), ec);
-                g_preset_delete.clear();
-                ImGui::PopID();
-                list_presets();
-                say("Preset deleted.");
-                return;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Keep")) g_preset_delete.clear();
+    ImGui::SameLine();
+    if (ImGui::Button("Groups...")) ImGui::OpenPopup("preset_groups");
+    if (ImGui::BeginPopup("preset_groups")) {
+        ImGui::TextDisabled("A save keeps:");
+        for (int g = 0; g < PRESET_GROUPS; g++) {
+            ImGui::PushID(g);
+            ImGui::Checkbox(PRESET_GROUP_NAMES[g], &g_preset_save_groups[g]);
+            ImGui::PopID();
         }
-        else if (ImGui::Button("Delete")) g_preset_delete = p;
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Name")) std::snprintf(g_preset_name, sizeof(g_preset_name), "%s", p.c_str());
-        ImGui::SameLine();
-        ImGui::TextUnformatted(p.c_str());
-        ImGui::PopID();
+        ImGui::Separator();
+        ImGui::TextDisabled("Apply takes:");
+        for (int g = 0; g < PRESET_GROUPS; g++) {
+            ImGui::PushID(100 + g);
+            ImGui::Checkbox(PRESET_GROUP_NAMES[g], &g_preset_apply_groups[g]);
+            ImGui::PopID();
+        }
+        ImGui::Separator();
+        ImGui::TextDisabled("Files: %s", presets_dir().string().c_str());
+        ImGui::EndPopup();
     }
-    ImGui::TextDisabled("Files: %s", presets_dir().string().c_str());
 }
 } // namespace
 
@@ -888,6 +909,8 @@ void draw_lighting_tool(recomp_context* ctx) {
         ImGui::TextDisabled("Last frame: %d level lights, %d torches and lamps, %d placed", s.sent_level_lights.load(),
                             s.sent_object_lights.load(), s.sent_placed_lights.load());
         ImGui::Separator();
+        draw_presets();
+        ImGui::Separator();
         if (ImGui::BeginTabBar("lighting_tabs")) {
             if (ImGui::BeginTabItem("Lights")) { draw_group(Group::Lights); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Shadows")) { draw_group(Group::Shadows); ImGui::EndTabItem(); }
@@ -899,7 +922,6 @@ void draw_lighting_tool(recomp_context* ctx) {
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Characters")) { draw_group(Group::Characters); ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Presets")) { draw_presets(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Placed lights")) { draw_placed(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Level lights")) { draw_level_lights(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Debug")) {
