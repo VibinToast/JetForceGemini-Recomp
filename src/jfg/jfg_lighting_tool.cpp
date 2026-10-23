@@ -144,10 +144,18 @@ std::vector<Setting>& settings_table() {
           "edge; real corners stay sharp. Off: one direction per triangle." },
         { "detail", "Surface detail", &s.detail, nullptr, 0, 100, Group::Surfaces, false,
           "Bumps from the textures (their light and dark taken as height) that catch the lights. Tenths of a unit." },
-        { "material_maps", "Material maps (%)", &s.material_maps, nullptr, 0, 200, Group::Surfaces, false,
-          "Authored normal and specular maps: materials/<texture hash>_n.png (normal, green up) and _s.png (red: shine, "
-          "green: sharpness) next to the game, named like texture dumps. Where a texture has them they replace the "
-          "detail and shine worked out from it. Read at start." },
+        { "normal_maps", "Normal maps", nullptr, &s.normal_maps, 0, 1, Group::Surfaces, false,
+          "Authored normal maps: materials/<texture hash>_n.png next to the game (green up), or in a texture pack. Where "
+          "a texture has one it replaces the surface detail worked out from it. Off: to compare." },
+        { "normal_strength", "Normal map strength (%)", &s.normal_strength, nullptr, 0, 200, Group::Surfaces, false,
+          "How deep the normal maps' bumps look." },
+        { "specular_maps", "Specular maps", nullptr, &s.specular_maps, 0, 1, Group::Surfaces, false,
+          "Authored specular maps: materials/<texture hash>_s.png (red: how strong the shine, green: how sharp). Where "
+          "a texture has one it replaces the shine settings for it. Off: to compare." },
+        { "specular_strength", "Specular map strength (%)", &s.specular_strength, nullptr, 0, 200, Group::Surfaces, false,
+          "How strong the specular maps' shine is." },
+        { "emission_maps", "Emission maps", nullptr, &s.emission_maps, 0, 1, Group::Surfaces, false,
+          "Emission maps (materials/<texture hash>_e.png): their glow and the lights they make. Off: to compare." },
         { "glow", "Emission (%)", &s.glow, nullptr, 0, 200, Group::Surfaces, false,
           "How bright emission maps (materials/<texture hash>_e.png) are: their glow on the textures and the lights "
           "they make (with Light from emission on top). 0 is off." },
@@ -493,7 +501,7 @@ void draw_group(Group group) {
     for (const Setting& t : settings_table()) {
         if (t.group != group) continue;
         if (group == Group::Sun && (std::strcmp(t.key, "sun_g") == 0 || std::strcmp(t.key, "sun_b") == 0)) continue;
-        if (std::strcmp(t.key, "glow") == 0 || std::strncmp(t.key, "emission_", 9) == 0) continue; // the Glow tab's
+        if (std::strcmp(t.key, "glow") == 0 || std::strncmp(t.key, "emission_", 9) == 0) continue; // the Emission tab's
         if (group == Group::Sun && std::strcmp(t.key, "sun_r") == 0) {
             LightingSettings& s = lighting_settings();
             float c[3] = { s.sun_r.load() / 255.0f, s.sun_g.load() / 255.0f, s.sun_b.load() / 255.0f };
@@ -842,7 +850,7 @@ void update_emission_lights() {
     }
     g_emission_lights.clear();
     // Emission (%) is over both: the maps' glow and the lights from them (0: neither).
-    const int emission = std::clamp(s.glow.load(), 0, 200);
+    const int emission = s.emission_maps.load() ? std::clamp(s.glow.load(), 0, 200) : 0;
     if (!s.emission_lights.load() || emission == 0) return;
     for (const EmissionPatch& p : g_emission_patches) {
         const std::array<float, 3>& c = g_emission_colour[(size_t)p.texture];
@@ -953,7 +961,7 @@ void draw_picked_texture() {
 void draw_glow() {
     g_glow_tab_tick = g_tick_count;
     for (const Setting& t : settings_table()) {
-        if (std::strcmp(t.key, "glow") == 0) draw_setting(t);
+        if (std::strcmp(t.key, "emission_maps") == 0 || std::strcmp(t.key, "glow") == 0) draw_setting(t);
     }
     ImGui::TextWrapped("Textures glow with emission maps: materials/<texture hash>_e.png next to the game (or anywhere in "
                        "a texture pack), the light the texture gives off, black where none. Point the crosshair at a "
@@ -962,7 +970,7 @@ void draw_glow() {
     draw_picked_texture();
     if (ImGui::CollapsingHeader("Lights from emission maps", ImGuiTreeNodeFlags_DefaultOpen)) {
         for (const Setting& t : settings_table()) {
-            if (std::strncmp(t.key, "emission_", 9) == 0) draw_setting(t);
+            if (std::strncmp(t.key, "emission_", 9) == 0 && std::strcmp(t.key, "emission_maps") != 0) draw_setting(t);
         }
         int textures = 0;
         for (int c : g_emission_checked) textures += c;

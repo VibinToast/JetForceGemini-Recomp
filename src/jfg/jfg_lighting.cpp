@@ -585,7 +585,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     const bool on = mode > 0;
     const float yaw = s.sun_yaw.load() * 3.14159265f / 180.0f, pitch = s.sun_pitch.load() * 3.14159265f / 180.0f;
     const float sun = s.sun_intensity.load() / 100.0f;
-    float params[20] = {};
+    float params[24] = {};
     params[0] = std::cos(pitch) * std::sin(yaw);
     params[1] = std::sin(pitch);
     params[2] = std::cos(pitch) * std::cos(yaw);
@@ -601,12 +601,13 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     params[12] = std::clamp(s.detail_characters.load(), 0, 200) / 100.0f;
     params[13] = s.sun_shadows.load() ? 1.0f : 0.0f;
     params[14] = (float)std::clamp(s.sun_shadow_area.load(), 250, 8000);
-    params[15] = on ? std::clamp(s.material_maps.load(), 0, 200) / 100.0f : 0.0f;
+    params[15] = (on && s.normal_maps.load()) ? std::clamp(s.normal_strength.load(), 0, 200) / 100.0f : 0.0f;
     params[16] = s.smooth_surfaces.load() ? 1.0f : 0.0f;
     params[17] = on ? s.shine_characters.load() / 100.0f : 0.0f;
     params[18] = (float)std::clamp(s.sharpness_characters.load(), 1, 256);
-    params[19] = on ? std::clamp(s.glow.load(), 0, 200) / 100.0f : 0.0f;
-    rt64_jfg_lighting_params(params, 20);
+    params[19] = (on && s.emission_maps.load()) ? std::clamp(s.glow.load(), 0, 200) / 100.0f : 0.0f;
+    params[20] = (on && s.specular_maps.load()) ? std::clamp(s.specular_strength.load(), 0, 200) / 100.0f : 0.0f;
+    rt64_jfg_lighting_params(params, 24);
     rt64_jfg_frame_objects((uint32_t)ctx->r4 & RDRAM_MASK, g_object_ranges.data(), (uint32_t)(g_object_ranges.size() / 3),
                            g_object_normals.data(), (uint32_t)g_object_normals.size(), g_object_lights.data(),
                            (uint32_t)(g_object_lights.size() / OBJECT_LIGHT_FLOATS));

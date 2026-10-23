@@ -195,7 +195,11 @@ struct LightingSettings {
     std::atomic<bool> smooth_surfaces{ true }; // the level's smooth surface directions (else one per triangle)
     std::atomic<int> shine_characters{ 20 };   // % shine on characters and objects (new character lighting)
     std::atomic<int> sharpness_characters{ 24 }; // how tight their highlights are
-    std::atomic<int> material_maps{ 100 };   // % of the authored normal and specular maps (materials/<hash>_n.png, _s.png)
+    std::atomic<bool> normal_maps{ true };   // authored normal maps (materials/<hash>_n.png) on
+    std::atomic<int> normal_strength{ 100 }; // ... how much they count (%)
+    std::atomic<bool> specular_maps{ true }; // authored specular maps (materials/<hash>_s.png) on
+    std::atomic<int> specular_strength{ 100 }; // ... how much they count (%)
+    std::atomic<bool> emission_maps{ true }; // emission maps (materials/<hash>_e.png) on: their glow and their lights
     std::atomic<int> glow{ 100 };            // % emission maps (materials/<hash>_e.png)
     std::atomic<bool> emission_lights{ true }; // lights placed where the level's emission-mapped textures are
     std::atomic<int> emission_light{ 100 };  // % their brightness
