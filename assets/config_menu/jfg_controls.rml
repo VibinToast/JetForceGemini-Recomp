@@ -129,9 +129,9 @@
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(14)">
                         <label class="config-option__title">Over-the-Shoulder Aiming</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="1" id="jfg_aim_shoulder_on" style="nav-up: #jfg_invert_mouse_y_on; nav-down: #jfg_aim_drag_margin_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="1" id="jfg_aim_shoulder_on" style="nav-up: #jfg_invert_mouse_y_on; " data-style-nav-down="aim_shoulder == 1 ? '#jfg_aim_centered_on' : '#jfg_aim_drag_margin_input'"/>
                             <label class="config-option__tab-label" for="jfg_aim_shoulder_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="0" id="jfg_aim_shoulder_off" style="nav-up: #jfg_invert_mouse_y_off; nav-down: #jfg_aim_drag_margin_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="0" id="jfg_aim_shoulder_off" style="nav-up: #jfg_invert_mouse_y_off; " data-style-nav-down="aim_shoulder == 1 ? '#jfg_aim_centered_off' : '#jfg_aim_drag_margin_input'"/>
                             <label class="config-option__tab-label" for="jfg_aim_shoulder_off">Off</label>
                         </div>
                     </div>
@@ -173,9 +173,9 @@
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(20)">
                         <label class="config-option__title">Keep the Reticle Centered</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_aim_centered" data-checked="aim_centered" value="1" id="jfg_aim_centered_on" style="nav-up: #jfg_aim_offset_z_input; nav-down: #jfg_aim_jump_on;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_aim_centered" data-checked="aim_centered" value="1" id="jfg_aim_centered_on" style="nav-down: #jfg_aim_jump_on;" data-style-nav-up="aim_shoulder == 1 ? '#jfg_aim_shoulder_on' : '#jfg_aim_offset_z_input'"/>
                             <label class="config-option__tab-label" for="jfg_aim_centered_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_aim_centered" data-checked="aim_centered" value="0" id="jfg_aim_centered_off" style="nav-up: #jfg_aim_offset_z_input; nav-down: #jfg_aim_jump_off;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_aim_centered" data-checked="aim_centered" value="0" id="jfg_aim_centered_off" style="nav-down: #jfg_aim_jump_off;" data-style-nav-up="aim_shoulder == 1 ? '#jfg_aim_shoulder_off' : '#jfg_aim_offset_z_input'"/>
                             <label class="config-option__tab-label" for="jfg_aim_centered_off">Off</label>
                         </div>
                     </div>
