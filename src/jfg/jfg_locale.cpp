@@ -13,11 +13,16 @@
 // own shift turns into the right entry; without it the game behaves as it always did.
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <span>
 
 #include "librecomp/game.hpp"
 #include "recomp.h"
 #include "jfg_hooks.h"
+
+namespace jfg {
+void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
+}
 
 namespace {
 
@@ -73,7 +78,14 @@ JFG_WRAP(initFront) {
 
 // From mmAlloc's wrapper (jfg_diagnostics.cpp), before the game's allocation: initFront's front_text buffer.
 extern "C" void jfg_locale_alloc(recomp_context* ctx) {
-    if (g_init_front.direct(ctx) && (uint32_t)ctx->r4 == FRONT_TEXT_SIZE) ctx->r4 = (gpr)(int32_t)front_text_size();
+    if (!g_init_front.direct(ctx) || (uint32_t)ctx->r4 != FRONT_TEXT_SIZE) return;
+    const uint32_t size = front_text_size();
+    ctx->r4 = (gpr)(int32_t)size;
+    if (size > FRONT_TEXT_SIZE) {
+        char line[120];
+        std::snprintf(line, sizeof line, "locale: menu text buffer 0x%X bytes (the game's own: 0x%X)", size, FRONT_TEXT_SIZE);
+        jfg::jfg_log_line("jfg_mods.log", line);
+    }
 }
 
 JFG_WRAP(subtitleStart) {
