@@ -595,6 +595,68 @@ void recompui::activate_mouse() {
     ui_state->update_focus(true, false);
 }
 
+// JFG PORT: one finger at a time on the menus. A touch that starts on a slider presses at once so the slider follows the
+// finger; any other touch waits: let go without moving and it is a click, move it and it scrolls the list it started on.
+static void handle_touch(const SDL_TouchFingerEvent& finger) {
+    static bool down = false;
+    static SDL_FingerID finger_id = 0;
+    static bool pressed = false;
+    static bool dragging = false;
+    static float start_y = 0.0f;
+    static float start_scroll = 0.0f;
+    static Rml::ObserverPtr<Rml::Element> scroller;
+
+    Rml::Context* context = ui_state->context;
+    const Rml::Vector2i size = context->GetDimensions();
+    const int x = (int)(finger.x * size.x);
+    const int y = (int)(finger.y * size.y);
+
+    if (finger.type == SDL_FINGERDOWN) {
+        if (down) return;
+        down = true;
+        finger_id = finger.fingerId;
+        dragging = false;
+        pressed = false;
+        start_y = (float)y;
+        scroller.reset();
+        context->ProcessMouseMove(x, y, 0);
+        for (Rml::Element* e = context->GetHoverElement(); e != nullptr; e = e->GetParentNode()) {
+            if (e->GetTagName() == "input" && e->GetAttribute<Rml::String>("type", "") == "range") {
+                pressed = true;
+                break;
+            }
+            if (!scroller && e->GetScrollHeight() > e->GetClientHeight() + 1.0f) {
+                scroller = e->GetObserverPtr();
+                start_scroll = e->GetScrollTop();
+            }
+        }
+        if (pressed) context->ProcessMouseButtonDown(0, 0);
+        return;
+    }
+    if (!down || finger.fingerId != finger_id) return;
+
+    if (finger.type == SDL_FINGERMOTION) {
+        if (pressed) {
+            context->ProcessMouseMove(x, y, 0);
+            return;
+        }
+        if (!dragging && fabsf(y - start_y) > size.y * 0.02f) dragging = true;
+        if (dragging && scroller) scroller->SetScrollTop(start_scroll - (y - start_y));
+        return;
+    }
+
+    // SDL_FINGERUP
+    down = false;
+    context->ProcessMouseMove(x, y, 0);
+    if (pressed) {
+        context->ProcessMouseButtonUp(0, 0);
+    } else if (!dragging) {
+        context->ProcessMouseButtonDown(0, 0);
+        context->ProcessMouseButtonUp(0, 0);
+    }
+    scroller.reset();
+}
+
 void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
 
     apply_background_input_mode();
@@ -736,6 +798,22 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
         }
 
         if (!dino::input::all_input_disabled()) {
+            // JFG PORT: the menus take touches themselves (below), so drop the mouse events SDL makes from them.
+            if (((cur_event.type == SDL_MOUSEMOTION && cur_event.motion.which == SDL_TOUCH_MOUSEID) ||
+                 ((cur_event.type == SDL_MOUSEBUTTONDOWN || cur_event.type == SDL_MOUSEBUTTONUP) && cur_event.button.which == SDL_TOUCH_MOUSEID) ||
+                 (cur_event.type == SDL_MOUSEWHEEL && cur_event.wheel.which == SDL_TOUCH_MOUSEID))) {
+                continue;
+            }
+            // JFG PORT: touch (the Steam Deck's screen). A tap clicks where it lands, dragging scrolls the list under the
+            // finger, and a touch that starts on a slider drags the slider.
+            if (cur_event.type == SDL_FINGERDOWN || cur_event.type == SDL_FINGERMOTION || cur_event.type == SDL_FINGERUP) {
+                if (context_capturing_mouse) {
+                    handle_touch(cur_event.tfinger);
+                    mouse_moved = true;
+                    mouse_clicked = true;
+                }
+                continue;
+            }
             bool is_mouse_input = false;
             // Implement some additional behavior for specific events on top of what RmlUi normally does with them.
             switch (cur_event.type) {
