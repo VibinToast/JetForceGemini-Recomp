@@ -20,7 +20,7 @@
 // Hints (Mr. Hints and the other talks, overlay 7): hinttextStart reads language L's table (0x09, 0x0B, 0x0D, 0x0F,
 // 0x11) and func_overlay_7_00000988 its data (0x0A, 0x0C, 0x0E, 0x0A again for 3, 0x12). Outside English these are
 // 0x10-byte stubs in the US ROM, which leave the hint box empty. When language L's table is a stub, both are told the
-// language is English.
+// language is English. Spanish data in 0x10 (from a European ROM) is read from there instead of 0x0A.
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -45,6 +45,8 @@ constexpr uint32_t ROM_ASSET_AREA = 0xB1880;
 constexpr int ASSET_GAME_TEXT_TABLE = 5, ASSET_FRONT_TEXT_TABLE = 7;
 constexpr int HINT_TABLE_ASSET[5] = { 0x09, 0x0B, 0x0D, 0x0F, 0x11 }; // hinttextStart's table per language
 constexpr uint32_t HINT_STUB_SIZE = 0x10;     // a language without hints in the US ROM
+constexpr int ASSET_HINTS_ENGLISH = 0x0A, ASSET_HINTS_SPANISH = 0x10, LANGUAGE_SPANISH = 3;
+constexpr uint32_t HINT_DATA_STUB_SIZE = 0x2E0; // the US ROM's hint data stubs
 constexpr int LANGUAGES = 5;                  // 0 English, 1 French, 2 German, 3 Spanish, 4 Japanese
 constexpr uint32_t FRONT_TEXT_SIZE = 0x3000;  // initFront's mmAlloc
 constexpr uint32_t INIT_FRONT_FRAME = 0x18;   // initFront's addiu $sp
@@ -81,12 +83,12 @@ uint32_t front_text_size() {
     return size;
 }
 
-// Whether language L has menu text: its block (L + 1 in the table) holds strings after the offsets. A stub is the
-// offsets alone, all -1.
+// Whether language L has menu text: its block (words L + 1 and L + 2 of the table, as setLanguage reads them) holds
+// strings after the offsets. A stub is the offsets alone, all -1.
 bool has_menu_text(int language) {
     const std::span<const uint8_t> table = asset(ASSET_FRONT_TEXT_TABLE);
     const uint32_t count = be32(table, 0);
-    const uint32_t start = be32(table, 4 + 4 * (language + 1)), end = be32(table, 8 + 4 * (language + 1));
+    const uint32_t start = be32(table, 4 * (language + 1)), end = be32(table, 4 * (language + 2));
     return language >= 0 && language < LANGUAGES && end != 0xFFFFFFFFu && end > start && end - start > count * 4;
 }
 
@@ -174,6 +176,28 @@ JFG_WRAP(hinttextStart) {
 JFG_WRAP(func_overlay_7_00000988_1EFBAB0) {
     JfgCaller::Scope scope(g_hint_data, ctx, HINT_DATA_FRAME);
     func_overlay_7_00000988_1EFBAB0_orig(rdram, ctx);
+}
+
+// func_overlay_7_00000988 passes the data asset ($a1) to one of these: 0x0A for language 3 too (the US switch has no
+// case for it), which pairs Spanish's table with English's data. With real Spanish data in 0x10 (a locale pack, from
+// a European ROM), they read that instead, as the European game does.
+namespace {
+void spanish_hint_data(recomp_context* ctx) {
+    if (g_hint_data.direct(ctx) && (int32_t)ctx->r5 == ASSET_HINTS_ENGLISH && jfg::rd8(ADDR_language) == LANGUAGE_SPANISH &&
+        has_hints(LANGUAGE_SPANISH) && asset(ASSET_HINTS_SPANISH).size() > HINT_DATA_STUB_SIZE) {
+        ctx->r5 = ASSET_HINTS_SPANISH;
+    }
+}
+} // namespace
+
+JFG_WRAP(func_overlay_7_00000B00_1EFBC28) {
+    spanish_hint_data(ctx);
+    func_overlay_7_00000B00_1EFBC28_orig(rdram, ctx);
+}
+
+JFG_WRAP(func_overlay_7_00000C90_1EFBDB8) {
+    spanish_hint_data(ctx);
+    func_overlay_7_00000C90_1EFBDB8_orig(rdram, ctx);
 }
 
 // A leaf function: called from one of the scoped callers, $sp is that caller's own.
