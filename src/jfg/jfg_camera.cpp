@@ -229,22 +229,76 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         static const bool log = std::getenv("JFG_DEBUG_FOLLOW_CAM") != nullptr; // tests: the height orbited and the character's
         if (log) std::fprintf(stderr, "[cam] tick %u placed %.1f air %d player y %.1f\n", g_tick_count, py + pivot, (int)air, py);
     }
+    // Where the point orbited is across the ground: on the character, except while aiming with Over-the-Shoulder off,
+    // when it has drag margins (as a 2D camera's): the character steps sideways across the middle of the screen, and the
+    // point only follows once it is "Aim Drag Margin" of the half screen out, holding it there; all the while the point
+    // also comes back towards it, moving or not. Turning the view while aiming leads the point the same way, sideways,
+    // and tilting it up or down leads it up or down. Forwards and back it follows at once. After aiming it eases back.
+    float qx = px, qz = pz;
+    const float distance = (float)g.camera_distance / 100.0f; // "Camera Distance": the game's distance, scaled
     // Stick up lowers the camera round the character until it looks up from below; the floor, when in the way, pulls
     // it in along the same line (camera_collide).
     const float pitch = std::clamp(game_elevation + g_cam.elevation, ORBIT_PITCH_MIN, ORBIT_PITCH_MAX);
+    {
+        const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
+        const float rx = -std::cos(g_cam.heading), rz = std::sin(g_cam.heading); // screen-right
+        // The point is kept as an offset from the character, always sideways (along screen-right).
+        float side = g_cam.orbit_dx * rx + g_cam.orbit_dz * rz, up = g_cam.orbit_dy;
+        const bool fresh = !g_cam.orbit_drag_valid || std::fabs(px - g_cam.orbit_last_x) + std::fabs(pz - g_cam.orbit_last_z) > 300.0f;
+        if (fresh) side = up = 0.0f;
+        if (g_cam.free_aim && g_cam.glide <= 0.0f && !g.aim_shoulder) {
+            // tan of half the view's width and height (about 74 and 46 degrees across)
+            constexpr float HALF_SCREEN = 0.75f, HALF_SCREEN_UP = 0.42f;
+            const float margin = (float)g.aim_drag_margin / 100.0f * HALF_SCREEN * boom * distance; // "Aim Drag Margin"
+            const float margin_up = (float)g.aim_drag_margin / 100.0f * HALF_SCREEN_UP * boom * distance;
+            // The character's sideways step since the last frame leaves the point where it was, up to the margin.
+            const float step = (px - g_cam.orbit_last_x) * rx + (pz - g_cam.orbit_last_z) * rz;
+            side -= step;
+            // Turning the view does the same: the point goes the way the view turns, by the arc the turn sweeps at the
+            // camera's distance, so the crosshair leads away from the character (the heading grows turning left).
+            if (!fresh) side -= wrap_angle(g_cam.heading - g_cam.orbit_last_heading) * boom * distance;
+            // and tilting it up or down (the pitch grows looking down) moves it up or down
+            if (!fresh) up -= (pitch - g_cam.orbit_last_pitch) * boom * distance;
+            // and all the while it comes back over ("Aim Drag Return Speed", 100%: in about a third of a second)
+            const float keep = std::pow(0.9f, frames * (float)g.aim_drag_return / 100.0f);
+            side = std::clamp(side * keep, -margin, margin);
+            up = std::clamp(up * keep, -margin_up, margin_up);
+        }
+        else {
+            const float keep = std::pow(0.85f, frames);
+            side *= keep;
+            up *= keep;
+            if (std::fabs(side) < 0.5f) side = 0.0f;
+            if (std::fabs(up) < 0.5f) up = 0.0f;
+        }
+        if (!std::isfinite(side)) side = 0.0f;
+        if (!std::isfinite(up)) up = 0.0f;
+        g_cam.orbit_dx = side * rx;
+        g_cam.orbit_dz = side * rz;
+        g_cam.orbit_last_x = px;
+        g_cam.orbit_last_z = pz;
+        g_cam.orbit_dy = up;
+        g_cam.orbit_last_heading = g_cam.heading;
+        g_cam.orbit_last_pitch = pitch;
+        g_cam.orbit_drag_valid = true;
+        qx = px + g_cam.orbit_dx;
+        qz = pz + g_cam.orbit_dz;
+        pivot += up;
+        g_cam.orbit_pivot = pivot;
+    }
     const float elevation = pitch;
 
     for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
     g_cam.camera_addr = cam;
     g_cam.overridden = true;
-    float wx = px - std::sin(g_cam.heading) * boom * std::cos(elevation);
-    float wy = py + pivot + boom * std::sin(elevation);
-    float wz = pz - std::cos(g_cam.heading) * boom * std::cos(elevation);
-    camera_collide(ctx, px, py + pivot, pz, wx, wy, wz);
+    float wx = qx - std::sin(g_cam.heading) * boom * distance * std::cos(elevation);
+    float wy = py + pivot + boom * distance * std::sin(elevation);
+    float wz = qz - std::cos(g_cam.heading) * boom * distance * std::cos(elevation);
+    camera_collide(ctx, qx, py + pivot, qz, wx, wy, wz);
     float look = g_cam.heading, look_pitch = pitch;
     {
         // Looking at the point orbited from where the camera ended up (the game's check may have lifted it off the floor).
-        const float dx = px - wx, dy = py + pivot - wy, dz = pz - wz, d = std::sqrt(dx * dx + dz * dz);
+        const float dx = qx - wx, dy = py + pivot - wy, dz = qz - wz, d = std::sqrt(dx * dx + dz * dz);
         if (d + std::fabs(dy) > 10.0f) { look = std::atan2(dx, dz); look_pitch = std::atan2(-dy, d); }
     }
     g_cam.view_saved = true;
@@ -279,7 +333,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     // Dual-stick aiming: the aim again, along the view that is drawn now. The game's tick has run since the aim was
     // set before it, and on the tick aiming starts it has just reset its aim angles; the crosshair, drawn after the
     // scene from them, is then in the middle of the screen from the first frame on.
-    // A shot this tick has added its spread to the crosshair's angles (controlFireDummyShot: +0x1CA/+0x1CC are the aim
+    // A shot this tick has added its spread to the crosshair's angles (the game's shot code, func_800386B0: +0x1CA/+0x1CC are the aim
     // +0x1C6/+0x1C8 plus a random kick - the machine gun's shake); it stays on top of the aim.
     if (g_cam.free_aim) {
         const uint32_t data = rd32(obj + 0x68);

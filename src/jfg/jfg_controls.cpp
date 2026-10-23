@@ -331,15 +331,20 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     // (C-left / C-right move it sideways relative to where it faces). So the mouse never turns the body - that is held
     // at the direction it had when the fight began (taken again whenever the boss control starts running anew). Left
     // and right move the reticle's offset from that direction instead, up and down tilt the view. The camera is the
-    // game's own boss camera, left alone (it follows the boss), so the reticle moves about the screen and stays on it.
-    constexpr int RETICLE_LIMIT = 0x1C71; // 40 degrees either side, as 16-bit angle units
+    // game's own boss camera, which follows the body. Past the reticle's box (the game's own limit) the body turns
+    // further with the aim, so the view can be taken a little further round, not so far that it shows past the
+    // arena. The rail is the body yaw at +0x11C (+0x106): the boss control moves the character sideways along it and
+    // keeps it within the arena's tether; that stays where the fight began, so left and right still move along the
+    // same path. The body the aim comes from (+0x1C6 is its yaw plus the reticle's offset) is the object's yaw.
+    constexpr int RETICLE_LIMIT = 0x13C0; // 28 degrees either side, as 16-bit angle units: the game's own limit
+    constexpr int TURN_LIMIT = 0x1555;    // 30 degrees either side beyond that
     constexpr int PITCH_LIMIT = 0x2AAA;
     static uint32_t last_obj = 0, last_tick = 0;
     static uint16_t centre = 0;
-    static int reticle = 0;
+    static int reticle = 0, turn = 0;
     const uint32_t data = rd32(obj + 0x68);
     if (valid_ptr(data)) {
-        if (obj != last_obj || g_tick_count - last_tick > 3) { last_obj = obj; centre = rd16(obj); reticle = 0; }
+        if (obj != last_obj || g_tick_count - last_tick > 3) { last_obj = obj; centre = rd16(obj); reticle = 0; turn = 0; }
         // Right stick as aim movement, with the game's own dead zone and range (joyClamp), as in aim_controls.
         auto axis = [](float v) {
             const float a = (std::abs(v) * 78.0f - 6.0f) / 64.0f;
@@ -351,8 +356,13 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
         const int yaw_step = (int)std::lround(axis(stick_x) * YAW_RATE * frames * speed) + g_mouse_aim_x;
         // stick up = look up unless "Invert Aim Up/Down" is set; the view pitch value goes down to look up
         const int pitch_step = (int)std::lround(axis(g.invert_aim_y ? stick_y : -stick_y) * PITCH_RATE * frames * speed) + g_mouse_aim_y;
-        reticle = std::clamp(reticle - yaw_step, -RETICLE_LIMIT, RETICLE_LIMIT);
-        wr16(obj, centre);
+        reticle -= yaw_step;
+        if (reticle > RETICLE_LIMIT) { turn = std::min(turn + reticle - RETICLE_LIMIT, TURN_LIMIT); reticle = RETICLE_LIMIT; }
+        if (reticle < -RETICLE_LIMIT) { turn = std::max(turn + reticle + RETICLE_LIMIT, -TURN_LIMIT); reticle = -RETICLE_LIMIT; }
+        // back from the edge: the turn goes first, so the reticle comes back off the edge only once the view is round
+        if (turn > 0 && reticle < RETICLE_LIMIT) { const int back = std::min(turn, RETICLE_LIMIT - reticle); turn -= back; reticle += back; }
+        if (turn < 0 && reticle > -RETICLE_LIMIT) { const int back = std::min(-turn, reticle + RETICLE_LIMIT); turn += back; reticle -= back; }
+        wr16(obj, (uint16_t)(centre + turn));
         wr16(data + PD_BODY_YAW_COPY, centre);
         wr16(data + PD_BODY_YAW, centre);
         for (uint32_t k : { PD_RETICLE_YAW, 0x1DCu, 0x246u }) wr16(data + k, (uint16_t)(int16_t)reticle);
@@ -361,6 +371,12 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
         wr16(data + PD_RETICLE_PITCH, 0);
         wr8(pad + 2, 0);
         wr8(pad + 3, 0);
+        static const bool log = std::getenv("JFG_DEBUG_BOSS") != nullptr; // tests: the turn, the game's camera and the character
+        if (log) {
+            const uint32_t c = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
+            std::fprintf(stderr, "[boss] tick %u reticle %d turn %d cam yaw %d pos %.0f %.0f %.0f char %.1f %.1f\n", g_tick_count, reticle, turn,
+                         (int)(int16_t)rd16(c), rdf(c + 0x0C), rdf(c + 0x10), rdf(c + 0x14), rdf(obj + 0x0C), rdf(obj + 0x14));
+        }
     }
     last_tick = g_tick_count;
 }
@@ -525,7 +541,7 @@ void jfg_aim_along_view(recomp_context* ctx, uint32_t obj, float ox, float oy, f
 static void aim_at_screen_centre(recomp_context* ctx, uint32_t obj, uint32_t pad) {
     const float pitch = std::clamp(g_cam.orbit_elevation + g_cam.elevation, ORBIT_PITCH_MIN, ORBIT_PITCH_MAX); // as jfg_camera_override: larger looks down
     const float fx = std::sin(g_cam.heading) * std::cos(pitch), fy = -std::sin(pitch), fz = std::cos(g_cam.heading) * std::cos(pitch);
-    jfg_aim_along_view(ctx, obj, rdf(obj + 0x0C), rdf(obj + 0x10) + g_cam.orbit_pivot, rdf(obj + 0x14), fx, fy, fz);
+    jfg_aim_along_view(ctx, obj, rdf(obj + 0x0C) + g_cam.orbit_dx, rdf(obj + 0x10) + g_cam.orbit_pivot, rdf(obj + 0x14) + g_cam.orbit_dz, fx, fy, fz);
     wr8(pad + 2, 0);
     wr8(pad + 3, 0);
 }
@@ -748,7 +764,7 @@ void jfg_camera_controls(recomp_context* ctx) {
     // Right stick: 150 degrees a second sideways, 75 up/down, at full deflection.
     constexpr float YAW_RATE = 150.0f / 60.0f * (PI_F / 180.0f), PITCH_RATE = 75.0f / 60.0f * (PI_F / 180.0f);
     g_cam.heading = wrap_angle(g_cam.heading + g_sign_cam * (rx * YAW_RATE * frames * (float)g.camera_speed_h / 100.0f + g_mouse_cam_x));
-    g_cam.elevation = std::clamp(g_cam.elevation + (g.invert_camera_y ? -ry : ry) * -PITCH_RATE * frames * (float)g.camera_speed_v / 100.0f - g_mouse_cam_y, -1.1f, 0.75f);
+    g_cam.elevation = std::clamp(g_cam.elevation + (g.invert_camera_y ? -ry : ry) * -PITCH_RATE * frames * (float)g.camera_speed_v / 100.0f - g_mouse_cam_y, -1.6f, 1.3f);
     if (g_cam.free_aim) {
         // The camera turned as when not aiming; the character aims at the middle of the view. The left stick walks and
         // strafes through the C buttons while aiming (jfg_dual_stick), so the game's stick is not rewritten here.

@@ -220,6 +220,9 @@ void draw_options() {
                              "game's own wall check. With it off the camera can end up outside the level.");
                 changed |= options_slider("Camera left/right %", &g.camera_speed_h, 10, 400);
                 changed |= options_slider("Camera up/down %", &g.camera_speed_v, 10, 400);
+                changed |= options_slider("Camera distance %", &g.camera_distance, 50, 250);
+                changed |= options_slider("Aim drag margin %", &g.aim_drag_margin, 0, 50);
+                changed |= options_slider("Aim drag return speed %", &g.aim_drag_return, 0, 400);
                 ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
                 changed |= ImGui::Checkbox("Built-in button layout", &g.dual_layout);
                 options_help("LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. "
