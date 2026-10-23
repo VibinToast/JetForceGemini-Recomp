@@ -111,6 +111,9 @@ std::vector<Setting>& settings_table() {
         { "sun_shadow_area", "Shadow area (units)", &s.sun_shadow_area, nullptr, 250, 8000, Group::Sun, false,
           "Half the size of the square around the view that gets its shadows: larger reaches further, with softer, "
           "blockier edges." },
+        { "smooth_surfaces", "Smooth surfaces", nullptr, &s.smooth_surfaces, 0, 1, Group::Surfaces, false,
+          "Shine, detail and facing flow across neighbouring planes of the level instead of breaking at every triangle "
+          "edge; real corners stay sharp. Off: one direction per triangle." },
         { "detail", "Surface detail", &s.detail, nullptr, 0, 100, Group::Surfaces, false,
           "Bumps from the textures (their light and dark taken as height) that catch the lights. Tenths of a unit." },
         { "material_maps", "Material maps (%)", &s.material_maps, nullptr, 0, 200, Group::Surfaces, false,

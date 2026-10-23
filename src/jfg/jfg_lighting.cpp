@@ -26,6 +26,7 @@
 #include <mutex>
 #include <cstdlib>
 #include <cstring>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -35,6 +36,7 @@
 
 void rt64_jfg_frame_lights(uint32_t dlStart, const float* data, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
 void rt64_jfg_level_vertices(const uint32_t* ranges, uint32_t count);            // lib/rt64 src/hle/rt64_rsp.cpp
+void rt64_jfg_level_normals(const uint32_t* ranges, uint32_t rangeCount, const uint32_t* normals, uint32_t normalCount); // ...
 void rt64_jfg_frame_points(uint32_t dlStart, const float* data, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
 void rt64_jfg_lighting_params(const float* params, uint32_t count); // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 void rt64_jfg_frame_objects(uint32_t dlStart, const uint32_t* ranges, uint32_t rangeCount, const uint32_t* normals,
@@ -265,6 +267,123 @@ extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
     g_object_lights.insert(g_object_lights.end(), light, light + OBJECT_LIGHT_FLOATS);
 }
 
+// Smooth surface directions for the level. The level stores no directions, so RT64 otherwise works out one per
+// triangle from its shape (flat), and shine and surface detail break at every triangle edge. Here each segment's
+// triangles (track segment, src/track.c: Triangle* at +0x04, 16 bytes each with the vertex indices at +1..+3, relative to
+// their batch's first vertex; batches at +0x0C, 16 bytes each: first vertex s16 at +6, first triangle s16 at +8,
+// count at +0x28, the next batch's first triangle ends a batch) give every corner the average of the directions of
+// the triangles meeting there, weighted by their size and welded by position across segments. RasterPS blends it with
+// the flat direction and keeps the flat one where they differ a lot (real corners). Worked out once per level and
+// sent with the vertex arrays they belong to (both copies the game's lighting keeps too).
+constexpr uint32_t SEGMENT_TRIANGLES = 0x04, SEGMENT_BATCHES = 0x0C, SEGMENT_BATCH_COUNT = 0x28;
+constexpr uint32_t BATCH_SIZE = 0x10, BATCH_FIRST_VERTEX = 0x06, BATCH_FIRST_TRIANGLE = 0x08, TRIANGLE_SIZE = 0x10;
+
+static void send_level_normals() {
+    static uint32_t key[4] = { 0, 0, 0, 0 };
+    static std::vector<uint32_t> normals, ranges;
+    const uint32_t track = rd32(ADDR_track);
+    const uint32_t segments = valid_ptr(track) ? rd32(track + TRACK_SEGMENTS) : 0;
+    const int32_t segment_count = valid_ptr(track) ? (int16_t)rd16(track + TRACK_SEGMENT_COUNT) : 0;
+    const uint32_t blocks = rd32(ADDR_trackLightBlocks);
+    const uint32_t first_block = valid_ptr(blocks) ? rd32(blocks) : 0;
+    const uint32_t now[4] = { track, segments, (uint32_t)segment_count, first_block };
+    if (std::memcmp(now, key, sizeof(key)) == 0) return;
+    std::memcpy(key, now, sizeof(key));
+    normals.clear();
+    ranges.clear();
+    if (!valid_ptr(segments) || segment_count <= 0) {
+        rt64_jfg_level_normals(nullptr, 0, nullptr, 0);
+        return;
+    }
+
+    // Each corner's position (welded) gets the sum of the directions of the triangles meeting there.
+    struct Sum { float x = 0, y = 0, z = 0; };
+    std::unordered_map<uint64_t, Sum> sums;
+    auto pos_key = [](int16_t x, int16_t y, int16_t z) {
+        return ((uint64_t)(uint16_t)x << 32) | ((uint64_t)(uint16_t)y << 16) | (uint64_t)(uint16_t)z;
+    };
+    auto vertex = [](uint32_t verts, uint32_t i, int16_t* v) {
+        for (uint32_t c = 0; c < 3; c++) v[c] = (int16_t)rd16(verts + i * VERTEX_SIZE + c * 2);
+    };
+    const int32_t count = std::min(segment_count, (int32_t)MAX_SEGMENTS);
+    for (int pass = 0; pass < 2; pass++) {
+        for (int32_t i = 0; i < count; i++) {
+            const uint32_t seg = segments + (uint32_t)i * SEGMENT_SIZE;
+            const uint32_t verts = rd32(seg + SEGMENT_VERTICES), tris = rd32(seg + SEGMENT_TRIANGLES);
+            const uint32_t batches = rd32(seg + SEGMENT_BATCHES);
+            const int32_t vertex_count = (int16_t)rd16(seg + SEGMENT_VERTEX_COUNT);
+            const int32_t batch_count = (int16_t)rd16(seg + SEGMENT_BATCH_COUNT);
+            if (!valid_ptr(verts) || vertex_count <= 0) continue;
+            if (pass == 0) {
+                if (!valid_ptr(tris) || !valid_ptr(batches)) continue;
+                for (int32_t b = 0; b < batch_count && b < 4096; b++) {
+                    const uint32_t batch = batches + (uint32_t)b * BATCH_SIZE;
+                    const int32_t first_vertex = (int16_t)rd16(batch + BATCH_FIRST_VERTEX);
+                    const int32_t t0 = (int16_t)rd16(batch + BATCH_FIRST_TRIANGLE);
+                    const int32_t t1 = (int16_t)rd16(batch + BATCH_SIZE + BATCH_FIRST_TRIANGLE);
+                    for (int32_t t = t0; t < t1 && t - t0 < 4096; t++) {
+                        const uint32_t tri = tris + (uint32_t)t * TRIANGLE_SIZE;
+                        int16_t v[3][3];
+                        bool ok = true;
+                        for (uint32_t k = 0; k < 3; k++) {
+                            const int32_t index = first_vertex + rd8(tri + 1 + k);
+                            if (index < 0 || index >= vertex_count) { ok = false; break; }
+                            vertex(verts, (uint32_t)index, v[k]);
+                        }
+                        if (!ok) continue;
+                        const float ax = (float)(v[1][0] - v[0][0]), ay = (float)(v[1][1] - v[0][1]), az = (float)(v[1][2] - v[0][2]);
+                        const float bx = (float)(v[2][0] - v[0][0]), by = (float)(v[2][1] - v[0][1]), bz = (float)(v[2][2] - v[0][2]);
+                        const float nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+                        for (uint32_t k = 0; k < 3; k++) {
+                            Sum& sum = sums[pos_key(v[k][0], v[k][1], v[k][2])];
+                            sum.x += nx;
+                            sum.y += ny;
+                            sum.z += nz;
+                        }
+                    }
+                }
+            }
+            else {
+                // Every vertex gets its corner's direction (s8 x, y, z; 0 when the triangles there cancel out), for the
+                // segment's own array and the game's two lighting copies of it.
+                const uint32_t offset = (uint32_t)normals.size();
+                for (int32_t k = 0; k < vertex_count; k++) {
+                    int16_t v[3];
+                    vertex(verts, (uint32_t)k, v);
+                    const auto it = sums.find(pos_key(v[0], v[1], v[2]));
+                    uint32_t packed = 0;
+                    if (it != sums.end()) {
+                        const float len = std::sqrt(it->second.x * it->second.x + it->second.y * it->second.y + it->second.z * it->second.z);
+                        if (len > 1e-3f) {
+                            const int nx = (int)std::lround(it->second.x / len * 127.0f), ny = (int)std::lround(it->second.y / len * 127.0f);
+                            const int nz = (int)std::lround(it->second.z / len * 127.0f);
+                            packed = (uint32_t)(uint8_t)nx | ((uint32_t)(uint8_t)ny << 8) | ((uint32_t)(uint8_t)nz << 16);
+                        }
+                    }
+                    normals.push_back(packed);
+                }
+                uint32_t arrays[3] = { verts, 0, 0 };
+                if (valid_ptr(blocks)) {
+                    arrays[1] = rd32(blocks + (uint32_t)i * 8);
+                    arrays[2] = rd32(blocks + (uint32_t)i * 8 + 4);
+                }
+                for (uint32_t a : arrays) {
+                    if (!valid_ptr(a)) continue;
+                    ranges.push_back(a & RDRAM_MASK);
+                    ranges.push_back((uint32_t)vertex_count);
+                    ranges.push_back(offset);
+                }
+            }
+        }
+    }
+    rt64_jfg_level_normals(ranges.data(), (uint32_t)(ranges.size() / 3), normals.data(), (uint32_t)normals.size());
+    if (lighting_settings().log.load()) {
+        char line[160];
+        std::snprintf(line, sizeof(line), "level normals: %zu vertices, %zu corners, %zu arrays", normals.size(), sums.size(), ranges.size() / 3);
+        jfg_log_line("jfg_lighting.log", line);
+    }
+}
+
 // The level's vertex arrays as physical [start, end) pairs, as RT64 sees vertex loads.
 static void send_level_vertices() {
     static uint32_t ranges[MAX_SEGMENTS * 3 * 2];
@@ -332,6 +451,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     rt64_jfg_level_ambient.store(active ? std::clamp(s.level_ambient.load(), 0, 199) / 100.0f : 1.0f, std::memory_order_relaxed);
     if (s.log.load()) log_object_lights();
     send_level_vertices();
+    send_level_normals();
     // Every candidate light (id = its slot's address, so RT64 can match it with the last frame's for interpolation),
     // then the nearest to the camera up to the limit.
     struct Light {
@@ -451,7 +571,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     const bool on = mode > 0;
     const float yaw = s.sun_yaw.load() * 3.14159265f / 180.0f, pitch = s.sun_pitch.load() * 3.14159265f / 180.0f;
     const float sun = s.sun_intensity.load() / 100.0f;
-    float params[16] = {};
+    float params[20] = {};
     params[0] = std::cos(pitch) * std::sin(yaw);
     params[1] = std::sin(pitch);
     params[2] = std::cos(pitch) * std::cos(yaw);
@@ -468,7 +588,8 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     params[13] = s.sun_shadows.load() ? 1.0f : 0.0f;
     params[14] = (float)std::clamp(s.sun_shadow_area.load(), 250, 8000);
     params[15] = on ? std::clamp(s.material_maps.load(), 0, 200) / 100.0f : 0.0f;
-    rt64_jfg_lighting_params(params, 16);
+    params[16] = s.smooth_surfaces.load() ? 1.0f : 0.0f;
+    rt64_jfg_lighting_params(params, 20);
     rt64_jfg_frame_objects((uint32_t)ctx->r4 & RDRAM_MASK, g_object_ranges.data(), (uint32_t)(g_object_ranges.size() / 3),
                            g_object_normals.data(), (uint32_t)g_object_normals.size(), g_object_lights.data(),
                            (uint32_t)(g_object_lights.size() / OBJECT_LIGHT_FLOATS));
