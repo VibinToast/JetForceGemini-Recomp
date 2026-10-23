@@ -148,7 +148,8 @@ std::vector<Setting>& settings_table() {
           "green: sharpness) next to the game, named like texture dumps. Where a texture has them they replace the "
           "detail and shine worked out from it. Read at start." },
         { "glow", "Emission (%)", &s.glow, nullptr, 0, 200, Group::Surfaces, false,
-          "How bright emission maps (materials/<texture hash>_e.png) shine on their textures. 0 is off." },
+          "How bright emission maps (materials/<texture hash>_e.png) are: their glow on the textures and the lights "
+          "they make (with Light from emission on top). 0 is off." },
         { "emission_lights", "Emission maps light the level", nullptr, &s.emission_lights, 0, 1, Group::Surfaces, false,
           "Places lights where the level's textures with emission maps are, in their colour, so the glow falls on the "
           "walls, floor and characters around them. Nearby spots of one texture share a light." },
@@ -829,7 +830,9 @@ void update_emission_lights() {
         }
     }
     g_emission_lights.clear();
-    if (!s.emission_lights.load()) return;
+    // Emission (%) is over both: the maps' glow and the lights from them (0: neither).
+    const int emission = std::clamp(s.glow.load(), 0, 200);
+    if (!s.emission_lights.load() || emission == 0) return;
     for (const EmissionPatch& p : g_emission_patches) {
         const std::array<float, 3>& c = g_emission_colour[(size_t)p.texture];
         const float peak = std::max({ c[0], c[1], c[2] });
@@ -843,7 +846,7 @@ void update_emission_lights() {
         l.r = (int)std::lround(c[0] / peak * 255.0f);
         l.g = (int)std::lround(c[1] / peak * 255.0f);
         l.b = (int)std::lround(c[2] / peak * 255.0f);
-        l.intensity = (int)std::lround(lum * s.emission_light.load());
+        l.intensity = (int)std::lround(lum * s.emission_light.load() * emission / 100.0f);
         l.radius = (int)std::lround(s.emission_reach.load() * std::clamp(std::sqrt(p.area) / 64.0f, 0.5f, 2.0f));
         l.inner = 10;
         l.shadows = s.emission_shadows.load();
