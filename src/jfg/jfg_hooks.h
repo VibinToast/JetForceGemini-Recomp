@@ -61,6 +61,8 @@ int jfg_refuel_amount(int amount);                                     // refuel
 float jfg_sniper_zoom(float zoom);                                     // controlGetManualAim
 int jfg_sniper_walk(int weapon);                                       // the characters' aim control (overlays 15-17)
 int jfg_flag_override(int flag);                                       // entry of mainGetGameFlag
+// jfg_lighting.cpp
+int jfg_track_light(uint8_t* rdram, recomp_context* ctx);              // entry of trackLightAsm
 // jfg_gore.cpp
 void jfg_blood_more(uint8_t* rdram, recomp_context* ctx);              // entry of bloodSpurtAdd (after jfg_no_blood)
 void jfg_gore_splat(uint8_t* rdram, recomp_context* ctx);              // bloodSpurtUpdateAll, a splat's life countdown
