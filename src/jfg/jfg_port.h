@@ -212,6 +212,7 @@ struct PlacedLight {
     int flicker = 0;      // % how much it dims at most
     int flicker_speed = 100; // %
     bool on = true;
+    bool shadows = true;  // casts shadows
 };
 struct LightOverride {
     float x = 0, y = 0, z = 0;
@@ -222,6 +223,7 @@ struct LightOverride {
     int radius = 100;     // % of its own
     int flicker = 0;
     int flicker_speed = 100;
+    bool shadows = true;  // casts shadows
 };
 const std::vector<PlacedLight>& lighting_placed_lights();
 const LightOverride* lighting_override_at(float x, float y, float z); // nullptr when the light keeps its own look

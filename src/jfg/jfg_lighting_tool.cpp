@@ -225,19 +225,21 @@ void read_file(const std::filesystem::path& path, bool level_file, bool settings
         }
         else if (level_file && lights && std::strncmp(key, "light.", 6) == 0) {
             PlacedLight p;
-            int on = 1;
-            if (std::sscanf(value, "%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d", &p.x, &p.y, &p.z, &p.r, &p.g, &p.b, &p.intensity,
-                            &p.radius, &p.inner, &p.flicker, &p.flicker_speed, &on) >= 8) {
+            int on = 1, shadows = 1;
+            if (std::sscanf(value, "%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", &p.x, &p.y, &p.z, &p.r, &p.g, &p.b, &p.intensity,
+                            &p.radius, &p.inner, &p.flicker, &p.flicker_speed, &on, &shadows) >= 8) {
                 p.on = on != 0;
+                p.shadows = shadows != 0;
                 g_placed.push_back(p);
             }
         }
         else if (level_file && lights && std::strncmp(key, "override.", 9) == 0) {
             LightOverride o;
-            int on = 1, recolour = 0;
-            if (std::sscanf(value, "%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d", &o.x, &o.y, &o.z, &on, &recolour, &o.r, &o.g, &o.b,
-                            &o.intensity, &o.radius, &o.flicker, &o.flicker_speed) >= 10) {
+            int on = 1, recolour = 0, shadows = 1;
+            if (std::sscanf(value, "%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", &o.x, &o.y, &o.z, &on, &recolour, &o.r, &o.g, &o.b,
+                            &o.intensity, &o.radius, &o.flicker, &o.flicker_speed, &shadows) >= 10) {
                 o.on = on != 0;
+                o.shadows = shadows != 0;
                 o.recolour = recolour != 0;
                 g_overrides.push_back(o);
             }
@@ -260,13 +262,13 @@ void save_level() {
         if (g_level_own) write_settings(f, true);
         for (size_t i = 0; i < g_placed.size(); i++) {
             const PlacedLight& p = g_placed[i];
-            std::fprintf(f, "light.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, p.x, p.y, p.z, p.r, p.g, p.b, p.intensity,
-                         p.radius, p.inner, p.flicker, p.flicker_speed, p.on ? 1 : 0);
+            std::fprintf(f, "light.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, p.x, p.y, p.z, p.r, p.g, p.b, p.intensity,
+                         p.radius, p.inner, p.flicker, p.flicker_speed, p.on ? 1 : 0, p.shadows ? 1 : 0);
         }
         for (size_t i = 0; i < g_overrides.size(); i++) {
             const LightOverride& o = g_overrides[i];
-            std::fprintf(f, "override.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, o.x, o.y, o.z, o.on ? 1 : 0,
-                         o.recolour ? 1 : 0, o.r, o.g, o.b, o.intensity, o.radius, o.flicker, o.flicker_speed);
+            std::fprintf(f, "override.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, o.x, o.y, o.z, o.on ? 1 : 0,
+                         o.recolour ? 1 : 0, o.r, o.g, o.b, o.intensity, o.radius, o.flicker, o.flicker_speed, o.shadows ? 1 : 0);
         }
         std::fclose(f);
     }
@@ -424,6 +426,9 @@ bool edit_placed(PlacedLight& p, bool with_position) {
         }
         changed |= ImGui::Checkbox("On", &p.on);
     }
+    changed |= ImGui::Checkbox("Casts shadows", &p.shadows);
+    help("Off: the light shines through characters and the level without throwing shadows (and leaves its shadow "
+         "map to another light).");
     changed |= colour_edit("Colour", &p.r, &p.g, &p.b);
     changed |= slider_int("Intensity (%)", &p.intensity, 0, 400);
     changed |= slider_int("Reach (units)", &p.radius, 10, 2000);
@@ -557,6 +562,7 @@ void draw_level_lights() {
         edit.b = rd8(selected->l + OBJ_LIGHT_COLOUR + 2);
     }
     bool changed = ImGui::Checkbox("On", &edit.on);
+    changed |= ImGui::Checkbox("Casts shadows", &edit.shadows);
     changed |= ImGui::Checkbox("Own colour", &edit.recolour);
     ImGui::BeginDisabled(!edit.recolour);
     changed |= colour_edit("Colour", &edit.r, &edit.g, &edit.b);

@@ -334,7 +334,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     // Every candidate light (id = its slot's address, so RT64 can match it with the last frame's for interpolation),
     // then the nearest to the camera up to the limit.
     struct Light {
-        float d[9];
+        float d[10]; // x, y, z, radius, inner, r, g, b, id, flags (1 = casts no shadows)
         float dist2;
         bool level;
     };
@@ -342,7 +342,8 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     found.clear();
     const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
     const float cx = rdf(cam + 0x0C), cy = rdf(cam + 0x10), cz = rdf(cam + 0x14);
-    auto add = [&](uint32_t id, float x, float y, float z, float radius, float inner, const float* colour, bool level) {
+    auto add = [&](uint32_t id, float x, float y, float z, float radius, float inner, const float* colour, bool level,
+                   bool shadows = true) {
         Light light;
         light.d[0] = x;
         light.d[1] = y;
@@ -351,6 +352,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
         light.d[4] = inner;
         for (uint32_t c = 0; c < 3; c++) light.d[5 + c] = colour[c];
         std::memcpy(&light.d[8], &id, 4);
+        light.d[9] = shadows ? 0.0f : 1.0f;
         light.dist2 = (x - cx) * (x - cx) + (y - cy) * (y - cy) + (z - cz) * (z - cz);
         light.level = level;
         found.push_back(light);
@@ -401,7 +403,8 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
             for (uint32_t c = 0; c < 3; c++) colour[c] *= scale;
             radius *= o->radius / 100.0f;
         }
-        add(l, x, y, z, radius * object_radius, radius * 0.3f, colour, false);
+        const LightOverride* own = lighting_override_at(x, y, z);
+        add(l, x, y, z, radius * object_radius, radius * 0.3f, colour, false, own == nullptr || own->shadows);
     }
 
     // The lights placed with the lighting tool (pulsing while the tool shows which one is selected).
@@ -413,21 +416,20 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
         float scale = p.intensity / 100.0f * lighting_flicker(0xC0DE0000u + (uint32_t)i, p.flicker, p.flicker_speed);
         if (lighting_pulse_light() == (int)i) scale *= 0.6f + 0.4f * std::sin(g_tick_count * 0.25f);
         const float colour[3] = { p.r / 255.0f * scale, p.g / 255.0f * scale, p.b / 255.0f * scale };
-        add(0xC0DE0000u + (uint32_t)i, p.x, p.y, p.z, (float)p.radius, p.radius * std::clamp(p.inner, 0, 95) / 100.0f, colour, false);
+        add(0xC0DE0000u + (uint32_t)i, p.x, p.y, p.z, (float)p.radius, p.radius * std::clamp(p.inner, 0, 95) / 100.0f, colour, false,
+            p.shadows);
         placed_sent++;
     }
     s.sent_placed_lights = placed_sent;
 
     const size_t max_lights = (size_t)std::clamp(s.max_lights.load(), 0, (int)MAX_FRAME_LIGHTS);
-    if (found.size() > max_lights) {
-        std::partial_sort(found.begin(), found.begin() + max_lights, found.end(),
-                          [](const Light& a, const Light& b) { return a.dist2 < b.dist2; });
-        found.resize(max_lights);
-    }
-    float data[MAX_FRAME_LIGHTS * 9];
+    // Nearest first (RT64 gives the first ones that cast shadows a shadow map).
+    std::sort(found.begin(), found.end(), [](const Light& a, const Light& b) { return a.dist2 < b.dist2; });
+    if (found.size() > max_lights) found.resize(max_lights);
+    float data[MAX_FRAME_LIGHTS * 10];
     int level_lights = 0;
     for (size_t i = 0; i < found.size(); i++) {
-        std::memcpy(&data[i * 9], found[i].d, sizeof(found[i].d));
+        std::memcpy(&data[i * 10], found[i].d, sizeof(found[i].d));
         level_lights += found[i].level ? 1 : 0;
     }
     s.sent_level_lights = level_lights;
