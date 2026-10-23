@@ -81,7 +81,7 @@ std::vector<Setting>& settings_table() {
           "Hides the dark blob the game draws under characters and objects." },
         { "shadow_lights", "Lights with shadows", &s.shadow_lights, nullptr, 0, 4, Group::Shadows, true,
           "The nearest lights that cast shadows. Each draws the scene six more times a frame." },
-        { "shadow_size", "Shadow detail", &s.shadow_size, nullptr, 128, 2048, Group::Shadows, true,
+        { "shadow_size", "Shadow detail", &s.shadow_size, nullptr, 128, 1024, Group::Shadows, true,
           "Pixels per side of each shadow map: sharper edges, more memory and work." },
         { "sun", "Directional light", nullptr, &s.sun, 0, 1, Group::Sun, false,
           "A light from one direction over the whole level, like the sun or the moon." },
@@ -94,6 +94,12 @@ std::vector<Setting>& settings_table() {
         { "sun_intensity", "Intensity (%)", &s.sun_intensity, nullptr, 0, 200, Group::Sun, false, "" },
         { "sun_characters", "On characters (%)", &s.sun_characters, nullptr, 0, 200, Group::Sun, false,
           "How much of it falls on characters and objects." },
+        { "sun_shadows", "Casts shadows", nullptr, &s.sun_shadows, 0, 1, Group::Sun, false,
+          "The level, characters and objects shadow it, in a square around where the camera looks. Uses the shadow "
+          "darkness from the Shadows tab." },
+        { "sun_shadow_area", "Shadow area (units)", &s.sun_shadow_area, nullptr, 250, 8000, Group::Sun, false,
+          "Half the size of the square around the view that gets its shadows: larger reaches further, with softer, "
+          "blockier edges." },
         { "detail", "Surface detail", &s.detail, nullptr, 0, 100, Group::Surfaces, false,
           "Bumps from the textures (their light and dark taken as height) that catch the lights. Tenths of a unit." },
         { "detail_characters", "Detail on characters (%)", &s.detail_characters, nullptr, 0, 200, Group::Surfaces, false,

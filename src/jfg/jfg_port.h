@@ -161,20 +161,21 @@ std::string depth_fog_status();         // the F9 menu's depth fog status line
 
 // --- jfg_lighting.cpp, jfg_lighting_tool.cpp ----------------------------------------------------------------------
 // Modern lighting (JFG-125). The lighting tool (F12) edits these live and saves them per level (lighting/level_N.txt)
-// or as the defaults (lighting/default.txt); the JFG_* test switches set them at start.
+// or as the defaults (lighting/default.txt); the JFG_* test switches set them at start. The values here are the
+// built-in look the "Modern Lighting" option gives before anything is saved (nothing applies while it is off).
 struct LightingSettings {
-    std::atomic<int> mode{ 0 };              // 0 off, 1 the game's level lights per pixel, 2 also torches and lamps
+    std::atomic<int> mode{ 2 };              // 0 off, 1 the game's level lights per pixel, 2 also torches and lamps
     std::atomic<int> level_ambient{ 100 };   // % of the level's own colours, its ambient light
     std::atomic<int> level_strength{ 100 };  // % of the game's level lights (shots, flashes)
-    std::atomic<int> object_strength{ 35 };  // % of the torch and lamp lights on the level (mode 2)
+    std::atomic<int> object_strength{ 50 };  // % of the torch and lamp lights on the level (mode 2)
     std::atomic<int> object_radius{ 125 };   // % of a torch or lamp light's radius (the game's own conversion: 125)
     std::atomic<int> max_lights{ 32 };       // lights sent per frame (at most 64)
     std::atomic<bool> no_game_lighting{ false }; // skip the game's per-vertex level lighting without replacing it
     std::atomic<bool> no_object_lighting{ false }; // skip the game's per-vertex lighting of characters and objects
-    std::atomic<bool> characters{ false };   // light characters and objects in RT64 (per pixel, with their normals)
-    std::atomic<int> character_lights{ 0 };  // % the frame's lights add on characters (the game's own come from them)
-    std::atomic<int> facing{ 0 };            // % the level lighting depends on a surface facing its light (0 = as the game)
-    std::atomic<int> shadows{ 0 };           // % how dark shadows from the lights are
+    std::atomic<bool> characters{ true };    // light characters and objects in RT64 (per pixel, with their normals)
+    std::atomic<int> character_lights{ 40 }; // % the frame's lights add on characters (the game's own come from them)
+    std::atomic<int> facing{ 40 };           // % the level lighting depends on a surface facing its light (0 = as the game)
+    std::atomic<int> shadows{ 80 };          // % how dark shadows from the lights are
     std::atomic<int> shadow_lights{ 4 };     // how many of the nearest lights get a shadow map (0-4)
     std::atomic<int> shadow_size{ 512 };     // each shadow map face's size in texels
     std::atomic<int> glow_shadow{ 75 };      // % of the level's painted glow a full shadow takes
@@ -185,9 +186,11 @@ struct LightingSettings {
     std::atomic<int> sun_r{ 255 }, sun_g{ 244 }, sun_b{ 214 }; // its colour
     std::atomic<int> sun_intensity{ 35 };    // % of full white
     std::atomic<int> sun_characters{ 100 };  // % of it on characters and objects
-    std::atomic<int> detail{ 0 };            // surface detail from the textures: tenths of a world unit of height
+    std::atomic<bool> sun_shadows{ true };   // it casts shadows (around where the camera looks)
+    std::atomic<int> sun_shadow_area{ 1000 }; // half the size of the square it shadows, world units
+    std::atomic<int> detail{ 10 };           // surface detail from the textures: tenths of a world unit of height
     std::atomic<int> detail_characters{ 0 }; // % of it on characters and objects (their textures are mostly painted features)
-    std::atomic<int> shine{ 0 };             // % shine (specular highlights)
+    std::atomic<int> shine{ 20 };            // % shine (specular highlights)
     std::atomic<int> sharpness{ 24 };        // how tight the highlights are
     std::atomic<bool> debug_world{ false };  // show the world position as colour
     std::atomic<bool> debug_normal{ false }; // show the surface direction as colour

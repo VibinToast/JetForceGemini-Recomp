@@ -435,10 +435,16 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     rt64_jfg_frame_lights((uint32_t)ctx->r4 & RDRAM_MASK, data, (uint32_t)found.size());
 
     // The camera (for the shine), placed on in-between frames as the lights are, and the settings the shaders take.
-    float points[5] = { cx, cy, cz, 0.0f, 0.0f };
-    const uint32_t camera_id = 0xCA3E7A00u;
+    // [1]: where the camera looks, a little ahead (the directional light's shadows are made around it).
+    const float heading = -angle_from_s16(rd16(cam)), pitch_cam = angle_from_s16(rd16(cam + 2));
+    const float ahead = s.sun_shadow_area.load() * 0.6f;
+    float points[10] = { cx, cy, cz, 0.0f, 0.0f,
+                         cx + std::sin(heading) * std::cos(pitch_cam) * ahead, cy - std::sin(pitch_cam) * ahead,
+                         cz + std::cos(heading) * std::cos(pitch_cam) * ahead, 0.0f, 0.0f };
+    const uint32_t camera_id = 0xCA3E7A00u, focus_id = 0xCA3E7A01u;
     std::memcpy(&points[4], &camera_id, 4);
-    rt64_jfg_frame_points((uint32_t)ctx->r4 & RDRAM_MASK, points, 1);
+    std::memcpy(&points[9], &focus_id, 4);
+    rt64_jfg_frame_points((uint32_t)ctx->r4 & RDRAM_MASK, points, 2);
     const bool on = mode > 0;
     const float yaw = s.sun_yaw.load() * 3.14159265f / 180.0f, pitch = s.sun_pitch.load() * 3.14159265f / 180.0f;
     const float sun = s.sun_intensity.load() / 100.0f;
@@ -456,6 +462,8 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     params[10] = (float)std::clamp(s.sharpness.load(), 1, 256);
     params[11] = std::clamp(s.glow_shadow.load(), 0, 100) / 100.0f;
     params[12] = std::clamp(s.detail_characters.load(), 0, 200) / 100.0f;
+    params[13] = s.sun_shadows.load() ? 1.0f : 0.0f;
+    params[14] = (float)std::clamp(s.sun_shadow_area.load(), 250, 8000);
     rt64_jfg_lighting_params(params, 16);
     rt64_jfg_frame_objects((uint32_t)ctx->r4 & RDRAM_MASK, g_object_ranges.data(), (uint32_t)(g_object_ranges.size() / 3),
                            g_object_normals.data(), (uint32_t)g_object_normals.size(), g_object_lights.data(),
