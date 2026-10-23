@@ -219,7 +219,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     if (update_toast && dino::debug_ui::backend::in_ui_frame()) {
         // Top middle, out of the way of the start-up key hint at the bottom: two lines in the launcher's gold.
         const std::string line1 = "Update v" + update_version + " is available";
-        const char* line2 = "Select / Esc, then the launcher button next to Quit, to install it";
+        const char* line2 = "Select / Esc, then Return to Launcher on the Quit tab, to install it";
         const ImVec2 size = ImGui::GetIO().DisplaySize;
         ImFont* font = ImGui::GetFont();
         const float font_size = std::max(18.0f, size.y / 34.0f), small = font_size * 0.75f;
