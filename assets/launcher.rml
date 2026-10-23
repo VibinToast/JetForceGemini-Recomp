@@ -227,6 +227,7 @@
 			.rl-page .config-option__details { color: #3CC8FF; }
 			.rl-page .jfg-note { color: #3CC8FF; }
 			.rl-page .jfg-keys-note { display: none; } /* the General page's note about F10 / F9: those are for the game */
+			.rl-page .jfg-ingame-only { display: none; } /* the Language list: locale mods load with the game */
 			.rl-page .config__wrapper p { font-family: "JetBrains Mono"; font-size: 18dp; line-height: 27dp; color: #E8F3FF; }
 			.rl-page .config__wrapper p b, .rl-page .config__wrapper p i { color: #3CC8FF; }
 			/* The focused option's description (generated pages): the option's name as a heading, larger text, a cyan bar. */
