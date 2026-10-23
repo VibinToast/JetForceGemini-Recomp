@@ -435,6 +435,10 @@ static void draw_lighting() {
     if (ImGui::Checkbox("Game's per-vertex level lighting off", &flag)) s.no_game_lighting = flag;
     options_help("Leaves the levels with only their painted-in colours, without adding anything per pixel either (unless a "
                  "mode is on).");
+    flag = s.no_object_lighting.load();
+    if (ImGui::Checkbox("Game's lighting of characters and objects off", &flag)) s.no_object_lighting = flag;
+    options_help("Leaves characters and objects without the light the game puts on them from nearby lights (test for "
+                 "moving them to the new lighting).");
     flag = s.debug_world.load();
     if (ImGui::Checkbox("Show world position", &flag)) s.debug_world = flag;
     options_help("Colours every 3D surface by where it is in the world, repeating every 256 units; magenta has no position "

@@ -188,6 +188,24 @@ func = "trackLightAsm"
 before_vram = 0x8001D500
 text = "{ int jfg_track_light(uint8_t*, recomp_context*); if (jfg_track_light(rdram, ctx)) { recomp_exit_function(); return; } }"
 
+# Modern lighting, characters and objects (src/jfg/jfg_lighting.cpp): the entries of the three functions lightObject
+# uses to write a model's vertex colours from its lights (asm, return nothing). Skipped to see what a model keeps
+# without them (for now: JFG_NO_OBJECT_LIGHTING=1, or the F9 Lighting tab).
+[[patches.hook]]
+func = "lightSingleLight"
+before_vram = 0x800229E0
+text = "{ int jfg_object_light(void); if (jfg_object_light()) { recomp_exit_function(); return; } }"
+
+[[patches.hook]]
+func = "lightTwoLights"
+before_vram = 0x80022BC4
+text = "{ int jfg_object_light(void); if (jfg_object_light()) { recomp_exit_function(); return; } }"
+
+[[patches.hook]]
+func = "lightMultiLight"
+before_vram = 0x80022E98
+text = "{ int jfg_object_light(void); if (jfg_object_light()) { recomp_exit_function(); return; } }"
+
 # "Hit flash opacity" option (src/jfg/jfg_visuals.cpp): entry of frontFlashScreen(arg0, player, color), the red screen
 # when the character is hit (color in $a2). Returns the colour to use, 0 = no flash (the function returns nothing).
 [[patches.hook]]

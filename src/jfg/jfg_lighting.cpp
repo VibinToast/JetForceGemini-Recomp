@@ -95,6 +95,7 @@ LightingSettings& lighting_settings() {
             settings.object_strength = std::clamp((int)std::lround(std::atof(env) * 100.0), 0, 200);
         }
         settings.no_game_lighting = std::getenv("JFG_NO_TRACK_LIGHTS") != nullptr;
+        settings.no_object_lighting = std::getenv("JFG_NO_OBJECT_LIGHTING") != nullptr;
         settings.debug_world = std::getenv("RT64_JFG_DEBUG_WORLD") != nullptr;
         settings.debug_normal = std::getenv("RT64_JFG_DEBUG_NORMAL") != nullptr;
         settings.log = std::getenv("JFG_DEBUG_LIGHTS") != nullptr;
@@ -280,6 +281,13 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     }
     rt64_jfg_frame_casters((uint32_t)ctx->r4 & RDRAM_MASK, casters, (uint32_t)g_casters.size());
     g_casters.clear();
+}
+
+// Entries of lightSingleLight, lightTwoLights and lightMultiLight (called by lightObject): they write a model's vertex
+// colours from the lights near it. Returns non-zero to skip them; the model then keeps whatever its vertex colours
+// held before (lightEnviroMap, the shiny models' texture coordinates, still runs).
+extern "C" int jfg_object_light(void) {
+    return lighting_settings().no_object_lighting.load() ? 1 : 0;
 }
 
 // Entry of trackLightAsm(track, light, visible). Returns non-zero to skip it.

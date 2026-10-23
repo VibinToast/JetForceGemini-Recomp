@@ -168,6 +168,7 @@ struct LightingSettings {
     std::atomic<int> object_radius{ 125 };   // % of a torch or lamp light's radius (the game's own conversion: 125)
     std::atomic<int> max_lights{ 32 };       // lights sent per frame (RT64 takes at most 32)
     std::atomic<bool> no_game_lighting{ false }; // skip the game's per-vertex level lighting without replacing it
+    std::atomic<bool> no_object_lighting{ false }; // skip the game's per-vertex lighting of characters and objects
     std::atomic<int> facing{ 0 };            // % the level lighting depends on a surface facing its light (0 = as the game)
     std::atomic<int> shadows{ 0 };           // % how dark characters' and objects' shadows from these lights are
     std::atomic<int> caster_size{ 100 };     // % of the size worked out from each one's own shadow
