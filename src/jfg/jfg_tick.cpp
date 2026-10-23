@@ -15,6 +15,8 @@
 #include <string>
 #include <vector>
 
+#include <SDL.h>
+
 #include "imgui/imgui.h"
 #include "debug_ui/debug_ui.hpp"
 #include "debug_ui/backend.hpp"
@@ -104,6 +106,35 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         else if (warped2 && !warped3 && w3[0] >= 0 && now - start >= std::chrono::seconds(w3[0])) {
             warped3 = true;
             g.warp_level = w3[1]; g.warp_character = w3[2]; g.warp_entrance = w3[3]; g.pending_warp = true;
+        }
+    }
+
+    // Scripted testing: JFG_DEBUG_FULLSCREEN=<seconds>[,<seconds>...] presses F11 (fullscreen on / off) at each of those
+    // times, through SDL's event queue as a real key press goes.
+    {
+        static const auto start = std::chrono::steady_clock::now();
+        static const char* env = std::getenv("JFG_DEBUG_FULLSCREEN");
+        static std::vector<int> times;
+        static size_t next = 0;
+        if (env != nullptr && times.empty()) {
+            for (const char* c = env; *c; ) {
+                times.push_back(std::atoi(c));
+                while (*c && *c != ',') c++;
+                if (*c == ',') c++;
+            }
+        }
+        if (next < times.size() && std::chrono::steady_clock::now() - start >= std::chrono::seconds(times[next])) {
+            next++;
+            SDL_Event e = {};
+            e.type = SDL_KEYDOWN;
+            e.key.state = SDL_PRESSED;
+            e.key.keysym.scancode = SDL_SCANCODE_F11;
+            e.key.keysym.sym = SDLK_F11;
+            SDL_PushEvent(&e);
+            e.type = SDL_KEYUP;
+            e.key.state = SDL_RELEASED;
+            SDL_PushEvent(&e);
+            std::fprintf(stderr, "[jfg] test: F11 pressed\n");
         }
     }
 
