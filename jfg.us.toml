@@ -312,10 +312,11 @@ text = "{ int jfg_vi_skip(uint8_t*, recomp_context*); if (jfg_vi_skip(rdram, ctx
 
 # While a cutscene is skipped no graphics task is sent at all (rcpFast3d returns at once, so rcpWaitDP has nothing to
 # wait for): the skipped part then runs at the speed of the game logic alone instead of one tick per video frame.
+# First, modern lighting (src/jfg/jfg_lighting.cpp) sends the frame's track lights to RT64 with the display list's address.
 [[patches.hook]]
 func = "rcpFast3d"
 before_vram = 0x8004DA10
-text = "{ int jfg_rcp_skip(uint8_t*, uint32_t); if (jfg_rcp_skip(rdram, (uint32_t)ctx->r6)) { ctx->r2 = 0; recomp_exit_function(); return; } }"
+text = "{ void jfg_frame_lights(uint8_t*, recomp_context*); jfg_frame_lights(rdram, ctx); int jfg_rcp_skip(uint8_t*, uint32_t); if (jfg_rcp_skip(rdram, (uint32_t)ctx->r6)) { ctx->r2 = 0; recomp_exit_function(); return; } }"
 
 # Sounds started by a skipped cutscene are dropped (they would all be heard at once when the skip ends, and the sound
 # player runs out of sound states). ad_sndp_play(bank, sound, volume, pan, pitch, ?, handlePtr): the handle (7th argument, on the stack) is set to NULL.
