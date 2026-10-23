@@ -37,6 +37,8 @@ void rt64_jfg_frame_lights(uint32_t dlStart, const float* data, uint32_t count);
 void rt64_jfg_level_vertices(const uint32_t* ranges, uint32_t count);            // lib/rt64 src/hle/rt64_rsp.cpp
 extern std::atomic<int> rt64_jfg_pixel_lights; // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 extern std::atomic<int> rt64_jfg_debug_world;  // ...
+extern std::atomic<int> rt64_jfg_debug_normal; // ...
+extern std::atomic<float> rt64_jfg_facing;     // ...
 
 namespace jfg {
 
@@ -78,18 +80,20 @@ static void log_light(uint32_t light) {
 // The settings start from the test switches: JFG_PIXEL_LIGHTS (mode: 1 = the game's level lights per pixel; 2 = also
 // the lights the game only uses on characters and objects, type 0x40: torches, lamps, which then light the level too,
 // beyond the original game), JFG_PIXEL_LIGHTS_STRENGTH (0-1, the torches and lamps: the level already has their glow
-// baked into its colours, so at full strength they light it twice), JFG_NO_TRACK_LIGHTS, RT64_JFG_DEBUG_WORLD,
-// JFG_DEBUG_LIGHTS.
+// baked into its colours, so at full strength they light it twice), JFG_PIXEL_LIGHTS_FACING (0-100),
+// JFG_NO_TRACK_LIGHTS, RT64_JFG_DEBUG_WORLD, RT64_JFG_DEBUG_NORMAL, JFG_DEBUG_LIGHTS.
 LightingSettings& lighting_settings() {
     static LightingSettings settings;
     static std::once_flag once;
     std::call_once(once, [] {
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS")) settings.mode = std::clamp(std::atoi(env), 0, 2);
+        if (const char* env = std::getenv("JFG_PIXEL_LIGHTS_FACING")) settings.facing = std::clamp(std::atoi(env), 0, 100);
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS_STRENGTH")) {
             settings.object_strength = std::clamp((int)std::lround(std::atof(env) * 100.0), 0, 200);
         }
         settings.no_game_lighting = std::getenv("JFG_NO_TRACK_LIGHTS") != nullptr;
         settings.debug_world = std::getenv("RT64_JFG_DEBUG_WORLD") != nullptr;
+        settings.debug_normal = std::getenv("RT64_JFG_DEBUG_NORMAL") != nullptr;
         settings.log = std::getenv("JFG_DEBUG_LIGHTS") != nullptr;
     });
     return settings;
@@ -152,6 +156,8 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     const int mode = s.mode.load();
     rt64_jfg_pixel_lights.store(mode > 0 ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_debug_world.store(s.debug_world.load() ? 1 : 0, std::memory_order_relaxed);
+    rt64_jfg_debug_normal.store(s.debug_normal.load() ? 1 : 0, std::memory_order_relaxed);
+    rt64_jfg_facing.store(std::clamp(s.facing.load(), 0, 100) / 100.0f, std::memory_order_relaxed);
     if (s.log.load()) log_object_lights();
     send_level_vertices();
     // Every candidate light (id = its slot's address, so RT64 can match it with the last frame's for interpolation),

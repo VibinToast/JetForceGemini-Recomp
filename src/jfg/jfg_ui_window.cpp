@@ -418,6 +418,10 @@ static void draw_lighting() {
     options_help("How far their light reaches, as a share of the light's own radius. 125 is what the game uses when it "
                  "turns one of its object lights into a level light.");
     ImGui::EndDisabled();
+    live_slider("Facing the light (%)", s.facing, 0, 100);
+    options_help("How much a surface turned away from a light gets less of it, which gives walls and corners depth. The "
+                 "game never does this: 0 keeps its look. Surfaces get one direction per triangle, so low-detail ones look "
+                 "faceted.");
     live_slider("Most lights per frame", s.max_lights, 0, 32);
     ImGui::TextDisabled("Last frame: %d level lights, %d torches and lamps", s.sent_level_lights.load(),
                         s.sent_object_lights.load());
@@ -431,6 +435,9 @@ static void draw_lighting() {
     if (ImGui::Checkbox("Show world position", &flag)) s.debug_world = flag;
     options_help("Colours every 3D surface by where it is in the world, repeating every 256 units; magenta has no position "
                  "(the HUD, rectangles).");
+    flag = s.debug_normal.load();
+    if (ImGui::Checkbox("Show surface directions", &flag)) s.debug_normal = flag;
+    options_help("Colours every 3D surface by which way it faces: red east-west, green up, blue north-south.");
     flag = s.log.load();
     if (ImGui::Checkbox("Log lights to jfg_lighting.log", &flag)) s.log = flag;
     ImGui::PopStyleVar();
