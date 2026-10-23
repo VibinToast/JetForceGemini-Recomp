@@ -33,7 +33,7 @@
 	<link type="text/template" href="config_menu/jfg_graphics.rml" />
 	<link type="text/template" href="config_menu/jfg_textures.rml" />
 	<style>
-		.jfg-selected { border-color: #3cc8ff; background-color: rgba(60, 200, 255, 0.35); color: #e8f3ff; }
+		.jfg-selected { border-color: #ffb21a; background-color: rgba(60, 200, 255, 0.3); color: #e8f3ff; } /* the chosen profile / pack: a gold outline on the hover background */
 		.jfg-note { color: #3cc8ff; }
 		/* JFG PORT: group headings in the emblem gold, as in the launcher (the options and selections are "Gemini" cyan). */
 		.config-group__title { color: #ffb21a; }
