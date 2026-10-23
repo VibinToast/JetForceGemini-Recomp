@@ -63,6 +63,7 @@ constexpr uint32_t TRACK_LIGHT_FULL_COLOUR = 0x20 + 31 * 3, TRACK_LIGHT_SIZE = 0
 constexpr uint32_t ADDR_trackLights = 0x800A0D78;     // level light* (D_800A0D78_A1978)
 constexpr uint32_t ADDR_trackLightSlots = 0x800A0D70; // s32, slots in that array (D_800A0D70_A1970)
 constexpr uint32_t MAX_FRAME_LIGHTS = 64;
+constexpr uint32_t MAX_REMOVERS = 16;                 // switched-off level lights taking their painted glow away
 constexpr uint32_t ADDR_track = 0x800A0D60;           // Track* (src/track.c)
 constexpr uint32_t TRACK_SEGMENTS = 0x04, TRACK_SEGMENT_COUNT = 0x1A; // track segment*, s16
 constexpr uint32_t SEGMENT_SIZE = 0x48, SEGMENT_VERTICES = 0x00, SEGMENT_VERTEX_COUNT = 0x24; // Vertex*, s16
@@ -459,12 +460,13 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     // Every candidate light (id = its slot's address, so RT64 can match it with the last frame's for interpolation),
     // then the nearest to the camera up to the limit.
     struct Light {
-        float d[10]; // x, y, z, radius, inner, r, g, b, id, flags (1 = casts no shadows)
+        float d[10]; // x, y, z, radius, inner, r, g, b, id, flags (1 = casts no shadows, 2 = switched off: takes its painted glow away)
         float dist2;
         bool level;
     };
-    static std::vector<Light> found;
+    static std::vector<Light> found, removers;
     found.clear();
+    removers.clear();
     const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
     const float cx = rdf(cam + 0x0C), cy = rdf(cam + 0x10), cz = rdf(cam + 0x14);
     auto add = [&](uint32_t id, float x, float y, float z, float radius, float inner, const float* colour, bool level,
@@ -503,7 +505,8 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     const float object_radius = s.object_radius.load() / 100.0f;
     const uint32_t objects = rd32(ADDR_activeLights);
     const int32_t object_count = (int32_t)rd32(ADDR_activeLightCount);
-    for (int32_t i = 0; mode >= 2 && valid_ptr(objects) && i < object_count; i++) {
+    // In mode 1 too: a light switched off in the lighting tool still takes its painted glow away.
+    for (int32_t i = 0; mode >= 1 && valid_ptr(objects) && i < object_count; i++) {
         const uint32_t l = rd32(objects + (uint32_t)i * 4);
         if (!valid_ptr(l) || !(rd8(l + OBJ_LIGHT_TYPE) & 0x40)) continue;
         const uint32_t intensity = rd8(l + OBJ_LIGHT_COLOUR + 3);
@@ -518,7 +521,20 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
         // larger or smaller, flickering.
         const LightOverride* own = lighting_override_for(l);
         if (const LightOverride* o = own) {
-            if (!o->on || o->radius <= 0) continue; // reach 0 is off too
+            if (!o->on || o->radius <= 0) { // reach 0 is off too
+                // Switched off: the glow the level has painted in around it goes too, in its own colour and over the
+                // reach the game gives it (as the light would have).
+                const float off = std::clamp(s.off_glow.load(), 0, 200) / 100.0f;
+                float own_colour[3];
+                for (uint32_t c = 0; c < 3; c++) own_colour[c] = (float)((rd8(l + OBJ_LIGHT_COLOUR + c) * intensity) >> 8) / 255.0f * off;
+                const size_t before = found.size();
+                if (off > 0.0f) add(l, x, y, z, radius * object_radius, radius * 0.3f, own_colour, false, false);
+                if (found.size() > before) {
+                    removers.push_back(found.back());
+                    found.pop_back();
+                }
+                continue;
+            }
             if (o->recolour) {
                 const float level = (float)intensity / 256.0f * object_strength;
                 colour[0] = o->r / 255.0f * level;
@@ -529,6 +545,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
             for (uint32_t c = 0; c < 3; c++) colour[c] *= scale;
             radius *= o->radius / 100.0f;
         }
+        if (mode < 2) continue;
         add(l, x, y, z, radius * object_radius, radius * 0.3f, colour, false, own == nullptr || own->shadows);
     }
 
@@ -561,7 +578,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     // Nearest first (RT64 gives the first ones that cast shadows a shadow map).
     std::sort(found.begin(), found.end(), [](const Light& a, const Light& b) { return a.dist2 < b.dist2; });
     if (found.size() > max_lights) found.resize(max_lights);
-    float data[MAX_FRAME_LIGHTS * 10];
+    float data[(MAX_FRAME_LIGHTS + MAX_REMOVERS) * 10];
     int level_lights = 0;
     for (size_t i = 0; i < found.size(); i++) {
         std::memcpy(&data[i * 10], found[i].d, sizeof(found[i].d));
@@ -569,7 +586,14 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     }
     s.sent_level_lights = level_lights;
     s.sent_object_lights = (int)found.size() - level_lights;
-    rt64_jfg_frame_lights((uint32_t)ctx->r4 & RDRAM_MASK, data, (uint32_t)found.size());
+    // The switched-off lights after them, nearest first (flag 2).
+    std::sort(removers.begin(), removers.end(), [](const Light& a, const Light& b) { return a.dist2 < b.dist2; });
+    size_t sent = found.size();
+    for (size_t i = 0; i < removers.size() && i < MAX_REMOVERS; i++, sent++) {
+        removers[i].d[9] = 2.0f;
+        std::memcpy(&data[sent * 10], removers[i].d, sizeof(removers[i].d));
+    }
+    rt64_jfg_frame_lights((uint32_t)ctx->r4 & RDRAM_MASK, data, (uint32_t)sent);
 
     // The camera (for the shine), placed on in-between frames as the lights are, and the settings the shaders take.
     // [1]: where the camera looks, a little ahead (the directional light's shadows are made around it).

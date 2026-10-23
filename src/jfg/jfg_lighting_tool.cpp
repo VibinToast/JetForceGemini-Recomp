@@ -108,6 +108,9 @@ std::vector<Setting>& settings_table() {
           "Brightness of the game's torches and lamps on the level. Their glow is already painted into the level." },
         { "object_radius", "Torch and lamp reach (%)", &s.object_radius, nullptr, 25, 300, Group::Lights, false,
           "How far torches and lamps reach, as a share of their own radius (125 is what the game uses)." },
+        { "off_glow", "Glow of lights switched off (%)", &s.off_glow, nullptr, 0, 200, Group::Lights, false,
+          "A torch or lamp switched off in the Level lights tab also takes away the glow the level has painted in around "
+          "it, this much (its own colour over its reach). 0 leaves the painted glow." },
         { "facing", "Facing the light (%)", &s.facing, nullptr, 0, 100, Group::Lights, false,
           "How much a surface turned away from a light gets less of it. 0 keeps the game's look." },
         { "max_lights", "Most lights per frame", &s.max_lights, nullptr, 0, 64, Group::Lights, true,

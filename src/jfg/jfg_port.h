@@ -200,6 +200,7 @@ struct LightingSettings {
     std::atomic<bool> specular_maps{ true }; // authored specular maps (materials/<hash>_s.png) on
     std::atomic<int> specular_strength{ 100 }; // ... how much they count (%)
     std::atomic<bool> emission_maps{ true }; // emission maps (materials/<hash>_e.png) on: their glow and their lights
+    std::atomic<int> off_glow{ 100 };        // % of a switched-off level light's painted glow taken away
     std::atomic<int> glow{ 100 };            // % emission maps (materials/<hash>_e.png)
     std::atomic<bool> emission_lights{ true }; // lights placed where the level's emission-mapped textures are
     std::atomic<int> emission_light{ 100 };  // % their brightness
