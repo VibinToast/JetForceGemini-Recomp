@@ -541,7 +541,8 @@ void jfg_aim_along_view(recomp_context* ctx, uint32_t obj, float ox, float oy, f
 static void aim_at_screen_centre(recomp_context* ctx, uint32_t obj, uint32_t pad) {
     const float pitch = std::clamp(g_cam.orbit_elevation + g_cam.elevation, ORBIT_PITCH_MIN, ORBIT_PITCH_MAX); // as jfg_camera_override: larger looks down
     const float fx = std::sin(g_cam.heading) * std::cos(pitch), fy = -std::sin(pitch), fz = std::cos(g_cam.heading) * std::cos(pitch);
-    jfg_aim_along_view(ctx, obj, rdf(obj + 0x0C) + g_cam.orbit_dx, rdf(obj + 0x10) + g_cam.orbit_pivot, rdf(obj + 0x14) + g_cam.orbit_dz, fx, fy, fz);
+    jfg_aim_along_view(ctx, obj, rdf(obj + 0x0C) + g_cam.orbit_dx + g_cam.aim_offset_wx, rdf(obj + 0x10) + g_cam.orbit_pivot,
+                       rdf(obj + 0x14) + g_cam.orbit_dz + g_cam.aim_offset_wz, fx, fy, fz);
     wr8(pad + 2, 0);
     wr8(pad + 3, 0);
 }
@@ -553,6 +554,13 @@ void jfg_camera_controls(recomp_context* ctx) {
     if (!signs_read) {
         signs_read = true;
         if (const char* e = std::getenv("JFG_DUAL_STICK_SIGNS")) std::sscanf(e, "%f,%f", &g_sign_move, &g_sign_cam);
+    }
+    if (menu_paused()) {
+        // "Pause in the Settings Menu": the dual-stick camera stands still with the game (jfg_camera_override holds the
+        // view); input meanwhile is the menu's.
+        g_mouse_dx.exchange(0, std::memory_order_relaxed);
+        g_mouse_dy.exchange(0, std::memory_order_relaxed);
+        return;
     }
     const bool was_active = g_cam.active;
     g_cam.active = false;

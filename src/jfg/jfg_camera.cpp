@@ -88,11 +88,13 @@ extern "C" void jfg_settings_menu_open(int open) { g_settings_menu_open.store(op
 // Hook in func_80045F00 (0x80046058, where the game decides between running the world and its pause tick): 1 makes
 // this tick a pause tick (objects drawn but not moved) without the pause menu. Used by the fly camera's "freeze" and
 // by "Pause in the Settings Menu" (gameplay only: not in a cutscene, whose music would run on without it, or a skip).
+bool menu_paused() {
+    return g.pause_in_menu && g_settings_menu_open.load(std::memory_order_relaxed) && g_rdram != nullptr && !g.skipping &&
+           rd32(ADDR_mainGameMode) == 0 && !in_cutscene();
+}
 extern "C" int jfg_freeze_world(void) {
     if (g_fly.active && g.fly_freeze) return 1;
-    if (g.pause_in_menu && g_settings_menu_open.load(std::memory_order_relaxed) && g_rdram != nullptr && !g.skipping &&
-        rd32(ADDR_mainGameMode) == 0 && !in_cutscene()) return 1;
-    return 0;
+    return menu_paused() ? 1 : 0;
 }
 
 // Start of the tick: give the game its own camera back.
@@ -142,6 +144,22 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         return;
     }
     if ((!g_cam.active && !g_cam.shoulder) || g_cam.overridden) return;
+    const uint32_t cam_now = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
+    if (menu_paused() && g_cam.drawn_valid) {
+        // "Pause in the Settings Menu": the view stays exactly as last drawn (jfg_camera_controls does not run meanwhile).
+        for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam_now + i); std::memcpy(&g_cam.saved[i], &v, 4); }
+        g_cam.camera_addr = cam_now;
+        g_cam.overridden = true;
+        wrf(cam_now + 0x0C, g_cam.drawn_x); wrf(cam_now + 0x10, g_cam.drawn_y); wrf(cam_now + 0x14, g_cam.drawn_z);
+        wr16(cam_now + 0, g_cam.drawn_yaw);
+        wr16(cam_now + 2, g_cam.drawn_pitch);
+        return;
+    }
+    auto remember = [](uint32_t c) {
+        g_cam.drawn_x = rdf(c + 0x0C); g_cam.drawn_y = rdf(c + 0x10); g_cam.drawn_z = rdf(c + 0x14);
+        g_cam.drawn_yaw = rd16(c); g_cam.drawn_pitch = rd16(c + 2);
+        g_cam.drawn_valid = true;
+    };
     const uint32_t obj = player_object(ctx);
     if (obj == 0) return;
     const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
@@ -179,34 +197,37 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         wrf(cam + 0x14, cz + (ctz_ - cz) * b);
         wr16(cam + 0, angle_to_s16(-(game_look + wrap_angle(look - game_look) * b)));
         wr16(cam + 2, angle_to_s16(game_pitch + (pitch - game_pitch) * b));
+        remember(cam);
         return;
     }
-    // The camera orbits the middle of the character's body, ORBIT_CENTRE above its feet, and always looks at it, while
-    // aiming too (Over-the-Shoulder off). Only the distance and the starting tilt come from the game's camera.
+    // The camera orbits the middle of the character's body, ORBIT_CENTRE above its feet, at ORBIT_DISTANCE (times
+    // "Camera Distance"), and always looks at it, while aiming too (Over-the-Shoulder off). Only the starting tilt comes
+    // from the game's camera: its distance moves in and out with aiming, walls and the start of a level, and does not
+    // always come back to the same value (161 before an aim, 144 after, in the first level), so taking it made the
+    // view, and every aim's zoom, differ from one time to the next with the same settings.
     float game_elevation, boom;
     if (g_cam.free_aim) {
-        // Dual-stick aiming: the game's aiming camera has moved in close; the distance and tilt from before are kept.
+        // Dual-stick aiming: the game's aiming camera has moved in close; the tilt from before is kept.
         game_elevation = g_cam.orbit_elevation;
-        boom = g_cam.orbit_boom;
+        boom = ORBIT_DISTANCE;
     }
     else {
         if (flat < 20.0f || flat > 2000.0f) { g_cam.view_saved = false; g_cam.orbit_valid = false; return; } // not an ordinary follow camera (first person, a fixed view, ...)
         game_elevation = angle_from_s16(rd16(cam + 2));
         // The game's camera looks at a point above the character's feet: its distance from that point.
         const float game_pivot = std::clamp((cy - py) - flat * std::tan(game_elevation), 0.0f, 200.0f);
-        boom = std::clamp(std::sqrt(flat * flat + (cy - py - game_pivot) * (cy - py - game_pivot)), 40.0f, 1000.0f);
+        const float game_boom = std::clamp(std::sqrt(flat * flat + (cy - py - game_pivot) * (cy - py - game_pivot)), 40.0f, 1000.0f);
+        boom = ORBIT_DISTANCE;
         if (g_cam.orbit_valid && g_cam.orbit_easing) {
-            // Just after aiming the game's camera is still in close and swings back out: the kept orbit stays until the
-            // game's is near it again (at most orbit_settle frames), then eases over to it, so the view neither zooms in
-            // nor jumps when the aim button is let go.
-            constexpr float EASE = 0.15f, NEAR = 0.1f;
-            const bool back = std::fabs(boom - g_cam.orbit_boom) < NEAR * g_cam.orbit_boom;
+            // Just after aiming the game's camera is still in close and swings back out: the kept tilt stays until the
+            // game's is near it again (at most orbit_settle frames), then eases over to it, so the view does not jump
+            // when the aim button is let go.
+            constexpr float EASE = 0.15f, NEAR = 0.25f;
+            const bool back = std::fabs(game_boom - boom) < NEAR * boom;
             const float ease = (back || g_cam.orbit_settle <= 0) ? EASE : 0.0f;
-            const float live_boom = boom;
             game_elevation = g_cam.orbit_elevation + (game_elevation - g_cam.orbit_elevation) * ease;
-            boom = g_cam.orbit_boom + (boom - g_cam.orbit_boom) * ease;
             if (g_cam.orbit_settle > 0) g_cam.orbit_settle--;
-            if (back && std::fabs(boom - live_boom) < 1.0f) g_cam.orbit_easing = false;
+            if (ease > 0.0f && std::fabs(game_elevation - angle_from_s16(rd16(cam + 2))) < 0.01f) g_cam.orbit_easing = false;
         }
         g_cam.orbit_valid = true;
         g_cam.orbit_elevation = game_elevation;
@@ -284,6 +305,23 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         qx = px + g_cam.orbit_dx;
         qz = pz + g_cam.orbit_dz;
         pivot += up;
+    }
+    // "Aim Offset" (Over-the-Shoulder off): while aiming the point orbited moves right/up of the character and the
+    // camera closer in ("Aim Zoom") by the options, gliding there and back in a tenth of a second, so the view can be set up like
+    // an over-the-shoulder one. The crosshair stays in the middle of the screen (jfg_aim_along_view uses the view drawn).
+    float reach = boom * distance;
+    {
+        const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
+        const bool on = g_cam.free_aim && g_cam.glide <= 0.0f && !g.aim_shoulder;
+        g_cam.aim_offset_blend = on ? std::min(1.0f, g_cam.aim_offset_blend + frames / 6.0f) : std::max(0.0f, g_cam.aim_offset_blend - frames / 6.0f);
+        const float b = g_cam.aim_offset_blend;
+        const float right = (float)g.aim_offset_x * b;
+        g_cam.aim_offset_wx = -std::cos(g_cam.heading) * right; // screen-right
+        g_cam.aim_offset_wz = std::sin(g_cam.heading) * right;
+        qx += g_cam.aim_offset_wx;
+        qz += g_cam.aim_offset_wz;
+        pivot += (float)g.aim_offset_y * b;
+        reach = std::max(20.0f, reach - (float)g.aim_offset_z * b); // "Aim Zoom": closer in
         g_cam.orbit_pivot = pivot;
     }
     const float elevation = pitch;
@@ -291,9 +329,9 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
     g_cam.camera_addr = cam;
     g_cam.overridden = true;
-    float wx = qx - std::sin(g_cam.heading) * boom * distance * std::cos(elevation);
-    float wy = py + pivot + boom * distance * std::sin(elevation);
-    float wz = qz - std::cos(g_cam.heading) * boom * distance * std::cos(elevation);
+    float wx = qx - std::sin(g_cam.heading) * reach * std::cos(elevation);
+    float wy = py + pivot + reach * std::sin(elevation);
+    float wz = qz - std::cos(g_cam.heading) * reach * std::cos(elevation);
     camera_collide(ctx, qx, py + pivot, qz, wx, wy, wz);
     float look = g_cam.heading, look_pitch = pitch;
     {
@@ -330,6 +368,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     wrf(cam + 0x14, wz);
     wr16(cam + 0, angle_to_s16(-look));
     wr16(cam + 2, angle_to_s16(look_pitch));
+    remember(cam);
     // Dual-stick aiming: the aim again, along the view that is drawn now. The game's tick has run since the aim was
     // set before it, and on the tick aiming starts it has just reset its aim angles; the crosshair, drawn after the
     // scene from them, is then in the middle of the screen from the first frame on.
