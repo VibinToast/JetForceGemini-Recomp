@@ -436,6 +436,18 @@ static void draw_lighting() {
     ImGui::TextDisabled("Last frame: %d level lights, %d torches and lamps", s.sent_level_lights.load(),
                         s.sent_object_lights.load());
 
+    options_section("Characters and objects");
+    bool characters = s.characters.load();
+    if (ImGui::Checkbox("New lighting for characters and objects", &characters)) s.characters = characters;
+    options_help("Lights characters and objects per pixel with their models' own surface directions, from the same "
+                 "ambient and lights the game uses, instead of the game's per-vertex lighting. The level ambient slider "
+                 "scales their ambient too.");
+    ImGui::BeginDisabled(!characters);
+    live_slider("Frame's lights on characters (%)", s.character_lights, 0, 100);
+    options_help("How much the per-pixel lights (shots, flashes, torches and lamps) add on characters, with facing and "
+                 "shadows. The game's own light on them already comes from the nearest lights, so this adds to it.");
+    ImGui::EndDisabled();
+
     options_section("Debug");
     bool flag = s.no_game_lighting.load();
     if (ImGui::Checkbox("Game's per-vertex level lighting off", &flag)) s.no_game_lighting = flag;

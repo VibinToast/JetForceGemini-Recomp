@@ -191,6 +191,13 @@ text = "{ int jfg_track_light(uint8_t*, recomp_context*); if (jfg_track_light(rd
 # Modern lighting, characters and objects (src/jfg/jfg_lighting.cpp): the entries of the three functions lightObject
 # uses to write a model's vertex colours from its lights (asm, return nothing). Skipped to see what a model keeps
 # without them (for now: JFG_NO_OBJECT_LIGHTING=1, or the F9 Lighting tab).
+# ... and the entry of lightObject(trans, modInst, lighting, mtx): with the new character lighting on, the port reads
+# the model's normals and the object's light settings for RT64 and writes the base colours into its vertices.
+[[patches.hook]]
+func = "lightObject"
+before_vram = 0x800221F0
+text = "{ void jfg_light_object(uint8_t*, recomp_context*); jfg_light_object(rdram, ctx); }"
+
 [[patches.hook]]
 func = "lightSingleLight"
 before_vram = 0x800229E0

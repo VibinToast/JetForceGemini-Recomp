@@ -36,6 +36,8 @@
 void rt64_jfg_frame_lights(uint32_t dlStart, const float* data, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
 void rt64_jfg_level_vertices(const uint32_t* ranges, uint32_t count);            // lib/rt64 src/hle/rt64_rsp.cpp
 void rt64_jfg_frame_casters(uint32_t dlStart, const float* data, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
+void rt64_jfg_frame_objects(uint32_t dlStart, const uint32_t* ranges, uint32_t rangeCount, const uint32_t* normals,
+                            uint32_t normalCount, const float* lights, uint32_t lightCount); // ...
 extern std::atomic<int> rt64_jfg_pixel_lights; // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 extern std::atomic<int> rt64_jfg_debug_world;  // ...
 extern std::atomic<int> rt64_jfg_debug_normal; // ...
@@ -98,6 +100,8 @@ LightingSettings& lighting_settings() {
         }
         settings.no_game_lighting = std::getenv("JFG_NO_TRACK_LIGHTS") != nullptr;
         settings.no_object_lighting = std::getenv("JFG_NO_OBJECT_LIGHTING") != nullptr;
+        settings.characters = std::getenv("JFG_CHARACTER_LIGHTING") != nullptr;
+        if (const char* env = std::getenv("JFG_CHARACTER_LIGHTS")) settings.character_lights = std::clamp(std::atoi(env), 0, 100);
         settings.debug_world = std::getenv("RT64_JFG_DEBUG_WORLD") != nullptr;
         settings.debug_normal = std::getenv("RT64_JFG_DEBUG_NORMAL") != nullptr;
         settings.log = std::getenv("JFG_DEBUG_LIGHTS") != nullptr;
@@ -122,6 +126,112 @@ void lighting_add_caster(uint32_t object, float x, float z, float scale) {
     const float radius = CASTER_UNITS / scale * (lighting_settings().caster_size.load() / 100.0f);
     const float y = rdf(object + OBJ_Y);
     g_casters.push_back({ object, x, y + radius, z, radius });
+}
+
+// --- characters and objects ---------------------------------------------------------------------------------------
+// The game lights a model per vertex (lightSingleLight, lightTwoLights, lightMultiLight, called by lightObject) from
+// two of its tables (read from the recompiled lightSingleLight):
+//   model + 0x6C: groups of [u8 count, u8 joint], then count records; a count of 0 ends it. A record is a big-endian
+//                 word: the offset of a table entry (top 16 bits), n more vertices sharing it (4 bits), the vertex
+//                 index (12 bits); then the n extra indices, 12 bits each, packed from the top; 4 + (12n + 7) / 8
+//                 bytes in all.
+//   model + 0x68: the table: per entry a normal (s8 x, y, z, in the joint's space) and the base colour (u8 r, g, b).
+// Brightness = min + (max - min) x how much the normal faces the light (one direction per joint), colour = base x
+// brightness, written into the instance's vertices (modInst + 0x04, 10 bytes each, colour at +6).
+// With the new character lighting, the port writes the base colour itself, sends each vertex's normal (with the
+// object's slot) and the object's settings to RT64, and the game's three functions are skipped.
+constexpr uint32_t MODINST_MODEL = 0x00, MODINST_VERTICES = 0x04;
+constexpr uint32_t MODEL_NORMAL_TABLE = 0x68, MODEL_NORMAL_LIST = 0x6C;
+// Object lighting (the game's lighting code): f32 fade (+0x00), s16 directions used (+0x0E), light setting[4] (+0x10, 0x20
+// each): Vec3f direction (+0x00), u8 max (+0x15), u8 min (+0x17).
+constexpr uint32_t LIGHTING_FADE = 0x00, LIGHTING_COUNT = 0x0E, LIGHTING_SETTINGS = 0x10, SETTING_SIZE = 0x20;
+constexpr uint32_t SETTING_DIR = 0x00, SETTING_MAX = 0x15, SETTING_MIN = 0x17;
+constexpr size_t MAX_OBJECTS = 254, MAX_OBJECT_VERTICES = 4096;
+
+std::vector<uint32_t> g_object_ranges;  // start, vertex count, offset into g_object_normals
+std::vector<uint32_t> g_object_normals; // per vertex: s8 x, y, z, slot + 1
+std::vector<float> g_object_lights;     // 20 floats per slot (RT64's JfgObjectLight)
+
+static uint32_t be32(uint32_t a) {
+    return ((uint32_t)rd8(a) << 24) | ((uint32_t)rd8(a + 1) << 16) | ((uint32_t)rd8(a + 2) << 8) | rd8(a + 3);
+}
+
+// Entry of lightObject(trans, modInst, lighting, mtx).
+extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    LightingSettings& s = lighting_settings();
+    if (!s.characters.load()) return;
+    const uint32_t inst = (uint32_t)ctx->r5, lighting = (uint32_t)ctx->r6;
+    if (!valid_ptr(inst) || !valid_ptr(lighting) || g_object_lights.size() / 20 >= MAX_OBJECTS) return;
+    const uint32_t model = rd32(inst + MODINST_MODEL), verts = rd32(inst + MODINST_VERTICES);
+    if (!valid_ptr(model) || !valid_ptr(verts)) return;
+    const uint32_t list = rd32(model + MODEL_NORMAL_LIST), table = rd32(model + MODEL_NORMAL_TABLE);
+    if (!valid_ptr(list) || !valid_ptr(table)) return;
+
+    const uint32_t slot = (uint32_t)(g_object_lights.size() / 20) + 1;
+    const size_t first = g_object_normals.size();
+    uint32_t vertex_count = 0;
+    auto set = [&](uint32_t idx, uint32_t entry) {
+        if (idx >= MAX_OBJECT_VERTICES) return;
+        if (idx >= vertex_count) {
+            vertex_count = idx + 1;
+            g_object_normals.resize(first + vertex_count, 0);
+        }
+        g_object_normals[first + idx] = rd8(entry) | ((uint32_t)rd8(entry + 1) << 8) | ((uint32_t)rd8(entry + 2) << 16) | (slot << 24);
+        const uint32_t v = verts + idx * 10;
+        wr8(v + 6, rd8(entry + 3));
+        wr8(v + 7, rd8(entry + 4));
+        wr8(v + 8, rd8(entry + 5));
+        wr8(v + 9, 0xFF);
+    };
+    uint32_t p = list;
+    for (int guard = 0; guard < 4096; guard++) {
+        const uint32_t count = rd8(p);
+        if (count == 0) break;
+        p += 2; // the joint byte: the game turns its light direction per joint, RT64 turns the normals instead
+        for (uint32_t k = 0; k < count; k++) {
+            const uint32_t w = be32(p);
+            const uint32_t entry = table + (w >> 16), extra = (w >> 12) & 0xF;
+            set(w & 0xFFF, entry);
+            for (uint32_t j = 0; j < extra; j++) {
+                const uint32_t bit = 12 * j; // from the top of the bytes after the word
+                const uint32_t b = p + 4 + bit / 8;
+                const uint32_t two = ((uint32_t)rd8(b) << 8) | rd8(b + 1);
+                set((bit % 8 == 0) ? (two >> 4) : (two & 0xFFF), entry);
+            }
+            p += extra ? (12 * extra + 39) / 8 : 4;
+        }
+    }
+    if (vertex_count == 0) {
+        g_object_normals.resize(first);
+        return;
+    }
+    g_object_ranges.push_back(verts & RDRAM_MASK);
+    g_object_ranges.push_back(vertex_count);
+    g_object_ranges.push_back((uint32_t)first);
+
+    // Its settings, with the fade lightObject applies to the first one.
+    float light[20] = {};
+    const int32_t used = std::clamp((int)(int16_t)rd16(lighting + LIGHTING_COUNT), 0, 4);
+    const float fade = rdf(lighting + LIGHTING_FADE);
+    for (int32_t k = 0; k < std::max(used, 1); k++) {
+        const uint32_t setting = lighting + LIGHTING_SETTINGS + (uint32_t)k * SETTING_SIZE;
+        float lo = rd8(setting + SETTING_MIN), hi = rd8(setting + SETTING_MAX);
+        if (k == 0 && fade != 1.0f) {
+            lo = std::floor(lo * fade);
+            hi = std::floor(hi * fade);
+        }
+        if (k == 0) light[16] = lo / 255.0f;
+        if (k < used) {
+            light[k * 4] = rdf(setting + SETTING_DIR);
+            light[k * 4 + 1] = rdf(setting + SETTING_DIR + 4);
+            light[k * 4 + 2] = rdf(setting + SETTING_DIR + 8);
+            light[k * 4 + 3] = std::max(hi - lo, 0.0f) / 255.0f;
+        }
+    }
+    light[17] = (float)used;
+    light[18] = s.character_lights.load() / 100.0f;
+    g_object_lights.insert(g_object_lights.end(), light, light + 20);
 }
 
 // The level's vertex arrays as physical [start, end) pairs, as RT64 sees vertex loads.
@@ -284,13 +394,20 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     }
     rt64_jfg_frame_casters((uint32_t)ctx->r4 & RDRAM_MASK, casters, (uint32_t)g_casters.size());
     g_casters.clear();
+    rt64_jfg_frame_objects((uint32_t)ctx->r4 & RDRAM_MASK, g_object_ranges.data(), (uint32_t)(g_object_ranges.size() / 3),
+                           g_object_normals.data(), (uint32_t)g_object_normals.size(), g_object_lights.data(),
+                           (uint32_t)(g_object_lights.size() / 20));
+    g_object_ranges.clear();
+    g_object_normals.clear();
+    g_object_lights.clear();
 }
 
 // Entries of lightSingleLight, lightTwoLights and lightMultiLight (called by lightObject): they write a model's vertex
 // colours from the lights near it. Returns non-zero to skip them; the model then keeps whatever its vertex colours
 // held before (lightEnviroMap, the shiny models' texture coordinates, still runs).
 extern "C" int jfg_object_light(void) {
-    return lighting_settings().no_object_lighting.load() ? 1 : 0;
+    const LightingSettings& s = lighting_settings();
+    return (s.no_object_lighting.load() || s.characters.load()) ? 1 : 0;
 }
 
 // Entry of trackLightAsm(track, light, visible). Returns non-zero to skip it.

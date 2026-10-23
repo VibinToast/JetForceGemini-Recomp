@@ -65,6 +65,7 @@ int jfg_flag_override(int flag);                                       // entry 
 int jfg_track_light(uint8_t* rdram, recomp_context* ctx);              // entry of trackLightAsm
 void jfg_frame_lights(uint8_t* rdram, recomp_context* ctx);            // entry of rcpFast3d (before jfg_rcp_skip)
 int jfg_object_light(void);                                            // entries of lightSingleLight, lightTwoLights, lightMultiLight
+void jfg_light_object(uint8_t* rdram, recomp_context* ctx);            // entry of lightObject
 // jfg_gore.cpp
 void jfg_blood_more(uint8_t* rdram, recomp_context* ctx);              // entry of bloodSpurtAdd (after jfg_no_blood)
 void jfg_gore_splat(uint8_t* rdram, recomp_context* ctx);              // bloodSpurtUpdateAll, a splat's life countdown
