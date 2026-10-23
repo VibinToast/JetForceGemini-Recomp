@@ -2,8 +2,8 @@
 // chosen; jfg_locale.cpp: showing it).
 //
 // English is the game's own text. Every other locale comes from one place:
-//   - built in: a language slot of the ROM with menu text of its own (the US ROM's French and German menus, and
-//     whatever the launcher added from the player's European and Japanese ROMs, locale/*.bin);
+//   - built in: a language slot of the ROM with menu text of its own (the US ROM's French and German menus, or any
+//     slot an asset mod fills);
 //   - a locale mod: a mod with jfg_locale.json, one language each. Any number can be installed; they never replace
 //     each other, and two mods for the same language are listed side by side under their mods' names.
 // The chosen one is shown in the game's language slot 1 through runtime assets (jfg_assets.h): menus, subtitles,
@@ -12,6 +12,7 @@
 // jfg_locale.json (all files in the game's own formats, as the decomp's tools/text.py writes them):
 //   {
 //     "name": "Italiano",                     shown in the Language list
+//     "english_name": "Italian",              listed instead when the menus' font can't draw "name" (e.g. 日本語)
 //     "menu": "menu.bin",                     one menu block: 532 s32 offsets (-1 = none), then the strings
 //     "subtitle_table": "sub_table.bin",      51 entries: words (flags << 24 | offset), the end word, -1
 //     "subtitle_data": "sub_data.bin",
@@ -46,7 +47,8 @@ struct SubtitleEntry {
 
 struct Locale {
     std::string id;   // "builtin.<slot>" or "mod.<mod id>"
-    std::string name; // as listed
+    std::string name;         // the locale's own name
+    std::string english_name; // for menus whose font can't draw `name`
     std::vector<uint8_t> menu;
     std::vector<SubtitleEntry> subtitles; // empty or SUBTITLE_BLOCK
     std::vector<uint8_t> hint_table, hint_data;
@@ -64,7 +66,8 @@ const Locale* find(const std::string& id);
 std::string chosen();
 void choose(const std::string& id);
 
-// For menus (any thread): (id, name) of English and every locale, in list order.
+// For menus (any thread): (id, label) of English and every locale, in list order. The label is the locale's name,
+// or its English name when the name has characters the menus' font lacks (beyond Latin: U+024F).
 std::vector<std::pair<std::string, std::string>> list();
 
 } // namespace jfg::locale

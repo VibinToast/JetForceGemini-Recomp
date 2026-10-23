@@ -356,18 +356,9 @@
 											</div>
 										</div>
 									</div></div>
-									<!-- Languages from the player's European ROM (src/jfg/jfg_locale_import.cpp) -->
-									<div class="rl-block-shadow" data-if="rom_valid"><div class="rl-block">
-										<div class="rl-rom-text">
-											<div class="rl-text">{{locale_text}}</div>
-											<div class="rl-text rl-muted">Built from your own ROM and kept on your computer. Choose the language in General.</div>
-											<div class="rl-action-shadow"><button id="rl_locale" class="rl-action rl-action--outline"
-												data-event-click="locale_browse()" style="nav-left: #nav_play; nav-up: #rl_browse;">{{locale_label}}</button></div>
-										</div>
-									</div></div>
 									<div class="rl-banner-shadow" data-if="update_available">
 										<button id="rl_update_banner" class="rl-banner" data-event-click="show_update()"
-											style="nav-left: #nav_play;" data-style-nav-up="rom_valid ? '#rl_locale' : '#rl_browse'" data-style-nav-down="official_update ? '#rl_pack_banner' : '#rl_start'">
+											style="nav-left: #nav_play; nav-up: #rl_browse;" data-style-nav-down="official_update ? '#rl_pack_banner' : '#rl_start'">
 											<span class="rl-banner-title">Update available: v{{update_version}}</span>
 											<span class="rl-banner-text">See what is new and update. Your saves and settings are kept.</span>
 										</button>
@@ -375,14 +366,14 @@
 									<!-- An installed official HD texture pack with a newer version out (src/ui/ui_launcher.cpp) -->
 									<div class="rl-banner-shadow" data-if="official_update">
 										<button id="rl_pack_banner" class="rl-banner" data-event-click="official_show_update()" style="nav-left: #nav_play; nav-down: #rl_start;"
-											data-style-nav-up="update_available ? '#rl_update_banner' : (rom_valid ? '#rl_locale' : '#rl_browse')">
+											data-style-nav-up="update_available ? '#rl_update_banner' : '#rl_browse'">
 											<span class="rl-banner-title">{{official_update_title}}</span>
 											<span class="rl-banner-text">{{official_update_text}}</span>
 										</button>
 									</div>
 									<div class="rl-start-shadow">
 										<button id="rl_start" class="rl-start" data-attrif-autofocus="rom_valid" data-class-rl-ready="rom_valid" data-event-click="start_game()"
-											data-style-nav-up="official_update ? '#rl_pack_banner' : (update_available ? '#rl_update_banner' : (rom_valid ? '#rl_locale' : '#rl_browse'))"
+											data-style-nav-up="official_update ? '#rl_pack_banner' : (update_available ? '#rl_update_banner' : '#rl_browse')"
 											style="nav-left: #nav_play;">Start Jet Force Gemini</button>
 									</div>
 									<div class="rl-start-note" data-if="!rom_valid">Load a ROM to start.</div>

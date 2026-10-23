@@ -87,7 +87,7 @@ void add_builtin() {
         l.menu = rom_menu_block(slot);
         if (l.menu.empty()) continue;
         l.id = "builtin." + std::to_string(slot);
-        l.name = std::string(SLOT_NAMES[slot]) + " (game)";
+        l.name = l.english_name = std::string(SLOT_NAMES[slot]) + " (game)";
         if (entries >= (size_t)jfg::locale::SUBTITLE_BLOCK * (slot + 1))
             l.subtitles = subtitle_entries(gtable, gdata, jfg::locale::SUBTITLE_BLOCK * slot, jfg::locale::SUBTITLE_BLOCK);
         const std::span<const uint8_t> ht = jfg::assets::read_rom(SLOT_HINT_TABLE[slot]);
@@ -97,7 +97,8 @@ void add_builtin() {
             l.hint_table.assign(ht.begin(), ht.end());
             l.hint_data.assign(hd.begin(), hd.end());
         }
-        // Japanese pages from a Star Twins import: descriptors 4-7 of 0x3A, their glyphs at the end of 0x3B.
+        // Pages in slot 4 (an asset mod with Japanese, as text.py packs it): descriptors 4-7 of 0x3A, their glyphs
+        // at the end of 0x3B.
         if (slot == 4 && fonts.size() >= 8 * FONT_DESC) {
             const uint32_t offset = be32(fonts, 4 * FONT_DESC + 4), size = be32(fonts, 4 * FONT_DESC + 8) >> 16;
             if (size != 0 && (uint64_t)offset + 4ull * 256 * size <= glyphs.size()) {
@@ -138,6 +139,7 @@ void on_locale_mod_enabled(recomp::mods::ModContext& context, const recomp::mods
     jfg::locale::Locale l;
     l.id = "mod." + id;
     l.name = j["name"].get<std::string>();
+    if (j.contains("english_name") && j["english_name"].is_string()) l.english_name = j["english_name"].get<std::string>();
     bool missing = false;
     l.menu = mod_file(mod, j, "menu", missing);
     const std::vector<uint8_t> st = mod_file(mod, j, "subtitle_table", missing), sd = mod_file(mod, j, "subtitle_data", missing);
@@ -167,6 +169,24 @@ void on_locale_mod_enabled(recomp::mods::ModContext& context, const recomp::mods
         l.page_font.clear();
     }
     g_pending.push_back({ context.get_mod_order_index(id), std::move(l) });
+}
+
+// Whether the menus' font draws every character of `text` (UTF-8): Latin, up to U+024F.
+bool latin(const std::string& text) {
+    for (size_t i = 0; i < text.size(); i++) {
+        const uint8_t c = (uint8_t)text[i];
+        if (c < 0x80) continue;
+        if ((c & 0xE0) != 0xC0 || i + 1 >= text.size()) return false; // 3 and 4 byte sequences are U+0800 and up
+        if ((((c & 0x1F) << 6) | ((uint8_t)text[i + 1] & 0x3F)) > 0x24F) return false;
+        i++;
+    }
+    return true;
+}
+
+std::string label(const jfg::locale::Locale& l) {
+    if (latin(l.name)) return l.name;
+    if (!l.english_name.empty()) return l.english_name;
+    return l.id;
 }
 
 void load_choice() {
@@ -225,7 +245,7 @@ extern "C" void jfg_locale_build_registry(void) {
     g_pending.clear();
     std::lock_guard<std::mutex> lock(g_mutex);
     g_list = { { "", "English" } };
-    for (const jfg::locale::Locale& l : g_locales) g_list.emplace_back(l.id, l.name);
+    for (const jfg::locale::Locale& l : g_locales) g_list.emplace_back(l.id, label(l));
     load_choice();
     char line[160];
     std::snprintf(line, sizeof line, "locale: %zu locales besides English", g_locales.size());

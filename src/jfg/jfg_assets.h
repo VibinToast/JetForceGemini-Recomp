@@ -2,7 +2,7 @@
 //
 // Two layers, both under the game's asset table (src/pi.c in the decomp: 71 assets read through piRomLoad,
 // piRomLoadSection and piRomGetFileSize):
-//   - Boot assets: asset mods (jfg_assets.json) and locale/*.bin, laid into the ROM once before the game starts.
+//   - Boot assets: asset mods (jfg_assets.json), laid into the ROM once before the game starts.
 //   - Runtime assets: a port feature serves its own version of an asset while the game runs, and can change or drop
 //     it at any time; the loaders' wrappers read it instead of the ROM. Each runtime asset has one owner, so two
 //     features can't fight over an asset unnoticed: a second owner is refused and logged. The locale system
