@@ -161,6 +161,7 @@ bool g_have_player = false;
 std::string g_message;
 uint32_t g_message_tick = 0;
 bool g_confirm_clear = false;
+bool g_confirm_reset = false;  // asking before Reset
 
 bool use_files() { return std::getenv("JFG_LIGHTING_NO_FILES") == nullptr; }
 // Test switch: JFG_LIGHTING_TOOL=open opens the tool at start, =place with "place with fire" on (JFG_DEBUG_INPUT can
@@ -292,6 +293,7 @@ void load_level(int level) {
     g_overrides.clear();
     g_selected = -1;
     g_selected_game = 0;
+    g_confirm_reset = false; // a pending Reset was about the level before
     if (!use_files()) return;
     std::vector<Setting>& table = settings_table();
     for (size_t i = 0; i < table.size() && i < g_built_in.size(); i++) {
@@ -918,16 +920,32 @@ void draw_lighting_tool(recomp_context* ctx) {
             help("Forgets this level's own settings; it uses the defaults again.");
         }
         ImGui::SameLine();
-        if (ImGui::Button("Built-in settings")) {
-            std::vector<Setting>& table = settings_table();
-            for (size_t i = 0; i < table.size() && i < g_built_in.size(); i++) {
-                if (table[i].group != Group::Debug) put(table[i], g_built_in[i]);
-            }
-            if (g_level_own) touched_level();
-            touched_default();
-            say("Settings back to the built-in ones.");
+        // Reset: the settings back to how the port ships them, in whichever the level uses, after a confirmation that
+        // says which; on a level without its own settings that is the defaults, shared by every such level. Quality
+        // settings (the same everywhere) and the debug views are left alone.
+        if (!g_confirm_reset) {
+            if (ImGui::Button("Reset...")) g_confirm_reset = true;
+            help("Puts the settings back to how the port ships them, for this level's own settings or the defaults "
+                 "(whichever it uses). Asks first.");
         }
-        help("Every setting back to how the port ships it, for this level's settings or the defaults (whichever it uses).");
+        else {
+            ImGui::NewLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.35f, 1.0f), "%s", g_level_own
+                ? "Reset this level's own settings to the built-in ones?"
+                : "Reset the DEFAULTS to the built-in ones? Every level without its own settings changes.");
+            if (ImGui::Button("Yes, reset")) {
+                std::vector<Setting>& table = settings_table();
+                for (size_t i = 0; i < table.size() && i < g_built_in.size(); i++) {
+                    if (table[i].group != Group::Debug && !table[i].global) put(table[i], g_built_in[i]);
+                }
+                if (g_level_own) touched_level();
+                else touched_default();
+                g_confirm_reset = false;
+                say(g_level_own ? "This level's settings are back to the built-in ones." : "The defaults are back to the built-in ones.");
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel")) g_confirm_reset = false;
+        }
         if (!g_message.empty() && g_tick_count - g_message_tick < 60 * 6) ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "%s", g_message.c_str());
         ImGui::TextDisabled("Last frame: %d level lights, %d torches and lamps, %d placed", s.sent_level_lights.load(),
                             s.sent_object_lights.load(), s.sent_placed_lights.load());
