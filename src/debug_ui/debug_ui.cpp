@@ -12,7 +12,8 @@ bool is_open() {
 }
 
 bool game_has_input() {
-    return !is_open();
+    // JFG PORT: the lighting tool (F12) keeps the controls unless it is in placement mode.
+    return !is_open() && (!backend::lighting_tool_open() || backend::lighting_tool_playing());
 }
 
 bool want_capture_keyboard() {

@@ -35,7 +35,8 @@
 
 void rt64_jfg_frame_lights(uint32_t dlStart, const float* data, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
 void rt64_jfg_level_vertices(const uint32_t* ranges, uint32_t count);            // lib/rt64 src/hle/rt64_rsp.cpp
-void rt64_jfg_frame_casters(uint32_t dlStart, const float* data, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
+void rt64_jfg_frame_points(uint32_t dlStart, const float* data, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
+void rt64_jfg_lighting_params(const float* params, uint32_t count); // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 void rt64_jfg_frame_objects(uint32_t dlStart, const uint32_t* ranges, uint32_t rangeCount, const uint32_t* normals,
                             uint32_t normalCount, const float* lights, uint32_t lightCount); // ...
 extern std::atomic<int> rt64_jfg_pixel_lights; // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
@@ -111,28 +112,20 @@ LightingSettings& lighting_settings() {
         settings.debug_world = std::getenv("RT64_JFG_DEBUG_WORLD") != nullptr;
         settings.debug_normal = std::getenv("RT64_JFG_DEBUG_NORMAL") != nullptr;
         settings.debug_shadow = std::getenv("RT64_JFG_DEBUG_SHADOW") != nullptr;
+        // JFG_SUN="yaw,pitch,intensity" turns the directional light on; JFG_DETAIL (tenths of a unit), JFG_SHINE (%).
+        if (const char* env = std::getenv("JFG_SUN")) {
+            int yaw = 45, pitch = 50, intensity = 35;
+            std::sscanf(env, "%d,%d,%d", &yaw, &pitch, &intensity);
+            settings.sun = true;
+            settings.sun_yaw = yaw;
+            settings.sun_pitch = pitch;
+            settings.sun_intensity = intensity;
+        }
+        if (const char* env = std::getenv("JFG_DETAIL")) settings.detail = std::clamp(std::atoi(env), 0, 100);
+        if (const char* env = std::getenv("JFG_SHINE")) settings.shine = std::clamp(std::atoi(env), 0, 200);
         settings.log = std::getenv("JFG_DEBUG_LIGHTS") != nullptr;
     });
     return settings;
-}
-
-// Shadow casters: the objects the game draws a shadow for this frame, as spheres resting on the ground at their place.
-// A shadow image's scale is its size in texels (s10.5) over its size in the world, so the radius is CASTER_UNITS over
-// it (calibrated on the player, JFG_DEBUG_LIGHTS logs the scales), times the caster size setting.
-struct Caster {
-    uint32_t object;
-    float x, y, z, radius;
-};
-std::vector<Caster> g_casters; // game thread: added by func_8001FA24, sent and cleared at rcpFast3d
-constexpr float CASTER_UNITS = 384.0f; // the player: a radius of about 20
-constexpr uint32_t OBJ_Y = 0x10; // ObjectTransform: f32 x, y, z at +0x0C
-constexpr size_t MAX_CASTERS = 64;
-
-void lighting_add_caster(uint32_t object, float x, float z, float scale) {
-    if (!valid_ptr(object) || scale <= 0.0f || g_casters.size() >= MAX_CASTERS) return;
-    const float radius = CASTER_UNITS / scale * (lighting_settings().caster_size.load() / 100.0f);
-    const float y = rdf(object + OBJ_Y);
-    g_casters.push_back({ object, x, y + radius, z, radius });
 }
 
 // --- characters and objects ---------------------------------------------------------------------------------------
@@ -158,7 +151,7 @@ constexpr size_t MAX_OBJECTS = 254, MAX_OBJECT_VERTICES = 4096;
 
 std::vector<uint32_t> g_object_ranges;  // start, vertex count, offset into g_object_normals
 std::vector<uint32_t> g_object_normals; // per vertex: s8 x, y, z, slot + 1
-constexpr size_t OBJECT_LIGHT_FLOATS = 36; // RT64's JfgObjectLight
+constexpr size_t OBJECT_LIGHT_FLOATS = 52; // RT64's JfgObjectLight: dirs, colors, positions, params
 std::vector<float> g_object_lights;     // OBJECT_LIGHT_FLOATS per slot
 
 static uint32_t be32(uint32_t a) {
@@ -169,7 +162,7 @@ static uint32_t be32(uint32_t a) {
 extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     LightingSettings& s = lighting_settings();
-    if (!s.characters.load()) return;
+    if (!s.characters.load() || !lighting_active()) return;
     const uint32_t inst = (uint32_t)ctx->r5, lighting = (uint32_t)ctx->r6;
     if (!valid_ptr(inst) || !valid_ptr(lighting) || g_object_lights.size() / OBJECT_LIGHT_FLOATS >= MAX_OBJECTS) return;
     const uint32_t model = rd32(inst + MODINST_MODEL), verts = rd32(inst + MODINST_VERTICES);
@@ -221,16 +214,30 @@ extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
 
     // Its settings, with the fade lightObject applies to the first one. Each points at its light's colour table
     // (+0x18, the object light's +0x70, made by lightCreateLightTable from its colour; the first one's is white):
-    // the colour is that object light's.
+    // the colour is that object light's (as the lighting tool changed it), and where it is, so the character is
+    // shadowed from it when it has a shadow map.
     float light[OBJECT_LIGHT_FLOATS] = {};
-    auto colour_of = [](uint32_t table, float* rgb) {
+    auto colour_of = [](uint32_t table, float* rgb, float* pos) {
         rgb[0] = rgb[1] = rgb[2] = 1.0f;
         const uint32_t objects = rd32(ADDR_activeLights);
         const int32_t count = (int32_t)rd32(ADDR_activeLightCount);
         for (int32_t i = 0; valid_ptr(table) && valid_ptr(objects) && i < count; i++) {
             const uint32_t l = rd32(objects + (uint32_t)i * 4);
             if (valid_ptr(l) && rd32(l + OBJ_LIGHT_TABLE) == table) {
-                for (uint32_t c = 0; c < 3; c++) rgb[c] = rd8(l + OBJ_LIGHT_COLOUR + c) / 255.0f;
+                for (uint32_t c = 0; c < 3; c++) {
+                    rgb[c] = rd8(l + OBJ_LIGHT_COLOUR + c) / 255.0f;
+                    pos[c] = rdf(l + OBJ_LIGHT_POS + c * 4);
+                }
+                pos[3] = 1.0f;
+                if (const LightOverride* o = lighting_override_at(pos[0], pos[1], pos[2])) {
+                    const float scale = o->on ? o->intensity / 100.0f * lighting_flicker(l, o->flicker, o->flicker_speed) : 0.0f;
+                    if (o->recolour) {
+                        rgb[0] = o->r / 255.0f;
+                        rgb[1] = o->g / 255.0f;
+                        rgb[2] = o->b / 255.0f;
+                    }
+                    for (uint32_t c = 0; c < 3; c++) rgb[c] *= scale;
+                }
                 return;
             }
         }
@@ -244,17 +251,17 @@ extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
             lo = std::floor(lo * fade);
             hi = std::floor(hi * fade);
         }
-        if (k == 0) light[32] = lo / 255.0f;
+        if (k == 0) light[48] = lo / 255.0f;
         if (k < used) {
             light[k * 4] = rdf(setting + SETTING_DIR);
             light[k * 4 + 1] = rdf(setting + SETTING_DIR + 4);
             light[k * 4 + 2] = rdf(setting + SETTING_DIR + 8);
             light[k * 4 + 3] = std::max(hi - lo, 0.0f) / 255.0f;
-            colour_of(rd32(setting + SETTING_TABLE), &light[16 + k * 4]);
+            colour_of(rd32(setting + SETTING_TABLE), &light[16 + k * 4], &light[32 + k * 4]);
         }
     }
-    light[33] = (float)used;
-    light[34] = s.character_lights.load() / 100.0f;
+    light[49] = (float)used;
+    light[50] = s.character_lights.load() / 100.0f;
     g_object_lights.insert(g_object_lights.end(), light, light + OBJECT_LIGHT_FLOATS);
 }
 
@@ -312,7 +319,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     if ((uint32_t)ctx->r6 != 0) return; // side tasks (clone, refraction, blur) are not frames
     LightingSettings& s = lighting_settings();
-    const int mode = s.mode.load();
+    const int mode = lighting_active() ? s.mode.load() : 0;
     rt64_jfg_pixel_lights.store(mode > 0 ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_debug_world.store(s.debug_world.load() ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_debug_normal.store(s.debug_normal.load() ? 1 : 0, std::memory_order_relaxed);
@@ -373,15 +380,43 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
         const uint32_t l = rd32(objects + (uint32_t)i * 4);
         if (!valid_ptr(l) || !(rd8(l + OBJ_LIGHT_TYPE) & 0x40)) continue;
         const uint32_t intensity = rd8(l + OBJ_LIGHT_COLOUR + 3);
-        const float radius = rdf(l + OBJ_LIGHT_RADIUS);
+        float radius = rdf(l + OBJ_LIGHT_RADIUS);
         if (intensity == 0 || radius <= 0.0f) continue;
+        const float x = rdf(l + OBJ_LIGHT_POS), y = rdf(l + OBJ_LIGHT_POS + 4), z = rdf(l + OBJ_LIGHT_POS + 8);
         float colour[3];
         for (uint32_t c = 0; c < 3; c++) {
             colour[c] = (float)((rd8(l + OBJ_LIGHT_COLOUR + c) * intensity) >> 8) / 255.0f * object_strength;
         }
-        add(l, rdf(l + OBJ_LIGHT_POS), rdf(l + OBJ_LIGHT_POS + 4), rdf(l + OBJ_LIGHT_POS + 8), radius * object_radius,
-            radius * 0.3f, colour, false);
+        // As the lighting tool changed it: off, another colour (at the light's own brightness), brighter or dimmer,
+        // larger or smaller, flickering.
+        if (const LightOverride* o = lighting_override_at(x, y, z)) {
+            if (!o->on) continue;
+            if (o->recolour) {
+                const float level = (float)intensity / 256.0f * object_strength;
+                colour[0] = o->r / 255.0f * level;
+                colour[1] = o->g / 255.0f * level;
+                colour[2] = o->b / 255.0f * level;
+            }
+            const float scale = o->intensity / 100.0f * lighting_flicker(l, o->flicker, o->flicker_speed);
+            for (uint32_t c = 0; c < 3; c++) colour[c] *= scale;
+            radius *= o->radius / 100.0f;
+        }
+        add(l, x, y, z, radius * object_radius, radius * 0.3f, colour, false);
     }
+
+    // The lights placed with the lighting tool (pulsing while the tool shows which one is selected).
+    const std::vector<PlacedLight>& placed = lighting_placed_lights();
+    int placed_sent = 0;
+    for (size_t i = 0; mode >= 1 && i < placed.size(); i++) {
+        const PlacedLight& p = placed[i];
+        if (!p.on || p.radius <= 0) continue;
+        float scale = p.intensity / 100.0f * lighting_flicker(0xC0DE0000u + (uint32_t)i, p.flicker, p.flicker_speed);
+        if (lighting_pulse_light() == (int)i) scale *= 0.6f + 0.4f * std::sin(g_tick_count * 0.25f);
+        const float colour[3] = { p.r / 255.0f * scale, p.g / 255.0f * scale, p.b / 255.0f * scale };
+        add(0xC0DE0000u + (uint32_t)i, p.x, p.y, p.z, (float)p.radius, p.radius * std::clamp(p.inner, 0, 95) / 100.0f, colour, false);
+        placed_sent++;
+    }
+    s.sent_placed_lights = placed_sent;
 
     const size_t max_lights = (size_t)std::clamp(s.max_lights.load(), 0, (int)MAX_FRAME_LIGHTS);
     if (found.size() > max_lights) {
@@ -399,28 +434,29 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     s.sent_object_lights = (int)found.size() - level_lights;
     rt64_jfg_frame_lights((uint32_t)ctx->r4 & RDRAM_MASK, data, (uint32_t)found.size());
 
-    float casters[MAX_CASTERS * 5];
-    for (size_t i = 0; i < g_casters.size(); i++) {
-        const Caster& c = g_casters[i];
-        casters[i * 5] = c.x;
-        casters[i * 5 + 1] = c.y;
-        casters[i * 5 + 2] = c.z;
-        casters[i * 5 + 3] = c.radius;
-        std::memcpy(&casters[i * 5 + 4], &c.object, 4);
-    }
-    if (s.log.load()) {
-        static uint32_t frames = 0, logged = 0;
-        if ((frames++ % 120) == 0 && logged < 40 && !g_casters.empty()) {
-            logged++;
-            char line[200];
-            const Caster& c = g_casters[0];
-            std::snprintf(line, sizeof(line), "%zu casters; first: object %08X at %.0f %.0f %.0f radius %.1f", g_casters.size(),
-                          c.object, c.x, c.y - c.radius, c.z, c.radius);
-            jfg_log_line("jfg_lighting.log", line);
-        }
-    }
-    rt64_jfg_frame_casters((uint32_t)ctx->r4 & RDRAM_MASK, casters, (uint32_t)g_casters.size());
-    g_casters.clear();
+    // The camera (for the shine), placed on in-between frames as the lights are, and the settings the shaders take.
+    float points[5] = { cx, cy, cz, 0.0f, 0.0f };
+    const uint32_t camera_id = 0xCA3E7A00u;
+    std::memcpy(&points[4], &camera_id, 4);
+    rt64_jfg_frame_points((uint32_t)ctx->r4 & RDRAM_MASK, points, 1);
+    const bool on = mode > 0;
+    const float yaw = s.sun_yaw.load() * 3.14159265f / 180.0f, pitch = s.sun_pitch.load() * 3.14159265f / 180.0f;
+    const float sun = s.sun_intensity.load() / 100.0f;
+    float params[16] = {};
+    params[0] = std::cos(pitch) * std::sin(yaw);
+    params[1] = std::sin(pitch);
+    params[2] = std::cos(pitch) * std::cos(yaw);
+    params[3] = (on && s.sun.load()) ? 1.0f : 0.0f;
+    params[4] = s.sun_r.load() / 255.0f * sun;
+    params[5] = s.sun_g.load() / 255.0f * sun;
+    params[6] = s.sun_b.load() / 255.0f * sun;
+    params[7] = std::clamp(s.sun_characters.load(), 0, 200) / 100.0f;
+    params[8] = on ? s.detail.load() / 10.0f : 0.0f;
+    params[9] = on ? s.shine.load() / 100.0f : 0.0f;
+    params[10] = (float)std::clamp(s.sharpness.load(), 1, 256);
+    params[11] = std::clamp(s.glow_shadow.load(), 0, 100) / 100.0f;
+    params[12] = std::clamp(s.detail_characters.load(), 0, 200) / 100.0f;
+    rt64_jfg_lighting_params(params, 16);
     rt64_jfg_frame_objects((uint32_t)ctx->r4 & RDRAM_MASK, g_object_ranges.data(), (uint32_t)(g_object_ranges.size() / 3),
                            g_object_normals.data(), (uint32_t)g_object_normals.size(), g_object_lights.data(),
                            (uint32_t)(g_object_lights.size() / OBJECT_LIGHT_FLOATS));
@@ -434,7 +470,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
 // held before (lightEnviroMap, the shiny models' texture coordinates, still runs).
 extern "C" int jfg_object_light(void) {
     const LightingSettings& s = lighting_settings();
-    return (s.no_object_lighting.load() || s.characters.load()) ? 1 : 0;
+    return (s.no_object_lighting.load() || (s.characters.load() && lighting_active())) ? 1 : 0;
 }
 
 // Entry of trackLightAsm(track, light, visible). Returns non-zero to skip it.
@@ -442,7 +478,7 @@ extern "C" int jfg_track_light(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const LightingSettings& s = lighting_settings();
     if (s.log.load()) log_light((uint32_t)ctx->r5);
-    return (s.no_game_lighting.load() || s.mode.load() > 0) ? 1 : 0;
+    return (s.no_game_lighting.load() || (s.mode.load() > 0 && lighting_active())) ? 1 : 0;
 }
 
 } // namespace jfg

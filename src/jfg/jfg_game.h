@@ -36,6 +36,7 @@ void mainSetGameFlag(uint8_t* rdram, recomp_context* ctx);
 void mainSaveGame(uint8_t* rdram, recomp_context* ctx);
 void frontGetMode(uint8_t* rdram, recomp_context* ctx);
 void objGetPlayerlist(uint8_t* rdram, recomp_context* ctx);
+void trackNearestIntersection(uint8_t* rdram, recomp_context* ctx);
 void objGetObjList(uint8_t* rdram, recomp_context* ctx);
 void controlSelectWeapon(uint8_t* rdram, recomp_context* ctx);
 void objMoveXYZ(uint8_t* rdram, recomp_context* ctx);

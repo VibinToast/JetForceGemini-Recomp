@@ -2,7 +2,7 @@
 static const char* const jfg_general_keys[] = { "main_volume", "pause_in_menu", "start_skips_cutscenes", "show_fps", "show_level", "show_pack", "save_notification", "fly_speed", "fly_freeze", "fly_hide_hud", "skip_launcher", "check_for_updates", "show_official_pack" };
 static const char* const jfg_gameplay_keys[] = { "auto_save", "auto_save_minutes", "keep_area_progress", "permanent_tribals", "no_blood", "gore_keep_blood", "gore_keep_limbs", "blood_amount", "damage_taken", "unlimited_continues", "refuel_speed", "dive_speed", "move_speed", "sprint", "sprint_speed", "sprint_aiming", "sprint_swimming", "sprint_swim_speed", "normalize_diagonal" };
 static const char* const jfg_controls_keys[] = { "dual_stick", "dual_layout", "swap_triggers", "invert_aim_y", "invert_camera_y", "aim_from_character", "camera_speed_h", "camera_speed_v", "camera_collision", "mouse_keyboard", "mouse_camera_speed", "mouse_aim_speed", "invert_mouse_y", "aim_shoulder", "aim_centered", "aim_jump", "aim_speed", "sniper_fixed_zoom", "sniper_zoom", "invert_aim_normal", "joystick_deadzone", "joystick_range", "rumble_strength", "background_input" };
-static const char* const jfg_graphics_keys[] = { "wm_option", "res_option", "ds_option", "msaa_option", "frame_rate", "smooth_motion", "smooth_shadows", "widescreen", "fov", "texture_filter", "output_filter", "hit_flash", "no_lod", "far_objects", "hide_floyd", "ssao", "ssao_strength", "ssao_radius", "bloom", "bloom_intensity", "bloom_threshold", "bloom_radius", "vignette", "vignette_strength", "vignette_size", "level_fog_distance", "no_level_fog" };
+static const char* const jfg_graphics_keys[] = { "wm_option", "res_option", "ds_option", "msaa_option", "frame_rate", "smooth_motion", "smooth_shadows", "widescreen", "fov", "texture_filter", "output_filter", "hit_flash", "no_lod", "far_objects", "hide_floyd", "modern_lighting", "ssao", "ssao_strength", "ssao_radius", "bloom", "bloom_intensity", "bloom_threshold", "bloom_radius", "vignette", "vignette_strength", "vignette_size", "level_fog_distance", "no_level_fog" };
 static const char* const jfg_textures_keys[] = { "texture_dump", "dump_by_level" };
 struct JfgTabFirst { const char* tab; const char* first; };
 static const JfgTabFirst jfg_tab_first_ids[] = {
@@ -86,6 +86,7 @@ static const JfgOptionTitle jfg_option_titles[] = {
     { "no_lod", "Disable LOD", 'b', "", "" },
     { "far_objects", "Draw Distant Objects", 'b', "", "" },
     { "hide_floyd", "Hide Floyd", 'b', "", "" },
+    { "modern_lighting", "Modern Lighting", 'b', "", "" },
     { "ssao", "Ambient Occlusion (SSAO)", 'b', "", "" },
     { "ssao_strength", "SSAO Strength", 'r', "%", "" },
     { "ssao_radius", "SSAO Radius", 'r', "", "" },

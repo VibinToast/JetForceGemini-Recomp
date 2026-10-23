@@ -393,93 +393,6 @@ static void live_slider(const char* label, std::atomic<int>& setting, int lo, in
 }
 
 // Lighting tab: modern lighting, in progress (jfg_lighting.cpp). Changes apply at once; nothing is saved.
-static void draw_lighting() {
-    LightingSettings& s = lighting_settings();
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, ImGui::GetFontSize() * 0.55f));
-    ImGui::TextDisabled("Work in progress (JFG-125). Changes apply at once and are not saved.");
-
-    options_section("Level ambient");
-    live_slider("Level ambient (%)", s.level_ambient, 0, 199);
-    options_help("How bright the level's own colours are: its ambient light, painted in by the developers. 100 is the "
-                 "original; lower makes the levels darker so lights stand out more. Works with per-pixel lighting off too. "
-                 "Later this becomes a per-level adjustment.");
-
-    options_section("Per-pixel lighting");
-    static const char* const modes[] = { "Off (the game's own lighting)", "The game's level lights per pixel",
-                                         "Also torches and lamps on the level" };
-    int mode = s.mode.load();
-    ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
-    if (ImGui::Combo("Mode", &mode, modes, IM_ARRAYSIZE(modes))) s.mode = mode;
-    options_help("The game lights its levels by brightening vertices near each light, which smears the light over whole "
-                 "triangles. Per pixel, the same lights make smooth pools. The game only does this for shots, flashes and "
-                 "the like; torches and lamps light characters and objects only, and their glow on the walls is painted "
-                 "into the level. The third mode lets them light the level too, which the original never does.");
-    live_slider("Level lights (%)", s.level_strength, 0, 200);
-    options_help("Shots, flashes and other lights the game puts on the level. 100 is the original brightness.");
-    ImGui::BeginDisabled(mode < 2);
-    live_slider("Torches and lamps (%)", s.object_strength, 0, 200);
-    options_help("How strongly torches and lamps light the level. Their glow is already painted into the walls, so high "
-                 "values light them twice.");
-    live_slider("Torch and lamp reach (%)", s.object_radius, 25, 400);
-    options_help("How far their light reaches, as a share of the light's own radius. 125 is what the game uses when it "
-                 "turns one of its object lights into a level light.");
-    ImGui::EndDisabled();
-    live_slider("Facing the light (%)", s.facing, 0, 100);
-    options_help("How much a surface turned away from a light gets less of it, which gives walls and corners depth. The "
-                 "game never does this: 0 keeps its look. Surfaces get one direction per triangle, so low-detail ones look "
-                 "faceted.");
-    live_slider("Shadows of characters and objects (%)", s.shadows, 0, 100);
-    options_help("The level, characters and objects block these lights: they throw shadows away from a torch, lamp or "
-                 "flash, and darken the glow the level has painted in around it. 0 is off, as in the game.");
-    live_slider("Lights with shadows", s.shadow_lights, 0, 4);
-    options_help("The nearest lights that cast shadows. Each one draws the scene six more times a frame.");
-    live_slider("Shadow detail", s.shadow_size, 128, 2048);
-    options_help("The size of each light's shadow maps in pixels per side: sharper edges, more memory and work.");
-    bool no_game_shadows = s.no_game_shadows.load();
-    if (ImGui::Checkbox("Game's shadows off", &no_game_shadows)) s.no_game_shadows = no_game_shadows;
-    options_help("Hides the dark blob the game draws on the ground under characters and objects. They still block "
-                 "these lights.");
-    live_slider("Most lights per frame", s.max_lights, 0, 32);
-    ImGui::TextDisabled("Last frame: %d level lights, %d torches and lamps", s.sent_level_lights.load(),
-                        s.sent_object_lights.load());
-
-    options_section("Characters and objects");
-    bool characters = s.characters.load();
-    if (ImGui::Checkbox("New lighting for characters and objects", &characters)) s.characters = characters;
-    options_help("Lights characters and objects per pixel with their models' own surface directions, from the same "
-                 "ambient and lights the game uses, instead of the game's per-vertex lighting. The level ambient slider "
-                 "scales their ambient too.");
-    ImGui::BeginDisabled(!characters);
-    live_slider("Frame's lights on characters (%)", s.character_lights, 0, 100);
-    options_help("How much the per-pixel lights (shots, flashes, torches and lamps) add on characters, with facing and "
-                 "shadows. The game's own light on them already comes from the nearest lights, so this adds to it.");
-    ImGui::EndDisabled();
-
-    options_section("Debug");
-    bool flag = s.no_game_lighting.load();
-    if (ImGui::Checkbox("Game's per-vertex level lighting off", &flag)) s.no_game_lighting = flag;
-    options_help("Leaves the levels with only their painted-in colours, without adding anything per pixel either (unless a "
-                 "mode is on).");
-    flag = s.no_object_lighting.load();
-    if (ImGui::Checkbox("Game's lighting of characters and objects off", &flag)) s.no_object_lighting = flag;
-    options_help("Leaves characters and objects without the light the game puts on them from nearby lights (test for "
-                 "moving them to the new lighting).");
-    flag = s.debug_world.load();
-    if (ImGui::Checkbox("Show world position", &flag)) s.debug_world = flag;
-    options_help("Colours every 3D surface by where it is in the world, repeating every 256 units; magenta has no position "
-                 "(the HUD, rectangles).");
-    flag = s.debug_normal.load();
-    if (ImGui::Checkbox("Show surface directions", &flag)) s.debug_normal = flag;
-    options_help("Colours every 3D surface by which way it faces: red east-west, green up, blue north-south.");
-    flag = s.debug_shadow.load();
-    if (ImGui::Checkbox("Show shadows from the lights", &flag)) s.debug_shadow = flag;
-    options_help("Paints red where characters and objects block a torch, lamp or flash, at full darkness, whatever the "
-                 "shadow slider says.");
-    flag = s.log.load();
-    if (ImGui::Checkbox("Log lights to jfg_lighting.log", &flag)) s.log = flag;
-    ImGui::PopStyleVar();
-}
-
 // F9: the original all-in-one window (jfg_debug_frame, while the debug UI is open without the toolbar).
 void draw_debug_window(recomp_context* ctx) {
     ImGui::GetIO().FontGlobalScale = 1.0f; // the toolbar scales globally; this window scales itself
@@ -494,7 +407,10 @@ void draw_debug_window(recomp_context* ctx) {
             if (ImGui::BeginTabItem("Profiles")) { draw_profiles(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Cheats")) { draw_cheats(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Options")) { draw_options(); ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Lighting")) { draw_lighting(); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Lighting")) {
+                ImGui::TextWrapped("Lighting has its own tool now: press F12.");
+                ImGui::EndTabItem();
+            }
             if (ImGui::BeginTabItem("Level warp")) { draw_warp(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Weapons")) { draw_weapons(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Items")) {

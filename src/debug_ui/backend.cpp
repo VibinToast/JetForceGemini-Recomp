@@ -102,6 +102,15 @@ static RT64::UserConfiguration::GraphicsAPI get_graphics_api() {
 }
 
 bool is_open() { return b_is_open; }
+// JFG PORT: the lighting tool (F12) is an ImGui window of its own. While it is open the UI frame runs; the game keeps the
+// controls only in its placement mode.
+static std::atomic<bool> b_lighting_open{ false };
+static std::atomic<bool> b_lighting_playing{ false };
+bool lighting_tool_open() { return b_lighting_open.load(); }
+bool lighting_tool_playing() { return b_lighting_playing.load(); }
+void set_lighting_tool_playing(bool playing) { b_lighting_playing = playing; }
+void set_lighting_tool_open(bool open) { b_lighting_open = open; }
+static bool ui_wanted() { return b_is_open || b_overlay || b_lighting_open.load(); }
 bool in_ui_frame() { return b_in_ui_frame; }
 void set_overlay(bool enabled) { b_overlay = enabled; }
 bool take_reset_request() { return b_reset_requested.exchange(false); }
@@ -113,12 +122,17 @@ static void handle_toggle_key(const SDL_Event& event) {
     if (event.type != SDL_KEYDOWN || event.key.repeat) return;
     const SDL_Scancode code = event.key.keysym.scancode;
     if (code == SDL_Scancode::SDL_SCANCODE_GRAVE || code == SDL_Scancode::SDL_SCANCODE_F9) b_is_open = !b_is_open;
+    // F12: open the lighting tool; in placement mode, back to the tool; else close it.
+    if (code == SDL_Scancode::SDL_SCANCODE_F12) {
+        if (b_lighting_open && b_lighting_playing) b_lighting_playing = false;
+        else b_lighting_open = !b_lighting_open;
+    }
 }
 
 void begin() {
     if (!dino_imgui_ctx->Initialized) return;
 
-    if (!b_is_open) {
+    if (!ui_wanted()) {
         // Still process the event queue but don't send any to ImGui
         SDL_Event event{};
         while (event_queue.try_dequeue(event)) {
@@ -126,7 +140,7 @@ void begin() {
         }
     }
 
-    if (!b_is_open && !b_overlay) {
+    if (!ui_wanted()) {
         // Still not open even after handling key events
         return;
     }
@@ -146,10 +160,10 @@ void begin() {
     }
 
     // JFG PORT: an overlay-only frame must not take over the mouse cursor.
-    if (b_is_open) ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+    if (b_is_open || (b_lighting_open && !b_lighting_playing)) ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
     else ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
 
-    if (!b_is_open && !b_overlay) {
+    if (!ui_wanted()) {
         // Closed after handling key events
         b_in_ui_frame = false;
         ImGui::SetCurrentContext(prev_ctx);
@@ -369,7 +383,7 @@ static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::Render
         draw_cpu_layer(command_list, swap_chain_framebuffer);
     }
 
-    if (!b_is_open && !b_overlay) return;
+    if (!ui_wanted()) return;
 
     const std::lock_guard<std::mutex> frame_lock(frame_mutex);
 

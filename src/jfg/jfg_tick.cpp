@@ -56,6 +56,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     gameplay_tick();
     tribal_saves_tick();
     tools_game_tick(ctx); // F10's requests and the values it shows
+    lighting_tool_tick(ctx); // the lighting tool's level files, placement mode and saving
 
     // Cheats keep applying while the menu is closed.
     apply_flag(g.invulnerable, g.applied_invulnerable, ADDR_invulnerabilityCheat);
@@ -297,6 +298,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         load_level_names();
         draw_debug_window(ctx);
     }
+    if (dino::debug_ui::backend::lighting_tool_open() && dino::debug_ui::backend::in_ui_frame()) draw_lighting_tool(ctx);
     dino::debug_ui::ui_frame_end();
 
     // 60 fps: viFrameSync paces the game by gVideoDeltaTime (2 video frames, 3 when it falls behind); the game's own
