@@ -753,6 +753,20 @@ class ConfigFocusScrollListener : public Rml::EventListener {
             list = list->GetParentNode();
         }
         if (list == nullptr) return;
+        // The other end: the row of the list's last control that can take the focus (not a locked one) scrolls the list to
+        // its very bottom, so the text below it shows too. Anything else only scrolls as far as needed.
+        Rml::ElementList controls;
+        list->QuerySelectorAll(controls, "input, button, select, textarea");
+        for (auto it = controls.rbegin(); it != controls.rend(); ++it) {
+            if ((*it)->HasAttribute("disabled") || !(*it)->IsVisible(true)) continue;
+            Rml::Element* last_row = *it;
+            while (last_row != nullptr && last_row->GetParentNode() != list) last_row = last_row->GetParentNode();
+            if (last_row == row) {
+                list->SetScrollTop(list->GetScrollHeight() - list->GetClientHeight());
+                return;
+            }
+            break;
+        }
         const float bottom = target->GetAbsoluteOffset(Rml::BoxArea::Border).y + target->GetBox().GetSize(Rml::BoxArea::Border).y -
             list->GetAbsoluteOffset(Rml::BoxArea::Padding).y + list->GetScrollTop();
         if (bottom <= list->GetClientHeight()) {
