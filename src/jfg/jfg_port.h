@@ -170,8 +170,8 @@ struct LightingSettings {
     std::atomic<int> object_strength{ 50 };  // % of the torch and lamp lights on the level (mode 2)
     std::atomic<int> object_radius{ 125 };   // % of a torch or lamp light's radius (the game's own conversion: 125)
     std::atomic<int> max_lights{ 32 };       // lights sent per frame (at most 64)
-    std::atomic<bool> no_game_lighting{ false }; // skip the game's per-vertex level lighting without replacing it
-    std::atomic<bool> no_object_lighting{ false }; // skip the game's per-vertex lighting of characters and objects
+    std::atomic<bool> no_game_lighting{ true };  // skip the game's per-vertex level lighting without replacing it
+    std::atomic<bool> no_object_lighting{ true };  // skip the game's per-vertex lighting of characters and objects
     std::atomic<bool> characters{ true };    // light characters and objects in RT64 (per pixel, with their normals)
     std::atomic<int> character_lights{ 40 }; // % the frame's lights add on characters (the game's own come from them)
     std::atomic<int> facing{ 40 };           // % the level lighting depends on a surface facing its light (0 = as the game)
@@ -179,7 +179,7 @@ struct LightingSettings {
     std::atomic<int> shadow_lights{ 4 };     // how many of the nearest lights get a shadow map (0-4)
     std::atomic<int> shadow_size{ 512 };     // each shadow map face's size in texels
     std::atomic<int> glow_shadow{ 75 };      // % of the level's painted glow a full shadow takes
-    std::atomic<bool> no_game_shadows{ false }; // drop the game's blob shadows under characters
+    std::atomic<bool> no_game_shadows{ true };  // drop the game's blob shadows under characters
     std::atomic<bool> sun{ false };          // the directional light
     std::atomic<int> sun_yaw{ 45 };          // its direction: degrees around (0 = towards +z)
     std::atomic<int> sun_pitch{ 50 };        // ... and up (90 = straight down from above)
