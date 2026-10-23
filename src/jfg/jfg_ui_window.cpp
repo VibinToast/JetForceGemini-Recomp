@@ -432,6 +432,10 @@ static void draw_lighting() {
     options_help("Characters and objects that have a shadow also block these lights: they throw a soft shadow away from "
                  "a torch or a flash. 0 is off, as in the game.");
     live_slider("Shadow caster size (%)", s.caster_size, 25, 300);
+    bool no_game_shadows = s.no_game_shadows.load();
+    if (ImGui::Checkbox("Game's shadows off", &no_game_shadows)) s.no_game_shadows = no_game_shadows;
+    options_help("Hides the dark blob the game draws on the ground under characters and objects. They still block "
+                 "these lights.");
     live_slider("Most lights per frame", s.max_lights, 0, 32);
     ImGui::TextDisabled("Last frame: %d level lights, %d torches and lamps", s.sent_level_lights.load(),
                         s.sent_object_lights.load());

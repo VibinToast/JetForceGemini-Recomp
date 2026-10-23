@@ -100,6 +100,7 @@ LightingSettings& lighting_settings() {
         }
         settings.no_game_lighting = std::getenv("JFG_NO_TRACK_LIGHTS") != nullptr;
         settings.no_object_lighting = std::getenv("JFG_NO_OBJECT_LIGHTING") != nullptr;
+        settings.no_game_shadows = std::getenv("JFG_NO_GAME_SHADOWS") != nullptr;
         settings.characters = std::getenv("JFG_CHARACTER_LIGHTING") != nullptr;
         if (const char* env = std::getenv("JFG_CHARACTER_LIGHTS")) settings.character_lights = std::clamp(std::atoi(env), 0, 100);
         settings.debug_world = std::getenv("RT64_JFG_DEBUG_WORLD") != nullptr;
