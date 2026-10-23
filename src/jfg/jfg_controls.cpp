@@ -54,9 +54,6 @@ CameraControl g_cam; // see jfg_port.h
 uint32_t g_tick_count = 0;     // jfg_camera_controls calls
 uint32_t g_boss_seen_tick = 0; // g_tick_count when the boss control last ran
 bool boss_control_active() { return g_boss_seen_tick != 0 && g_tick_count - g_boss_seen_tick <= 2; }
-// Boss fights with the mouse: how far the camera is turned in place (16-bit angle units: the aim's yaw offset beyond the box, same sign),
-// set by boss_controls and applied by jfg_camera_override. 0 when not in use.
-int g_boss_cam_turn = 0;
 
 bool dual_stick_wanted() {
     static const bool env = std::getenv("JFG_DUAL_STICK") != nullptr; // for tests
@@ -333,9 +330,9 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     // In a boss fight the character is on a rail: it faces the boss, never turns, and only steps left and right
     // (C-left / C-right move it sideways relative to where it faces). So the mouse never turns the body - that is held
     // at the direction it had when the fight began (taken again whenever the boss control starts running anew). Left
-    // and right move the reticle's offset from that direction instead, up and down tilt the view.
-    constexpr int RETICLE_BOX = 0x1C71;   // 40 degrees: the aim may go this far to either side before the camera turns with it
-    constexpr int RETICLE_LIMIT = 0x5555; // 120 degrees either side, as 16-bit angle units (some bosses move round the arena)
+    // and right move the reticle's offset from that direction instead, up and down tilt the view. The camera is the
+    // game's own boss camera, left alone (it follows the boss), so the reticle moves about the screen and stays on it.
+    constexpr int RETICLE_LIMIT = 0x1C71; // 40 degrees either side, as 16-bit angle units
     constexpr int PITCH_LIMIT = 0x2AAA;
     static uint32_t last_obj = 0, last_tick = 0;
     static uint16_t centre = 0;
@@ -364,15 +361,6 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
         wr16(data + PD_RETICLE_PITCH, 0);
         wr8(pad + 2, 0);
         wr8(pad + 3, 0);
-        // Past the box the camera turns on the spot, so the boss can be followed to the sides of the arena. It turns
-        // about the player's position, never moving the player.
-        // With "Keep the reticle centered" and a controller the camera follows the whole aim, so the reticle stays in
-        // the middle of the screen.
-        const int box = (!g.aim_centered || jfg_mouse_keyboard_active() != 0) ? RETICLE_BOX : 0;
-        g_boss_cam_turn = reticle > box ? reticle - box : reticle < -box ? reticle + box : 0;
-    }
-    else {
-        g_boss_cam_turn = 0;
     }
     last_tick = g_tick_count;
 }
@@ -535,7 +523,7 @@ void jfg_aim_along_view(recomp_context* ctx, uint32_t obj, float ox, float oy, f
 // at the ground and tilts up on the spot the line drawn is a little different; jfg_camera_override sets the one drawn),
 // with the game's stick centred.
 static void aim_at_screen_centre(recomp_context* ctx, uint32_t obj, uint32_t pad) {
-    const float pitch = std::clamp(g_cam.orbit_elevation + g_cam.elevation, -0.45f, 1.25f); // as jfg_camera_override: larger looks down
+    const float pitch = std::clamp(g_cam.orbit_elevation + g_cam.elevation, ORBIT_PITCH_MIN, ORBIT_PITCH_MAX); // as jfg_camera_override: larger looks down
     const float fx = std::sin(g_cam.heading) * std::cos(pitch), fy = -std::sin(pitch), fz = std::cos(g_cam.heading) * std::cos(pitch);
     jfg_aim_along_view(ctx, obj, rdf(obj + 0x0C), rdf(obj + 0x10) + g_cam.orbit_pivot, rdf(obj + 0x14), fx, fy, fz);
     wr8(pad + 2, 0);
