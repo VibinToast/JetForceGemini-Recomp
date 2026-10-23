@@ -80,6 +80,7 @@ struct State {
     bool sprint_swimming = false;  // sprint also works while swimming (Vela, at the surface and diving)
     int  sprint_swim_speed = 160;  // swim sprint: swimming speed while it is held, percent (on top of the Dive speed)
     bool normalize_diagonal = false; // running while sidestepping is no faster than running alone (jfg_move_scale)
+    bool aim_even_speed = false;   // while aiming the character walks as fast sideways and backwards as forwards (jfg_move_scale)
     bool camera_collision = true;  // dual stick: the camera stays inside the level (the game's own wall check)
     bool aim_from_character = false; // dual stick: on aiming, the view turns to the character instead of the character to the view
     bool dual_layout = true;       // dual stick: built-in controller layout instead of the controller bindings

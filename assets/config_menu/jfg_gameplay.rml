@@ -160,10 +160,19 @@
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(18)">
                         <label class="config-option__title">Normalize Diagonal Speed</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_normalize_diagonal" data-checked="normalize_diagonal" value="1" id="jfg_normalize_diagonal_on" style="nav-up: #jfg_sprint_swim_speed_input; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_normalize_diagonal" data-checked="normalize_diagonal" value="1" id="jfg_normalize_diagonal_on" style="nav-up: #jfg_sprint_swim_speed_input; nav-down: #jfg_aim_even_speed_on;"/>
                             <label class="config-option__tab-label" for="jfg_normalize_diagonal_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_normalize_diagonal" data-checked="normalize_diagonal" value="0" id="jfg_normalize_diagonal_off" style="nav-up: #jfg_sprint_swim_speed_input; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_normalize_diagonal" data-checked="normalize_diagonal" value="0" id="jfg_normalize_diagonal_off" style="nav-up: #jfg_sprint_swim_speed_input; nav-down: #jfg_aim_even_speed_off;"/>
                             <label class="config-option__tab-label" for="jfg_normalize_diagonal_off">Off</label>
+                        </div>
+                    </div>
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(19)">
+                        <label class="config-option__title">Same Aim-Walk Speed in All Directions</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" name="jfg_aim_even_speed" data-checked="aim_even_speed" value="1" id="jfg_aim_even_speed_on" style="nav-up: #jfg_normalize_diagonal_on; nav-down: none;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_even_speed_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" name="jfg_aim_even_speed" data-checked="aim_even_speed" value="0" id="jfg_aim_even_speed_off" style="nav-up: #jfg_normalize_diagonal_off; nav-down: none;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_even_speed_off">Off</label>
                         </div>
                     </div>
 
@@ -189,6 +198,7 @@
                     <div data-if="cur_config_index == 16"><div class="jfg-desc__card"><div class="jfg-desc__title">Sprint While Swimming</div><p>Sprinting also works in the water: Vela swims and dives faster while the sprint button is held.</p></div></div>
                     <div data-if="cur_config_index == 17"><div class="jfg-desc__card"><div class="jfg-desc__title">Swim Sprint Speed</div><p>How fast Vela swims while sprinting, on top of Vela's Dive Speed.</p></div></div>
                     <div data-if="cur_config_index == 18"><div class="jfg-desc__card"><div class="jfg-desc__title">Normalize Diagonal Speed</div><p>In the game, running forward while sidestepping adds the two speeds together, so going diagonally is about 40% faster. With this on a diagonal is as fast as running straight.</p></div></div>
+                    <div data-if="cur_config_index == 19"><div class="jfg-desc__card"><div class="jfg-desc__title">Same Aim-Walk Speed in All Directions</div><p>While aiming the game walks forward fastest: backwards is about 25% slower and sideways about 40% slower. With this on the character walks as fast in every direction, diagonals included.</p></div></div>
                 </div>
             </div>
         </form>

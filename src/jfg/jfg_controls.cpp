@@ -820,22 +820,34 @@ extern "C" void jfg_move_scale(uint8_t* rdram_, recomp_context* ctx) {
     // "Normalize diagonal speed": running while sidestepping (C-left / C-right, also what the left stick gives while
     // aiming) adds the two speeds together. The step is split into its forward and sideways parts (relative to the way
     // the character faces) and shortened to the larger part alone, so a diagonal is as fast as either direction.
+    // "Same aim-walk speed in all directions": while aiming the game walks 8.125 units a tick forwards, 6 backwards and
+    // 5 sideways (Lupus 4.5), measured with the C buttons held. The backward and sideways parts of the step are
+    // stretched to the forward speed, and a diagonal is shortened to the larger part as with "Normalize diagonal speed".
+    const bool even = g.aim_even_speed && !swim && rd8(data + PD_STATE) == PD_STATE_AIMING;
+    float sx = as_float(ctx->r5), sz = as_float(ctx->r7);
     float normalize = 1.0f;
-    if (g.normalize_diagonal && !swim) {
+    if ((g.normalize_diagonal || even) && !swim) {
         constexpr uint16_t C_LEFT = 0x0002, C_RIGHT = 0x0001;
         const uint32_t pad = ADDR_sControllerCurrData + 6u * (rd8(ADDR_sPlayerID) & 3u);
-        if ((rd16(pad) & (C_LEFT | C_RIGHT)) != 0) {
+        if ((rd16(pad) & (C_LEFT | C_RIGHT)) != 0 || even) {
             const float heading = angle_from_s16(rd16(obj)) + PI_F; // the way the character runs
-            const float sx = as_float(ctx->r5), sz = as_float(ctx->r7);
-            const float forward = sx * std::sin(heading) + sz * std::cos(heading), sideways = sx * std::cos(heading) - sz * std::sin(heading);
+            float forward = sx * std::sin(heading) + sz * std::cos(heading), sideways = sx * std::cos(heading) - sz * std::sin(heading);
+            if (even) {
+                constexpr float FORWARD = 8.125f, BACKWARD = 6.0f;
+                const float side = (int16_t)rd16(ADDR_currentCharacter) == 2 ? 4.5f : 5.0f;
+                if (forward < 0.0f) forward *= FORWARD / BACKWARD;
+                sideways *= FORWARD / side;
+                sx = forward * std::sin(heading) + sideways * std::cos(heading);
+                sz = forward * std::cos(heading) - sideways * std::sin(heading);
+            }
             const float length = std::sqrt(forward * forward + sideways * sideways);
             if (length > 0.0f) normalize = std::max(std::fabs(forward), std::fabs(sideways)) / length;
         }
     }
     const float factor_xz = g_cam.move_factor * dive * normalize, factor_y = dive;
-    if (factor_xz == 1.0f && factor_y == 1.0f) return;
+    if (factor_xz == 1.0f && factor_y == 1.0f && !even) return;
     auto as_bits = [](float f) { uint32_t bits; std::memcpy(&bits, &f, 4); return bits; };
-    const float dx = as_float(ctx->r5) * (factor_xz - 1.0f), dz = as_float(ctx->r7) * (factor_xz - 1.0f);
+    const float dx = sx * factor_xz - as_float(ctx->r5), dz = sz * factor_xz - as_float(ctx->r7);
     const float dy = swim ? as_float(ctx->r6) * (factor_y - 1.0f) : 0.0f;
     if (dx == 0.0f && dy == 0.0f && dz == 0.0f) return;
     const float x0 = rdf(obj + 0x0C), y0 = rdf(obj + 0x10), z0 = rdf(obj + 0x14);

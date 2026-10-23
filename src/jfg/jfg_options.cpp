@@ -133,6 +133,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "sprint_swimming") == 0) g.sprint_swimming = value != 0;
     else if (std::strcmp(key, "sprint_swim_speed") == 0) g.sprint_swim_speed = std::clamp(value, 100, 300);
     else if (std::strcmp(key, "normalize_diagonal") == 0) g.normalize_diagonal = value != 0;
+    else if (std::strcmp(key, "aim_even_speed") == 0) g.aim_even_speed = value != 0;
     else if (std::strcmp(key, "invert_aim_normal") == 0) g.invert_aim_normal = value != 0;
     else if (std::strcmp(key, "invert_camera_y") == 0) g.invert_camera_y = value != 0;
     else if (std::strcmp(key, "camera_speed_h") == 0) g.camera_speed_h = std::clamp(value, 10, 400);
@@ -198,7 +199,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "camera_collision=%d\ncamera_distance=%d\n", s.camera_collision ? 1 : 0, s.camera_distance); out += buf;
     std::snprintf(buf, sizeof(buf), "aim_drag_margin=%d\naim_drag_return=%d\n", s.aim_drag_margin, s.aim_drag_return); out += buf;
     std::snprintf(buf, sizeof(buf), "aim_offset_x=%d\naim_offset_y=%d\naim_offset_z=%d\n", s.aim_offset_x, s.aim_offset_y, s.aim_offset_z); out += buf;
-    std::snprintf(buf, sizeof(buf), "move_speed=%d\nnormalize_diagonal=%d\n", s.move_speed, s.normalize_diagonal ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "move_speed=%d\nnormalize_diagonal=%d\naim_even_speed=%d\n", s.move_speed, s.normalize_diagonal ? 1 : 0, s.aim_even_speed ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "camera_speed_h=%d\ncamera_speed_v=%d\naim_shoulder=%d\naim_centered=%d\naim_speed=%d\n", s.camera_speed_h, s.camera_speed_v, s.aim_shoulder ? 1 : 0, s.aim_centered ? 1 : 0, s.aim_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "aim_jump=%d\n", s.aim_jump ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "mouse_keyboard=%d\nmouse_camera_speed=%d\nmouse_aim_speed=%d\ninvert_mouse_y=%d\n", s.mouse_keyboard ? 1 : 0, s.mouse_camera_speed, s.mouse_aim_speed, s.invert_mouse_y ? 1 : 0); out += buf;
