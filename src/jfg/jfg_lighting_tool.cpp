@@ -13,7 +13,8 @@
 //                recoloured, brighter or dimmer, larger or smaller, flickering; saved with the level
 //   emission     a texture picker (any texture under the crosshair: its hash for naming its maps) and the lights
 //                made where the level's textures with emission maps (materials/<hash>_e.png) are
-// Changes apply at once and are saved a moment later. Game thread only: the tool is drawn from jfg_debug_frame's UI
+// Changes apply at once and stay unsaved until Save (Discard goes back to the files): the defaults and the level are
+// kept in memory and compared with what was last read or saved. Game thread only: the tool is drawn from jfg_debug_frame's UI
 // frame, its tick runs every game tick, and the lighting reads the lights at rcpFast3d, all on the game thread.
 #include <algorithm>
 #include <array>
@@ -214,8 +215,10 @@ bool g_level_own = false;      // it has its own settings (else the defaults)
 std::vector<PlacedLight> g_placed;
 std::vector<LightOverride> g_overrides;
 std::vector<int> g_built_in;   // the settings as built in, for "back to built-in"
-bool g_dirty_level = false, g_dirty_default = false;
-uint32_t g_dirty_tick = 0;
+std::vector<int> g_defaults;        // the defaults as they are now (every setting but the debug views), unsaved or not
+std::vector<int> g_saved_defaults;  // ... as default.txt has them
+std::string g_saved_level;          // the level's file as it was read or last saved ("" = none)
+bool g_confirm_discard = false;     // asking before Discard
 PlacedLight g_template;        // the light placement makes
 int g_selected = -1;           // placed light being edited
 bool g_pulse = true;           // pulse the selected placed light
@@ -272,29 +275,18 @@ void test_switch() {
 std::filesystem::path default_path() { return std::filesystem::path(LIGHTING_DIR) / "default.txt"; }
 std::filesystem::path level_path(int level) { return std::filesystem::path(LIGHTING_DIR) / ("level_" + std::to_string(level) + ".txt"); }
 void say(const std::string& text) { g_message = text; g_message_tick = g_tick_count; }
-void touched_level() { g_dirty_level = true; g_dirty_tick = g_tick_count; }
-void touched_default() { g_dirty_default = true; g_dirty_tick = g_tick_count; }
-void touched_setting(const Setting& t) {
-    if (t.global || !g_level_own) touched_default();
-    else touched_level();
-}
 
 // Key=value lines; "set.<key>" settings, "light.N" placed lights, "override.N" game light changes.
-void write_settings(std::FILE* f, bool level_file) {
-    for (const Setting& t : settings_table()) {
-        if (t.group == Group::Debug) continue;
-        if (level_file && t.global) continue;
-        std::fprintf(f, "set.%s=%d\n", t.key, get(t));
-    }
-}
-
 void save_default() {
     if (!use_files()) return;
     std::error_code ec;
     std::filesystem::create_directories(LIGHTING_DIR, ec);
     if (std::FILE* f = std::fopen(default_path().string().c_str(), "w")) {
         std::fputs("# Jet Force Gemini modern lighting: the defaults (lighting tool, F12)\n", f);
-        write_settings(f, false);
+        const std::vector<Setting>& table = settings_table();
+        for (size_t i = 0; i < table.size() && i < g_defaults.size(); i++) {
+            if (table[i].group != Group::Debug) std::fprintf(f, "set.%s=%d\n", table[i].key, g_defaults[i]);
+        }
         std::fclose(f);
     }
 }
@@ -345,41 +337,97 @@ void read_file(const std::filesystem::path& path, bool level_file, bool settings
     std::fclose(f);
 }
 
+// The level's file as it would be written now: whether it has its own settings (and them), its placed lights and its
+// changed game lights; "" when it has none of those (no file).
+std::string level_text() {
+    if (g_level < 0 || (!g_level_own && g_placed.empty() && g_overrides.empty())) return "";
+    std::string out;
+    char line[320];
+    std::snprintf(line, sizeof(line), "own_settings=%d\n", g_level_own ? 1 : 0);
+    out += line;
+    if (g_level_own) {
+        for (const Setting& t : settings_table()) {
+            if (t.group == Group::Debug || t.global) continue;
+            std::snprintf(line, sizeof(line), "set.%s=%d\n", t.key, get(t));
+            out += line;
+        }
+    }
+    for (size_t i = 0; i < g_placed.size(); i++) {
+        const PlacedLight& p = g_placed[i];
+        std::snprintf(line, sizeof(line), "light.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, p.x, p.y, p.z, p.r, p.g, p.b,
+                      p.intensity, p.radius, p.inner, p.flicker, p.flicker_speed, p.on ? 1 : 0, p.shadows ? 1 : 0);
+        out += line;
+    }
+    for (size_t i = 0; i < g_overrides.size(); i++) {
+        const LightOverride& o = g_overrides[i];
+        std::snprintf(line, sizeof(line), "override.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, o.x, o.y, o.z, o.on ? 1 : 0,
+                      o.recolour ? 1 : 0, o.r, o.g, o.b, o.intensity, o.radius, o.flicker, o.flicker_speed, o.shadows ? 1 : 0, o.nth);
+        out += line;
+    }
+    return out;
+}
+
 void save_level() {
     if (!use_files() || g_level < 0) return;
     std::error_code ec;
-    if (!g_level_own && g_placed.empty() && g_overrides.empty()) {
+    const std::string text = level_text();
+    if (text.empty()) {
         std::filesystem::remove(level_path(g_level), ec); // nothing of its own left
         return;
     }
     std::filesystem::create_directories(LIGHTING_DIR, ec);
     if (std::FILE* f = std::fopen(level_path(g_level).string().c_str(), "w")) {
         std::fprintf(f, "# Jet Force Gemini modern lighting: level %d (lighting tool, F12)\n", g_level);
-        std::fprintf(f, "own_settings=%d\n", g_level_own ? 1 : 0);
-        if (g_level_own) write_settings(f, true);
-        for (size_t i = 0; i < g_placed.size(); i++) {
-            const PlacedLight& p = g_placed[i];
-            std::fprintf(f, "light.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, p.x, p.y, p.z, p.r, p.g, p.b, p.intensity,
-                         p.radius, p.inner, p.flicker, p.flicker_speed, p.on ? 1 : 0, p.shadows ? 1 : 0);
-        }
-        for (size_t i = 0; i < g_overrides.size(); i++) {
-            const LightOverride& o = g_overrides[i];
-            std::fprintf(f, "override.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, o.x, o.y, o.z, o.on ? 1 : 0,
-                         o.recolour ? 1 : 0, o.r, o.g, o.b, o.intensity, o.radius, o.flicker, o.flicker_speed, o.shadows ? 1 : 0, o.nth);
-        }
+        std::fputs(text.c_str(), f);
         std::fclose(f);
     }
 }
 
-void flush() {
-    if (g_dirty_default) save_default();
-    if (g_dirty_level) save_level();
-    g_dirty_default = g_dirty_level = false;
+// The working defaults follow the settings while the level uses them (and the quality settings, the same everywhere,
+// always), every tick.
+void sync_defaults() {
+    const std::vector<Setting>& table = settings_table();
+    if (g_defaults.size() != table.size()) return;
+    for (size_t i = 0; i < table.size(); i++) {
+        if (table[i].group == Group::Debug) continue;
+        if (!g_level_own || table[i].global) g_defaults[i] = get(table[i]);
+    }
 }
 
-// A new level: the defaults (built in, then lighting/default.txt), then the level's own file.
+bool defaults_unsaved() { return use_files() && g_defaults != g_saved_defaults; }
+bool level_unsaved() { return use_files() && g_level >= 0 && level_text() != g_saved_level; }
+
+// The defaults from the files: built in, then default.txt (into the settings, then the working copy).
+void load_defaults() {
+    std::vector<Setting>& table = settings_table();
+    for (size_t i = 0; i < table.size() && i < g_built_in.size(); i++) {
+        if (table[i].group != Group::Debug) put(table[i], g_built_in[i]);
+    }
+    read_file(default_path(), false, true);
+    g_defaults.assign(table.size(), 0);
+    for (size_t i = 0; i < table.size(); i++) g_defaults[i] = get(table[i]);
+    g_saved_defaults = g_defaults;
+}
+
+void save_all() {
+    sync_defaults();
+    if (defaults_unsaved()) {
+        save_default();
+        g_saved_defaults = g_defaults;
+    }
+    if (level_unsaved()) {
+        save_level();
+        g_saved_level = level_text();
+    }
+}
+
+// A new level: the defaults as they are now (unsaved changes to them carry over), then the level's own file. Unsaved
+// changes to the level before are dropped.
 void load_level(int level) {
-    flush();
+    if (level_unsaved() && level != g_level) {
+        say("Unsaved changes to level " + std::to_string(g_level) + " were dropped (not saved).");
+    }
+    sync_defaults();
     g_level = level;
     g_level_own = false;
     g_placed.clear();
@@ -393,14 +441,24 @@ void load_level(int level) {
     g_selected = -1;
     g_selected_game = 0;
     g_confirm_reset = false; // a pending Reset was about the level before
+    g_confirm_discard = false;
     if (!use_files()) return;
     std::vector<Setting>& table = settings_table();
-    for (size_t i = 0; i < table.size() && i < g_built_in.size(); i++) {
-        if (!table[i].global && table[i].group != Group::Debug) put(table[i], g_built_in[i]);
+    for (size_t i = 0; i < table.size() && i < g_defaults.size(); i++) {
+        if (table[i].group != Group::Debug) put(table[i], g_defaults[i]);
     }
-    read_file(default_path(), false, true);
     read_file(level_path(level), true, false, true);
     if (g_level_own) read_file(level_path(level), true, true, false);
+    g_saved_level = level_text();
+}
+
+// Discard: the defaults and the level back to their files.
+void discard_all() {
+    load_defaults();
+    const int level = g_level;
+    g_level = -32768; // nothing of the level before counts as unsaved
+    g_saved_level = "";
+    load_level(level);
 }
 
 bool aim_fresh() { return g_aim_tick != 0 && g_tick_count - g_aim_tick <= 3; }
@@ -442,7 +500,6 @@ void place_light() {
     light.z = p[2];
     g_placed.push_back(light);
     g_selected = (int)g_placed.size() - 1;
-    touched_level();
     char text[96];
     std::snprintf(text, sizeof(text), "Light %d placed at %.0f, %.0f, %.0f.", g_selected + 1, p[0], p[1], p[2]);
     say(text);
@@ -491,14 +548,12 @@ void draw_setting(const Setting& t) {
         bool v = t.b->load();
         if (ImGui::Checkbox(t.label, &v)) {
             t.b->store(v);
-            touched_setting(t);
         }
     }
     else {
         int v = t.i->load();
         if (slider_int(t.label, &v, t.lo, t.hi)) {
             put(t, v);
-            touched_setting(t);
         }
     }
     help(t.help);
@@ -515,7 +570,6 @@ void draw_group(Group group) {
                 s.sun_r = (int)std::lround(c[0] * 255.0f);
                 s.sun_g = (int)std::lround(c[1] * 255.0f);
                 s.sun_b = (int)std::lround(c[2] * 255.0f);
-                touched_setting(t);
             }
             continue;
         }
@@ -592,7 +646,7 @@ void draw_placed() {
     if (g_selected >= 0 && g_selected < (int)g_placed.size()) {
         ImGui::SeparatorText("Selected light");
         PlacedLight& p = g_placed[g_selected];
-        if (edit_placed(p, true)) touched_level();
+        edit_placed(p, true);
         float pt[3];
         ImGui::BeginDisabled(!placement_point(pt));
         if (ImGui::Button(aim_fresh() ? "Move to the screen's middle" : "Move above the player")) {
@@ -600,7 +654,6 @@ void draw_placed() {
             p.x = pt[0];
             p.y = pt[1];
             p.z = pt[2];
-            touched_level();
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
@@ -609,7 +662,6 @@ void draw_placed() {
             copy.x += 20.0f;
             g_placed.push_back(copy);
             g_selected = (int)g_placed.size() - 1;
-            touched_level();
         }
         ImGui::SameLine();
         if (ImGui::Button("Use for new lights")) g_template = p;
@@ -617,7 +669,6 @@ void draw_placed() {
         if (ImGui::Button("Remove")) {
             g_placed.erase(g_placed.begin() + g_selected);
             g_selected = -1;
-            touched_level();
         }
     }
     if (!g_placed.empty()) {
@@ -630,7 +681,6 @@ void draw_placed() {
                 g_placed.clear();
                 g_selected = -1;
                 g_confirm_clear = false;
-                touched_level();
             }
             ImGui::SameLine();
             if (ImGui::Button("Keep them")) g_confirm_clear = false;
@@ -702,11 +752,9 @@ void draw_level_lights() {
     if (changed) {
         if (o) *o = edit;
         else g_overrides.push_back(edit);
-        touched_level();
     }
     if (o && ImGui::Button("Back to the game's own")) {
         g_overrides.erase(g_overrides.begin() + (o - g_overrides.data()));
-        touched_level();
     }
 }
 // --- glowing textures --------------------------------------------------------------------------------------------
@@ -1181,7 +1229,6 @@ void apply_preset(const std::string& name) {
             const int g = (int)t.group;
             if (std::strcmp(t.key, line + 4) != 0 || t.global || g >= PRESET_GROUPS || !g_preset_apply_groups[g]) continue;
             put(t, std::atoi(eq + 1));
-            touched_setting(t);
             applied++;
         }
     }
@@ -1352,7 +1399,8 @@ void update_aim(recomp_context* ctx) {
 void lighting_tool_tick(recomp_context* ctx) {
     if (g_built_in.empty()) {
         for (const Setting& t : settings_table()) g_built_in.push_back(get(t));
-        read_file(default_path(), false, true); // the defaults' global settings at once
+        if (use_files()) load_defaults(); // the defaults' global settings at once
+        else g_defaults = g_saved_defaults = g_built_in;
     }
     test_switch();
     const int level = (int16_t)rd16(ADDR_currentLevel);
@@ -1440,7 +1488,7 @@ void lighting_tool_tick(recomp_context* ctx) {
         if (rd16(ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u)) & Z_BUTTON) place_light();
     }
 
-    if ((g_dirty_default || g_dirty_level) && g_tick_count - g_dirty_tick > 30) flush();
+    sync_defaults();
 }
 
 namespace {
@@ -1496,19 +1544,18 @@ void draw_lighting_tool(recomp_context* ctx) {
         if (!g_level_own) {
             if (ImGui::Button("Give this level its own settings")) {
                 g_level_own = true;
-                touched_level();
                 say("This level now keeps its own settings; the defaults stay as they were.");
             }
-            help("Copies the current settings into this level's file. Changes then stay with this level only.");
+            help("Copies the current settings into this level's own settings (saved with Save). Changes then stay with this level only.");
         }
         else {
             if (ImGui::Button("Back to the defaults for this level")) {
                 g_level_own = false;
-                save_level();
-                const int level = g_level;
-                g_level = -32768;
-                load_level(level);
-                say("This level uses the defaults again (its placed lights and changed torches stay).");
+                std::vector<Setting>& table = settings_table();
+                for (size_t i = 0; i < table.size() && i < g_defaults.size(); i++) {
+                    if (table[i].group != Group::Debug && !table[i].global) put(table[i], g_defaults[i]);
+                }
+                say("This level uses the defaults again (its placed lights and changed torches stay). Save to keep it.");
             }
             help("Forgets this level's own settings; it uses the defaults again.");
         }
@@ -1531,8 +1578,6 @@ void draw_lighting_tool(recomp_context* ctx) {
                 for (size_t i = 0; i < table.size() && i < g_built_in.size(); i++) {
                     if (table[i].group != Group::Debug && !table[i].global) put(table[i], g_built_in[i]);
                 }
-                if (g_level_own) touched_level();
-                else touched_default();
                 g_confirm_reset = false;
                 say(g_level_own ? "This level's settings are back to the built-in ones." : "The defaults are back to the built-in ones.");
             }
@@ -1540,6 +1585,40 @@ void draw_lighting_tool(recomp_context* ctx) {
             if (ImGui::Button("Cancel")) g_confirm_reset = false;
         }
         if (!g_message.empty() && g_tick_count - g_message_tick < 60 * 6) ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "%s", g_message.c_str());
+        // Unsaved changes: what they are about, Save, Discard (asks first).
+        {
+            const bool defaults = defaults_unsaved(), level = level_unsaved();
+            if (defaults || level) {
+                std::string what = level ? "this level" : "";
+                if (defaults) what += level ? " and the defaults" : "the defaults";
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.25f, 1.0f), "Unsaved changes to %s.", what.c_str());
+                if (defaults && !g_level_own) {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(the defaults: every level without its own settings)");
+                }
+                if (!g_confirm_discard) {
+                    if (ImGui::Button("Save")) {
+                        save_all();
+                        say("Saved.");
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Discard...")) g_confirm_discard = true;
+                    help("Unsaved changes stay while you play; changing level drops this level's unsaved changes (the "
+                         "defaults' stay), and closing the game drops them all.");
+                }
+                else {
+                    ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.35f, 1.0f), "Throw away the unsaved changes and go back to the saved files?");
+                    if (ImGui::Button("Yes, discard")) {
+                        discard_all();
+                        g_confirm_discard = false;
+                        say("Back to the saved settings.");
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Keep them")) g_confirm_discard = false;
+                }
+            }
+            else g_confirm_discard = false;
+        }
         ImGui::TextDisabled("Last frame: %d level lights, %d torches and lamps, %d placed", s.sent_level_lights.load(),
                             s.sent_object_lights.load(), s.sent_placed_lights.load());
         ImGui::Separator();
