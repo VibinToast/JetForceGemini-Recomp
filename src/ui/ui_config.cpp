@@ -821,6 +821,22 @@ void jfg_config_step_tab(int dir) {
     }
 }
 
+// JFG PORT: with a slider selected the bumpers move it by 10 (LB down, RB up), held at its ends. False when the
+// selection is not on a slider, so the bumpers switch tabs as usual.
+bool jfg_config_slider_step(int dir) {
+    if (recompui::is_prompt_open()) return false;
+    Rml::Element* focus = recompui::get_config_tabset()->GetOwnerDocument()->GetFocusLeafNode();
+    if (focus == nullptr || focus->GetTagName() != "input" || focus->GetAttribute<Rml::String>("type", "") != "range") return false;
+    auto* input = static_cast<Rml::ElementFormControlInput*>(focus);
+    const float lo = focus->GetAttribute<float>("min", 0.0f);
+    const float hi = focus->GetAttribute<float>("max", 100.0f);
+    float v = 0.0f;
+    try { v = std::stof(input->GetValue()); } catch (...) { return true; }
+    v = std::clamp(v + dir * 10.0f, lo, hi);
+    input->SetValue(std::to_string((int)std::lround(v)));
+    return true;
+}
+
 // JFG PORT: the recomp's own options that the port's tabs show (volume, stick and rumble, window and resolution),
 // as ints like the port's options. The graphics ones apply at once (there is no Apply button on the port's tabs).
 struct UpstreamOption { const char* key; int (*get)(); void (*set)(int); };
