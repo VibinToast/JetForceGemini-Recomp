@@ -141,15 +141,6 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         wr16(cam + 4, 0);
         return;
     }
-    if (g_boss_cam_turn != 0 && boss_control_active() && !g_cam.overridden) {
-        // Boss fight, mouse and keyboard: the game's camera, turned on the spot by how far the aim has gone to the side.
-        const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
-        for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
-        g_cam.camera_addr = cam;
-        g_cam.overridden = true;
-        wr16(cam + 0, (uint16_t)(rd16(cam + 0) - g_boss_cam_turn)); // camera angle = minus the heading it looks along
-        return;
-    }
     if ((!g_cam.active && !g_cam.shoulder) || g_cam.overridden) return;
     const uint32_t obj = player_object(ctx);
     if (obj == 0) return;
@@ -190,48 +181,20 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         wr16(cam + 2, angle_to_s16(game_pitch + (pitch - game_pitch) * b));
         return;
     }
-    float game_elevation, pivot, boom;
+    // The camera orbits the middle of the character's body, ORBIT_CENTRE above its feet, and always looks at it, while
+    // aiming too (Over-the-Shoulder off). Only the distance and the starting tilt come from the game's camera.
+    float game_elevation, boom;
     if (g_cam.free_aim) {
-        // Dual-stick aiming: the game's aiming camera has moved in close; the orbit from before aiming is kept.
+        // Dual-stick aiming: the game's aiming camera has moved in close; the distance and tilt from before are kept.
         game_elevation = g_cam.orbit_elevation;
-        pivot = g_cam.orbit_pivot;
         boom = g_cam.orbit_boom;
     }
     else {
         if (flat < 20.0f || flat > 2000.0f) { g_cam.view_saved = false; g_cam.orbit_valid = false; return; } // not an ordinary follow camera (first person, a fixed view, ...)
         game_elevation = angle_from_s16(rd16(cam + 2));
-        // The game's camera looks at a point above the character's feet; keep looking at that point from the same distance.
-        pivot = std::clamp((cy - py) - flat * std::tan(game_elevation), 0.0f, 200.0f);
-        boom = std::sqrt(flat * flat + (cy - py - pivot) * (cy - py - pivot));
-        {
-            // The game's camera does not follow a jump up and down: the height it looks at stays put. When Lupus's jets
-            // come on (a hover) it catches up about 50 units in a third of a second, and the free camera followed it,
-            // so Lupus seemed to drop (issue #16). From the jets coming on that height eases over instead, for at least
-            // about a second and until it has caught up (per video frame, so the same at Game 30 and 60). Walking,
-            // slopes and ordinary jumps follow the game's camera as before. The jets: control data + 0x14A non-zero
-            // while in the jump state, the game's own test for hovering.
-            const uint32_t data = rd32(obj + 0x68);
-            const bool jet = valid_ptr(data) && rd8(data + 0x14A) != 0 && (rd8(data + PD_STATE) & ~0x20u) == PD_STATE_JUMP;
-            const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
-            const float look = py + pivot;
-            const bool fresh = g_cam.follow_tick == 0 || g_cam.follow_tick + 1 != g_tick_count || std::fabs(look - g_cam.follow_look) > 300.0f;
-            if (jet && !g_cam.hover_jet && !fresh) { g_cam.hover_ease = true; g_cam.hover_frames = 60.0f; }
-            g_cam.hover_jet = jet;
-            if (fresh) g_cam.hover_ease = false;
-            if (g_cam.hover_ease) {
-                g_cam.follow_look = look + (g_cam.follow_look - look) * std::pow(0.92f, frames);
-                g_cam.hover_frames -= frames;
-                if (g_cam.hover_frames <= 0.0f && std::fabs(g_cam.follow_look - look) < 1.0f) g_cam.hover_ease = false;
-                pivot = std::clamp(g_cam.follow_look - py, -100.0f, 300.0f);
-            }
-            else {
-                g_cam.follow_look = look;
-            }
-            g_cam.follow_tick = g_tick_count;
-            static const bool log = std::getenv("JFG_DEBUG_FOLLOW_CAM") != nullptr; // tests: the height looked at, the game's and ours
-            if (log) std::fprintf(stderr, "[cam] tick %u look %.1f placed %.1f jet %d easing %d player y %.1f\n", g_tick_count, look, py + pivot, (int)jet,
-                                  (int)g_cam.hover_ease, py);
-        }
+        // The game's camera looks at a point above the character's feet: its distance from that point.
+        const float game_pivot = std::clamp((cy - py) - flat * std::tan(game_elevation), 0.0f, 200.0f);
+        boom = std::clamp(std::sqrt(flat * flat + (cy - py - game_pivot) * (cy - py - game_pivot)), 40.0f, 1000.0f);
         if (g_cam.orbit_valid && g_cam.orbit_easing) {
             // Just after aiming the game's camera is still in close and swings back out: the kept orbit stays until the
             // game's is near it again (at most orbit_settle frames), then eases over to it, so the view neither zooms in
@@ -241,20 +204,35 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
             const float ease = (back || g_cam.orbit_settle <= 0) ? EASE : 0.0f;
             const float live_boom = boom;
             game_elevation = g_cam.orbit_elevation + (game_elevation - g_cam.orbit_elevation) * ease;
-            pivot = g_cam.orbit_pivot + (pivot - g_cam.orbit_pivot) * ease;
             boom = g_cam.orbit_boom + (boom - g_cam.orbit_boom) * ease;
             if (g_cam.orbit_settle > 0) g_cam.orbit_settle--;
             if (back && std::fabs(boom - live_boom) < 1.0f) g_cam.orbit_easing = false;
         }
         g_cam.orbit_valid = true;
         g_cam.orbit_elevation = game_elevation;
-        g_cam.orbit_pivot = pivot;
         g_cam.orbit_boom = boom;
     }
-    // Stick up lowers the camera towards the ground behind the character; once it is nearly level it stays there
-    // (so it cannot sink into the floor) and tilts upwards on the spot instead.
-    const float pitch = std::clamp(game_elevation + g_cam.elevation, -0.45f, 1.25f);
-    const float elevation = std::max(pitch, 0.06f);
+    float pivot;
+    {
+        // The height of the point orbited follows the character's: closely on the ground (slopes, steps), gently in the
+        // air, so a jump or a hover lifts the view smoothly rather than jerking it, and Lupus does not seem to drop when
+        // his jets come on (issue #16). Per video frame, so the same at Game 30 and 60. Somewhere new: at once.
+        const uint32_t data = rd32(obj + 0x68);
+        const bool air = valid_ptr(data) && (rd8(data + PD_STATE) & ~0x20u) == PD_STATE_JUMP;
+        const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
+        const float target = py + ORBIT_CENTRE;
+        const bool fresh = g_cam.follow_tick == 0 || g_cam.follow_tick + 1 != g_tick_count || std::fabs(target - g_cam.follow_look) > 300.0f;
+        g_cam.follow_look = fresh ? target : target + (g_cam.follow_look - target) * std::pow(air ? 0.92f : 0.6f, frames);
+        g_cam.follow_tick = g_tick_count;
+        pivot = g_cam.follow_look - py;
+        g_cam.orbit_pivot = pivot;
+        static const bool log = std::getenv("JFG_DEBUG_FOLLOW_CAM") != nullptr; // tests: the height orbited and the character's
+        if (log) std::fprintf(stderr, "[cam] tick %u placed %.1f air %d player y %.1f\n", g_tick_count, py + pivot, (int)air, py);
+    }
+    // Stick up lowers the camera round the character until it looks up from below; the floor, when in the way, pulls
+    // it in along the same line (camera_collide).
+    const float pitch = std::clamp(game_elevation + g_cam.elevation, ORBIT_PITCH_MIN, ORBIT_PITCH_MAX);
+    const float elevation = pitch;
 
     for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
     g_cam.camera_addr = cam;
@@ -263,11 +241,16 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     float wy = py + pivot + boom * std::sin(elevation);
     float wz = pz - std::cos(g_cam.heading) * boom * std::cos(elevation);
     camera_collide(ctx, px, py + pivot, pz, wx, wy, wz);
+    float look = g_cam.heading, look_pitch = pitch;
+    {
+        // Looking at the point orbited from where the camera ended up (the game's check may have lifted it off the floor).
+        const float dx = px - wx, dy = py + pivot - wy, dz = pz - wz, d = std::sqrt(dx * dx + dz * dz);
+        if (d + std::fabs(dy) > 10.0f) { look = std::atan2(dx, dz); look_pitch = std::atan2(-dy, d); }
+    }
     g_cam.view_saved = true;
     g_cam.view_x = wx; g_cam.view_y = wy; g_cam.view_z = wz;
-    g_cam.view_yaw = angle_to_s16(-g_cam.heading);
-    g_cam.view_pitch = angle_to_s16(pitch);
-    float look = g_cam.heading, look_pitch = pitch;
+    g_cam.view_yaw = angle_to_s16(-look);
+    g_cam.view_pitch = angle_to_s16(look_pitch);
     if (g_cam.glide > 0.0f) {
         // Over-the-shoulder aiming with the dual stick: glide to a spot at head height, a little behind and to the
         // right, still looking at a point well ahead on the view's centre line (near the one the character aims at,
@@ -296,8 +279,18 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     // Dual-stick aiming: the aim again, along the view that is drawn now. The game's tick has run since the aim was
     // set before it, and on the tick aiming starts it has just reset its aim angles; the crosshair, drawn after the
     // scene from them, is then in the middle of the screen from the first frame on.
+    // A shot this tick has added its spread to the crosshair's angles (controlFireDummyShot: +0x1CA/+0x1CC are the aim
+    // +0x1C6/+0x1C8 plus a random kick - the machine gun's shake); it stays on top of the aim.
     if (g_cam.free_aim) {
+        const uint32_t data = rd32(obj + 0x68);
+        const bool aim_data = valid_ptr(data);
+        const uint16_t kick_yaw = aim_data ? (uint16_t)(rd16(data + 0x1CA) - rd16(data + 0x1C6)) : 0;
+        const uint16_t kick_pitch = aim_data ? (uint16_t)(rd16(data + 0x1CC) - rd16(data + 0x1C8)) : 0;
         jfg_aim_along_view(ctx, obj, wx, wy, wz, std::sin(look) * std::cos(look_pitch), -std::sin(look_pitch), std::cos(look) * std::cos(look_pitch));
+        if (aim_data) {
+            wr16(data + 0x1CA, (uint16_t)(rd16(data + 0x1C6) + kick_yaw));
+            wr16(data + 0x1CC, (uint16_t)(rd16(data + 0x1C8) + kick_pitch));
+        }
     }
 }
 

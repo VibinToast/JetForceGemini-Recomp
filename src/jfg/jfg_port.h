@@ -94,22 +94,21 @@ struct CameraControl {
     uint16_t view_yaw = 0, view_pitch = 0;
     int aim_pitch_pending = -1; // the free camera's tilt for the aim, set once the game's aiming has started (-1: none)
     // Dual-stick aiming (issue #14): while aiming, the free camera stays the view and the character aims at the point
-    // under the middle of the screen. The orbit (distance, height of the point looked at, the game camera's own
-    // elevation) is kept from the last frame before aiming: the game's aiming camera moves in close meanwhile.
+    // under the middle of the screen. The orbit's distance and the game camera's own elevation are kept from the last
+    // frame before aiming: the game's aiming camera moves in close meanwhile.
     bool free_aim = false;
     bool orbit_valid = false;
-    float orbit_pivot = 0, orbit_boom = 0, orbit_elevation = 0;
+    float orbit_pivot = 0, orbit_boom = 0, orbit_elevation = 0; // orbit_pivot: the height orbited above the feet, as last placed
     bool orbit_easing = false;  // after aiming: the orbit goes back over to the game camera's (jfg_camera_override)
     int orbit_settle = 0;       // frames left in which it waits for the game's camera to swing back out
     float glide = 0;            // 0..1: how far the view has glided to the over-the-shoulder spot while aiming
-    // Hovering (Lupus's jets, a jetpack): the height the free camera looks at eases towards the game camera's, which
-    // catches up all at once as the hover starts (issue #16). Elsewhere it is the game camera's, as before.
-    bool hover_jet = false;     // the jets were on last tick
-    bool hover_ease = false;    // easing: from the jets coming on until it has caught up, at least hover_frames
-    float hover_frames = 0;     // video frames left of the at least ~1 s of easing after the jets came on
-    float follow_look = 0;      // the height looked at, as last placed
-    uint32_t follow_tick = 0;   // g_tick_count when it was placed; anything older starts again from the game's
+    // The height orbited eases after the character's (gently in the air: jumps, Lupus's hover, issue #16).
+    float follow_look = 0;      // the height orbited, as last placed
+    uint32_t follow_tick = 0;   // g_tick_count when it was placed; anything older starts again at the character
 };
+// The free camera's orbit: round the middle of the character's body, this far above its feet, from looking up at it
+// from below (-45 degrees) to looking down on it (67 degrees). The camera's pitch is positive looking down.
+constexpr float ORBIT_CENTRE = 40.0f, ORBIT_PITCH_MIN = -0.78f, ORBIT_PITCH_MAX = 1.17f;
 void camera_hand_over_to_aim(uint32_t cam); // jfg_camera.cpp
 // Dual-stick aiming: the character aims at the first surface on the view's centre line (from o along the unit vector
 // f), or the point on it at its weapon's range (jfg_controls.cpp).
@@ -120,7 +119,6 @@ extern std::atomic<float> g_stick_lx, g_stick_ly, g_stick_rx, g_stick_ry;
 extern float g_mouse_cam_x, g_mouse_cam_y; // mouse this tick, in radians of camera turn
 extern float g_sign_move, g_sign_cam;      // handedness of the stick and the camera
 extern uint32_t g_tick_count;              // jfg_camera_controls calls
-extern int g_boss_cam_turn;                // boss fights: the camera turned on the spot (16-bit angle units)
 bool boss_control_active();
 bool control_mods_blocked();               // cutscene or Floyd mission: the control and camera options are off
 void jfg_camera_controls(recomp_context* ctx); // game thread, right after joyRead (jfg_after_joy)
