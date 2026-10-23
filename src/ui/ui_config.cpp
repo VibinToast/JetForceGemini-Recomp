@@ -963,7 +963,7 @@ public:
                     jfg_tools_open_from_menu();
                 }
             });
-        // JFG PORT: the launcher button next to Quit. The game cannot go back to the launcher while it runs, so it starts
+        // JFG PORT: Return to Launcher (the Quit tab). The game cannot go back to the launcher while it runs, so it starts
         // again on the launcher (--launcher, also with skip_launcher=1) and this run quits, as Quit does.
         recompui::register_event(listener, "open_return_to_launcher_prompt",
             [](const std::string& param, Rml::Event& event) {
