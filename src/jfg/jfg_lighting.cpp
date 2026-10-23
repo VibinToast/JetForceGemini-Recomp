@@ -145,12 +145,14 @@ constexpr uint32_t MODEL_NORMAL_TABLE = 0x68, MODEL_NORMAL_LIST = 0x6C;
 // Object lighting (the game's lighting code): f32 fade (+0x00), s16 directions used (+0x0E), light setting[4] (+0x10, 0x20
 // each): Vec3f direction (+0x00), u8 max (+0x15), u8 min (+0x17).
 constexpr uint32_t LIGHTING_FADE = 0x00, LIGHTING_COUNT = 0x0E, LIGHTING_SETTINGS = 0x10, SETTING_SIZE = 0x20;
-constexpr uint32_t SETTING_DIR = 0x00, SETTING_MAX = 0x15, SETTING_MIN = 0x17;
+constexpr uint32_t SETTING_DIR = 0x00, SETTING_MAX = 0x15, SETTING_MIN = 0x17, SETTING_TABLE = 0x18;
+constexpr uint32_t OBJ_LIGHT_TABLE = 0x70; // object light: its colour table
 constexpr size_t MAX_OBJECTS = 254, MAX_OBJECT_VERTICES = 4096;
 
 std::vector<uint32_t> g_object_ranges;  // start, vertex count, offset into g_object_normals
 std::vector<uint32_t> g_object_normals; // per vertex: s8 x, y, z, slot + 1
-std::vector<float> g_object_lights;     // 20 floats per slot (RT64's JfgObjectLight)
+constexpr size_t OBJECT_LIGHT_FLOATS = 36; // RT64's JfgObjectLight
+std::vector<float> g_object_lights;     // OBJECT_LIGHT_FLOATS per slot
 
 static uint32_t be32(uint32_t a) {
     return ((uint32_t)rd8(a) << 24) | ((uint32_t)rd8(a + 1) << 16) | ((uint32_t)rd8(a + 2) << 8) | rd8(a + 3);
@@ -162,13 +164,13 @@ extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
     LightingSettings& s = lighting_settings();
     if (!s.characters.load()) return;
     const uint32_t inst = (uint32_t)ctx->r5, lighting = (uint32_t)ctx->r6;
-    if (!valid_ptr(inst) || !valid_ptr(lighting) || g_object_lights.size() / 20 >= MAX_OBJECTS) return;
+    if (!valid_ptr(inst) || !valid_ptr(lighting) || g_object_lights.size() / OBJECT_LIGHT_FLOATS >= MAX_OBJECTS) return;
     const uint32_t model = rd32(inst + MODINST_MODEL), verts = rd32(inst + MODINST_VERTICES);
     if (!valid_ptr(model) || !valid_ptr(verts)) return;
     const uint32_t list = rd32(model + MODEL_NORMAL_LIST), table = rd32(model + MODEL_NORMAL_TABLE);
     if (!valid_ptr(list) || !valid_ptr(table)) return;
 
-    const uint32_t slot = (uint32_t)(g_object_lights.size() / 20) + 1;
+    const uint32_t slot = (uint32_t)(g_object_lights.size() / OBJECT_LIGHT_FLOATS) + 1;
     const size_t first = g_object_normals.size();
     uint32_t vertex_count = 0;
     auto set = [&](uint32_t idx, uint32_t entry) {
@@ -210,8 +212,22 @@ extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
     g_object_ranges.push_back(vertex_count);
     g_object_ranges.push_back((uint32_t)first);
 
-    // Its settings, with the fade lightObject applies to the first one.
-    float light[20] = {};
+    // Its settings, with the fade lightObject applies to the first one. Each points at its light's colour table
+    // (+0x18, the object light's +0x70, made by lightCreateLightTable from its colour; the first one's is white):
+    // the colour is that object light's.
+    float light[OBJECT_LIGHT_FLOATS] = {};
+    auto colour_of = [](uint32_t table, float* rgb) {
+        rgb[0] = rgb[1] = rgb[2] = 1.0f;
+        const uint32_t objects = rd32(ADDR_activeLights);
+        const int32_t count = (int32_t)rd32(ADDR_activeLightCount);
+        for (int32_t i = 0; valid_ptr(table) && valid_ptr(objects) && i < count; i++) {
+            const uint32_t l = rd32(objects + (uint32_t)i * 4);
+            if (valid_ptr(l) && rd32(l + OBJ_LIGHT_TABLE) == table) {
+                for (uint32_t c = 0; c < 3; c++) rgb[c] = rd8(l + OBJ_LIGHT_COLOUR + c) / 255.0f;
+                return;
+            }
+        }
+    };
     const int32_t used = std::clamp((int)(int16_t)rd16(lighting + LIGHTING_COUNT), 0, 4);
     const float fade = rdf(lighting + LIGHTING_FADE);
     for (int32_t k = 0; k < std::max(used, 1); k++) {
@@ -221,17 +237,18 @@ extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
             lo = std::floor(lo * fade);
             hi = std::floor(hi * fade);
         }
-        if (k == 0) light[16] = lo / 255.0f;
+        if (k == 0) light[32] = lo / 255.0f;
         if (k < used) {
             light[k * 4] = rdf(setting + SETTING_DIR);
             light[k * 4 + 1] = rdf(setting + SETTING_DIR + 4);
             light[k * 4 + 2] = rdf(setting + SETTING_DIR + 8);
             light[k * 4 + 3] = std::max(hi - lo, 0.0f) / 255.0f;
+            colour_of(rd32(setting + SETTING_TABLE), &light[16 + k * 4]);
         }
     }
-    light[17] = (float)used;
-    light[18] = s.character_lights.load() / 100.0f;
-    g_object_lights.insert(g_object_lights.end(), light, light + 20);
+    light[33] = (float)used;
+    light[34] = s.character_lights.load() / 100.0f;
+    g_object_lights.insert(g_object_lights.end(), light, light + OBJECT_LIGHT_FLOATS);
 }
 
 // The level's vertex arrays as physical [start, end) pairs, as RT64 sees vertex loads.
@@ -396,7 +413,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     g_casters.clear();
     rt64_jfg_frame_objects((uint32_t)ctx->r4 & RDRAM_MASK, g_object_ranges.data(), (uint32_t)(g_object_ranges.size() / 3),
                            g_object_normals.data(), (uint32_t)g_object_normals.size(), g_object_lights.data(),
-                           (uint32_t)(g_object_lights.size() / 20));
+                           (uint32_t)(g_object_lights.size() / OBJECT_LIGHT_FLOATS));
     g_object_ranges.clear();
     g_object_normals.clear();
     g_object_lights.clear();
