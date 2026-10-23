@@ -229,7 +229,7 @@ extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
                     pos[c] = rdf(l + OBJ_LIGHT_POS + c * 4);
                 }
                 pos[3] = 1.0f;
-                if (const LightOverride* o = lighting_override_at(pos[0], pos[1], pos[2])) {
+                if (const LightOverride* o = lighting_override_for(l)) {
                     const float scale = o->on ? o->intensity / 100.0f * lighting_flicker(l, o->flicker, o->flicker_speed) : 0.0f;
                     if (o->recolour) {
                         rgb[0] = o->r / 255.0f;
@@ -392,7 +392,8 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
         }
         // As the lighting tool changed it: off, another colour (at the light's own brightness), brighter or dimmer,
         // larger or smaller, flickering.
-        if (const LightOverride* o = lighting_override_at(x, y, z)) {
+        const LightOverride* own = lighting_override_for(l);
+        if (const LightOverride* o = own) {
             if (!o->on) continue;
             if (o->recolour) {
                 const float level = (float)intensity / 256.0f * object_strength;
@@ -404,7 +405,6 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
             for (uint32_t c = 0; c < 3; c++) colour[c] *= scale;
             radius *= o->radius / 100.0f;
         }
-        const LightOverride* own = lighting_override_at(x, y, z);
         add(l, x, y, z, radius * object_radius, radius * 0.3f, colour, false, own == nullptr || own->shadows);
     }
 

@@ -42,7 +42,12 @@ void set_lighting_tool_open(bool open);
 namespace jfg {
 
 namespace {
-constexpr const char* LIGHTING_DIR = "lighting";
+// The lighting files' folder: lighting/ next to the game, or JFG_LIGHTING_DIR (test runs on a copy).
+const char* lighting_dir() {
+    static const char* const dir = std::getenv("JFG_LIGHTING_DIR") ? std::getenv("JFG_LIGHTING_DIR") : "lighting";
+    return dir;
+}
+#define LIGHTING_DIR lighting_dir()
 constexpr uint32_t OBJ_POS = 0x0C;                     // ObjectTransform: f32 x, y, z
 constexpr uint32_t ADDR_activeLights = 0x800A1008, ADDR_activeLightCount = 0x800A1004; // see jfg_lighting.cpp
 constexpr uint32_t OBJ_LIGHT_TYPE = 0x03, OBJ_LIGHT_POS = 0x18, OBJ_LIGHT_RADIUS = 0x24, OBJ_LIGHT_COLOUR = 0x40;
@@ -240,8 +245,8 @@ void read_file(const std::filesystem::path& path, bool level_file, bool settings
         else if (level_file && lights && std::strncmp(key, "override.", 9) == 0) {
             LightOverride o;
             int on = 1, recolour = 0, shadows = 1;
-            if (std::sscanf(value, "%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", &o.x, &o.y, &o.z, &on, &recolour, &o.r, &o.g, &o.b,
-                            &o.intensity, &o.radius, &o.flicker, &o.flicker_speed, &shadows) >= 10) {
+            if (std::sscanf(value, "%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", &o.x, &o.y, &o.z, &on, &recolour, &o.r, &o.g, &o.b,
+                            &o.intensity, &o.radius, &o.flicker, &o.flicker_speed, &shadows, &o.nth) >= 10) {
                 o.on = on != 0;
                 o.shadows = shadows != 0;
                 o.recolour = recolour != 0;
@@ -271,8 +276,8 @@ void save_level() {
         }
         for (size_t i = 0; i < g_overrides.size(); i++) {
             const LightOverride& o = g_overrides[i];
-            std::fprintf(f, "override.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, o.x, o.y, o.z, o.on ? 1 : 0,
-                         o.recolour ? 1 : 0, o.r, o.g, o.b, o.intensity, o.radius, o.flicker, o.flicker_speed, o.shadows ? 1 : 0);
+            std::fprintf(f, "override.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, o.x, o.y, o.z, o.on ? 1 : 0,
+                         o.recolour ? 1 : 0, o.r, o.g, o.b, o.intensity, o.radius, o.flicker, o.flicker_speed, o.shadows ? 1 : 0, o.nth);
         }
         std::fclose(f);
     }
@@ -349,12 +354,29 @@ void place_light() {
     say(text);
 }
 
-LightOverride* override_for(float x, float y, float z) {
+LightOverride* override_for(float x, float y, float z, int nth) {
     for (LightOverride& o : g_overrides) {
         const float dx = o.x - x, dy = o.y - y, dz = o.z - z;
-        if (dx * dx + dy * dy + dz * dz <= SAME_LIGHT * SAME_LIGHT) return &o;
+        if (o.nth == nth && dx * dx + dy * dy + dz * dz <= SAME_LIGHT * SAME_LIGHT) return &o;
     }
     return nullptr;
+}
+
+// Which of the game's torches and lamps at a light's spot it is: how many come before it in the game's list there
+// (the character select room has two at the same place).
+int light_nth(uint32_t light) {
+    const float x = rdf(light + OBJ_LIGHT_POS), y = rdf(light + OBJ_LIGHT_POS + 4), z = rdf(light + OBJ_LIGHT_POS + 8);
+    const uint32_t objects = rd32(ADDR_activeLights);
+    const int32_t count = (int32_t)rd32(ADDR_activeLightCount);
+    int nth = 0;
+    for (int32_t i = 0; valid_ptr(objects) && i < count && i < 256; i++) {
+        const uint32_t l = rd32(objects + (uint32_t)i * 4);
+        if (l == light) break;
+        if (!valid_ptr(l) || !(rd8(l + OBJ_LIGHT_TYPE) & 0x40)) continue;
+        const float dx = rdf(l + OBJ_LIGHT_POS) - x, dy = rdf(l + OBJ_LIGHT_POS + 4) - y, dz = rdf(l + OBJ_LIGHT_POS + 8) - z;
+        if (dx * dx + dy * dy + dz * dz <= SAME_LIGHT * SAME_LIGHT) nth++;
+    }
+    return nth;
 }
 
 // --- UI helpers ---------------------------------------------------------------------------------------------------
@@ -544,9 +566,12 @@ void draw_level_lights() {
     if (rows.empty()) ImGui::TextDisabled("No torches or lamps active here.");
     const Row* selected = nullptr;
     for (const Row& r : rows) {
-        const LightOverride* o = override_for(r.x, r.y, r.z);
-        char label[160];
-        std::snprintf(label, sizeof(label), "%.0f, %.0f, %.0f   %.0f away   reach %.0f%s##game%08X", r.x, r.y, r.z, std::sqrt(r.d2),
+        const int nth = light_nth(r.l);
+        const LightOverride* o = override_for(r.x, r.y, r.z, nth);
+        char label[180];
+        char which[16] = "";
+        if (nth > 0) std::snprintf(which, sizeof(which), " (#%d here)", nth + 1);
+        std::snprintf(label, sizeof(label), "%.0f, %.0f, %.0f%s   %.0f away   reach %.0f%s##game%08X", r.x, r.y, r.z, which, std::sqrt(r.d2),
                       rdf(r.l + OBJ_LIGHT_RADIUS), o ? (o->on ? "   (changed)" : "   (off)") : "", r.l);
         ImVec4 colour(rd8(r.l + OBJ_LIGHT_COLOUR) / 255.0f, rd8(r.l + OBJ_LIGHT_COLOUR + 1) / 255.0f, rd8(r.l + OBJ_LIGHT_COLOUR + 2) / 255.0f, 1.0f);
         ImGui::ColorButton("##c", colour, ImGuiColorEditFlags_NoTooltip, ImVec2(ImGui::GetFontSize(), ImGui::GetFontSize()));
@@ -556,9 +581,11 @@ void draw_level_lights() {
     }
     if (!selected) return;
     ImGui::SeparatorText("Selected torch or lamp");
-    LightOverride* o = override_for(selected->x, selected->y, selected->z);
+    const int nth = light_nth(selected->l);
+    LightOverride* o = override_for(selected->x, selected->y, selected->z, nth);
     LightOverride edit = o ? *o : LightOverride{};
     if (!o) {
+        edit.nth = nth;
         edit.x = selected->x;
         edit.y = selected->y;
         edit.z = selected->z;
@@ -750,9 +777,9 @@ void draw_presets() {
 // --- what the lighting reads --------------------------------------------------------------------------------------
 const std::vector<PlacedLight>& lighting_placed_lights() { return g_placed; }
 
-const LightOverride* lighting_override_at(float x, float y, float z) {
+const LightOverride* lighting_override_for(uint32_t light) {
     if (g_overrides.empty()) return nullptr;
-    return override_for(x, y, z);
+    return override_for(rdf(light + OBJ_LIGHT_POS), rdf(light + OBJ_LIGHT_POS + 4), rdf(light + OBJ_LIGHT_POS + 8), light_nth(light));
 }
 
 float lighting_flicker(uint32_t seed, int amount, int speed) {
@@ -778,7 +805,8 @@ bool lighting_active() {
     static bool checked = false;
     if (!checked) {
         checked = true;
-        if (std::getenv("JFG_PIXEL_LIGHTS") != nullptr || std::getenv("JFG_MODERN_LIGHTING") != nullptr) g_forced_lighting = 1;
+        if (std::getenv("JFG_PIXEL_LIGHTS") != nullptr) g_forced_lighting = 1;
+        if (const char* env = std::getenv("JFG_MODERN_LIGHTING")) g_forced_lighting = (std::atoi(env) != 0) ? 1 : 0; // 0: off
     }
     return (g_forced_lighting >= 0) ? (g_forced_lighting != 0) : g.modern_lighting;
 }

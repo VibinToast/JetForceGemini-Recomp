@@ -224,9 +224,10 @@ struct LightOverride {
     int flicker = 0;
     int flicker_speed = 100;
     bool shadows = true;  // casts shadows
+    int nth = 0;          // which of the game's lights at this spot (several can stand on one), in the game's order
 };
 const std::vector<PlacedLight>& lighting_placed_lights();
-const LightOverride* lighting_override_at(float x, float y, float z); // nullptr when the light keeps its own look
+const LightOverride* lighting_override_for(uint32_t light); // a game light's changes (its object light); nullptr: its own look
 float lighting_flicker(uint32_t seed, int amount, int speed);        // 1 = full, down to 1 - amount
 int lighting_pulse_light();                    // the placed light the tool pulses to show it (-1 = none)
 bool lighting_active();                        // the player's "Modern Lighting" option allows it
