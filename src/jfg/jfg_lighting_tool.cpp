@@ -45,6 +45,7 @@ bool rt64_jfg_picked(uint64_t* hash, uint32_t* width, uint32_t* height, uint32_t
 void rt64_jfg_highlight(uint64_t hash, float amount);    // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 void rt64_jfg_preview_request(uint64_t hash);             // lib/rt64 src/hle/rt64_state.cpp
 bool rt64_jfg_preview(uint64_t hash, uint32_t* width, uint32_t* height, std::vector<uint8_t>& rgba); // ...
+bool rt64_jfg_material_preview(uint64_t hash, int kind, uint32_t* width, uint32_t* height, std::vector<uint8_t>& rgba); // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 
 namespace dino::debug_ui::backend {
 bool lighting_tool_open();           // F12
@@ -895,58 +896,89 @@ std::string texture_hash(int texture, int* frames = nullptr) {
     return text;
 }
 
-// The shown texture itself, enlarged with sharp pixels over a checkerboard (its see-through parts): RT64 decodes the
-// original from TMEM the next time it is drawn (a pack's replacement isn't shown). One 256 x 256 ImGui texture, the
-// picture in its top-left corner.
+// A picture in the Textures tab: one 256 x 256 ImGui texture (registered once), the picture in its top-left corner,
+// replaced when its key changes.
 constexpr int PREVIEW_SIZE = 256;
-ImTextureData* g_preview_tex = nullptr;
-uint64_t g_preview_hash = 0;
-uint32_t g_preview_w = 0, g_preview_h = 0;
+struct Preview {
+    ImTextureData* tex = nullptr;
+    uint64_t key = 0;
+    uint32_t w = 0, h = 0;
 
+    void set(uint64_t new_key, const std::vector<uint8_t>& rgba, uint32_t width, uint32_t height) {
+        if (tex == nullptr) {
+            tex = IM_NEW(ImTextureData)();
+            tex->Create(ImTextureFormat_RGBA32, PREVIEW_SIZE, PREVIEW_SIZE);
+            ImGui::RegisterUserTexture(tex);
+        }
+        if (width > (uint32_t)PREVIEW_SIZE || height > (uint32_t)PREVIEW_SIZE) return;
+        for (uint32_t y = 0; y < height; y++) std::memcpy(tex->GetPixelsAt(0, (int)y), &rgba[(size_t)y * width * 4], (size_t)width * 4);
+        ImTextureDataQueueUpload(tex, 0, 0, (int)width, (int)height);
+        key = new_key;
+        w = width;
+        h = height;
+    }
+
+    // Drawn at most `longest` pixels on its long side (whole-number enlargement when `sharp`), over a checkerboard.
+    void draw(float longest, bool sharp) const {
+        const float unit = ImGui::GetFontSize() / 13.0f;
+        const float fit = longest * unit / (float)std::max(std::max(w, h), 1u);
+        const float scale = sharp ? std::max(1.0f, std::floor(fit)) : fit;
+        const ImVec2 size(w * scale, h * scale);
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float cell = 8.0f * unit;
+        for (float y = 0; y < size.y; y += cell) {
+            for (float x = 0; x < size.x; x += cell) {
+                const bool dark = ((int)(x / cell) + (int)(y / cell)) & 1;
+                dl->AddRectFilled(ImVec2(at.x + x, at.y + y), ImVec2(at.x + std::min(x + cell, size.x), at.y + std::min(y + cell, size.y)),
+                                  dark ? IM_COL32(70, 70, 70, 255) : IM_COL32(110, 110, 110, 255));
+            }
+        }
+        ImGuiPlatformIO& pio = ImGui::GetPlatformIO();
+        if (sharp && pio.DrawCallback_SetSamplerNearest) dl->AddCallback(pio.DrawCallback_SetSamplerNearest, nullptr);
+        ImGui::Image(tex->GetTexRef(), size, ImVec2(0, 0), ImVec2(w / (float)PREVIEW_SIZE, h / (float)PREVIEW_SIZE));
+        if (sharp && pio.DrawCallback_SetSamplerLinear) dl->AddCallback(pio.DrawCallback_SetSamplerLinear, nullptr);
+    }
+};
+Preview g_preview;      // the texture: the original as RT64 decodes it from TMEM (not a pack's replacement)
+Preview g_map_preview[3]; // its normal, specular and emission maps (RT64 keeps a small copy of each map it loads)
+
+// The shown texture, enlarged with sharp pixels, and beside it each material map it has, labelled.
 void draw_texture_preview(uint64_t hash) {
     rt64_jfg_preview_request(hash);
-    if (g_preview_tex == nullptr) {
-        g_preview_tex = IM_NEW(ImTextureData)();
-        g_preview_tex->Create(ImTextureFormat_RGBA32, PREVIEW_SIZE, PREVIEW_SIZE);
-        ImGui::RegisterUserTexture(g_preview_tex);
-    }
-    if (hash != g_preview_hash) {
+    if (hash != g_preview.key) {
         uint32_t w = 0, h = 0;
         std::vector<uint8_t> rgba;
-        if (rt64_jfg_preview(hash, &w, &h, rgba) && w <= (uint32_t)PREVIEW_SIZE && h <= (uint32_t)PREVIEW_SIZE) {
-            for (uint32_t y = 0; y < h; y++) {
-                std::memcpy(g_preview_tex->GetPixelsAt(0, (int)y), &rgba[(size_t)y * w * 4], (size_t)w * 4);
-            }
-            ImTextureDataQueueUpload(g_preview_tex, 0, 0, (int)w, (int)h);
-            g_preview_hash = hash;
-            g_preview_w = w;
-            g_preview_h = h;
+        if (rt64_jfg_preview(hash, &w, &h, rgba)) g_preview.set(hash, rgba, w, h);
+    }
+    const uint32_t kinds = rt64_jfg_material_kinds(hash);
+    const char* const names[3] = { "Normal (_n)", "Specular (_s)", "Emission (_e)" };
+    bool any_map = false;
+    for (int k = 0; k < 3; k++) {
+        if (!(kinds & (1u << k))) continue;
+        any_map = true;
+        if (hash != g_map_preview[k].key) {
+            uint32_t w = 0, h = 0;
+            std::vector<uint8_t> rgba;
+            if (rt64_jfg_material_preview(hash, k, &w, &h, rgba)) g_map_preview[k].set(hash, rgba, w, h);
         }
     }
-    if (hash == 0 || hash != g_preview_hash) {
-        ImGui::TextDisabled(hash == 0 ? "" : "(the texture shows once it is drawn again)");
-        return;
+    if (hash == 0) return;
+    ImGui::BeginGroup();
+    ImGui::TextDisabled("Texture");
+    if (hash == g_preview.key) g_preview.draw(192.0f, true);
+    else ImGui::TextDisabled("(shows once it is drawn again)");
+    ImGui::EndGroup();
+    if (!any_map) return;
+    for (int k = 0; k < 3; k++) {
+        if (!(kinds & (1u << k))) continue;
+        ImGui::SameLine();
+        ImGui::BeginGroup();
+        ImGui::TextDisabled("%s", names[k]);
+        if (hash == g_map_preview[k].key) g_map_preview[k].draw(128.0f, false);
+        else ImGui::TextDisabled("(loads when drawn)");
+        ImGui::EndGroup();
     }
-    // Whole-number enlargement up to 256 pixels on the long side (the tool's font scale on top).
-    const float unit = ImGui::GetFontSize() / 13.0f;
-    const int longest = (int)std::max(g_preview_w, g_preview_h);
-    const float scale = std::max(1, 256 / std::max(longest, 1)) * unit;
-    const ImVec2 size(g_preview_w * scale, g_preview_h * scale);
-    const ImVec2 at = ImGui::GetCursorScreenPos();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float cell = 8.0f * unit;
-    for (float y = 0; y < size.y; y += cell) {
-        for (float x = 0; x < size.x; x += cell) {
-            const bool dark = ((int)(x / cell) + (int)(y / cell)) & 1;
-            dl->AddRectFilled(ImVec2(at.x + x, at.y + y), ImVec2(at.x + std::min(x + cell, size.x), at.y + std::min(y + cell, size.y)),
-                              dark ? IM_COL32(70, 70, 70, 255) : IM_COL32(110, 110, 110, 255));
-        }
-    }
-    ImGuiPlatformIO& pio = ImGui::GetPlatformIO();
-    if (pio.DrawCallback_SetSamplerNearest) dl->AddCallback(pio.DrawCallback_SetSamplerNearest, nullptr);
-    ImGui::Image(g_preview_tex->GetTexRef(), size, ImVec2(0, 0),
-                 ImVec2(g_preview_w / (float)PREVIEW_SIZE, g_preview_h / (float)PREVIEW_SIZE));
-    if (pio.DrawCallback_SetSamplerLinear) dl->AddCallback(pio.DrawCallback_SetSamplerLinear, nullptr);
 }
 
 // Any texture under the crosshair (level, characters, objects, effects drawn in 3D; RT64 finds it): its hash, size,
@@ -1013,6 +1045,7 @@ void draw_picked_texture() {
     ImGui::SameLine();
     if (ImGui::Button("Rescan material maps")) {
         rt64_jfg_material_rescan();
+        for (Preview& p : g_map_preview) p.key = 0; // changed maps show again once reloaded
         say("Material maps scanned again: new and changed files load the next time their texture is drawn.");
     }
     help("After adding or changing files in materials/ (or a texture pack): finds them without restarting. Each "
