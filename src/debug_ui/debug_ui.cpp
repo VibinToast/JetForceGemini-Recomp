@@ -22,6 +22,11 @@ bool want_capture_keyboard() {
         return false;
     }
 
+    // JFG PORT: the lighting tool (F12) takes the keyboard only while it has it (Alt) and a field is being typed in.
+    if (backend::lighting_tool_open() && !backend::lighting_tool_playing() && backend::dino_imgui_ctx->IO.WantTextInput) {
+        return true;
+    }
+
     return backend::is_open() && backend::dino_imgui_ctx->IO.WantCaptureKeyboard;
 }
 

@@ -3,8 +3,8 @@
 // A window of its own (src/debug_ui/backend.cpp opens it with F12) for everything the modern lighting can do:
 //   settings     every lighting setting, saved for the level (lighting/level_N.txt, "own settings") or as the defaults
 //                every other level uses (lighting/default.txt); quality settings (shadow maps, light count) are global
-//   placed lights  lights of one's own, saved with the level: "placement mode" gives the game the controls, and each
-//                shot (Z) puts the light being made where the middle of the screen points (a crosshair shows it: the
+//   placed lights  lights of one's own, saved with the level: with "place with fire" on, each shot (Z) puts the light
+//                being made where the middle of the screen points (a crosshair shows it: the
 //                game's own collision ray, trackNearestIntersection, from the camera), or above the player when it
 //                hits nothing; each can be moved, recoloured, resized, made to flicker, switched off or removed
 //   level lights the game's own torches and lamps (its object lights), found again by where they stand: switched off,
@@ -149,6 +149,7 @@ uint32_t g_dirty_tick = 0;
 PlacedLight g_template;        // the light placement makes
 int g_selected = -1;           // placed light being edited
 bool g_pulse = true;           // pulse the selected placed light
+bool g_placing = false;        // each shot places a light
 uint32_t g_selected_game = 0;  // game light being edited (its object light)
 float g_aim[3] = { 0, 0, 0 };
 uint32_t g_aim_tick = 0;
@@ -159,14 +160,16 @@ uint32_t g_message_tick = 0;
 bool g_confirm_clear = false;
 
 bool use_files() { return std::getenv("JFG_LIGHTING_NO_FILES") == nullptr; }
-// Test switch: JFG_LIGHTING_TOOL=place opens the tool in placement mode at start (JFG_DEBUG_INPUT can then fire).
+// Test switch: JFG_LIGHTING_TOOL=open opens the tool at start, =place with "place with fire" on (JFG_DEBUG_INPUT can
+// then fire), =mouse with the mouse and keyboard on the tool.
 void test_switch() {
     static bool done = false;
     if (done) return;
     done = true;
     if (const char* env = std::getenv("JFG_LIGHTING_TOOL")) {
         dino::debug_ui::backend::set_lighting_tool_open(true);
-        dino::debug_ui::backend::set_lighting_tool_playing(std::strcmp(env, "place") == 0);
+        g_placing = std::strcmp(env, "place") == 0;
+        dino::debug_ui::backend::set_lighting_tool_playing(std::strcmp(env, "mouse") != 0);
     }
 }
 std::filesystem::path default_path() { return std::filesystem::path(LIGHTING_DIR) / "default.txt"; }
@@ -437,13 +440,10 @@ bool edit_placed(PlacedLight& p, bool with_position) {
 void draw_placed() {
     LightingSettings& s = lighting_settings();
     if (s.mode.load() < 1) ImGui::TextColored(ImVec4(1, 0.7f, 0.3f, 1), "Lights is 0 (off) in the Lights tab: placed lights don't show.");
-    ImGui::TextWrapped("Placement mode gives the game the controls: turn the camera so the crosshair in the middle of the "
-                       "screen is on a spot and fire (Z) to place the light just in front of it, or above the player when "
-                       "it points at nothing. F12 comes back here.");
-    if (ImGui::Button("Placement mode")) {
-        dino::debug_ui::backend::set_lighting_tool_playing(true);
-        say("Placement mode: aim and fire to place lights; F12 to come back.");
-    }
+    ImGui::TextWrapped("With \"Place with fire\" on, a crosshair shows in the middle of the screen: turn the camera so it is "
+                       "on a spot and fire (Z) to place the light just in front of it, or above the player when it points "
+                       "at nothing. Shots then place lights instead of only shooting.");
+    ImGui::Checkbox("Place with fire", &g_placing);
     ImGui::SameLine();
     ImGui::BeginDisabled(!aim_fresh() && !g_have_player);
     if (ImGui::Button(aim_fresh() ? "Place at the screen's middle" : "Place above the player")) place_light();
@@ -652,8 +652,8 @@ void lighting_tool_tick(recomp_context* ctx) {
 
     if (dino::debug_ui::backend::lighting_tool_open() && g_have_player) update_aim(ctx);
 
-    // Placement mode: each shot places the light being made.
-    if (dino::debug_ui::backend::lighting_tool_open() && dino::debug_ui::backend::lighting_tool_playing()) {
+    // "Place with fire": each shot places the light being made.
+    if (dino::debug_ui::backend::lighting_tool_open() && g_placing) {
         if (rd16(ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u)) & Z_BUTTON) place_light();
     }
 
@@ -670,9 +670,12 @@ void draw_lighting_tool(recomp_context* ctx) {
     if (playing) ImGui::SetNextWindowBgAlpha(0.55f);
     if (ImGui::Begin("Lighting tool (F12)")) {
         ImGui::SetWindowFontScale(std::max(1.0f, ImGui::GetIO().DisplaySize.y / 900.0f));
-        if (playing) {
-            ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "PLACEMENT MODE: point the crosshair and fire (Z) to place a light.");
-            ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "F12: back to the tool.");
+        if (playing) ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "The game has the controls. Alt: mouse and keyboard to the tool.");
+        else ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "The tool has the mouse and keyboard. Alt: back to the game.");
+        if (g_placing) {
+            ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "PLACING: point the crosshair and fire (Z) to place a light.");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Stop placing")) g_placing = false;
             if (aim_fresh()) ImGui::Text("Crosshair on %.0f, %.0f, %.0f", g_aim[0], g_aim[1], g_aim[2]);
             else ImGui::Text("Crosshair on nothing: the light goes above the player.");
             // The crosshair: the middle of the screen, where the ray goes.
