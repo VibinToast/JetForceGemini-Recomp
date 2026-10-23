@@ -44,6 +44,8 @@ extern std::atomic<int> rt64_jfg_debug_normal; // ...
 extern std::atomic<int> rt64_jfg_debug_shadow; // ...
 extern std::atomic<float> rt64_jfg_facing;     // ...
 extern std::atomic<float> rt64_jfg_shadows;    // ...
+extern std::atomic<int> rt64_jfg_shadow_lights; // ...
+extern std::atomic<int> rt64_jfg_shadow_size;  // ...
 extern std::atomic<float> rt64_jfg_level_ambient; // ...
 
 namespace jfg {
@@ -95,7 +97,8 @@ LightingSettings& lighting_settings() {
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS")) settings.mode = std::clamp(std::atoi(env), 0, 2);
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS_FACING")) settings.facing = std::clamp(std::atoi(env), 0, 100);
         if (const char* env = std::getenv("JFG_PIXEL_SHADOWS")) settings.shadows = std::clamp(std::atoi(env), 0, 100);
-        if (const char* env = std::getenv("JFG_CASTER_SIZE")) settings.caster_size = std::clamp(std::atoi(env), 25, 300);
+        if (const char* env = std::getenv("JFG_SHADOW_LIGHTS")) settings.shadow_lights = std::clamp(std::atoi(env), 0, 4);
+        if (const char* env = std::getenv("JFG_SHADOW_SIZE")) settings.shadow_size = std::clamp(std::atoi(env), 128, 2048);
         if (const char* env = std::getenv("JFG_LEVEL_AMBIENT")) settings.level_ambient = std::clamp(std::atoi(env), 0, 199);
         if (const char* env = std::getenv("JFG_PIXEL_LIGHTS_STRENGTH")) {
             settings.object_strength = std::clamp((int)std::lround(std::atof(env) * 100.0), 0, 200);
@@ -316,6 +319,8 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     rt64_jfg_debug_shadow.store(s.debug_shadow.load() ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_facing.store(std::clamp(s.facing.load(), 0, 100) / 100.0f, std::memory_order_relaxed);
     rt64_jfg_shadows.store(std::clamp(s.shadows.load(), 0, 100) / 100.0f, std::memory_order_relaxed);
+    rt64_jfg_shadow_lights.store(std::clamp(s.shadow_lights.load(), 0, 4), std::memory_order_relaxed);
+    rt64_jfg_shadow_size.store(std::clamp(s.shadow_size.load(), 128, 2048), std::memory_order_relaxed);
     rt64_jfg_level_ambient.store(std::clamp(s.level_ambient.load(), 0, 199) / 100.0f, std::memory_order_relaxed);
     if (s.log.load()) log_object_lights();
     send_level_vertices();

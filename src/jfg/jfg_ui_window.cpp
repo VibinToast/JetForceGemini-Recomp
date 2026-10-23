@@ -429,9 +429,12 @@ static void draw_lighting() {
                  "game never does this: 0 keeps its look. Surfaces get one direction per triangle, so low-detail ones look "
                  "faceted.");
     live_slider("Shadows of characters and objects (%)", s.shadows, 0, 100);
-    options_help("Characters and objects that have a shadow also block these lights: they throw a soft shadow away from "
-                 "a torch or a flash. 0 is off, as in the game.");
-    live_slider("Shadow caster size (%)", s.caster_size, 25, 300);
+    options_help("The level, characters and objects block these lights: they throw shadows away from a torch, lamp or "
+                 "flash, and darken the glow the level has painted in around it. 0 is off, as in the game.");
+    live_slider("Lights with shadows", s.shadow_lights, 0, 4);
+    options_help("The nearest lights that cast shadows. Each one draws the scene six more times a frame.");
+    live_slider("Shadow detail", s.shadow_size, 128, 2048);
+    options_help("The size of each light's shadow maps in pixels per side: sharper edges, more memory and work.");
     bool no_game_shadows = s.no_game_shadows.load();
     if (ImGui::Checkbox("Game's shadows off", &no_game_shadows)) s.no_game_shadows = no_game_shadows;
     options_help("Hides the dark blob the game draws on the ground under characters and objects. They still block "

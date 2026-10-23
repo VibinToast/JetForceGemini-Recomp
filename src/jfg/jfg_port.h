@@ -174,7 +174,9 @@ struct LightingSettings {
     std::atomic<int> character_lights{ 0 };  // % the frame's lights add on characters (the game's own come from them)
     std::atomic<int> facing{ 0 };            // % the level lighting depends on a surface facing its light (0 = as the game)
     std::atomic<int> shadows{ 0 };           // % how dark characters' and objects' shadows from these lights are
-    std::atomic<int> caster_size{ 100 };     // % of the size worked out from each one's own shadow
+    std::atomic<int> caster_size{ 100 };     // % of the size worked out from each one's own shadow (no longer used)
+    std::atomic<int> shadow_lights{ 4 };     // how many of the nearest lights get a shadow map (0-4)
+    std::atomic<int> shadow_size{ 512 };     // each shadow map face's size in texels
     std::atomic<bool> no_game_shadows{ false }; // drop the game's blob shadows under characters (still casters here)
     std::atomic<bool> debug_world{ false };  // show the world position as colour
     std::atomic<bool> debug_normal{ false }; // show the surface direction as colour
