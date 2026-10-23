@@ -49,6 +49,7 @@ struct State {
     bool smooth_shadows = true;    // "Smooth Shadows": character shadows follow the in-between frames (jfg_shadow_interp.cpp)
     int  interp_limit = 0;         // only read from older settings files: the old Interpolation Limit, carried over to Smooth Motion
     bool widescreen = false;       // render the 3D view to the full window width, see jfg_widescreen_active()
+    bool hud_corners = false;      // in widescreen, the HUD at the window's edges (jfg_hud_corners.cpp)
     int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
     int  hit_flash = 100;          // red screen when the character is hit: strength, percent (jfg_hit_flash)
     bool hide_floyd = false;       // Floyd is not drawn while he follows the character (jfg_hide_object)
