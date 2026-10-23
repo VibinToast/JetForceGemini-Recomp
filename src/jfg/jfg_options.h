@@ -86,6 +86,9 @@ struct State {
     bool swap_triggers = false;    // dual stick: swap the N64 Z (fire) and R (aim) inputs
     int  camera_speed_h = 100;     // dual stick: camera speed sideways, percent
     int  camera_speed_v = 100;     // dual stick: camera speed up/down, percent
+    int  camera_distance = 100;    // dual stick: the camera's distance from the character, percent of the game's
+    int  aim_drag_margin = 10;     // dual stick, aiming: how far the character may step aside before the camera follows, percent of the half screen
+    int  aim_drag_return = 100;    // dual stick, aiming: how fast the camera comes back onto a character standing still, percent (0: never)
     bool aim_shoulder = false;     // aiming: view from over the character's right shoulder
     bool aim_centered = false;     // aiming: the view turns at once and the reticle stays in the middle
     bool aim_jump = false;         // aiming: the jump button (C-up) jumps instead of zooming, see aim_jump()

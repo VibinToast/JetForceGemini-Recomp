@@ -105,10 +105,13 @@ struct CameraControl {
     // The height orbited eases after the character's (gently in the air: jumps, Lupus's hover, issue #16).
     float follow_look = 0;      // the height orbited, as last placed
     uint32_t follow_tick = 0;   // g_tick_count when it was placed; anything older starts again at the character
+    // While aiming the point orbited has drag margins: its sideways offset from the character, and where that was.
+    float orbit_dx = 0, orbit_dz = 0, orbit_dy = 0, orbit_last_x = 0, orbit_last_z = 0, orbit_last_heading = 0, orbit_last_pitch = 0;
+    bool orbit_drag_valid = false;
 };
 // The free camera's orbit: round the middle of the character's body, this far above its feet, from looking up at it
-// from below (-45 degrees) to looking down on it (67 degrees). The camera's pitch is positive looking down.
-constexpr float ORBIT_CENTRE = 40.0f, ORBIT_PITCH_MIN = -0.78f, ORBIT_PITCH_MAX = 1.17f;
+// from below (-70 degrees) to looking down on it (80 degrees). The camera's pitch is positive looking down.
+constexpr float ORBIT_CENTRE = 40.0f, ORBIT_PITCH_MIN = -1.22f, ORBIT_PITCH_MAX = 1.40f;
 void camera_hand_over_to_aim(uint32_t cam); // jfg_camera.cpp
 // Dual-stick aiming: the character aims at the first surface on the view's centre line (from o along the unit vector
 // f), or the point on it at its weapon's range (jfg_controls.cpp).
