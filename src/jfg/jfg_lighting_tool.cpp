@@ -7,12 +7,15 @@
 //                being made where the middle of the screen points (a crosshair shows it: the
 //                game's own collision ray, trackNearestIntersection, from the camera), or above the player when it
 //                hits nothing; each can be moved, recoloured, resized, made to flicker, switched off or removed
+//   presets      named sets of settings (lighting/presets/<name>.txt) saved from the current ones and applied to any
+//                level, all of them or only some groups (say the directional light and the surfaces)
 //   level lights the game's own torches and lamps (its object lights), found again by where they stand: switched off,
 //                recoloured, brighter or dimmer, larger or smaller, flickering; saved with the level
 // Changes apply at once and are saved a moment later. Game thread only: the tool is drawn from jfg_debug_frame's UI
 // frame, its tick runs every game tick, and the lighting reads the lights at rcpFast3d, all on the game thread.
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -581,6 +584,144 @@ void draw_level_lights() {
         touched_level();
     }
 }
+// --- presets -----------------------------------------------------------------------------------------------------
+// A preset is the settings of the groups chosen when it was saved (set.<key>=<value> lines, as the level files), in
+// lighting/presets/<name>.txt. Applying it sets the groups chosen then, for the level's own settings or the defaults,
+// whichever the level uses. Quality settings (the same everywhere) and the debug views are never part of one.
+const char* const PRESET_GROUP_NAMES[] = { "Lights", "Shadows", "Directional", "Surfaces", "Characters" };
+constexpr int PRESET_GROUPS = 5;
+bool g_preset_save_groups[PRESET_GROUPS] = { true, true, true, true, true };
+bool g_preset_apply_groups[PRESET_GROUPS] = { true, true, true, true, true };
+char g_preset_name[64] = "";
+std::vector<std::string> g_presets;
+bool g_presets_listed = false;
+std::string g_preset_delete; // asking to confirm
+
+std::filesystem::path presets_dir() { return std::filesystem::path(LIGHTING_DIR) / "presets"; }
+
+void list_presets() {
+    g_presets.clear();
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it(presets_dir(), ec), end; !ec && it != end; it.increment(ec)) {
+        if (it->path().extension() == ".txt") g_presets.push_back(it->path().stem().string());
+    }
+    std::sort(g_presets.begin(), g_presets.end());
+    g_presets_listed = true;
+}
+
+// A name usable as a file name: letters, digits, space, - and _.
+std::string preset_file_name(const char* name) {
+    std::string out;
+    for (const char* c = name; *c; c++) {
+        const unsigned char ch = (unsigned char)*c;
+        if (std::isalnum(ch) || ch == ' ' || ch == '-' || ch == '_') out += (char)ch;
+    }
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    while (!out.empty() && out.front() == ' ') out.erase(out.begin());
+    return out;
+}
+
+void save_preset(const std::string& name) {
+    std::error_code ec;
+    std::filesystem::create_directories(presets_dir(), ec);
+    std::FILE* f = std::fopen((presets_dir() / (name + ".txt")).string().c_str(), "w");
+    if (!f) {
+        say("Could not write the preset.");
+        return;
+    }
+    std::fprintf(f, "# Jet Force Gemini modern lighting preset (lighting tool, F12)\n");
+    for (const Setting& t : settings_table()) {
+        const int g = (int)t.group;
+        if (t.global || g >= PRESET_GROUPS || !g_preset_save_groups[g]) continue;
+        std::fprintf(f, "set.%s=%d\n", t.key, get(t));
+    }
+    std::fclose(f);
+    list_presets();
+    say("Preset \"" + name + "\" saved.");
+}
+
+void apply_preset(const std::string& name) {
+    std::FILE* f = std::fopen((presets_dir() / (name + ".txt")).string().c_str(), "r");
+    if (!f) {
+        say("Could not read the preset.");
+        return;
+    }
+    int applied = 0;
+    char line[256];
+    while (std::fgets(line, sizeof(line), f)) {
+        char* eq = std::strchr(line, '=');
+        if (line[0] == '#' || !eq || std::strncmp(line, "set.", 4) != 0) continue;
+        *eq = 0;
+        for (const Setting& t : settings_table()) {
+            const int g = (int)t.group;
+            if (std::strcmp(t.key, line + 4) != 0 || t.global || g >= PRESET_GROUPS || !g_preset_apply_groups[g]) continue;
+            put(t, std::atoi(eq + 1));
+            touched_setting(t);
+            applied++;
+        }
+    }
+    std::fclose(f);
+    say("Preset \"" + name + "\" applied to " + (g_level_own ? "this level's own settings" : "the defaults") + " (" +
+        std::to_string(applied) + " settings).");
+}
+
+void draw_presets() {
+    if (!g_presets_listed) list_presets();
+    ImGui::TextWrapped("Save the current settings as a preset to use again on other levels. Applying one changes %s.",
+                       g_level_own ? "this level's own settings" : "the defaults (this level has no settings of its own)");
+
+    ImGui::SeparatorText("Save");
+    ImGui::TextDisabled("Groups to keep in it:");
+    for (int g = 0; g < PRESET_GROUPS; g++) {
+        if (g > 0) ImGui::SameLine();
+        ImGui::PushID(g);
+        ImGui::Checkbox(PRESET_GROUP_NAMES[g], &g_preset_save_groups[g]);
+        ImGui::PopID();
+    }
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14.0f);
+    ImGui::InputText("Name", g_preset_name, sizeof(g_preset_name));
+    const std::string name = preset_file_name(g_preset_name);
+    const bool exists = std::find(g_presets.begin(), g_presets.end(), name) != g_presets.end();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(name.empty());
+    if (ImGui::Button(exists ? "Overwrite" : "Save preset")) save_preset(name);
+    ImGui::EndDisabled();
+
+    ImGui::SeparatorText("Apply");
+    ImGui::TextDisabled("Groups to take from it:");
+    for (int g = 0; g < PRESET_GROUPS; g++) {
+        if (g > 0) ImGui::SameLine();
+        ImGui::PushID(100 + g);
+        ImGui::Checkbox(PRESET_GROUP_NAMES[g], &g_preset_apply_groups[g]);
+        ImGui::PopID();
+    }
+    if (g_presets.empty()) ImGui::TextDisabled("No presets saved yet.");
+    for (const std::string& p : g_presets) {
+        ImGui::PushID(p.c_str());
+        if (ImGui::Button("Apply")) apply_preset(p);
+        ImGui::SameLine();
+        if (g_preset_delete == p) {
+            if (ImGui::Button("Yes, delete")) {
+                std::error_code ec;
+                std::filesystem::remove(presets_dir() / (p + ".txt"), ec);
+                g_preset_delete.clear();
+                ImGui::PopID();
+                list_presets();
+                say("Preset deleted.");
+                return;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Keep")) g_preset_delete.clear();
+        }
+        else if (ImGui::Button("Delete")) g_preset_delete = p;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Name")) std::snprintf(g_preset_name, sizeof(g_preset_name), "%s", p.c_str());
+        ImGui::SameLine();
+        ImGui::TextUnformatted(p.c_str());
+        ImGui::PopID();
+    }
+    ImGui::TextDisabled("Files: %s", presets_dir().string().c_str());
+}
 } // namespace
 
 // --- what the lighting reads --------------------------------------------------------------------------------------
@@ -645,7 +786,12 @@ void lighting_tool_tick(recomp_context* ctx) {
     }
     test_switch();
     const int level = (int16_t)rd16(ADDR_currentLevel);
-    if (level != g_level) load_level(level);
+    if (level != g_level) {
+        load_level(level);
+        // Test switch: JFG_LIGHTING_PRESET=<name> applies that preset at every level load (scripted runs).
+        static const char* const preset = std::getenv("JFG_LIGHTING_PRESET");
+        if (preset != nullptr) apply_preset(preset);
+    }
 
     g_have_player = false;
     if (valid_ptr(rd32(ADDR_gameplay))) {
@@ -753,6 +899,7 @@ void draw_lighting_tool(recomp_context* ctx) {
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Characters")) { draw_group(Group::Characters); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Presets")) { draw_presets(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Placed lights")) { draw_placed(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Level lights")) { draw_level_lights(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Debug")) {
