@@ -26,6 +26,9 @@
 #include "jfg_options.h"
 #include "jfg_port.h"
 
+extern std::atomic<int> rt64_jfg_material_files;  // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
+extern std::atomic<int> rt64_jfg_material_loaded;  // ...
+
 namespace dino::debug_ui::backend {
 bool lighting_tool_open();           // F12
 bool lighting_tool_playing();        // placement mode: the game has the controls
@@ -102,6 +105,10 @@ std::vector<Setting>& settings_table() {
           "blockier edges." },
         { "detail", "Surface detail", &s.detail, nullptr, 0, 100, Group::Surfaces, false,
           "Bumps from the textures (their light and dark taken as height) that catch the lights. Tenths of a unit." },
+        { "material_maps", "Material maps (%)", &s.material_maps, nullptr, 0, 200, Group::Surfaces, false,
+          "Authored normal and specular maps: materials/<texture hash>_n.png (normal, green up) and _s.png (red: shine, "
+          "green: sharpness) next to the game, named like texture dumps. Where a texture has them they replace the "
+          "detail and shine worked out from it. Read at start." },
         { "detail_characters", "Detail on characters (%)", &s.detail_characters, nullptr, 0, 200, Group::Surfaces, false,
           "How much of the surface detail characters and objects get. Their textures are mostly painted features (faces, "
           "clothes), which don't make good bumps; carved objects do." },
@@ -730,7 +737,12 @@ void draw_lighting_tool(recomp_context* ctx) {
             if (ImGui::BeginTabItem("Lights")) { draw_group(Group::Lights); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Shadows")) { draw_group(Group::Shadows); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Directional")) { draw_group(Group::Sun); ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Surfaces")) { draw_group(Group::Surfaces); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Surfaces")) {
+                draw_group(Group::Surfaces);
+                ImGui::TextDisabled("Material maps: %d textures have them, %d maps loaded", rt64_jfg_material_files.load(),
+                                    rt64_jfg_material_loaded.load());
+                ImGui::EndTabItem();
+            }
             if (ImGui::BeginTabItem("Characters")) { draw_group(Group::Characters); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Placed lights")) { draw_placed(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Level lights")) { draw_level_lights(); ImGui::EndTabItem(); }
