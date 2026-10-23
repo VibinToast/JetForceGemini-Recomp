@@ -236,7 +236,7 @@ extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
                 }
                 pos[3] = 1.0f;
                 if (const LightOverride* o = lighting_override_for(l)) {
-                    const float scale = o->on ? o->intensity / 100.0f * lighting_flicker(l, o->flicker, o->flicker_speed) : 0.0f;
+                    const float scale = (o->on && o->radius > 0) ? o->intensity / 100.0f * lighting_flicker(l, o->flicker, o->flicker_speed) : 0.0f;
                     if (o->recolour) {
                         rgb[0] = o->r / 255.0f;
                         rgb[1] = o->g / 255.0f;
@@ -518,7 +518,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
         // larger or smaller, flickering.
         const LightOverride* own = lighting_override_for(l);
         if (const LightOverride* o = own) {
-            if (!o->on) continue;
+            if (!o->on || o->radius <= 0) continue; // reach 0 is off too
             if (o->recolour) {
                 const float level = (float)intensity / 256.0f * object_strength;
                 colour[0] = o->r / 255.0f * level;

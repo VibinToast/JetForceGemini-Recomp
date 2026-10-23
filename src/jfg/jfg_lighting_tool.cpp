@@ -682,13 +682,15 @@ void draw_level_lights() {
         edit.b = rd8(selected->l + OBJ_LIGHT_COLOUR + 2);
     }
     bool changed = ImGui::Checkbox("On", &edit.on);
+    help("Off: the light lights nothing (the level, characters, objects). The glow the level has painted in around it stays.");
     changed |= ImGui::Checkbox("Casts shadows", &edit.shadows);
     changed |= ImGui::Checkbox("Own colour", &edit.recolour);
     ImGui::BeginDisabled(!edit.recolour);
     changed |= colour_edit("Colour", &edit.r, &edit.g, &edit.b);
     ImGui::EndDisabled();
     changed |= slider_int("Intensity (% of its own)", &edit.intensity, 0, 400);
-    changed |= slider_int("Reach (% of its own)", &edit.radius, 10, 400);
+    changed |= slider_int("Reach (% of its own)", &edit.radius, 0, 400);
+    help("0 turns it off, as unticking On does.");
     changed |= slider_int("Flicker (%)", &edit.flicker, 0, 100);
     changed |= slider_int("Flicker speed (%)", &edit.flicker_speed, 10, 400);
     if (changed) {
