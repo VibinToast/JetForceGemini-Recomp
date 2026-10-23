@@ -457,6 +457,91 @@ void debug_player_log(uint32_t obj) {
         valid_ptr(data) ? rdf(data + 0x1EC) : 0.0f, valid_ptr(data) ? (int)(int16_t)rd16(data + 0x58C) : 0);
 }
 
+// Dual-stick aiming (CameraControl::free_aim): the character aims from its gun at the point under the middle of
+// the screen, so the game's own crosshair appears there. The game draws its crosshair where the line of fire meets
+// the level, or at the end of the weapon's range (frontPlayerTarget: lifetime x 6 x speed, at most 3000), so the point
+// aimed at is the first surface on the view's centre line (from ox, oy, oz along the unit vector f), or the point on it
+// at that range from the character: the line of fire then ends there too, and the crosshair is not drawn off the middle
+// on a wall nearer than the range. The aim's up/down is the game's view pitch (larger looks up), its reticle offsets
+// stay 0.
+// The game eases its aim angles (+0x1CE/+0x1D0, +0x1DC/+0x1DE, +0x1E0) towards the reticle offsets plus the view
+// pitch a third of the way each tick, and sets them back to 0 when its aiming starts, so the crosshair (drawn from
+// +0x1CA/+0x1CC) would travel to the middle over several ticks: they are written as arrived. jfg_camera_override
+// calls this again with the camera that is drawn, after the game's tick (which may have just started its aiming).
+void jfg_aim_along_view(recomp_context* ctx, uint32_t obj, float ox, float oy, float oz, float fx, float fy, float fz) {
+    const uint32_t data = rd32(obj + 0x68);
+    if (!valid_ptr(data)) return;
+    constexpr float HEAD = 60.0f;
+    constexpr int PITCH_LIMIT = 0x2AAA; // as aim_controls
+    constexpr uint32_t WEAPON_TABLE = 0x800A1490, WEAPON_DEF_SIZE = 0x30; // as jfg_weapons.cpp
+    float range = 1000.0f;
+    {
+        const int c = (int16_t)rd16(ADDR_currentCharacter);
+        const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
+        const uint32_t weapon = ch ? rd8(ch + CHAR_WEAPON_OFFSET) : 0xFFu;
+        if (weapon < 16) {
+            const uint32_t def = WEAPON_TABLE + WEAPON_DEF_SIZE * weapon;
+            const float r = (float)rd8(def + 0x07) * 6.0f * rdf(def + 0x10);
+            if (std::isfinite(r) && r > 0.0f) range = std::clamp(r, 150.0f, 3000.0f);
+        }
+    }
+    // The line of fire starts at the gun's barrel (controlGetGunBarrelPos: the point the character's model keeps for
+    // it, else about its head), so close up the aim is taken from there.
+    float gx = rdf(obj + 0x0C), gy = rdf(obj + 0x10) + HEAD, gz = rdf(obj + 0x14);
+    {
+        const uint32_t parts = rd32(obj + 0x6C);
+        const uint32_t model = valid_ptr(parts) ? rd32(parts) : 0;
+        const uint32_t barrel = valid_ptr(model) ? rd32(model + 0x68) : 0;
+        if (valid_ptr(barrel)) {
+            const float bx = rdf(barrel), by = rdf(barrel + 4), bz = rdf(barrel + 8);
+            const float off = std::fabs(bx - rdf(obj + 0x0C)) + std::fabs(by - rdf(obj + 0x10)) + std::fabs(bz - rdf(obj + 0x14));
+            if (std::isfinite(off) && off < 300.0f) { gx = bx; gy = by; gz = bz; } // (not a stale point elsewhere)
+        }
+    }
+    // The point s along the centre line that is `range` from the gun: |o + f s| = range, o = origin - gun.
+    const float hx = ox - gx, hy = oy - gy, hz = oz - gz;
+    const float b = hx * fx + hy * fy + hz * fz;
+    float s = -b + std::sqrt(std::max(b * b - (hx * hx + hy * hy + hz * hz) + range * range, 0.0f));
+    {
+        // The first surface on the centre line up to there (the game's test, as frontPlayerTarget's), taken when it is
+        // ahead of the gun: a wall close behind the character, or one the camera is pressed against, is passed over.
+        const uint32_t buf = ((uint32_t)ctx->r29 - 0x80u) & ~0x7u; // inside the gap call_game leaves below $sp
+        wrf(buf + 0, ox); wrf(buf + 4, oy); wrf(buf + 8, oz);
+        wrf(buf + 12, ox + fx * s); wrf(buf + 16, oy + fy * s); wrf(buf + 20, oz + fz * s);
+        if (call_game(trackNearestIntersection, ctx, { 0u, buf, buf + 12, buf + 24, 0x2000u, 0u }) != 0) {
+            const float hit = rdf(buf + 24 + 0x20); // TargetHit.dist: from the start of the line
+            // Only a surface the gun can point at: well ahead of it, not nearly straight above or below (a ledge over
+            // the character's head would turn it sideways and past the aim's 60-degree limit).
+            const float ex = hx + fx * hit, ey = hy + fy * hit, ez = hz + fz * hit;
+            const float flat = std::sqrt(ex * ex + ez * ez);
+            const bool reachable = flat > 100.0f && std::fabs(ey) < flat * 1.5f && (ex * fx + ez * fz) > 0.0f;
+            if (std::isfinite(hit) && hit > 0.0f && hit < s && reachable) s = hit;
+        }
+    }
+    const float dx = hx + fx * s, dy = hy + fy * s, dz = hz + fz * s;
+    const uint16_t yaw = angle_to_s16(std::atan2(dx, dz) + PI_F);
+    wr16(obj, yaw);
+    for (uint32_t k : { 0x106u, 0x11Cu, 0x122u, 0x1C6u, 0x1CAu }) wr16(data + k, yaw); // as at the start of aiming below
+    // The line of fire's up/down is the body's pitch plus the aim's (as the game adds them).
+    const int line = (int)(int16_t)angle_to_s16(std::atan2(dy, std::sqrt(dx * dx + dz * dz)));
+    const int body = (int)(int16_t)rd16(obj + 2);
+    const int view = std::clamp(line - body, -PITCH_LIMIT, PITCH_LIMIT);
+    for (uint32_t k : { PD_VIEW_PITCH, 0x1D0u, 0x1DEu }) wr16(data + k, (uint16_t)(int16_t)view);
+    for (uint32_t k : { 0x1C8u, 0x1CCu }) wr16(data + k, (uint16_t)(int16_t)(body + view));
+    for (uint32_t k : { PD_RETICLE_YAW, 0x1DCu, 0x246u, PD_RETICLE_PITCH }) wr16(data + k, 0);
+}
+
+// The tick's aim, before the game's control code: along the free camera's view from the point it orbits (once the camera is down
+// at the ground and tilts up on the spot the line drawn is a little different; jfg_camera_override sets the one drawn),
+// with the game's stick centred.
+static void aim_at_screen_centre(recomp_context* ctx, uint32_t obj, uint32_t pad) {
+    const float pitch = std::clamp(g_cam.orbit_elevation + g_cam.elevation, -0.45f, 1.25f); // as jfg_camera_override: larger looks down
+    const float fx = std::sin(g_cam.heading) * std::cos(pitch), fy = -std::sin(pitch), fz = std::cos(g_cam.heading) * std::cos(pitch);
+    jfg_aim_along_view(ctx, obj, rdf(obj + 0x0C), rdf(obj + 0x10) + g_cam.orbit_pivot, rdf(obj + 0x14), fx, fy, fz);
+    wr8(pad + 2, 0);
+    wr8(pad + 3, 0);
+}
+
 // Game thread, right after joyRead. Decides whether the right stick owns the camera this tick, advances the camera
 // angles, turns the character and rewrites the game's stick value.
 void jfg_camera_controls(recomp_context* ctx) {
@@ -548,7 +633,23 @@ void jfg_camera_controls(recomp_context* ctx) {
 
     // The aiming options work with any control layout.
     const float tick_frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
-    if (aim_state(obj)) {
+    {
+        // Dual-stick aiming keeps the free camera as the view (CameraControl::free_aim), when the free camera was the
+        // view the tick before. Not for the sniper scope (a first-person view), boss fights, or with "Aim Where the
+        // Character Faces" (the view goes round to the character's facing, as before).
+        const int c = (int16_t)rd16(ADDR_currentCharacter);
+        const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
+        constexpr uint8_t WEAPON_SNIPER = 7;
+        const bool sniper = ch != 0 && rd8(ch + CHAR_WEAPON_OFFSET) == WEAPON_SNIPER;
+        const bool was_free_aim = g_cam.free_aim;
+        g_cam.free_aim = aiming && was_active && g_cam.orbit_valid && jfg_dual_stick_active() && !boss_control_active() &&
+                         !sniper && !g.aim_from_character;
+        if (was_free_aim && !g_cam.free_aim) { g_cam.orbit_easing = true; g_cam.orbit_settle = 60; } // see jfg_camera_override
+        // Over-the-shoulder aiming then glides the free camera to the shoulder spot (and back) in a tenth of a second.
+        const float glide_step = tick_frames / 6.0f;
+        g_cam.glide = (g_cam.free_aim && g.aim_shoulder) ? std::min(1.0f, g_cam.glide + glide_step) : std::max(0.0f, g_cam.glide - glide_step);
+    }
+    if (aim_state(obj) && !g_cam.free_aim) {
         g_cam.shoulder = g.aim_shoulder;
         g_cam.shoulder_blend = g_cam.shoulder ? std::min(1.0f, g_cam.shoulder_blend + tick_frames / 6.0f) : 0.0f;
         aim_controls(obj, pad, tick_frames);
@@ -590,7 +691,8 @@ void jfg_camera_controls(recomp_context* ctx) {
         const float px = rdf(obj + 0x0C), pz = rdf(obj + 0x14), cx = rdf(cam + 0x0C), cz = rdf(cam + 0x14);
         const float flat = std::sqrt((px - cx) * (px - cx) + (pz - cz) * (pz - cz));
         const float off = flat < 30.0f ? 0.0f : std::fabs(wrap_angle(std::atan2(px - cx, pz - cz) - game_heading));
-        const bool away = (flat > 2000.0f || off > 50.0f * PI_F / 180.0f) && g_cam.arrive_hold <= 0 && !g_cam.face_reset;
+        // (Not while the dual stick aims: the game's own aiming camera then follows the character, not the view.)
+        const bool away = (flat > 2000.0f || off > 50.0f * PI_F / 180.0f) && g_cam.arrive_hold <= 0 && !g_cam.face_reset && !g_cam.free_aim;
         // a couple of ticks of grace, so a single odd frame (a wall pushing the camera in) does not let go
         g_cam.showing = away ? g_cam.showing + 1 : 0;
         static const bool log_cam = std::getenv("JFG_DEBUG_CAM") != nullptr;
@@ -602,8 +704,9 @@ void jfg_camera_controls(recomp_context* ctx) {
         if (g_cam.showing >= 2) { g_cam.was_aiming = false; return; }
     }
 
-    if (aiming) {
-        // The game's aiming view takes over; it looks the way the character is facing. By default the character is
+    if (aiming && !g_cam.free_aim) {
+        // Aiming where the free camera is not kept (see free_aim above), or did not come first:
+        // the game's aiming view takes over; it looks the way the character is facing. By default the character is
         // first turned to face where the free camera was looking, the aim's up/down is set to the free camera's tilt,
         // and the game's own camera (which stayed behind the old facing) is put where the free camera was showing, so
         // the aim starts on what the player was looking at; with the option, the character is left alone and the view
@@ -658,6 +761,12 @@ void jfg_camera_controls(recomp_context* ctx) {
     constexpr float YAW_RATE = 150.0f / 60.0f * (PI_F / 180.0f), PITCH_RATE = 75.0f / 60.0f * (PI_F / 180.0f);
     g_cam.heading = wrap_angle(g_cam.heading + g_sign_cam * (rx * YAW_RATE * frames * (float)g.camera_speed_h / 100.0f + g_mouse_cam_x));
     g_cam.elevation = std::clamp(g_cam.elevation + (g.invert_camera_y ? -ry : ry) * -PITCH_RATE * frames * (float)g.camera_speed_v / 100.0f - g_mouse_cam_y, -1.1f, 0.75f);
+    if (g_cam.free_aim) {
+        // The camera turned as when not aiming; the character aims at the middle of the view. The left stick walks and
+        // strafes through the C buttons while aiming (jfg_dual_stick), so the game's stick is not rewritten here.
+        aim_at_screen_centre(ctx, obj, pad);
+        return;
+    }
 
     // Left stick. The game's own controls are already relative to a camera - its own, the one that swings round behind
     // the character: the stick's direction, seen from that camera, is the way the character turns to and runs. So the
