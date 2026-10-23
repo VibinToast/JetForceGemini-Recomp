@@ -47,6 +47,10 @@ amSndPlay
 frontFlashScreen
 sidekickControl
 
+# Translated text: menu text buffer, subtitles per language (jfg_locale.cpp)
+initFront
+subtitleStart
+
 # Hide Floyd: his shadow (jfg_visuals.cpp)
 shadowGenerate
 
