@@ -768,10 +768,31 @@ int lighting_pulse_light() {
     return (g_pulse && dino::debug_ui::backend::lighting_tool_open()) ? g_selected : -1;
 }
 
+// The test switches turn it on for the session without touching the saved option; the tool's button then switches
+// that instead.
+int g_forced_lighting = -1; // -1: follow the option, 0 / 1: off / on for this session
+
 bool lighting_active() {
-    static const bool forced = std::getenv("JFG_PIXEL_LIGHTS") != nullptr || std::getenv("JFG_MODERN_LIGHTING") != nullptr;
-    return forced || g.modern_lighting;
+    static bool checked = false;
+    if (!checked) {
+        checked = true;
+        if (std::getenv("JFG_PIXEL_LIGHTS") != nullptr || std::getenv("JFG_MODERN_LIGHTING") != nullptr) g_forced_lighting = 1;
+    }
+    return (g_forced_lighting >= 0) ? (g_forced_lighting != 0) : g.modern_lighting;
 }
+
+namespace {
+// Modern lighting on / off, from the button at the top of the tool (the Graphics option, saved; or for this session
+// when a test switch turned it on).
+void toggle_lighting() {
+    if (g_forced_lighting >= 0) {
+        g_forced_lighting = g_forced_lighting ? 0 : 1;
+        return;
+    }
+    g.modern_lighting = !g.modern_lighting;
+    save_options();
+}
+} // namespace
 
 namespace {
 // Where the middle of the screen points: the camera's view ray (Camera: s16 yaw at +0, s16 pitch at +2, position at
@@ -862,13 +883,15 @@ void draw_lighting_tool(recomp_context* ctx) {
             dl->AddLine(ImVec2(c.x, c.y - r * 1.8f), ImVec2(c.x, c.y - r * 0.5f), col, 2.0f);
             dl->AddLine(ImVec2(c.x, c.y + r * 0.5f), ImVec2(c.x, c.y + r * 1.8f), col, 2.0f);
         }
-        if (!lighting_active()) {
-            ImGui::TextColored(ImVec4(1, 0.7f, 0.3f, 1), "Modern Lighting is off in the Graphics options.");
+        // Modern / original lighting, to compare (the same as the Graphics option).
+        {
+            const bool on = lighting_active();
+            ImGui::PushStyleColor(ImGuiCol_Button, on ? ImVec4(0.15f, 0.55f, 0.25f, 1.0f) : ImVec4(0.45f, 0.35f, 0.15f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, on ? ImVec4(0.2f, 0.65f, 0.3f, 1.0f) : ImVec4(0.55f, 0.45f, 0.2f, 1.0f));
+            if (ImGui::Button(on ? "Lighting: MODERN" : "Lighting: ORIGINAL", ImVec2(ImGui::GetFontSize() * 11.0f, 0.0f))) toggle_lighting();
+            ImGui::PopStyleColor(2);
             ImGui::SameLine();
-            if (ImGui::Button("Turn it on")) {
-                g.modern_lighting = true;
-                save_options();
-            }
+            ImGui::TextDisabled(on ? "click for the game's original lighting" : "click for the modern lighting");
         }
         load_level_names();
         const std::string name = (g_level >= 0 && g_level < (int)g_level_names.size()) ? g_level_names[g_level] : "";

@@ -98,7 +98,7 @@ extern "C" void jfg_shadow_end(uint8_t* rdram_, recomp_context* ctx) {
     (void)rdram_;
     if (!batch_open) return;
     batch_open = false;
-    if (lighting_settings().no_game_shadows.load()) {
+    if (lighting_settings().no_game_shadows.load() && lighting_active()) {
         ctx->r10 = start_vertices;
         ctx->r11 = start_triangles;
         ctx->r30 = start_batches;

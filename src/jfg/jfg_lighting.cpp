@@ -319,16 +319,17 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     if ((uint32_t)ctx->r6 != 0) return; // side tasks (clone, refraction, blur) are not frames
     LightingSettings& s = lighting_settings();
-    const int mode = lighting_active() ? s.mode.load() : 0;
+    const bool active = lighting_active(); // off: the game's original look, nothing of ours applied
+    const int mode = active ? s.mode.load() : 0;
     rt64_jfg_pixel_lights.store(mode > 0 ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_debug_world.store(s.debug_world.load() ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_debug_normal.store(s.debug_normal.load() ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_debug_shadow.store(s.debug_shadow.load() ? 1 : 0, std::memory_order_relaxed);
-    rt64_jfg_facing.store(std::clamp(s.facing.load(), 0, 100) / 100.0f, std::memory_order_relaxed);
-    rt64_jfg_shadows.store(std::clamp(s.shadows.load(), 0, 100) / 100.0f, std::memory_order_relaxed);
+    rt64_jfg_facing.store(active ? std::clamp(s.facing.load(), 0, 100) / 100.0f : 0.0f, std::memory_order_relaxed);
+    rt64_jfg_shadows.store(active ? std::clamp(s.shadows.load(), 0, 100) / 100.0f : 0.0f, std::memory_order_relaxed);
     rt64_jfg_shadow_lights.store(std::clamp(s.shadow_lights.load(), 0, 4), std::memory_order_relaxed);
     rt64_jfg_shadow_size.store(std::clamp(s.shadow_size.load(), 128, 2048), std::memory_order_relaxed);
-    rt64_jfg_level_ambient.store(std::clamp(s.level_ambient.load(), 0, 199) / 100.0f, std::memory_order_relaxed);
+    rt64_jfg_level_ambient.store(active ? std::clamp(s.level_ambient.load(), 0, 199) / 100.0f : 1.0f, std::memory_order_relaxed);
     if (s.log.load()) log_object_lights();
     send_level_vertices();
     // Every candidate light (id = its slot's address, so RT64 can match it with the last frame's for interpolation),
