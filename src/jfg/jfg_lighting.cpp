@@ -25,7 +25,9 @@
 #include <cstdio>
 #include <mutex>
 #include <cstdlib>
+#include <cstring>
 #include <unordered_set>
+#include <vector>
 
 #include "jfg_game.h"
 #include "jfg_hooks.h"
@@ -152,29 +154,44 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     rt64_jfg_debug_world.store(s.debug_world.load() ? 1 : 0, std::memory_order_relaxed);
     if (s.log.load()) log_object_lights();
     send_level_vertices();
-    float data[MAX_FRAME_LIGHTS * 8];
-    uint32_t count = 0;
-    const uint32_t max_lights = (uint32_t)std::clamp(s.max_lights.load(), 0, (int)MAX_FRAME_LIGHTS);
+    // Every candidate light (id = its slot's address, so RT64 can match it with the last frame's for interpolation),
+    // then the nearest to the camera up to the limit.
+    struct Light {
+        float d[9];
+        float dist2;
+        bool level;
+    };
+    static std::vector<Light> found;
+    found.clear();
+    const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
+    const float cx = rdf(cam + 0x0C), cy = rdf(cam + 0x10), cz = rdf(cam + 0x14);
+    auto add = [&](uint32_t id, float x, float y, float z, float radius, float inner, const float* colour, bool level) {
+        Light light;
+        light.d[0] = x;
+        light.d[1] = y;
+        light.d[2] = z;
+        light.d[3] = radius;
+        light.d[4] = inner;
+        for (uint32_t c = 0; c < 3; c++) light.d[5 + c] = colour[c];
+        std::memcpy(&light.d[8], &id, 4);
+        light.dist2 = (x - cx) * (x - cx) + (y - cy) * (y - cy) + (z - cz) * (z - cz);
+        light.level = level;
+        found.push_back(light);
+    };
+
     const float level_strength = s.level_strength.load() / 100.0f;
     const uint32_t lights = rd32(ADDR_trackLights);
     const int32_t slots = (int32_t)rd32(ADDR_trackLightSlots);
-    if (valid_ptr(lights)) {
-        for (int32_t i = 0; i < slots && count < max_lights; i++) {
-            const uint32_t l = lights + (uint32_t)i * TRACK_LIGHT_SIZE;
-            const float radius = rdf(l + TRACK_LIGHT_RADIUS);
-            if (radius <= 0.0f) continue;
-            float* d = &data[count++ * 8];
-            d[0] = rdf(l + TRACK_LIGHT_X);
-            d[1] = rdf(l + TRACK_LIGHT_X + 4);
-            d[2] = rdf(l + TRACK_LIGHT_X + 8);
-            d[3] = radius;
-            d[4] = rdf(l + TRACK_LIGHT_INNER);
-            for (uint32_t c = 0; c < 3; c++) {
-                d[5 + c] = rd8(l + TRACK_LIGHT_FULL_COLOUR + c) / 255.0f * level_strength;
-            }
-        }
+    for (int32_t i = 0; valid_ptr(lights) && i < slots; i++) {
+        const uint32_t l = lights + (uint32_t)i * TRACK_LIGHT_SIZE;
+        const float radius = rdf(l + TRACK_LIGHT_RADIUS);
+        if (radius <= 0.0f) continue;
+        float colour[3];
+        for (uint32_t c = 0; c < 3; c++) colour[c] = rd8(l + TRACK_LIGHT_FULL_COLOUR + c) / 255.0f * level_strength;
+        add(l, rdf(l + TRACK_LIGHT_X), rdf(l + TRACK_LIGHT_X + 4), rdf(l + TRACK_LIGHT_X + 8), radius,
+            rdf(l + TRACK_LIGHT_INNER), colour, true);
     }
-    const uint32_t level_lights = count;
+
     // Mode 2: the object-only lights as well, sized as the game sizes a track light from an object light
     // (func_80020D84_21984: radius x 1.25, inner radius x 0.3, colour x intensity / 256); the radius scale and the
     // strength are settings.
@@ -182,25 +199,35 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     const float object_radius = s.object_radius.load() / 100.0f;
     const uint32_t objects = rd32(ADDR_activeLights);
     const int32_t object_count = (int32_t)rd32(ADDR_activeLightCount);
-    for (int32_t i = 0; mode >= 2 && valid_ptr(objects) && i < object_count && count < max_lights; i++) {
+    for (int32_t i = 0; mode >= 2 && valid_ptr(objects) && i < object_count; i++) {
         const uint32_t l = rd32(objects + (uint32_t)i * 4);
         if (!valid_ptr(l) || !(rd8(l + OBJ_LIGHT_TYPE) & 0x40)) continue;
         const uint32_t intensity = rd8(l + OBJ_LIGHT_COLOUR + 3);
         const float radius = rdf(l + OBJ_LIGHT_RADIUS);
         if (intensity == 0 || radius <= 0.0f) continue;
-        float* d = &data[count++ * 8];
-        d[0] = rdf(l + OBJ_LIGHT_POS);
-        d[1] = rdf(l + OBJ_LIGHT_POS + 4);
-        d[2] = rdf(l + OBJ_LIGHT_POS + 8);
-        d[3] = radius * object_radius;
-        d[4] = radius * 0.3f;
+        float colour[3];
         for (uint32_t c = 0; c < 3; c++) {
-            d[5 + c] = (float)((rd8(l + OBJ_LIGHT_COLOUR + c) * intensity) >> 8) / 255.0f * object_strength;
+            colour[c] = (float)((rd8(l + OBJ_LIGHT_COLOUR + c) * intensity) >> 8) / 255.0f * object_strength;
         }
+        add(l, rdf(l + OBJ_LIGHT_POS), rdf(l + OBJ_LIGHT_POS + 4), rdf(l + OBJ_LIGHT_POS + 8), radius * object_radius,
+            radius * 0.3f, colour, false);
     }
-    s.sent_level_lights = (int)level_lights;
-    s.sent_object_lights = (int)(count - level_lights);
-    rt64_jfg_frame_lights((uint32_t)ctx->r4 & RDRAM_MASK, data, count);
+
+    const size_t max_lights = (size_t)std::clamp(s.max_lights.load(), 0, (int)MAX_FRAME_LIGHTS);
+    if (found.size() > max_lights) {
+        std::partial_sort(found.begin(), found.begin() + max_lights, found.end(),
+                          [](const Light& a, const Light& b) { return a.dist2 < b.dist2; });
+        found.resize(max_lights);
+    }
+    float data[MAX_FRAME_LIGHTS * 9];
+    int level_lights = 0;
+    for (size_t i = 0; i < found.size(); i++) {
+        std::memcpy(&data[i * 9], found[i].d, sizeof(found[i].d));
+        level_lights += found[i].level ? 1 : 0;
+    }
+    s.sent_level_lights = level_lights;
+    s.sent_object_lights = (int)found.size() - level_lights;
+    rt64_jfg_frame_lights((uint32_t)ctx->r4 & RDRAM_MASK, data, (uint32_t)found.size());
 }
 
 // Entry of trackLightAsm(track, light, visible). Returns non-zero to skip it.
