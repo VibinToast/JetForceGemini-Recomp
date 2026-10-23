@@ -159,6 +159,21 @@ void apply_no_lod(recomp_context* ctx); // "Disable LOD", "Draw distant objects"
 void fov_refresh();                     // before the scene is drawn
 std::string depth_fog_status();         // the F9 menu's depth fog status line
 
+// --- jfg_lighting.cpp --------------------------------------------------------------------------------------------
+// Modern lighting, in progress (JFG-125): the F9 Lighting tab edits these live; they start from the JFG_* test switches.
+struct LightingSettings {
+    std::atomic<int> mode{ 0 };              // 0 off, 1 the game's level lights per pixel, 2 also torches and lamps
+    std::atomic<int> level_strength{ 100 };  // % of the game's level lights (shots, flashes)
+    std::atomic<int> object_strength{ 35 };  // % of the torch and lamp lights on the level (mode 2)
+    std::atomic<int> object_radius{ 125 };   // % of a torch or lamp light's radius (the game's own conversion: 125)
+    std::atomic<int> max_lights{ 32 };       // lights sent per frame (RT64 takes at most 32)
+    std::atomic<bool> no_game_lighting{ false }; // skip the game's per-vertex level lighting without replacing it
+    std::atomic<bool> debug_world{ false };  // show the world position as colour
+    std::atomic<bool> log{ false };          // jfg_lighting.log
+    std::atomic<int> sent_level_lights{ 0 }, sent_object_lights{ 0 }; // what the last frame sent
+};
+LightingSettings& lighting_settings();
+
 // --- jfg_weapons.cpp ---------------------------------------------------------------------------------------------
 extern bool g_weapon_orig_read;            // the weapon table's original values have been read
 extern std::recursive_mutex g_weapon_mutex; // UI thread edits, game thread applies

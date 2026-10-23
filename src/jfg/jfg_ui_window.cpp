@@ -384,6 +384,54 @@ void draw_warp() {
                         "AlphaSewer = Sekhmet, ...). Entries ending in Seq are cutscenes. Use from inside a game.");
 }
 
+// Lighting tab: modern lighting, in progress (jfg_lighting.cpp). Changes apply at once; nothing is saved.
+static void draw_lighting() {
+    LightingSettings& s = lighting_settings();
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, ImGui::GetFontSize() * 0.55f));
+    ImGui::TextDisabled("Work in progress (JFG-125). Changes apply at once and are not saved.");
+
+    options_section("Per-pixel lighting");
+    static const char* const modes[] = { "Off (the game's own lighting)", "The game's level lights per pixel",
+                                         "Also torches and lamps on the level" };
+    int mode = s.mode.load();
+    ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+    if (ImGui::Combo("Mode", &mode, modes, IM_ARRAYSIZE(modes))) s.mode = mode;
+    options_help("The game lights its levels by brightening vertices near each light, which smears the light over whole "
+                 "triangles. Per pixel, the same lights make smooth pools. The game only does this for shots, flashes and "
+                 "the like; torches and lamps light characters and objects only, and their glow on the walls is painted "
+                 "into the level. The third mode lets them light the level too, which the original never does.");
+    int value = s.level_strength.load();
+    if (options_slider("Level lights (%)", &value, 0, 200)) s.level_strength = value;
+    options_help("Shots, flashes and other lights the game puts on the level. 100 is the original brightness.");
+    ImGui::BeginDisabled(mode < 2);
+    value = s.object_strength.load();
+    if (options_slider("Torches and lamps (%)", &value, 0, 200)) s.object_strength = value;
+    options_help("How strongly torches and lamps light the level. Their glow is already painted into the walls, so high "
+                 "values light them twice.");
+    value = s.object_radius.load();
+    if (options_slider("Torch and lamp reach (%)", &value, 25, 400)) s.object_radius = value;
+    options_help("How far their light reaches, as a share of the light's own radius. 125 is what the game uses when it "
+                 "turns one of its object lights into a level light.");
+    ImGui::EndDisabled();
+    value = s.max_lights.load();
+    if (options_slider("Most lights per frame", &value, 0, 32)) s.max_lights = value;
+    ImGui::TextDisabled("Last frame: %d level lights, %d torches and lamps", s.sent_level_lights.load(),
+                        s.sent_object_lights.load());
+
+    options_section("Debug");
+    bool flag = s.no_game_lighting.load();
+    if (ImGui::Checkbox("Game's per-vertex level lighting off", &flag)) s.no_game_lighting = flag;
+    options_help("Leaves the levels with only their painted-in colours, without adding anything per pixel either (unless a "
+                 "mode is on).");
+    flag = s.debug_world.load();
+    if (ImGui::Checkbox("Show world position", &flag)) s.debug_world = flag;
+    options_help("Colours every 3D surface by where it is in the world, repeating every 256 units; magenta has no position "
+                 "(the HUD, rectangles).");
+    flag = s.log.load();
+    if (ImGui::Checkbox("Log lights to jfg_lighting.log", &flag)) s.log = flag;
+    ImGui::PopStyleVar();
+}
+
 // F9: the original all-in-one window (jfg_debug_frame, while the debug UI is open without the toolbar).
 void draw_debug_window(recomp_context* ctx) {
     ImGui::GetIO().FontGlobalScale = 1.0f; // the toolbar scales globally; this window scales itself
@@ -398,6 +446,7 @@ void draw_debug_window(recomp_context* ctx) {
             if (ImGui::BeginTabItem("Profiles")) { draw_profiles(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Cheats")) { draw_cheats(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Options")) { draw_options(); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Lighting")) { draw_lighting(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Level warp")) { draw_warp(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Weapons")) { draw_weapons(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Items")) {

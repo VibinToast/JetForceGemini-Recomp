@@ -19,17 +19,22 @@
 // them for its lighting); RT64 marks the draws that load vertices from there and adds the lights to them per pixel in
 // RasterPS, and trackLightAsm is skipped so the light isn't added twice. Characters and objects keep the game's own
 // lighting.
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdio>
+#include <mutex>
 #include <cstdlib>
 #include <unordered_set>
 
 #include "jfg_game.h"
 #include "jfg_hooks.h"
+#include "jfg_port.h"
 
 void rt64_jfg_frame_lights(uint32_t dlStart, const float* data, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
 void rt64_jfg_level_vertices(const uint32_t* ranges, uint32_t count);            // lib/rt64 src/hle/rt64_rsp.cpp
 extern std::atomic<int> rt64_jfg_pixel_lights; // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
+extern std::atomic<int> rt64_jfg_debug_world;  // ...
 
 namespace jfg {
 
@@ -68,21 +73,24 @@ static void log_light(uint32_t light) {
     jfg_log_line("jfg_lighting.log", line);
 }
 
-// JFG_PIXEL_LIGHTS: 1 = the game's level lights per pixel; 2 = also the lights the game only uses on characters and
-// objects (type 0x40: torches, lamps), which then light the level too (beyond the original game).
-static int pixel_lights_mode() {
-    static const char* env = std::getenv("JFG_PIXEL_LIGHTS");
-    return env ? std::atoi(env) : 0;
-}
-
-static bool pixel_lights() { return pixel_lights_mode() > 0; }
-
-// How strongly the object-only lights light the level in mode 2 (JFG_PIXEL_LIGHTS_STRENGTH, 0-1): the level already has
-// their glow baked into its colours, so at full strength they light it twice.
-static float object_light_strength() {
-    static const char* env = std::getenv("JFG_PIXEL_LIGHTS_STRENGTH");
-    static const float strength = env ? (float)std::atof(env) : 0.35f;
-    return strength;
+// The settings start from the test switches: JFG_PIXEL_LIGHTS (mode: 1 = the game's level lights per pixel; 2 = also
+// the lights the game only uses on characters and objects, type 0x40: torches, lamps, which then light the level too,
+// beyond the original game), JFG_PIXEL_LIGHTS_STRENGTH (0-1, the torches and lamps: the level already has their glow
+// baked into its colours, so at full strength they light it twice), JFG_NO_TRACK_LIGHTS, RT64_JFG_DEBUG_WORLD,
+// JFG_DEBUG_LIGHTS.
+LightingSettings& lighting_settings() {
+    static LightingSettings settings;
+    static std::once_flag once;
+    std::call_once(once, [] {
+        if (const char* env = std::getenv("JFG_PIXEL_LIGHTS")) settings.mode = std::clamp(std::atoi(env), 0, 2);
+        if (const char* env = std::getenv("JFG_PIXEL_LIGHTS_STRENGTH")) {
+            settings.object_strength = std::clamp((int)std::lround(std::atof(env) * 100.0), 0, 200);
+        }
+        settings.no_game_lighting = std::getenv("JFG_NO_TRACK_LIGHTS") != nullptr;
+        settings.debug_world = std::getenv("RT64_JFG_DEBUG_WORLD") != nullptr;
+        settings.log = std::getenv("JFG_DEBUG_LIGHTS") != nullptr;
+    });
+    return settings;
 }
 
 // The level's vertex arrays as physical [start, end) pairs, as RT64 sees vertex loads.
@@ -138,16 +146,20 @@ static void log_object_lights() {
 extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     if ((uint32_t)ctx->r6 != 0) return; // side tasks (clone, refraction, blur) are not frames
-    rt64_jfg_pixel_lights.store(pixel_lights() ? 1 : 0, std::memory_order_relaxed);
-    static const bool log = std::getenv("JFG_DEBUG_LIGHTS") != nullptr;
-    if (log) log_object_lights();
+    LightingSettings& s = lighting_settings();
+    const int mode = s.mode.load();
+    rt64_jfg_pixel_lights.store(mode > 0 ? 1 : 0, std::memory_order_relaxed);
+    rt64_jfg_debug_world.store(s.debug_world.load() ? 1 : 0, std::memory_order_relaxed);
+    if (s.log.load()) log_object_lights();
     send_level_vertices();
     float data[MAX_FRAME_LIGHTS * 8];
     uint32_t count = 0;
+    const uint32_t max_lights = (uint32_t)std::clamp(s.max_lights.load(), 0, (int)MAX_FRAME_LIGHTS);
+    const float level_strength = s.level_strength.load() / 100.0f;
     const uint32_t lights = rd32(ADDR_trackLights);
     const int32_t slots = (int32_t)rd32(ADDR_trackLightSlots);
     if (valid_ptr(lights)) {
-        for (int32_t i = 0; i < slots && count < MAX_FRAME_LIGHTS; i++) {
+        for (int32_t i = 0; i < slots && count < max_lights; i++) {
             const uint32_t l = lights + (uint32_t)i * TRACK_LIGHT_SIZE;
             const float radius = rdf(l + TRACK_LIGHT_RADIUS);
             if (radius <= 0.0f) continue;
@@ -157,14 +169,20 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
             d[2] = rdf(l + TRACK_LIGHT_X + 8);
             d[3] = radius;
             d[4] = rdf(l + TRACK_LIGHT_INNER);
-            for (uint32_t c = 0; c < 3; c++) d[5 + c] = rd8(l + TRACK_LIGHT_FULL_COLOUR + c) / 255.0f;
+            for (uint32_t c = 0; c < 3; c++) {
+                d[5 + c] = rd8(l + TRACK_LIGHT_FULL_COLOUR + c) / 255.0f * level_strength;
+            }
         }
     }
+    const uint32_t level_lights = count;
     // Mode 2: the object-only lights as well, sized as the game sizes a track light from an object light
-    // (func_80020D84_21984: radius x 1.25, inner radius x 0.3, colour x intensity / 256).
+    // (func_80020D84_21984: radius x 1.25, inner radius x 0.3, colour x intensity / 256); the radius scale and the
+    // strength are settings.
+    const float object_strength = s.object_strength.load() / 100.0f;
+    const float object_radius = s.object_radius.load() / 100.0f;
     const uint32_t objects = rd32(ADDR_activeLights);
     const int32_t object_count = (int32_t)rd32(ADDR_activeLightCount);
-    for (int32_t i = 0; pixel_lights_mode() >= 2 && valid_ptr(objects) && i < object_count && count < MAX_FRAME_LIGHTS; i++) {
+    for (int32_t i = 0; mode >= 2 && valid_ptr(objects) && i < object_count && count < max_lights; i++) {
         const uint32_t l = rd32(objects + (uint32_t)i * 4);
         if (!valid_ptr(l) || !(rd8(l + OBJ_LIGHT_TYPE) & 0x40)) continue;
         const uint32_t intensity = rd8(l + OBJ_LIGHT_COLOUR + 3);
@@ -174,22 +192,23 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
         d[0] = rdf(l + OBJ_LIGHT_POS);
         d[1] = rdf(l + OBJ_LIGHT_POS + 4);
         d[2] = rdf(l + OBJ_LIGHT_POS + 8);
-        d[3] = radius * 1.25f;
+        d[3] = radius * object_radius;
         d[4] = radius * 0.3f;
         for (uint32_t c = 0; c < 3; c++) {
-            d[5 + c] = (float)((rd8(l + OBJ_LIGHT_COLOUR + c) * intensity) >> 8) / 255.0f * object_light_strength();
+            d[5 + c] = (float)((rd8(l + OBJ_LIGHT_COLOUR + c) * intensity) >> 8) / 255.0f * object_strength;
         }
     }
+    s.sent_level_lights = (int)level_lights;
+    s.sent_object_lights = (int)(count - level_lights);
     rt64_jfg_frame_lights((uint32_t)ctx->r4 & RDRAM_MASK, data, count);
 }
 
 // Entry of trackLightAsm(track, light, visible). Returns non-zero to skip it.
 extern "C" int jfg_track_light(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    static const bool log = std::getenv("JFG_DEBUG_LIGHTS") != nullptr;
-    static const bool skip = std::getenv("JFG_NO_TRACK_LIGHTS") != nullptr;
-    if (log) log_light((uint32_t)ctx->r5);
-    return (skip || pixel_lights()) ? 1 : 0;
+    const LightingSettings& s = lighting_settings();
+    if (s.log.load()) log_light((uint32_t)ctx->r5);
+    return (s.no_game_lighting.load() || s.mode.load() > 0) ? 1 : 0;
 }
 
 } // namespace jfg
