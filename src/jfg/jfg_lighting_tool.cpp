@@ -11,6 +11,9 @@
 //                level, all of them or only some groups (say the directional light and the surfaces)
 //   level lights the game's own torches and lamps (its object lights), found again by where they stand: switched off,
 //                recoloured, brighter or dimmer, larger or smaller, flickering; saved with the level
+//   glow         the level's textures that give off their own light (lamps, screens and windows painted into them):
+//                aimed at with the crosshair (or picked by number) and marked, saved with the level; they keep their
+//                own colours however dark the level is set (RT64: rt64_jfg_glow_ranges)
 // Changes apply at once and are saved a moment later. Game thread only: the tool is drawn from jfg_debug_frame's UI
 // frame, its tick runs every game tick, and the lighting reads the lights at rcpFast3d, all on the game thread.
 #include <algorithm>
@@ -31,6 +34,7 @@
 
 extern std::atomic<int> rt64_jfg_material_files;  // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 extern std::atomic<int> rt64_jfg_material_loaded;  // ...
+void rt64_jfg_glow_ranges(const uint32_t* ranges, uint32_t count); // lib/rt64 src/hle/rt64_state.cpp
 
 namespace dino::debug_ui::backend {
 bool lighting_tool_open();           // F12
@@ -40,6 +44,8 @@ void set_lighting_tool_open(bool open);
 }
 
 namespace jfg {
+
+void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
 
 namespace {
 // The lighting files' folder: lighting/ next to the game, or JFG_LIGHTING_DIR (test runs on a copy).
@@ -53,6 +59,21 @@ constexpr uint32_t ADDR_activeLights = 0x800A1008, ADDR_activeLightCount = 0x800
 constexpr uint32_t OBJ_LIGHT_TYPE = 0x03, OBJ_LIGHT_POS = 0x18, OBJ_LIGHT_RADIUS = 0x24, OBJ_LIGHT_COLOUR = 0x40;
 constexpr uint16_t Z_BUTTON = 0x2000;                  // fire
 constexpr float SAME_LIGHT = 2.0f;                     // a game light this close to an override's place is that one
+// The level (src/track.c, see jfg_lighting.cpp): Track: texture entry* textures (+0x00, 8 bytes each: texture header*),
+// segments (+0x04), texture count (s16 +0x18), segment count (s16 +0x1A). Segment (0x48 bytes): Vertex* (+0x00, 10
+// bytes each, s16 x, y, z), Triangle* (+0x04, 16 bytes each: vertex indices at +1..+3, from the batch's first vertex),
+// batches (+0x0C, 16 bytes each: texture index u8 +0x00, 0xFF = none; first vertex s16 +0x06; first triangle s16
+// +0x08, the next batch's ends it), vertex count (s16 +0x24), batch count (s16 +0x28). texture header: u8 width,
+// height (+0x00, +0x01), u16 frames x 256 (+0x12, animated textures: the frames follow each other), s16 size of one
+// frame with its header (+0x16).
+constexpr uint32_t ADDR_track = 0x800A0D60;
+constexpr uint32_t TRACK_TEXTURES = 0x00, TRACK_SEGMENTS = 0x04, TRACK_TEXTURE_COUNT = 0x18, TRACK_SEGMENT_COUNT = 0x1A;
+constexpr uint32_t SEGMENT_SIZE = 0x48, SEGMENT_VERTICES = 0x00, SEGMENT_TRIANGLES = 0x04, SEGMENT_BATCHES = 0x0C;
+constexpr uint32_t SEGMENT_VERTEX_COUNT = 0x24, SEGMENT_BATCH_COUNT = 0x28, VERTEX_SIZE = 10;
+constexpr uint32_t BATCH_SIZE = 0x10, BATCH_FIRST_VERTEX = 0x06, BATCH_FIRST_TRIANGLE = 0x08, TRIANGLE_SIZE = 0x10;
+constexpr uint32_t TEXTURE_FRAMES = 0x12, TEXTURE_SIZE = 0x16;
+constexpr uint32_t RDRAM_MASK = 0x007FFFFF;
+constexpr float AIM_REACH = 4000.0f;
 
 // --- settings -----------------------------------------------------------------------------------------------------
 enum class Group { Lights, Shadows, Sun, Surfaces, Characters, Debug };
@@ -120,6 +141,9 @@ std::vector<Setting>& settings_table() {
           "Authored normal and specular maps: materials/<texture hash>_n.png (normal, green up) and _s.png (red: shine, "
           "green: sharpness) next to the game, named like texture dumps. Where a texture has them they replace the "
           "detail and shine worked out from it. Read at start." },
+        { "glow", "Glowing textures (%)", &s.glow, nullptr, 0, 100, Group::Surfaces, false,
+          "How much the marked textures (and specular maps' blue) keep their own colours however dark the level is. 0 "
+          "is off." },
         { "detail_characters", "Detail on characters (%)", &s.detail_characters, nullptr, 0, 200, Group::Surfaces, false,
           "How much of the surface detail characters and objects get. Their textures are mostly painted features (faces, "
           "clothes), which don't make good bumps; carved objects do." },
@@ -174,10 +198,23 @@ std::string g_message;
 uint32_t g_message_tick = 0;
 bool g_confirm_clear = false;
 bool g_confirm_reset = false;  // asking before Reset
+// Glowing textures: the level's texture (its number in the level's list) and how much it glows (%).
+struct GlowMark {
+    int texture = 0;
+    int strength = 100;
+};
+std::vector<GlowMark> g_glow;
+float g_ray_from[3] = { 0, 0, 0 }, g_ray_dir[3] = { 0, 0, 1 };
+uint32_t g_ray_tick = 0;
+int g_aimed_texture = -1;      // the level texture under the crosshair (-1: none, or untextured)
+uint32_t g_glow_tab_tick = 0;  // the Glow tab was showing
+bool g_glow_preview = true;    // the texture under the crosshair pulses
+int g_glow_pick = 0;           // texture number typed in
+bool g_open_glow_tab = false;  // test switch: show the Glow tab once
 
 bool use_files() { return std::getenv("JFG_LIGHTING_NO_FILES") == nullptr; }
 // Test switch: JFG_LIGHTING_TOOL=open opens the tool at start, =place with "place with fire" on (JFG_DEBUG_INPUT can
-// then fire), =mouse with the mouse and keyboard on the tool.
+// then fire), =mouse with the mouse and keyboard on the tool, =glow on the Glow tab.
 void test_switch() {
     static bool done = false;
     if (done) return;
@@ -185,6 +222,7 @@ void test_switch() {
     if (const char* env = std::getenv("JFG_LIGHTING_TOOL")) {
         dino::debug_ui::backend::set_lighting_tool_open(true);
         g_placing = std::strcmp(env, "place") == 0;
+        g_open_glow_tab = std::strcmp(env, "glow") == 0;
         dino::debug_ui::backend::set_lighting_tool_playing(std::strcmp(env, "mouse") != 0);
     }
 }
@@ -249,6 +287,13 @@ void read_file(const std::filesystem::path& path, bool level_file, bool settings
                 g_placed.push_back(p);
             }
         }
+        else if (level_file && lights && std::strncmp(key, "glow.", 5) == 0) {
+            GlowMark m;
+            if (std::sscanf(value, "%d,%d", &m.texture, &m.strength) >= 1) {
+                m.strength = std::clamp(m.strength, 0, 100);
+                g_glow.push_back(m);
+            }
+        }
         else if (level_file && lights && std::strncmp(key, "override.", 9) == 0) {
             LightOverride o;
             int on = 1, recolour = 0, shadows = 1;
@@ -267,7 +312,7 @@ void read_file(const std::filesystem::path& path, bool level_file, bool settings
 void save_level() {
     if (!use_files() || g_level < 0) return;
     std::error_code ec;
-    if (!g_level_own && g_placed.empty() && g_overrides.empty()) {
+    if (!g_level_own && g_placed.empty() && g_overrides.empty() && g_glow.empty()) {
         std::filesystem::remove(level_path(g_level), ec); // nothing of its own left
         return;
     }
@@ -286,6 +331,7 @@ void save_level() {
             std::fprintf(f, "override.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, o.x, o.y, o.z, o.on ? 1 : 0,
                          o.recolour ? 1 : 0, o.r, o.g, o.b, o.intensity, o.radius, o.flicker, o.flicker_speed, o.shadows ? 1 : 0, o.nth);
         }
+        for (size_t i = 0; i < g_glow.size(); i++) std::fprintf(f, "glow.%zu=%d,%d\n", i, g_glow[i].texture, g_glow[i].strength);
         std::fclose(f);
     }
 }
@@ -303,6 +349,8 @@ void load_level(int level) {
     g_level_own = false;
     g_placed.clear();
     g_overrides.clear();
+    g_glow.clear();
+    g_aimed_texture = -1;
     g_selected = -1;
     g_selected_game = 0;
     g_confirm_reset = false; // a pending Reset was about the level before
@@ -421,6 +469,7 @@ void draw_group(Group group) {
     for (const Setting& t : settings_table()) {
         if (t.group != group) continue;
         if (group == Group::Sun && (std::strcmp(t.key, "sun_g") == 0 || std::strcmp(t.key, "sun_b") == 0)) continue;
+        if (std::strcmp(t.key, "glow") == 0) continue; // the Glow tab's
         if (group == Group::Sun && std::strcmp(t.key, "sun_r") == 0) {
             LightingSettings& s = lighting_settings();
             float c[3] = { s.sun_r.load() / 255.0f, s.sun_g.load() / 255.0f, s.sun_b.load() / 255.0f };
@@ -620,6 +669,184 @@ void draw_level_lights() {
         touched_level();
     }
 }
+// --- glowing textures --------------------------------------------------------------------------------------------
+int level_texture_count() {
+    const uint32_t track = rd32(ADDR_track);
+    return valid_ptr(track) ? std::max(0, (int)(int16_t)rd16(track + TRACK_TEXTURE_COUNT)) : 0;
+}
+
+uint32_t level_texture(int index) {
+    if (index < 0 || index >= level_texture_count()) return 0;
+    const uint32_t list = rd32(rd32(ADDR_track) + TRACK_TEXTURES);
+    if (!valid_ptr(list)) return 0;
+    const uint32_t header = rd32(list + (uint32_t)index * 8);
+    return valid_ptr(header) ? header : 0;
+}
+
+// The memory a level texture loads from: all its frames.
+bool level_texture_range(int index, uint32_t* start, uint32_t* end) {
+    const uint32_t header = level_texture(index);
+    if (header == 0) return false;
+    const uint32_t size = rd16(header + TEXTURE_SIZE);
+    const uint32_t frames = std::clamp((uint32_t)(rd16(header + TEXTURE_FRAMES) >> 8), 1u, 64u);
+    if (size == 0) return false;
+    *start = header & RDRAM_MASK;
+    *end = *start + size * frames;
+    return true;
+}
+
+// The level texture the crosshair is on: the nearest level triangle the camera's ray crosses (both sides), -1 when it
+// is untextured or there is none.
+int texture_on_ray(const float* from, const float* dir) {
+    const uint32_t track = rd32(ADDR_track);
+    if (!valid_ptr(track)) return -1;
+    const uint32_t segments = rd32(track + TRACK_SEGMENTS);
+    const int32_t segment_count = std::min((int32_t)(int16_t)rd16(track + TRACK_SEGMENT_COUNT), (int32_t)1024);
+    if (!valid_ptr(segments)) return -1;
+    float nearest = AIM_REACH;
+    int texture = -1;
+    for (int32_t i = 0; i < segment_count; i++) {
+        const uint32_t seg = segments + (uint32_t)i * SEGMENT_SIZE;
+        const uint32_t verts = rd32(seg + SEGMENT_VERTICES), tris = rd32(seg + SEGMENT_TRIANGLES), batches = rd32(seg + SEGMENT_BATCHES);
+        const int32_t vertex_count = (int16_t)rd16(seg + SEGMENT_VERTEX_COUNT);
+        const int32_t batch_count = (int16_t)rd16(seg + SEGMENT_BATCH_COUNT);
+        if (!valid_ptr(verts) || !valid_ptr(tris) || !valid_ptr(batches)) continue;
+        for (int32_t b = 0; b < batch_count && b < 4096; b++) {
+            const uint32_t batch = batches + (uint32_t)b * BATCH_SIZE;
+            const int32_t first_vertex = (int16_t)rd16(batch + BATCH_FIRST_VERTEX);
+            const int32_t t0 = (int16_t)rd16(batch + BATCH_FIRST_TRIANGLE);
+            const int32_t t1 = (int16_t)rd16(batch + BATCH_SIZE + BATCH_FIRST_TRIANGLE);
+            const uint8_t batch_texture = rd8(batch);
+            for (int32_t t = t0; t < t1 && t - t0 < 4096; t++) {
+                const uint32_t tri = tris + (uint32_t)t * TRIANGLE_SIZE;
+                float v[3][3];
+                bool ok = true;
+                for (uint32_t k = 0; k < 3 && ok; k++) {
+                    const int32_t index = first_vertex + rd8(tri + 1 + k);
+                    if (index < 0 || index >= vertex_count) ok = false;
+                    else for (uint32_t c = 0; c < 3; c++) v[k][c] = (float)(int16_t)rd16(verts + (uint32_t)index * VERTEX_SIZE + c * 2);
+                }
+                if (!ok) continue;
+                // Moller-Trumbore.
+                const float e1[3] = { v[1][0] - v[0][0], v[1][1] - v[0][1], v[1][2] - v[0][2] };
+                const float e2[3] = { v[2][0] - v[0][0], v[2][1] - v[0][1], v[2][2] - v[0][2] };
+                const float p[3] = { dir[1] * e2[2] - dir[2] * e2[1], dir[2] * e2[0] - dir[0] * e2[2], dir[0] * e2[1] - dir[1] * e2[0] };
+                const float det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+                if (std::fabs(det) < 1e-6f) continue;
+                const float inv = 1.0f / det;
+                const float s[3] = { from[0] - v[0][0], from[1] - v[0][1], from[2] - v[0][2] };
+                const float u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) * inv;
+                if (u < 0.0f || u > 1.0f) continue;
+                const float q[3] = { s[1] * e1[2] - s[2] * e1[1], s[2] * e1[0] - s[0] * e1[2], s[0] * e1[1] - s[1] * e1[0] };
+                const float w = (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]) * inv;
+                if (w < 0.0f || u + w > 1.0f) continue;
+                const float d = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) * inv;
+                if (d > 1.0f && d < nearest) {
+                    nearest = d;
+                    texture = (batch_texture == 0xFF) ? -1 : batch_texture;
+                }
+            }
+        }
+    }
+    return texture;
+}
+
+GlowMark* glow_mark(int texture) {
+    for (GlowMark& m : g_glow) {
+        if (m.texture == texture) return &m;
+    }
+    return nullptr;
+}
+
+void mark_glow(int texture) {
+    if (texture < 0 || texture >= level_texture_count()) {
+        say("No level texture to mark there.");
+        return;
+    }
+    if (glow_mark(texture)) {
+        say("Texture " + std::to_string(texture) + " already glows.");
+        return;
+    }
+    g_glow.push_back({ texture, 100 });
+    touched_level();
+    say("Texture " + std::to_string(texture) + " now glows.");
+}
+
+// The marked textures' memory (and the one under the crosshair, pulsing, while the Glow tab shows) to RT64, when it
+// changes.
+void send_glow() {
+    static std::vector<uint32_t> sent;
+    std::vector<uint32_t> ranges;
+    auto add = [&](int texture, int strength) {
+        uint32_t start, end;
+        if (strength <= 0 || !level_texture_range(texture, &start, &end)) return;
+        ranges.push_back(start);
+        ranges.push_back(end);
+        ranges.push_back((uint32_t)std::clamp(strength * 255 / 100, 1, 255));
+    };
+    for (const GlowMark& m : g_glow) add(m.texture, m.strength);
+    const bool tab = dino::debug_ui::backend::lighting_tool_open() && g_tick_count - g_glow_tab_tick <= 3;
+    if (tab && g_glow_preview && g_aimed_texture >= 0 && !glow_mark(g_aimed_texture)) {
+        add(g_aimed_texture, 40 + (int)(60.0f * (0.5f + 0.5f * std::sin(g_tick_count * 0.2f))));
+    }
+    if (ranges == sent) return;
+    sent = ranges;
+    rt64_jfg_glow_ranges(ranges.data(), (uint32_t)(ranges.size() / 3));
+}
+
+void draw_crosshair(bool on_something);
+
+void draw_glow() {
+    g_glow_tab_tick = g_tick_count;
+    for (const Setting& t : settings_table()) {
+        if (std::strcmp(t.key, "glow") == 0) draw_setting(t);
+    }
+    ImGui::TextWrapped("Textures with lamps, screens or windows painted into them can glow: they keep their own colours "
+                       "however dark the level is set, and shadows don't fall on them. Point the crosshair at one (it "
+                       "pulses to show which) and mark it. Every place the level uses that texture glows. Kept for this "
+                       "level.");
+    if (!lighting_active()) ImGui::TextColored(ImVec4(1, 0.7f, 0.3f, 1), "Modern lighting is off: nothing glows.");
+    ImGui::Checkbox("Pulse the texture under the crosshair", &g_glow_preview);
+    draw_crosshair(g_aimed_texture >= 0);
+    if (g_aimed_texture >= 0) {
+        const uint32_t header = level_texture(g_aimed_texture);
+        ImGui::Text("Crosshair on texture %d (%dx%d)", g_aimed_texture, header ? rd8(header) : 0, header ? rd8(header + 1) : 0);
+    }
+    else ImGui::TextDisabled("Crosshair on no texture of the level (characters and objects can't be marked yet).");
+    ImGui::BeginDisabled(g_aimed_texture < 0 || glow_mark(g_aimed_texture) != nullptr);
+    if (ImGui::Button("Mark the texture under the crosshair")) mark_glow(g_aimed_texture);
+    ImGui::EndDisabled();
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.0f);
+    ImGui::InputInt("##glowpick", &g_glow_pick);
+    g_glow_pick = std::clamp(g_glow_pick, 0, std::max(level_texture_count() - 1, 0));
+    ImGui::SameLine();
+    if (ImGui::Button("Mark texture by number")) mark_glow(g_glow_pick);
+    help("The level's textures by their number in its list (the crosshair line shows it).");
+
+    ImGui::SeparatorText("Glowing textures");
+    if (g_glow.empty()) ImGui::TextDisabled("None on this level yet.");
+    for (size_t i = 0; i < g_glow.size(); i++) {
+        GlowMark& m = g_glow[i];
+        ImGui::PushID((int)i);
+        const uint32_t header = level_texture(m.texture);
+        char label[96];
+        std::snprintf(label, sizeof(label), "Texture %d (%dx%d)", m.texture, header ? rd8(header) : 0, header ? rd8(header + 1) : 0);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+        if (ImGui::SliderInt("Glow (%)", &m.strength, 0, 100)) touched_level();
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Remove")) {
+            g_glow.erase(g_glow.begin() + (ptrdiff_t)i);
+            touched_level();
+            ImGui::PopID();
+            break;
+        }
+        ImGui::PopID();
+    }
+}
+
 // --- presets -----------------------------------------------------------------------------------------------------
 // A preset is the settings of the groups chosen when it was saved (set.<key>=<value> lines, as the level files), in
 // lighting/presets/<name>.txt. Applying it sets the groups chosen then, for the level's own settings or the defaults,
@@ -837,7 +1064,7 @@ namespace {
 // &start, &end, &result, 0x2000, 0), as frontPlayerTarget calls it for the aim: non-zero on a hit, the distance to
 // it at result + 0x20. The vectors live in the gap below $sp that call_game leaves.
 void update_aim(recomp_context* ctx) {
-    constexpr float REACH = 4000.0f;
+    constexpr float REACH = AIM_REACH;
     const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
     const float heading = -angle_from_s16(rd16(cam)), pitch = angle_from_s16(rd16(cam + 2));
     const float dir[3] = { std::sin(heading) * std::cos(pitch), -std::sin(pitch), std::cos(heading) * std::cos(pitch) };
@@ -848,6 +1075,11 @@ void update_aim(recomp_context* ctx) {
         wrf(start + c * 4, from[c]);
         wrf(end + c * 4, from[c] + dir[c] * REACH);
     }
+    for (uint32_t c = 0; c < 3; c++) {
+        g_ray_from[c] = from[c];
+        g_ray_dir[c] = dir[c];
+    }
+    g_ray_tick = g_tick_count;
     for (uint32_t i = 0; i < 0x40; i += 4) wr32(result + i, 0);
     const uint32_t hit = call_game(trackNearestIntersection, ctx, { 0, start, end, result, 0x2000, 0 });
     if (hit == 0) return;
@@ -883,6 +1115,22 @@ void lighting_tool_tick(recomp_context* ctx) {
 
     if (dino::debug_ui::backend::lighting_tool_open() && g_have_player) update_aim(ctx);
 
+    // The texture under the crosshair while the Glow tab shows; JFG_LIGHTING_LOG_AIM: logs it (scripted runs).
+    static const bool log_aim = std::getenv("JFG_LIGHTING_LOG_AIM") != nullptr;
+    const int aimed_before = g_aimed_texture;
+    g_aimed_texture = -1;
+    if ((g_tick_count - g_glow_tab_tick <= 3 || log_aim) && g_ray_tick != 0 && g_tick_count - g_ray_tick <= 3) {
+        g_aimed_texture = texture_on_ray(g_ray_from, g_ray_dir);
+    }
+    if (log_aim && g_aimed_texture != aimed_before) {
+        uint32_t start = 0, end = 0;
+        level_texture_range(g_aimed_texture, &start, &end);
+        char line[160];
+        std::snprintf(line, sizeof(line), "aim: level %d texture %d (%08X-%08X) of %d", g_level, g_aimed_texture, start, end, level_texture_count());
+        jfg_log_line("jfg_lighting.log", line);
+    }
+    send_glow();
+
     // "Place with fire": each shot places the light being made.
     if (dino::debug_ui::backend::lighting_tool_open() && g_placing) {
         if (rd16(ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u)) & Z_BUTTON) place_light();
@@ -890,6 +1138,21 @@ void lighting_tool_tick(recomp_context* ctx) {
 
     if ((g_dirty_default || g_dirty_level) && g_tick_count - g_dirty_tick > 30) flush();
 }
+
+namespace {
+// The crosshair: the middle of the screen, where the ray goes; green on something, orange on nothing.
+void draw_crosshair(bool on_something) {
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    const ImVec2 c(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
+    const float r = std::max(8.0f, ImGui::GetIO().DisplaySize.y / 90.0f);
+    const ImU32 col = on_something ? IM_COL32(120, 255, 140, 230) : IM_COL32(255, 170, 80, 230);
+    dl->AddCircle(c, r, col, 24, 2.0f);
+    dl->AddLine(ImVec2(c.x - r * 1.8f, c.y), ImVec2(c.x - r * 0.5f, c.y), col, 2.0f);
+    dl->AddLine(ImVec2(c.x + r * 0.5f, c.y), ImVec2(c.x + r * 1.8f, c.y), col, 2.0f);
+    dl->AddLine(ImVec2(c.x, c.y - r * 1.8f), ImVec2(c.x, c.y - r * 0.5f), col, 2.0f);
+    dl->AddLine(ImVec2(c.x, c.y + r * 0.5f), ImVec2(c.x, c.y + r * 1.8f), col, 2.0f);
+}
+} // namespace
 
 void draw_lighting_tool(recomp_context* ctx) {
     (void)ctx;
@@ -909,16 +1172,7 @@ void draw_lighting_tool(recomp_context* ctx) {
             if (ImGui::SmallButton("Stop placing")) g_placing = false;
             if (aim_fresh()) ImGui::Text("Crosshair on %.0f, %.0f, %.0f", g_aim[0], g_aim[1], g_aim[2]);
             else ImGui::Text("Crosshair on nothing: the light goes above the player.");
-            // The crosshair: the middle of the screen, where the ray goes.
-            ImDrawList* dl = ImGui::GetForegroundDrawList();
-            const ImVec2 c(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
-            const float r = std::max(8.0f, ImGui::GetIO().DisplaySize.y / 90.0f);
-            const ImU32 col = aim_fresh() ? IM_COL32(120, 255, 140, 230) : IM_COL32(255, 170, 80, 230);
-            dl->AddCircle(c, r, col, 24, 2.0f);
-            dl->AddLine(ImVec2(c.x - r * 1.8f, c.y), ImVec2(c.x - r * 0.5f, c.y), col, 2.0f);
-            dl->AddLine(ImVec2(c.x + r * 0.5f, c.y), ImVec2(c.x + r * 1.8f, c.y), col, 2.0f);
-            dl->AddLine(ImVec2(c.x, c.y - r * 1.8f), ImVec2(c.x, c.y - r * 0.5f), col, 2.0f);
-            dl->AddLine(ImVec2(c.x, c.y + r * 0.5f), ImVec2(c.x, c.y + r * 1.8f), col, 2.0f);
+            draw_crosshair(aim_fresh());
         }
         // Modern / original lighting, to compare (the same as the Graphics option).
         {
@@ -997,6 +1251,8 @@ void draw_lighting_tool(recomp_context* ctx) {
                                     rt64_jfg_material_loaded.load());
                 ImGui::EndTabItem();
             }
+            if (ImGui::BeginTabItem("Glow", nullptr, g_open_glow_tab ? ImGuiTabItemFlags_SetSelected : 0)) { draw_glow(); ImGui::EndTabItem(); }
+            g_open_glow_tab = false;
             if (ImGui::BeginTabItem("Characters")) { draw_group(Group::Characters); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Placed lights")) { draw_placed(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Level lights")) { draw_level_lights(); ImGui::EndTabItem(); }
