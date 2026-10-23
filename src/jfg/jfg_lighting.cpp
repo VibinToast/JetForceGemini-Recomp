@@ -589,6 +589,8 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     params[14] = (float)std::clamp(s.sun_shadow_area.load(), 250, 8000);
     params[15] = on ? std::clamp(s.material_maps.load(), 0, 200) / 100.0f : 0.0f;
     params[16] = s.smooth_surfaces.load() ? 1.0f : 0.0f;
+    params[17] = on ? s.shine_characters.load() / 100.0f : 0.0f;
+    params[18] = (float)std::clamp(s.sharpness_characters.load(), 1, 256);
     rt64_jfg_lighting_params(params, 20);
     rt64_jfg_frame_objects((uint32_t)ctx->r4 & RDRAM_MASK, g_object_ranges.data(), (uint32_t)(g_object_ranges.size() / 3),
                            g_object_normals.data(), (uint32_t)g_object_normals.size(), g_object_lights.data(),

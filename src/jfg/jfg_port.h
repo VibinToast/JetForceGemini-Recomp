@@ -193,6 +193,8 @@ struct LightingSettings {
     std::atomic<int> shine{ 20 };            // % shine (specular highlights)
     std::atomic<int> sharpness{ 24 };        // how tight the highlights are
     std::atomic<bool> smooth_surfaces{ true }; // the level's smooth surface directions (else one per triangle)
+    std::atomic<int> shine_characters{ 20 };   // % shine on characters and objects (new character lighting)
+    std::atomic<int> sharpness_characters{ 24 }; // how tight their highlights are
     std::atomic<int> material_maps{ 100 };   // % of the authored normal and specular maps (materials/<hash>_n.png, _s.png)
     std::atomic<bool> debug_world{ false };  // show the world position as colour
     std::atomic<bool> debug_normal{ false }; // show the surface direction as colour
