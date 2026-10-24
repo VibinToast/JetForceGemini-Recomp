@@ -9,9 +9,10 @@
 // off the game's own behaviour is unchanged.
 // The splats that make room are not lost: each is copied into a host list (SPLATS_KEPT at most, a new level empties
 // it), and bloodSpurtsDraw(&gfx, &mtx, &vtx), which draws every entry of the pool by its state, is run again for them,
-// 64 at a time: the list's newest are put into the pool, drawn, and the pool is put back. Passes stop while the frame's
-// display list, matrix or vertex buffer would come within BUFFER_RESERVE of its size (MAX_gfx, MAX_mtx, MAX_vtx; past
-// them the game drops the whole frame), so the oldest kept splats are the ones not drawn in a busy frame.
+// 64 at a time: the list's newest are put into the pool, drawn, and the pool is put back. The level's own frame
+// buffers are sized for its normal drawing (listReallocate), so the passes write into blocks of their own taken from
+// the game's heap, which the frame's display list calls. RT64 reads this microcode's addresses within 8 MB, so the
+// blocks cannot be above the game's memory. When a block is full the oldest kept splats are not drawn that frame.
 //
 // Body parts (objects.c / spranim.c): a severed limb is an object (behaviour severedLimbControl, data at object + 0x68)
 // with a life timer (data + 0x14, s16, counted down by twice the update rate) after which it fades out (object + 0x39)
@@ -37,6 +38,7 @@
 
 extern "C" void bloodSpurtAdd(uint8_t* rdram, recomp_context* ctx);
 extern "C" void bloodSpurtsDraw(uint8_t* rdram, recomp_context* ctx);
+extern "C" void mmFree(uint8_t* rdram, recomp_context* ctx);
 
 namespace jfg {
 
@@ -92,13 +94,6 @@ struct KeptSplat { uint32_t words[BLOOD_ENTRY_WORDS]; };
 std::deque<KeptSplat> g_kept_splats;
 int g_kept_level = -1;
 int g_extra_passes = 0, g_extra_drawn = 0; // in the last bloodSpurtsDraw, for the test log
-
-// The frame's buffers (main.c): the two bases of each (one per frame), the size of an entry and the most it may use.
-constexpr uint32_t ADDR_frame = 0x800FD7C0;
-constexpr uint32_t ADDR_gfxBase = 0x800FB400, ADDR_mtxBase = 0x800FB410, ADDR_vtxBase = 0x800FB420;
-constexpr uint32_t ADDR_MAX_gfx = 0x800FD7DC, ADDR_MAX_mtx = 0x800FD7E0, ADDR_MAX_vtx = 0x800FD7E8;
-constexpr uint32_t GFX_SIZE = 8, MTX_SIZE = 64, VTX_SIZE = 10;
-constexpr float BUFFER_RESERVE = 0.25f; // of each buffer, left for what the frame draws after the blood
 
 // The overlay's start as last seen by a hook (0 = not seen yet).
 uint32_t g_blood_base = 0;
@@ -171,52 +166,84 @@ extern "C" void jfg_blood_make_room(uint8_t* rdram_, uint32_t base) {
 }
 
 namespace {
-// How much of a frame buffer is in use: `ptr` (where bloodSpurtsDraw's pointer is now) from this frame's base, in
-// entries; -1 if it is not in the buffer.
-int buffer_used(uint32_t base_addr, uint32_t ptr, uint32_t size, int max) {
-    const uint32_t base = rd32(base_addr + 4 * (rd32(ADDR_frame) & 1));
-    if (ptr < base) return -1;
-    const uint32_t used = (ptr - base) / size;
-    return used <= (uint32_t)max ? (int)used : -1;
+// Two blocks from the game's heap (one per frame, as the game's own buffers: the frame drawn now may still be read
+// while the next one is made), for the kept splats' display list (first half) and vertices (second half). Taken once
+// per level, when the first splat is kept, as big as the heap allows with HEAP_RESERVE left for the game; given back
+// when overlay 8 is freed (leaving the level) or Blood stays is turned off.
+constexpr uint32_t ADDR_frame = 0x800FD7C0;           // which of the two buffers the game draws into now
+constexpr uint32_t ADDR_FreeRAM = 0x800FDD90;         // s32: free bytes in the main heap
+constexpr uint32_t BLOCK_MAX = 0x70000, BLOCK_MIN = 0x4000, HEAP_RESERVE = 0xC0000;
+constexpr uint32_t BLOCK_COLOUR = 0xFF00FFFF;
+uint32_t g_blocks[2] = {}, g_block_size = 0;
+int g_block_level = -1; // the level the blocks (or the failed try) are for
+constexpr uint32_t G_DL = 0x06000000, G_ENDDL = 0xB8000000;
+
+void free_blocks(recomp_context* ctx) {
+    for (uint32_t& b : g_blocks) {
+        if (b != 0) call_game(mmFree, ctx, { b });
+        b = 0;
+    }
+    g_block_size = 0;
+    g_block_level = -1;
+}
+
+bool take_blocks(recomp_context* ctx, int level) {
+    if (g_block_level == level) return g_block_size != 0;
+    free_blocks(ctx);
+    g_block_level = level;
+    const int32_t free_ram = (int32_t)rd32(ADDR_FreeRAM);
+    if (free_ram < (int32_t)(HEAP_RESERVE + 2 * BLOCK_MIN)) return false;
+    const uint32_t size = std::min<uint32_t>(BLOCK_MAX, ((uint32_t)free_ram - HEAP_RESERVE) / 2) & ~0xFu;
+    for (uint32_t& b : g_blocks) b = call_game(mmAlloc, ctx, { size, BLOCK_COLOUR });
+    if (g_blocks[0] == 0 || g_blocks[1] == 0) { free_blocks(ctx); g_block_level = level; return false; }
+    g_block_size = size;
+    return true;
 }
 } // namespace
 
+// Entry of bloodSpurtFreeLib (overlay 8 freed, the level is left): the kept splats and their blocks go.
+extern "C" void jfg_blood_free_kept(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    g_kept_splats.clear();
+    free_blocks(ctx);
+}
+
 // Entry of bloodSpurtsDraw(Gfx **dList, Mtx **mtx, Vertex **vtx): draws the kept splats (see the top of the file) in
-// extra passes of the function, before it draws the pool. `base` = where overlay 8 starts now (section_addresses[8]).
+// extra passes of the function, before it draws the pool. The passes write into this frame's block, which the frame's
+// display list calls. `base` = where overlay 8 starts now (section_addresses[8]).
 extern "C" void jfg_blood_draw_kept(uint8_t* rdram_, recomp_context* ctx, uint32_t base) {
     static bool busy = false;
     if (busy) return;
     g_rdram = rdram_;
     g_extra_passes = g_extra_drawn = 0;
-    if (!g.gore_keep_blood || g.no_blood) { g_kept_splats.clear(); return; }
-    if ((int16_t)rd16(ADDR_currentLevel) != g_kept_level) g_kept_splats.clear();
-    if (g_kept_splats.empty()) return;
+    if (!g.gore_keep_blood || g.no_blood) {
+        g_kept_splats.clear();
+        if (g_block_size != 0) free_blocks(ctx);
+        return;
+    }
+    const int level = (int16_t)rd16(ADDR_currentLevel);
+    if (level != g_kept_level) g_kept_splats.clear();
+    if (g_kept_splats.empty() || !take_blocks(ctx, level)) return;
     g_blood_base = base;
-    const uint32_t gfx_at = (uint32_t)ctx->r4, mtx_at = (uint32_t)ctx->r5, vtx_at = (uint32_t)ctx->r6;
-    const int max_gfx = (int)rd32(ADDR_MAX_gfx), max_mtx = (int)rd32(ADDR_MAX_mtx), max_vtx = (int)rd32(ADDR_MAX_vtx);
-    if (max_gfx <= 0 || max_mtx <= 0 || max_vtx <= 0) return;
-    auto used = [&](int& g_used, int& m_used, int& v_used) {
-        g_used = buffer_used(ADDR_gfxBase, rd32(gfx_at), GFX_SIZE, max_gfx);
-        m_used = buffer_used(ADDR_mtxBase, rd32(mtx_at), MTX_SIZE, max_mtx);
-        v_used = buffer_used(ADDR_vtxBase, rd32(vtx_at), VTX_SIZE, max_vtx);
-        return g_used >= 0 && m_used >= 0 && v_used >= 0;
-    };
-    int gu, mu, vu;
-    if (!used(gu, mu, vu)) return;
-    const int limit_gfx = (int)(max_gfx * (1.0f - BUFFER_RESERVE)), limit_mtx = (int)(max_mtx * (1.0f - BUFFER_RESERVE));
-    const int limit_vtx = (int)(max_vtx * (1.0f - BUFFER_RESERVE));
-    // The most one pass of 64 has cost (a guess until one is seen). Room for two is needed: the pass and the game's
-    // own pool drawn after it.
-    static int pass_gfx = 64 * 24, pass_mtx = 64, pass_vtx = 64 * 8;
-    auto room = [&] { return gu + 2 * pass_gfx <= limit_gfx && mu + 2 * pass_mtx <= limit_mtx && vu + 2 * pass_vtx <= limit_vtx; };
-    if (!room()) return;
+    const uint32_t gfx_at = (uint32_t)ctx->r4, vtx_at = (uint32_t)ctx->r6;
+    const uint32_t main_gfx = rd32(gfx_at), main_vtx = rd32(vtx_at);
+    const uint32_t block = g_blocks[rd32(ADDR_frame) & 1];
+    const uint32_t gfx_end = block + g_block_size / 2 - 8, vtx_end = block + g_block_size; // 8: the G_ENDDL
+    // The most one pass of 64 has written, in bytes (a guess until one is seen).
+    static uint32_t pass_gfx = 64 * 8 * 8 + 0x100, pass_vtx = 64 * 6 * 10;
+
+    // The frame's list calls the block; the passes write into it.
+    wr32(main_gfx, G_DL);
+    wr32(main_gfx + 4, block);
+    wr32(gfx_at, block);
+    wr32(vtx_at, block + g_block_size / 2);
 
     uint32_t pool[BLOOD_ENTRIES * BLOOD_ENTRY_WORDS];
     const uint32_t pool_at = blood_entry(0);
     for (uint32_t w = 0; w < BLOOD_ENTRIES * BLOOD_ENTRY_WORDS; w++) pool[w] = rd32(pool_at + w * 4);
     busy = true;
     size_t next = g_kept_splats.size(); // newest first
-    while (next > 0 && room()) {
+    while (next > 0 && rd32(gfx_at) + pass_gfx <= gfx_end && rd32(vtx_at) + pass_vtx <= vtx_end) {
         const int n = (int)std::min<size_t>(next, BLOOD_ENTRIES);
         for (int i = 0; i < BLOOD_ENTRIES; i++) {
             const uint32_t entry = blood_entry(i);
@@ -228,19 +255,23 @@ extern "C" void jfg_blood_draw_kept(uint8_t* rdram_, recomp_context* ctx, uint32
                 wr8(entry + BLOOD_STATE_OFFSET, 0);
             }
         }
+        const uint32_t g0 = rd32(gfx_at), v0 = rd32(vtx_at);
         recomp_context c = *ctx;
         bloodSpurtsDraw(rdram_, &c);
-        int gu2, mu2, vu2;
-        const bool ok = used(gu2, mu2, vu2);
+        pass_gfx = std::max(pass_gfx, rd32(gfx_at) - g0);
+        pass_vtx = std::max(pass_vtx, rd32(vtx_at) - v0);
         g_extra_passes++;
         g_extra_drawn += n;
         next -= n;
-        if (!ok) break;
-        pass_gfx = std::max(pass_gfx, gu2 - gu); pass_mtx = std::max(pass_mtx, mu2 - mu); pass_vtx = std::max(pass_vtx, vu2 - vu);
-        gu = gu2; mu = mu2; vu = vu2;
     }
     busy = false;
     for (uint32_t w = 0; w < BLOOD_ENTRIES * BLOOD_ENTRY_WORDS; w++) wr32(pool_at + w * 4, pool[w]);
+
+    const uint32_t end = rd32(gfx_at);
+    wr32(end, G_ENDDL);
+    wr32(end + 4, 0);
+    wr32(gfx_at, main_gfx + 8);
+    wr32(vtx_at, main_vtx);
 }
 
 // Entry of severedLimbControl(object, updateRate).
