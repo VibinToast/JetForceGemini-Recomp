@@ -335,10 +335,11 @@ void read_file(const std::filesystem::path& path, bool level_file, bool settings
         }
         else if (level_file && lights && std::strncmp(key, "override.", 9) == 0) {
             LightOverride o;
-            int on = 1, recolour = 0, shadows = 1;
-            if (std::sscanf(value, "%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", &o.x, &o.y, &o.z, &on, &recolour, &o.r, &o.g, &o.b,
-                            &o.intensity, &o.radius, &o.flicker, &o.flicker_speed, &shadows, &o.nth) >= 10) {
+            int on = 1, recolour = 0, shadows = 1, steady = 0;
+            if (std::sscanf(value, "%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", &o.x, &o.y, &o.z, &on, &recolour, &o.r, &o.g, &o.b,
+                            &o.intensity, &o.radius, &o.flicker, &o.flicker_speed, &shadows, &o.nth, &steady) >= 10) {
                 o.on = on != 0;
+                o.steady = steady != 0;
                 o.shadows = shadows != 0;
                 o.recolour = recolour != 0;
                 g_overrides.push_back(o);
@@ -371,8 +372,9 @@ std::string level_text() {
     }
     for (size_t i = 0; i < g_overrides.size(); i++) {
         const LightOverride& o = g_overrides[i];
-        std::snprintf(line, sizeof(line), "override.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, o.x, o.y, o.z, o.on ? 1 : 0,
-                      o.recolour ? 1 : 0, o.r, o.g, o.b, o.intensity, o.radius, o.flicker, o.flicker_speed, o.shadows ? 1 : 0, o.nth);
+        std::snprintf(line, sizeof(line), "override.%zu=%.2f,%.2f,%.2f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", i, o.x, o.y, o.z, o.on ? 1 : 0,
+                      o.recolour ? 1 : 0, o.r, o.g, o.b, o.intensity, o.radius, o.flicker, o.flicker_speed, o.shadows ? 1 : 0, o.nth,
+                      o.steady ? 1 : 0);
         out += line;
     }
     return out;
@@ -758,6 +760,9 @@ void draw_level_lights() {
     changed |= slider_int("Intensity (% of its own)", &edit.intensity, 0, 400);
     changed |= slider_int("Reach (% of its own)", &edit.radius, 0, 400);
     help("0 turns it off, as unticking On does.");
+    changed |= ImGui::Checkbox("Steady (the game's flicker off)", &edit.steady);
+    help("The game makes torches and fires flicker on its own. Steady holds this light at its average brightness and size "
+         "instead. Flicker below adds the tool's own flicker on top (0: none).");
     changed |= slider_int("Flicker (%)", &edit.flicker, 0, 100);
     changed |= slider_int("Flicker speed (%)", &edit.flicker_speed, 10, 400);
     if (changed) {

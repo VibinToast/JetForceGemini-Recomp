@@ -511,17 +511,33 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     for (int32_t i = 0; mode >= 1 && valid_ptr(objects) && i < object_count; i++) {
         const uint32_t l = rd32(objects + (uint32_t)i * 4);
         if (!valid_ptr(l) || !(rd8(l + OBJ_LIGHT_TYPE) & 0x40)) continue;
-        const uint32_t intensity = rd8(l + OBJ_LIGHT_COLOUR + 3);
+        uint32_t intensity = rd8(l + OBJ_LIGHT_COLOUR + 3);
         float radius = rdf(l + OBJ_LIGHT_RADIUS);
-        if (intensity == 0 || radius <= 0.0f) continue;
         const float x = rdf(l + OBJ_LIGHT_POS), y = rdf(l + OBJ_LIGHT_POS + 4), z = rdf(l + OBJ_LIGHT_POS + 8);
+        const LightOverride* own = lighting_override_for(l);
+        // Steady (the lighting tool): the game's own flicker off, at the light's average brightness and size over the
+        // last few seconds (kept per light; a light at another spot, as in another level, starts again).
+        if (own && own->steady) {
+            struct Average { float x, y, z, intensity, radius; };
+            static std::unordered_map<uint32_t, Average> averages;
+            if (averages.size() > 1024) averages.clear();
+            auto it = averages.find(l);
+            if (it == averages.end() || it->second.x != x || it->second.y != y || it->second.z != z) {
+                it = averages.insert_or_assign(l, Average{ x, y, z, (float)intensity, radius }).first;
+            }
+            Average& a = it->second;
+            a.intensity += ((float)intensity - a.intensity) * 0.02f;
+            a.radius += (radius - a.radius) * 0.02f;
+            intensity = (uint32_t)std::lround(a.intensity);
+            radius = a.radius;
+        }
+        if (intensity == 0 || radius <= 0.0f) continue;
         float colour[3];
         for (uint32_t c = 0; c < 3; c++) {
             colour[c] = (float)((rd8(l + OBJ_LIGHT_COLOUR + c) * intensity) >> 8) / 255.0f * object_strength;
         }
         // As the lighting tool changed it: off, another colour (at the light's own brightness), brighter or dimmer,
         // larger or smaller, flickering.
-        const LightOverride* own = lighting_override_for(l);
         if (const LightOverride* o = own) {
             if (!o->on || o->radius <= 0) { // reach 0 is off too
                 // Switched off: the glow the level has painted in around it goes too, in its own colour and over the

@@ -240,6 +240,7 @@ struct LightOverride {
     int flicker_speed = 100;
     bool shadows = true;  // casts shadows
     int nth = 0;          // which of the game's lights at this spot (several can stand on one), in the game's order
+    bool steady = false;  // the game's own flicker off: held at its average brightness and size
 };
 const std::vector<PlacedLight>& lighting_placed_lights();
 const std::vector<PlacedLight>& lighting_emission_lights(); // where the level's emission maps are (the lighting tool's Surfaces tab)
