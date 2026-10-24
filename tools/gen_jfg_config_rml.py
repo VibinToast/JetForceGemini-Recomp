@@ -48,10 +48,12 @@ GAMEPLAY = [
     ("group", None, "Gore", None, None),
     ("bool", "no_blood", "No Blood", None, "No blood, as in the Japanese version."),
     ("bool", "gore_keep_blood", "Blood Stays", None,
-     "Blood splats stay on the ground and walls instead of fading away. Up to 64 stay; once the screen is full, the oldest makes room for new blood."),
+     "Blood splats stay on the ground and walls instead of fading away. Blood Splat Limit sets how many; once it is reached, the oldest makes room for new blood."),
+    ("range", "blood_splats", "Blood Splat Limit", (64, 4096, ""),
+     "How many blood splats stay on the screen with Blood Stays on. 64 is the original game; more are drawn from memory the game does not use. Leaving the level clears them."),
     ("bool", "gore_keep_limbs", "Body Parts Stay", None,
      "Severed limbs and heads stay where they fell instead of fading away. The newest 24 are kept, so the game does not run out of memory in big fights."),
-    ("range", "blood_amount", "Blood Amount", (100, 400, "%"), "How much blood a hit sprays. 100% is the original game."),
+    ("range", "blood_amount", "Blood Amount", (100, 800, "%"), "How much blood a hit sprays. 100% is the original game."),
     ("group", None, "Player", None, None),
     ("range", "damage_taken", "Damage Taken", (0, 400, "%"),
      "How much damage the character takes from enemies, falls and explosions. 0% takes none; the Invulnerable cheat overrides it."),
@@ -182,8 +184,10 @@ TEXTURES = [
 ]
 
 # Options shown greyed out and locked while another (a bool) is on: the aiming view's sliders follow Over-the-Shoulder
-# Aiming's fixed view then (jfg_options.h, aim_view; jfg_settings_api.cpp shows its values and ignores changes).
+# Aiming's fixed view then (jfg_options.h, aim_view; jfg_settings_api.cpp shows its values and ignores changes), and the
+# gore options do nothing with No Blood on.
 LOCKED_BY = {k: "aim_shoulder" for k in ("aim_drag_margin", "aim_drag_return", "aim_offset_x", "aim_offset_y", "aim_offset_z")}
+LOCKED_BY.update({k: "no_blood" for k in ("gore_keep_blood", "blood_splats", "gore_keep_limbs", "blood_amount")})
 
 def row_ids(kind, key, extra):
     """The focusable ids of one option row, left to right."""
@@ -196,13 +200,34 @@ def option_markup(items, first_nav_up):
     # buttons (and some rows above), and at the last row Down went sideways between its radios. Between two rows of
     # radios the column is kept (On to On); a slider row has one control. The first row goes up to first_nav_up (the
     # tab; None leaves it automatic), the last row's Down goes nowhere.
+    # A locked row (LOCKED_BY) can't take the focus, so while its lock is on, Up/Down jump over the locked rows next to it
+    # (a data-style-nav-* attribute, see nav_locked, in place of the fixed property).
     rows = [row_ids(kind, key, extra) for kind, key, _, extra, _ in items if kind != "group"]
+    locks = [LOCKED_BY.get(key) for kind, key, _, _, _ in items if kind != "group"]
     def target(row, column):
         return "#" + row[min(column, len(row) - 1)]
+    def neighbour(i, step, column):
+        j = i + step
+        if j < 0: return first_nav_up
+        return target(rows[j], column) if j < len(rows) else "none"
+    def past_lock(i, step, column):
+        """(lock, where to go while it is on) when the next row that way is locked; None otherwise."""
+        j = i + step
+        if not (0 <= j < len(rows)) or locks[j] is None or locks[j] == locks[i]: return None
+        lock = locks[j]
+        while 0 <= j < len(rows) and locks[j] == lock: j += step
+        return lock, neighbour(j - step, step, column) or "auto"
     def nav_style(i, column):
-        up = target(rows[i - 1], column) if i > 0 else first_nav_up
-        down = target(rows[i + 1], column) if i + 1 < len(rows) else "none"
-        return (f"nav-up: {up}; " if up else "") + f"nav-down: {down};"
+        up = None if past_lock(i, -1, column) else neighbour(i, -1, column)
+        down = None if past_lock(i, 1, column) else neighbour(i, 1, column)
+        return (f"nav-up: {up}; " if up else "") + (f"nav-down: {down};" if down else "")
+    def nav_locked(i, column):
+        attrs = ""
+        for step, prop in ((-1, "nav-up"), (1, "nav-down")):
+            skip = past_lock(i, step, column)
+            if skip:
+                attrs += f' data-style-{prop}="{skip[0]} == 1 ? \'{skip[1]}\' : \'{neighbour(i, step, column) or "auto"}\'"'
+        return attrs
     out, helps, idx = [], [], 0
     for kind, key, title, extra, help_text in items:
         t = html.escape(title)
@@ -213,28 +238,28 @@ def option_markup(items, first_nav_up):
         ids = rows[idx]
         lock = LOCKED_BY.get(key)
         locked_style = (' data-style-opacity="' + lock + " == 1 ? '0.4' : '1'" + '"') if lock else ''
+        locked_attr = f' data-attrif-disabled="{lock} == 1"' if lock else ''
         out.append(f'                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index({idx})"{locked_style}>')
         out.append(f'                        <label class="config-option__title">{t}</label>')
         if kind == "bool":
             out.append('                        <div class="config-option__list">')
             for column, (v, label) in enumerate(((1, "On"), (0, "Off"))):
                 rid = ids[column]
-                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"/>')
+                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"{nav_locked(idx, column)}{locked_attr}/>')
                 out.append(f'                            <label class="config-option__tab-label" for="{rid}">{label}</label>')
             out.append('                        </div>')
         elif kind == "choice":
             out.append('                        <div class="config-option__list">')
             for column, (v, label) in enumerate(extra):
                 rid = ids[column]
-                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"/>')
+                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"{nav_locked(idx, column)}{locked_attr}/>')
                 out.append(f'                            <label class="config-option__tab-label" for="{rid}">{html.escape(label)}</label>')
             out.append('                        </div>')
         elif kind == "range":
             lo, hi, suffix = extra
             out.append('                        <div class="config-option__range-wrapper config-option__list">')
             out.append(f'                            <label class="config-option__range-label">{{{{{key}}}}}{suffix}</label>')
-            locked_attr = f' data-attrif-disabled="{lock} == 1"' if lock else ''
-            out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}" data-value="{key}"{locked_attr}/>')
+            out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}"{nav_locked(idx, 0)} data-value="{key}"{locked_attr}/>')
             out.append('                        </div>')
         out.append('                    </div>')
         # The focused option's description: its name as a heading, then the text (styled by .jfg-desc in config_menu.rml
