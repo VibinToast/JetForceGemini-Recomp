@@ -7,7 +7,7 @@
 // pool is full, frees the oldest splat for the new drop (hook in bloodSpurtAdd before the count is read), so new blood
 // always appears and the oldest stains make room. Drops still flying or splashing are never taken. With the option
 // off the game's own behaviour is unchanged.
-// The splats that make room are not lost: each is copied into a host list (SPLATS_KEPT at most, a new level empties
+// The splats that make room are not lost: each is copied into a host list (Blood Splat Limit - 64 at most, a new level empties
 // it), and bloodSpurtsDraw(&gfx, &mtx, &vtx), which draws every entry of the pool by its state, is run again for them,
 // 64 at a time: the list's newest are put into the pool, drawn, and the pool is put back. The level's own frame
 // buffers are sized for its normal drawing (listReallocate), so the passes write into blocks of their own in the
@@ -88,7 +88,8 @@ uint32_t g_blood_recycled = 0; // splats freed for new blood, for the test log
 
 // The splats freed for new blood, oldest first, as the pool entry's words, and the level they were made in.
 constexpr uint32_t BLOOD_ENTRY_WORDS = BLOOD_ENTRY_SIZE / 4;
-constexpr size_t SPLATS_KEPT = 4096;
+constexpr size_t SPLATS_KEPT = 4096 - BLOOD_ENTRIES; // the most Blood Splat Limit (blood_splats) keeps besides the pool
+size_t kept_limit() { return (size_t)std::clamp(g.blood_splats - BLOOD_ENTRIES, 0, (int)SPLATS_KEPT); }
 struct KeptSplat { uint32_t words[BLOOD_ENTRY_WORDS]; };
 std::deque<KeptSplat> g_kept_splats;
 int g_kept_level = -1;
@@ -155,8 +156,8 @@ extern "C" void jfg_blood_make_room(uint8_t* rdram_, uint32_t base) {
     if (level != g_kept_level) { g_kept_splats.clear(); g_kept_level = level; }
     KeptSplat kept;
     for (uint32_t w = 0; w < BLOOD_ENTRY_WORDS; w++) kept.words[w] = rd32(oldest + w * 4);
-    g_kept_splats.push_back(kept);
-    if (g_kept_splats.size() > SPLATS_KEPT) g_kept_splats.pop_front();
+    if (kept_limit() > 0) g_kept_splats.push_back(kept);
+    while (g_kept_splats.size() > kept_limit()) g_kept_splats.pop_front();
     wr8(oldest + BLOOD_STATE_OFFSET, 0);
     const int32_t count = (int32_t)rd32(blood_count());
     if (count > 0) wr32(blood_count(), (uint32_t)(count - 1));
@@ -195,6 +196,7 @@ extern "C" void jfg_blood_draw_kept(uint8_t* rdram_, recomp_context* ctx, uint32
     }
     const int level = (int16_t)rd16(ADDR_currentLevel);
     if (level != g_kept_level) g_kept_splats.clear();
+    while (g_kept_splats.size() > kept_limit()) g_kept_splats.pop_front(); // the limit was lowered
     if (g_kept_splats.empty()) { g_extra_passes = g_extra_drawn = 0; return; }
     g_blood_base = base;
 
