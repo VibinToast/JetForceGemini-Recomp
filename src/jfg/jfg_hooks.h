@@ -120,6 +120,7 @@ void jfg_cpu_rain_before(uint8_t* rdram, recomp_context* ctx);         // jfg_cp
 void jfg_cpu_rain_after(uint8_t* rdram, recomp_context* ctx);          // ... and after it
 void jfg_cpu_lines_before(uint8_t* rdram, recomp_context* ctx);        // jfg_cpu_layer.cpp: entry of fxOutputLines
 void jfg_cpu_lines_after(uint8_t* rdram, recomp_context* ctx);         // ... and mainCPUeffects after it returns
+void jfg_cpu_lines_faded(uint8_t* rdram, recomp_context* ctx);      // mainCPUeffects, after fxInitLines (a fade)
 int jfg_widescreen_active(void);                                       // jfg_visuals.cpp
 int jfg_texture_three_point(void);                                     // jfg_visuals.cpp
 int jfg_output_filtering(void);                                        // jfg_visuals.cpp

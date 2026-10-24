@@ -347,6 +347,26 @@ extern "C" void jfg_cpu_lines_after(uint8_t* rdram, recomp_context* ctx) {
     publish();
 }
 
+// mainCPUeffects, right after fxInitLines returns: during a fade (going through a loading zone, a warp) the game draws
+// no lines and only clears its list. The frame's buffer gets an empty layer, so the last reticle drawn into it is not
+// shown again on every frame presented for it until lines are drawn there again.
+extern "C" void jfg_cpu_lines_faded(uint8_t* rdram, recomp_context* ctx) {
+    (void)ctx;
+    g_rdram = rdram;
+    g_capturing = false;
+    if (!jfg_renderer_adds_frames()) return;
+    const uint32_t screen = rd32(ADDR_currentScreen);
+    if (!valid_ptr(screen)) return;
+    const uint32_t fb = screen & 0x1FFFFFFFu;
+    if (g_pending.fb != fb) {
+        g_pending = Layer();
+        g_pending.fb = fb;
+        g_pending.width = g_capture_width;
+        g_pending.height = g_capture_height;
+    }
+    publish();
+}
+
 // Present thread (render hook): the layer for the frame being presented, in window pixels. False if there is none.
 bool cpu_layer_build(ImDrawList* list) {
     const RT64JfgPresentInfo& info = rt64_jfg_present_info;
