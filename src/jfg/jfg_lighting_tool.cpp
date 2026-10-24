@@ -197,6 +197,10 @@ std::vector<Setting>& settings_table() {
           "Lights characters and objects per pixel with their models' own surface directions, from the same lights." },
         { "character_lights", "Frame's lights on characters (%)", &s.character_lights, nullptr, 0, 100, Group::Characters, false,
           "How much shots, torches and placed lights add on characters on top of the game's own light on them." },
+        { "unlit_objects", "Light objects the game leaves unlit", nullptr, &s.unlit_objects, 0, 1, Group::Characters, false,
+          "Objects the game draws without any lighting (bridges, crates, props) get the level's lighting: its ambient, "
+          "the frame's lights and the directional light, by which way each flat face points (no smooth shading). Off: "
+          "they keep the game's fixed look." },
         { "no_object_lighting", "Game's character lighting off", nullptr, &s.no_object_lighting, 0, 1, Group::Characters, false,
           "Characters and objects get no light from the game itself (on by default: the new lighting for characters replaces it)." },
         { "no_game_lighting", "Game's level lights off", nullptr, &s.no_game_lighting, 0, 1, Group::Characters, false,

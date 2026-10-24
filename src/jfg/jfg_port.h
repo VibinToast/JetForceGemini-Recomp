@@ -172,6 +172,7 @@ struct LightingSettings {
     std::atomic<int> max_lights{ 32 };       // lights sent per frame (at most 64)
     std::atomic<bool> no_game_lighting{ true };  // skip the game's per-vertex level lighting without replacing it
     std::atomic<bool> no_object_lighting{ true };  // skip the game's per-vertex lighting of characters and objects
+    std::atomic<bool> unlit_objects{ true }; // objects the game draws unlit (bridges, crates) are lit like the level
     std::atomic<bool> characters{ true };    // light characters and objects in RT64 (per pixel, with their normals)
     std::atomic<int> character_lights{ 40 }; // % the frame's lights add on characters (the game's own come from them)
     std::atomic<int> facing{ 40 };           // % the level lighting depends on a surface facing its light (0 = as the game)
