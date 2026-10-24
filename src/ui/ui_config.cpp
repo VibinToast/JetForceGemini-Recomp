@@ -928,18 +928,24 @@ void jfg_config_step_tab(int dir) {
     }
 }
 
-// JFG PORT: with a slider selected the bumpers move it by 10 (LB down, RB up), held at its ends. False when the
+// JFG PORT: with a slider selected the bumpers move it by 10 (LB down, RB up), held at its ends; a held direction (D-pad
+// or stick, after the first second) moves it too. The longer it is held (held_secs) the bigger the steps, also in
+// proportion to the slider's range so the long ones (Blood Splat Limit, 64-4096) get across quickly. False when the
 // selection is not on a slider, so the bumpers switch tabs as usual.
-bool jfg_config_slider_step(int dir) {
+bool jfg_config_slider_step(int dir, float held_secs, bool bumper) {
     if (recompui::is_prompt_open()) return false;
     Rml::Element* focus = recompui::get_config_tabset()->GetOwnerDocument()->GetFocusLeafNode();
     if (focus == nullptr || focus->GetTagName() != "input" || focus->GetAttribute<Rml::String>("type", "") != "range") return false;
     auto* input = static_cast<Rml::ElementFormControlInput*>(focus);
     const float lo = focus->GetAttribute<float>("min", 0.0f);
     const float hi = focus->GetAttribute<float>("max", 100.0f);
+    const float range = hi - lo;
+    float amount;
+    if (bumper) amount = held_secs < 1.0f ? 10.0f : held_secs < 2.0f ? std::max(10.0f, range * 0.02f) : std::max(20.0f, range * 0.05f);
+    else amount = held_secs < 2.0f ? std::max(2.0f, range * 0.005f) : held_secs < 3.0f ? std::max(5.0f, range * 0.015f) : std::max(10.0f, range * 0.03f);
     float v = 0.0f;
     try { v = std::stof(input->GetValue()); } catch (...) { return true; }
-    v = std::clamp(v + dir * 10.0f, lo, hi);
+    v = std::clamp(v + dir * std::round(amount), lo, hi);
     input->SetValue(std::to_string((int)std::lround(v)));
     return true;
 }
