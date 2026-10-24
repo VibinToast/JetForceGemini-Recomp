@@ -118,6 +118,9 @@ std::vector<Setting>& settings_table() {
         { "off_glow", "Glow of lights switched off (%)", &s.off_glow, nullptr, 0, 200, Group::Lights, false,
           "A torch or lamp switched off in the Level lights tab also takes away the glow the level has painted in around "
           "it, this much (its own colour over its reach). 0 leaves the painted glow." },
+        { "light_tint", "Lights keep the surface's colour (%)", &s.light_tint, nullptr, 0, 100, Group::Lights, false,
+          "The level's own colours tint the light that falls on them: blue water lit by a white torch stays blue, even with "
+          "the level ambient down. 0: lights add their own colour only (the surface's tint goes with the ambient)." },
         { "facing", "Facing the light (%)", &s.facing, nullptr, 0, 100, Group::Lights, false,
           "How much a surface turned away from a light gets less of it. 0 keeps the game's look." },
         { "max_lights", "Most lights per frame", &s.max_lights, nullptr, 0, 64, Group::Lights, true,

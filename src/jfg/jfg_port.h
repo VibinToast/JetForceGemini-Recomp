@@ -175,6 +175,7 @@ struct LightingSettings {
     std::atomic<bool> unlit_objects{ true }; // objects the game draws unlit (bridges, crates) are lit like the level
     std::atomic<bool> characters{ true };    // light characters and objects in RT64 (per pixel, with their normals)
     std::atomic<int> character_lights{ 40 }; // % the frame's lights add on characters (the game's own come from them)
+    std::atomic<int> light_tint{ 0 };        // % the frame's lights on the level take each surface's own colour
     std::atomic<int> facing{ 40 };           // % the level lighting depends on a surface facing its light (0 = as the game)
     std::atomic<int> shadows{ 80 };          // % how dark shadows from the lights are
     std::atomic<int> shadow_lights{ 4 };     // how many of the nearest lights get a shadow map (0-4)
