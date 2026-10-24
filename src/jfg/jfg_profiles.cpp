@@ -36,7 +36,7 @@ const BuiltinProfile BUILTIN_PROFILES[] = {
     { "Default", "The original game, as it played on the N64.", "start_skips_cutscenes=0\nauto_save=0\n" },
     { "Modern", "Modern controls and visuals, smoothed to 60 fps with Frame Interpolation, with the original weapons and gameplay. Its dual-stick controls use the "
                 "Built-in Button Layout in place of your controller bindings.",
-      "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nframe_rate=0\nsmooth_motion=60\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
+      "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nhud_corners=1\nframe_rate=0\nsmooth_motion=60\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
       "no_lod=1\nfar_objects=1\nssao=1\nssao_strength=30\nssao_radius=139\nbloom=1\nbloom_intensity=40\nbloom_threshold=19\n"
       "bloom_radius=6\ndual_stick=1\ninvert_aim_y=0\nswap_triggers=0\ndual_layout=1\ninvert_aim_normal=0\ninvert_camera_y=0\naim_from_character=0\n"
       "move_speed=110\ncamera_speed_h=134\ncamera_speed_v=107\naim_shoulder=1\naim_centered=1\naim_speed=100\n"
@@ -44,7 +44,7 @@ const BuiltinProfile BUILTIN_PROFILES[] = {
       "damage_taken=100\ndive_speed=100\nfly_speed=100\nfly_freeze=1\nfly_hide_hud=1\n" },
     { "Modern and Balanced", "Modern, plus rebalanced weapons. The balance changes are subjective. Its dual-stick controls use the "
                                "Built-in Button Layout in place of your controller bindings.",
-      "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nframe_rate=0\nsmooth_motion=60\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
+      "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nhud_corners=1\nframe_rate=0\nsmooth_motion=60\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
       "no_lod=1\nfar_objects=1\nssao=1\nssao_strength=30\nssao_radius=139\nbloom=1\nbloom_intensity=40\nbloom_threshold=19\n"
       "bloom_radius=6\ndual_stick=1\ninvert_aim_y=0\nswap_triggers=0\ndual_layout=1\ninvert_aim_normal=0\ninvert_camera_y=0\naim_from_character=0\n"
       "move_speed=110\ncamera_speed_h=134\ncamera_speed_v=107\naim_shoulder=1\naim_centered=1\naim_speed=100\n"
@@ -67,7 +67,7 @@ const BuiltinProfile BUILTIN_PROFILES[] = {
       "weapon.14.modify=1\nweapon.14.damage=8\nweapon.14.delay=0\nweapon.14.throw_delay=26\nweapon.14.lifetime=30\nweapon.14.spread_x=80\nweapon.14.spread_y=32\nweapon.14.speed_x100=1520\nweapon.14.size=100\nweapon.14.charge=100\nweapon.14.mines=8\nweapon.14.no_heat=0\n" },
     { "Extreme", "Modern visuals, smoothed to 60 fps with Frame Interpolation, with everything turned up: much faster movement and over-the-top weapons, "
                  "just for fun. Its dual-stick controls use the Built-in Button Layout in place of your controller bindings.",
-      "start_skips_cutscenes=1\nframe_rate=0\nsmooth_motion=60\nwidescreen=1\nno_lod=1\nfar_objects=1\n"
+      "start_skips_cutscenes=1\nframe_rate=0\nsmooth_motion=60\nwidescreen=1\nhud_corners=1\nno_lod=1\nfar_objects=1\n"
       "ssao=1\nssao_strength=44\nssao_radius=143\nbloom=1\nbloom_intensity=52\nbloom_threshold=34\nbloom_radius=6\n"
       "dual_stick=1\ndual_layout=1\nmouse_keyboard=1\naim_shoulder=1\naim_centered=1\naim_jump=1\n"
       "move_speed=200\ncamera_speed_h=150\ncamera_speed_v=150\naim_speed=150\n"
