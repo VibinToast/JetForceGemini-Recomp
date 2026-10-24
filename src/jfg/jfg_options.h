@@ -52,6 +52,7 @@ struct State {
     bool widescreen = false;       // render the 3D view to the full window width, see jfg_widescreen_active()
     int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
     int  hit_flash = 100;          // red screen when the character is hit: strength, percent (jfg_hit_flash)
+    int  shadow_opacity = 50;      // how dark character shadows are drawn, percent of the game's (jfg_shadow_alpha); 50 in every profile
     bool hide_floyd = false;       // Floyd is not drawn while he follows the character (jfg_hide_object)
     bool vignette = false;        // darker screen edges in RT64 (src/shaders/VignettePS.hlsl), see push_render_options()
     int  vignette_strength = 40;   // vignette: how dark the corners get, percent
