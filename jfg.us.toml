@@ -170,6 +170,19 @@ func = "bloodSpurtAdd"
 before_vram = 0x82080204
 text = "{ void jfg_blood_make_room(uint8_t*, uint32_t); jfg_blood_make_room(rdram, (uint32_t)section_addresses[8]); }"
 
+# "Blood stays": entry of bloodSpurtsDraw(&gfx, &mtx, &vtx); draws the splats that made room for new blood in extra
+# passes of the function, into heap blocks the frame's display list calls (src/jfg/jfg_gore.cpp, jfg_blood_draw_kept).
+[[patches.hook]]
+func = "bloodSpurtsDraw"
+before_vram = 0x82080AB4
+text = "{ void jfg_blood_draw_kept(uint8_t*, recomp_context*, uint32_t); jfg_blood_draw_kept(rdram, ctx, (uint32_t)section_addresses[8]); }"
+
+# "Blood stays": entry of bloodSpurtFreeLib (leaving the level): the kept splats and their heap blocks go.
+[[patches.hook]]
+func = "bloodSpurtFreeLib"
+before_vram = 0x820800C4
+text = "{ void jfg_blood_free_kept(uint8_t*, recomp_context*); jfg_blood_free_kept(rdram, ctx); }"
+
 # "Body parts stay": entry of severedLimbControl(object, updateRate).
 [[patches.hook]]
 func = "severedLimbControl"

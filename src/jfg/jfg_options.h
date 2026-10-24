@@ -28,6 +28,7 @@ struct State {
     bool gore_keep_blood = false;  // blood splats stay on the ground and walls (jfg_gore.cpp)
     bool gore_keep_limbs = false;  // severed body parts stay (jfg_gore.cpp)
     int  blood_amount = 100;       // blood drops per spurt, percent (jfg_blood_more)
+    int  blood_splats = 4096;      // splats that stay with gore_keep_blood (64 = the game's pool; jfg_gore.cpp)
     bool show_fps = false;         // frame rate in the top right corner
     bool show_level = false;       // level number and name in the top right corner
     bool show_pack = false;        // texture pack in use in the top right corner
