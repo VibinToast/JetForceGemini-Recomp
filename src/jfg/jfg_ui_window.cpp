@@ -68,7 +68,8 @@ void draw_options() {
             ImGui::BeginDisabled(g.no_blood);
             changed |= ImGui::Checkbox("Blood stays (splats on the ground and walls)", &g.gore_keep_blood);
             changed |= ImGui::Checkbox("Body parts stay", &g.gore_keep_limbs);
-            changed |= options_slider("Blood amount %", &g.blood_amount, 100, 400);
+            changed |= options_slider("Blood splats", &g.blood_splats, 64, 4096);
+            changed |= options_slider("Blood amount %", &g.blood_amount, 100, 800);
             ImGui::EndDisabled();
             changed |= ImGui::Checkbox("START skips cutscenes", &g.start_skips_cutscenes);
             options_help("Also skips the logo screens at start-up and the story intro after creating a file. A skipped cutscene "
@@ -98,11 +99,15 @@ void draw_options() {
             changed |= ImGui::Checkbox("Show texture pack", &g.show_pack);
             changed |= ImGui::Checkbox("Widescreen (fill the window)", &g.widescreen);
             options_help("During gameplay only; the HUD stays in the middle. Things at the far left and right may appear late.");
+            changed |= ImGui::Checkbox("HUD in screen corners", &g.hud_corners);
+            options_help("With Widescreen, the HUD moves out to the left and right edges of the window.");
             changed |= options_slider("Field of view %", &g.fov, 75, 140);
             options_help("Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, "
                          "menus, the pause screen and zoomed scopes keep the game's own.");
             changed |= options_slider("Hit flash opacity %", &g.hit_flash, 0, 100);
             options_help("How strongly the screen turns red when the character is hit. 0: no red flash.");
+            changed |= options_slider("Shadow opacity %", &g.shadow_opacity, 0, 200);
+            options_help("How dark the shadows under characters and objects are drawn. 100: the original game; 0: none.");
             changed |= ImGui::Checkbox("Hide Floyd", &g.hide_floyd);
             options_help("Floyd, his shadow and his sounds are gone while he follows the character; he still flies along "
                          "and shoots. Floyd missions and a second player flying him show him as usual.");
@@ -220,6 +225,7 @@ void draw_options() {
                              "game's own wall check. With it off the camera can end up outside the level.");
                 changed |= options_slider("Camera left/right %", &g.camera_speed_h, 10, 400);
                 changed |= options_slider("Camera up/down %", &g.camera_speed_v, 10, 400);
+                changed |= options_slider("Camera distance %", &g.camera_distance, 50, 250);
                 ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
                 changed |= ImGui::Checkbox("Built-in button layout", &g.dual_layout);
                 options_help("LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. "
@@ -258,9 +264,29 @@ void draw_options() {
             changed |= ImGui::Checkbox("Normalize diagonal speed", &g.normalize_diagonal);
             options_help("In the game, running forward while sidestepping adds the two speeds together, so going diagonally "
                          "is about 40% faster. With this on a diagonal is as fast as running straight.");
+            changed |= ImGui::Checkbox("Same aim-walk speed in all directions", &g.aim_even_speed);
+            options_help("While aiming the game walks forward fastest: backwards is about 25% slower and sideways about 40% "
+                         "slower. With this on the character walks as fast in every direction, diagonals included.");
 
             options_section("Aiming (any control layout)");
             changed |= ImGui::Checkbox("Over-the-shoulder view while aiming", &g.aim_shoulder);
+            {
+                // The dual-stick aiming view (aim_view): the player's sliders, or with the box above ticked its fixed
+                // shoulder view, shown greyed out (the player's own values stay saved underneath).
+                AimView shown = aim_view();
+                ImGui::BeginDisabled(g.aim_shoulder);
+                int* margin = g.aim_shoulder ? &shown.drag_margin : &g.aim_drag_margin;
+                int* back = g.aim_shoulder ? &shown.drag_return : &g.aim_drag_return;
+                int* x = g.aim_shoulder ? &shown.offset_x : &g.aim_offset_x;
+                int* y = g.aim_shoulder ? &shown.offset_y : &g.aim_offset_y;
+                int* zoom = g.aim_shoulder ? &shown.zoom : &g.aim_offset_z;
+                changed |= options_slider("Aim drag margin %", margin, 0, 50);
+                changed |= options_slider("Aim drag return speed %", back, 0, 400);
+                changed |= options_slider("Aim offset left/right", x, -50, 50);
+                changed |= options_slider("Aim offset up/down", y, -50, 50);
+                changed |= options_slider("Aim zoom", zoom, 0, 300);
+                ImGui::EndDisabled();
+            }
             changed |= ImGui::Checkbox("Keep the reticle centered", &g.aim_centered);
             changed |= ImGui::Checkbox("Jump while aiming", &g.aim_jump);
             options_help("The jump button (C-up; A in the dual-stick layout, Space with mouse and keyboard) jumps while aiming, "

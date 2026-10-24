@@ -3,6 +3,37 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
+## Unreleased
+
+### New options
+
+- HUD in Screen Corners (Graphics): in widescreen the HUD moves out to the corners of the window. It needs Widescreen on.
+- Shadow Opacity (Graphics): how dark the shadows under characters are drawn (50% in every profile).
+- Blood Splat Limit (Gameplay): with Blood Stays on, how many blood splats stay, from 64 (the original game) up to 4096. Blood Amount now goes up to 800%.
+- Camera Distance, Aim Offset and Aim Zoom (Controls): where the dual-stick camera sits and how the aiming view looks. Over-the-Shoulder Aiming is now a preset of these sliders.
+- Same Aim-Walk Speed in All Directions (Controls): while aiming, walking backwards and sideways is as fast as walking forwards.
+- A Quit tab in the settings menu (Return to Launcher, Quit Game) replaces the two small icon buttons.
+
+### Changes
+
+- Dual stick: the camera pivots on the middle of the character, while aiming too. The crosshair is in the middle of the screen from the first frame you aim, with a small drag margin when you strafe. In boss fights the game's own camera stays in charge and the view turns with the aim. Lupus's hover no longer looks like a drop (#14, #16).
+- Settings menu: the game behind it is darkened, it reopens on the last tab and remembers your place in each tab, and the Profiles tab's description is a card like the other tabs'.
+- The selected profile and texture pack have a gold outline, in the settings menu and the launcher.
+- With a controller: with a slider selected, LB / RB move it by 10 (hold to keep moving), and holding a direction speeds it up. The last option scrolls the list to the bottom, and locked options are skipped.
+- Touch in the menus on the Steam Deck's screen: tap to select, drag to scroll, and drag a slider.
+- Profiles: Blood Splat Limit 64 in Default, 128 in Modern and Modern and Balanced, and 4096 in Extreme (with Blood Stays and Blood Amount 800%). Normalize Diagonal Speed and Same Aim-Walk Speed in All Directions are on in all but Default. Extreme sprints, also while aiming and swimming.
+- The game always pauses while the settings menu is open (the Pause in Settings Menu option is gone).
+- The in-game "Update available" notice shows for 5 seconds.
+
+### Fixes
+
+- Lupus's jetpack flames no longer flicker or lag behind while hovering at frame rates above 30.
+- The machine gun's crosshair shakes again while firing.
+- The reticle no longer stays on screen through a loading zone or warp with Frame Interpolation on.
+- Widescreen: the planet map shown after leaving a planet keeps its planets inside the picture.
+- Blood Stays keeps every splat up to the Blood Splat Limit, instead of old ones disappearing to make room.
+- Fixed a rare crash in busy fights at Game Frame Rate 60.
+
 ## v1.2.2 (2026-10-22)
 
 ### New options

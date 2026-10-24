@@ -117,7 +117,18 @@ static void jfg_fill_pack_entry(JfgPackEntry& e) {
 }
 
 // Rebuilds the lists and marks every port value as changed (settings can also change from the F9 menu and profiles).
+static bool jfg_config_menu_created = false; // set once the menu's context exists (load_document below)
+
 void jfg_config_menu_refresh() {
+    // The Quit tab (Return to Launcher, Quit Game) only while the game runs: from the launcher there is nothing to go back to.
+    // (Not before the menu exists: the refresh also runs when the launcher fills its pages.)
+    if (jfg_config_menu_created) {
+        Rml::ElementDocument* doc = recompui::get_config_context_id().get_document();
+        if (Rml::Element* quit_tab = doc != nullptr ? doc->GetElementById("tab_jfg_quit") : nullptr) {
+            if (ultramodern::is_game_started()) quit_tab->RemoveProperty(Rml::PropertyId::Display);
+            else quit_tab->SetProperty(Rml::PropertyId::Display, Rml::Style::Display::None);
+        }
+    }
     jfg_profile_entries.clear();
     const std::string active = jfg::settings::active_profile();
     for (const std::string& n : jfg::settings::profiles()) jfg_profile_entries.push_back({ n, n == active });
@@ -332,6 +343,82 @@ void dino::input::config_menu_set_cont_or_kb(bool cont_interacted) {
     }
 }
 
+// JFG PORT: each tab remembers the option that had the focus on it and how far its list was scrolled, and comes back to
+// them when switched to with the bumpers; the menu opened in game (Esc or the menu button) comes back on the tab it was
+// closed on (for this run of the game only). An option is focused again only with a controller or the keyboard in use;
+// with the mouse just the tab and the scrolling come back.
+struct JfgTabPlace {
+    bool saved = false;
+    std::string focus_id;
+    float scroll = 0.0f;
+};
+static std::vector<JfgTabPlace> jfg_tab_places;
+static int jfg_menu_closed_tab = -1;
+
+// The scrolling options list that holds element (a config__wrapper taller inside than out), or nullptr.
+static Rml::Element* jfg_scroll_list_of(Rml::Element* element) {
+    for (Rml::Element* e = element; e != nullptr; e = e->GetParentNode()) {
+        if (e->IsClassSet("config__wrapper") && e->GetScrollHeight() > e->GetClientHeight() + 1.0f) return e;
+    }
+    return nullptr;
+}
+
+// The scrolling options list of tab index, or nullptr (the tab has none, or it is not laid out).
+static Rml::Element* jfg_tab_list(int index) {
+    Rml::Element* panels = recompui::get_child_by_tag(recompui::get_config_tabset(), "panels");
+    Rml::Element* panel = panels != nullptr ? panels->GetChild(index) : nullptr;
+    if (panel == nullptr) return nullptr;
+    Rml::ElementList lists;
+    panel->GetElementsByClassName(lists, "config__wrapper");
+    for (Rml::Element* l : lists) {
+        if (l->GetScrollHeight() > l->GetClientHeight() + 1.0f) return l;
+    }
+    return nullptr;
+}
+
+// Notes where the open tab is (call before it is left). A focus outside its list (the tabs, the mouse) keeps the option
+// noted before.
+static void jfg_save_tab_place() {
+    Rml::ElementDocument* doc = recompui::get_config_context_id().get_document();
+    if (doc == nullptr) return;
+    const int index = recompui::get_config_tabset()->GetActiveTab();
+    if (index < 0) return;
+    if ((size_t)index >= jfg_tab_places.size()) jfg_tab_places.resize(index + 1);
+    JfgTabPlace& place = jfg_tab_places[index];
+    Rml::Element* list = jfg_tab_list(index);
+    if (list == nullptr) return;
+    place.saved = true;
+    place.scroll = list->GetScrollTop();
+    Rml::Element* focused = doc->GetFocusLeafNode();
+    if (focused != nullptr && jfg_scroll_list_of(focused) == list && !focused->GetId().empty()) place.focus_id = focused->GetId();
+}
+
+// Puts the open tab back where it was. Returns whether an option got the focus.
+static bool jfg_restore_tab_place() {
+    Rml::ElementDocument* doc = recompui::get_config_context_id().get_document();
+    if (doc == nullptr) return false;
+    const int index = recompui::get_config_tabset()->GetActiveTab();
+    if (index < 0 || (size_t)index >= jfg_tab_places.size() || !jfg_tab_places[index].saved) return false;
+    const JfgTabPlace& place = jfg_tab_places[index];
+    doc->UpdateDocument(); // lay the tab out, so its list can be scrolled
+    if (Rml::Element* list = jfg_tab_list(index)) list->SetScrollTop(place.scroll);
+    if (!recompui::get_cont_active() || place.focus_id.empty()) return false;
+    Rml::Element* target = doc->GetElementById(place.focus_id);
+    if (target == nullptr || target->HasAttribute("disabled") || !target->IsVisible(true)) return false;
+    target->Focus(true);
+    return true;
+}
+
+void jfg_restore_menu_place() {
+    if (jfg_menu_closed_tab < 0) return;
+    recompui::get_config_tabset()->SetActiveTab(jfg_menu_closed_tab);
+    if (jfg_restore_tab_place()) return;
+    if (!recompui::get_cont_active()) return;
+    if (Rml::Element* tabs = recompui::get_child_by_tag(recompui::get_config_tabset(), "tabs")) {
+        if (Rml::Element* tab = tabs->GetChild(jfg_menu_closed_tab)) tab->Focus(true);
+    }
+}
+
 void close_config_menu_impl() {
     dino::config::save_config();
 
@@ -342,6 +429,10 @@ void close_config_menu_impl() {
     	recompui::hide_context(sub_menu_context);
     }
     else if (recompui::is_context_shown(config_context)) {
+        if (ultramodern::is_game_started()) { // JFG PORT
+            jfg_save_tab_place();
+            jfg_menu_closed_tab = recompui::get_config_tabset()->GetActiveTab();
+        }
     	recompui::hide_context(config_context);
     }
     else {
@@ -423,7 +514,7 @@ void close_config_menu() {
     close_config_menu_impl();
 }
 
-void dino::config::open_quit_game_prompt() {
+void dino::config::open_quit_game_prompt(const std::string& return_focus_id) {
     recompui::open_choice_prompt(
         "Are you sure you want to quit?",
         "Any progress since your last save will be lost.",
@@ -436,7 +527,7 @@ void dino::config::open_quit_game_prompt() {
         recompui::ButtonVariant::Error,
         recompui::ButtonVariant::Tertiary,
         true,
-        "config__quit-game-button"
+        return_focus_id
     );
 }
 
@@ -753,6 +844,20 @@ class ConfigFocusScrollListener : public Rml::EventListener {
             list = list->GetParentNode();
         }
         if (list == nullptr) return;
+        // The other end: the row of the list's last control that can take the focus (not a locked one) scrolls the list to
+        // its very bottom, so the text below it shows too. Anything else only scrolls as far as needed.
+        Rml::ElementList controls;
+        list->QuerySelectorAll(controls, "input, button, select, textarea");
+        for (auto it = controls.rbegin(); it != controls.rend(); ++it) {
+            if ((*it)->HasAttribute("disabled") || !(*it)->IsVisible(true)) continue;
+            Rml::Element* last_row = *it;
+            while (last_row != nullptr && last_row->GetParentNode() != list) last_row = last_row->GetParentNode();
+            if (last_row == row) {
+                list->SetScrollTop(list->GetScrollHeight() - list->GetClientHeight());
+                return;
+            }
+            break;
+        }
         const float bottom = target->GetAbsoluteOffset(Rml::BoxArea::Border).y + target->GetBox().GetSize(Rml::BoxArea::Border).y -
             list->GetAbsoluteOffset(Rml::BoxArea::Padding).y + list->GetScrollTop();
         if (bottom <= list->GetClientHeight()) {
@@ -803,7 +908,8 @@ class ConfigTabsetListener : public Rml::EventListener {
 };
 
 // JFG PORT: the controller's bumpers switch tabs (LB the one to the left, RB to the right, wrapping round), skipping
-// hidden ones. The new tab gets the focus, so Down goes into its options.
+// hidden ones. The new tab comes back to the option it had the focus on last (see jfg_save_tab_place); without one the
+// tab gets the focus, so Down goes into its options.
 void jfg_config_step_tab(int dir) {
     if (recompui::is_prompt_open()) return;
     Rml::ElementTabSet* tabset = recompui::get_config_tabset();
@@ -815,10 +921,33 @@ void jfg_config_step_tab(int dir) {
         const int i = ((cur + dir * k) % n + n) % n;
         Rml::Element* tab = tabs->GetChild(i);
         if (tab == nullptr || tab->GetComputedValues().display() == Rml::Style::Display::None) continue;
+        jfg_save_tab_place();
         tabset->SetActiveTab(i);
-        tab->Focus();
+        if (!jfg_restore_tab_place()) tab->Focus();
         return;
     }
+}
+
+// JFG PORT: with a slider selected the bumpers move it by 10 (LB down, RB up), held at its ends; a held direction (D-pad
+// or stick, after the first second) moves it too. The longer it is held (held_secs) the bigger the steps, also in
+// proportion to the slider's range so the long ones (Blood Splat Limit, 64-4096) get across quickly. False when the
+// selection is not on a slider, so the bumpers switch tabs as usual.
+bool jfg_config_slider_step(int dir, float held_secs, bool bumper) {
+    if (recompui::is_prompt_open()) return false;
+    Rml::Element* focus = recompui::get_config_tabset()->GetOwnerDocument()->GetFocusLeafNode();
+    if (focus == nullptr || focus->GetTagName() != "input" || focus->GetAttribute<Rml::String>("type", "") != "range") return false;
+    auto* input = static_cast<Rml::ElementFormControlInput*>(focus);
+    const float lo = focus->GetAttribute<float>("min", 0.0f);
+    const float hi = focus->GetAttribute<float>("max", 100.0f);
+    const float range = hi - lo;
+    float amount;
+    if (bumper) amount = held_secs < 1.0f ? 10.0f : held_secs < 2.0f ? std::max(10.0f, range * 0.02f) : std::max(20.0f, range * 0.05f);
+    else amount = held_secs < 2.0f ? std::max(2.0f, range * 0.005f) : held_secs < 3.0f ? std::max(5.0f, range * 0.015f) : std::max(10.0f, range * 0.03f);
+    float v = 0.0f;
+    try { v = std::stof(input->GetValue()); } catch (...) { return true; }
+    v = std::clamp(v + dir * std::round(amount), lo, hi);
+    input->SetValue(std::to_string((int)std::lround(v)));
+    return true;
 }
 
 // JFG PORT: the recomp's own options that the port's tabs show (volume, stick and rumble, window and resolution),
@@ -898,6 +1027,7 @@ public:
     }
     void load_document() override {
         config_context = recompui::create_context(dino::runtime::get_asset_path("config_menu.rml"));
+        jfg_config_menu_created = true; // JFG PORT
         recompui::update_mod_list(false);
         recompui::get_config_tabset()->AddEventListener(Rml::EventId::Tabchange, &config_tabset_listener);
         recompui::get_config_tabset()->AddEventListener(Rml::EventId::Focus, &config_focus_scroll_listener, true); // JFG PORT: capture phase
@@ -937,7 +1067,9 @@ public:
 
         recompui::register_event(listener, "open_quit_game_prompt",
             [](const std::string& param, Rml::Event& event) {
-                dino::config::open_quit_game_prompt();
+                // JFG PORT: "open_quit_game_prompt:<id>" (the Quit tab's button) gives the focus back to <id> on Cancel.
+                if (param.size() > 1) dino::config::open_quit_game_prompt(param.substr(1));
+                else dino::config::open_quit_game_prompt();
             });
         // JFG PORT: the tools button: this menu closes and F10's tools bar opens (src/jfg/jfg_ui_tools.cpp), the controller
         // on its first menu; with the mouse and keys a bar already up is hidden instead. Not while closing waits on the
@@ -949,7 +1081,7 @@ public:
                     jfg_tools_open_from_menu();
                 }
             });
-        // JFG PORT: the launcher button next to Quit. The game cannot go back to the launcher while it runs, so it starts
+        // JFG PORT: Return to Launcher (the Quit tab). The game cannot go back to the launcher while it runs, so it starts
         // again on the launcher (--launcher, also with skip_launcher=1) and this run quits, as Quit does.
         recompui::register_event(listener, "open_return_to_launcher_prompt",
             [](const std::string& param, Rml::Event& event) {
@@ -971,7 +1103,7 @@ public:
                     recompui::ButtonVariant::Primary,
                     recompui::ButtonVariant::Tertiary,
                     true,
-                    "config__launcher-button"
+                    param.size() > 1 ? param.substr(1) : std::string("jfg_quit_launcher") // ":<id>": the button to focus again
                 );
             });
 

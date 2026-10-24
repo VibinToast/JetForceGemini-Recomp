@@ -30,6 +30,5 @@ Found something that isn't listed here? See [Reporting bugs](README.md#reporting
 
 ## Steam Deck
 
-- **The touchscreen doesn't work in the settings menu.** Use the Deck's controls instead. **Fix planned.**
 - **The Modern profiles turn on Mouse and Keyboard Controls.** After choosing one, turn Mouse and Keyboard Controls off
   again in the Controls tab (see [Steam Deck](README.md#steam-deck)).
