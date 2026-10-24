@@ -90,6 +90,21 @@ extern "C" void jfg_squad_spawn_after(uint8_t* rdram_, recomp_context* ctx) {
     jfg_log_line("jfg_memory.log", line);
 }
 
+// Entry of SquaddieInitFromRomdef(object, ...): 0 (skip it) when the object is NULL, see jfg.us.toml.
+extern "C" int jfg_squaddie_init_ok(uint8_t* rdram_, recomp_context* ctx) {
+    if ((uint32_t)ctx->r4 != 0) return 1;
+    g_rdram = rdram_;
+    static int logged = 0;
+    if (logged++ < 20) {
+        char line[200];
+        std::snprintf(line, sizeof(line), "reused squad member came back with no object (level %d, %d bytes of heap free); left out",
+            (int)(int16_t)rd16(ADDR_currentLevel), (int)rd32(ADDR_FreeRAM));
+        jfg_log_line("jfg_memory.log", line);
+    }
+    ctx->r2 = 0; // what it returns to the callers that use it
+    return 0;
+}
+
 // objSetupObject(entry, flags) returning NULL: which of its steps failed, logged to jfg_memory.log. A squadron member and
 // a gun turret's shot could not be created in level 248 with 200 KB of heap free (the shot's NULL then crashed
 // squadsFireWeapon), so the heap is not the only thing that runs out. Hooks: the entry, the return of each call that can

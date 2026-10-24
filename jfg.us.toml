@@ -708,6 +708,15 @@ func = "func_overlay_3_000148C0_1EE9DA0"
 before_vram = 0x82034CA4
 text = "{ void jfg_squad_spawn_after(uint8_t*, recomp_context*); jfg_squad_spawn_after(rdram, ctx); }"
 
+# Squad member brought back with no object: func_overlay_3_00014694 reuses a deactivated member through func_80005F14,
+# which can return NULL in a busy fight, and passes that straight to SquaddieInitFromRomdef (first read: object + 0x68;
+# crash 2026-10-23 at Game 60). The member is left out (the caller returns the same NULL, which the spawn loop counts
+# as a failed add, see jfg_squad_spawn_after); logged to bin/jfg_memory.log.
+[[patches.hook]]
+func = "SquaddieInitFromRomdef"
+before_vram = 0x8202DF84
+text = "{ int jfg_squaddie_init_ok(uint8_t*, recomp_context*); if (!jfg_squaddie_init_ok(rdram, ctx)) { recomp_exit_function(); return; } }"
+
 # Weapons tab (src/jfg/jfg_weapons.cpp): bolt size for the player's laser bolts, at the end of laserboltInit
 # (overlay 109; a0 = the new bolt).
 [[patches.hook]]
