@@ -147,6 +147,21 @@ std::vector<Setting>& settings_table() {
           "is darkened, the open stays as it is. Rays traced upwards from each pixel's surface. 0 is off." },
         { "ray_sky_reach", "Sky distance (units)", &s.ray_sky_reach, nullptr, 200, 20000, Group::Shadows, false,
           "How far a ray must get without hitting anything to count as seeing the sky." },
+        { "ray_gi", "Ray-traced indirect light", nullptr, &s.ray_gi, 0, 1, Group::Shadows, false,
+          "With ray-traced shadows on: light bounces. A grid of probes around the camera traces rays every frame; what "
+          "the torches, placed lights and the directional light light up lights its surroundings in turn, and the "
+          "sky's light comes in where the sky is seen. Smoothed over frames (a moving light's bounce follows in about "
+          "half a second)." },
+        { "ray_gi_strength", "Indirect light (%)", &s.ray_gi_strength, nullptr, 0, 400, Group::Shadows, false,
+          "How bright the bounced light and the sky's light are." },
+        { "ray_gi_spacing", "Probe spacing (units)", &s.ray_gi_spacing, nullptr, 32, 400, Group::Shadows, true,
+          "How far apart the probes are: smaller follows walls and corners more closely, larger reaches further from "
+          "the camera (the grid is 16 x 8 x 16 probes)." },
+        { "ray_sky_light", "Sky light (%)", &s.ray_sky_light, nullptr, 0, 400, Group::Shadows, false,
+          "The open sky's light on what sees it, in the sky colour below (with Ray-traced indirect light on). 0 is off." },
+        { "sky_r", "Sky colour red", &s.sky_r, nullptr, 0, 255, Group::Shadows, false, "" },
+        { "sky_g", "Sky colour green", &s.sky_g, nullptr, 0, 255, Group::Shadows, false, "" },
+        { "sky_b", "Sky colour blue", &s.sky_b, nullptr, 0, 255, Group::Shadows, false, "" },
         { "shadows", "Shadow darkness (%)", &s.shadows, nullptr, 0, 100, Group::Shadows, false,
           "How dark shadows from the lights are. 0 is off, as in the game." },
         { "glow_shadow", "Shadows on painted glow (%)", &s.glow_shadow, nullptr, 0, 100, Group::Shadows, false,

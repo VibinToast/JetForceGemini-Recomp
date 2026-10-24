@@ -636,7 +636,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     const bool on = mode > 0;
     const float yaw = s.sun_yaw.load() * 3.14159265f / 180.0f, pitch = s.sun_pitch.load() * 3.14159265f / 180.0f;
     const float sun = s.sun_intensity.load() / 100.0f;
-    float params[32] = {};
+    float params[40] = {};
     params[0] = std::cos(pitch) * std::sin(yaw);
     params[1] = std::sin(pitch);
     params[2] = std::cos(pitch) * std::cos(yaw);
@@ -665,7 +665,13 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     params[25] = std::clamp(s.ray_ao_strength.load(), 0, 200) / 100.0f;
     params[26] = std::clamp(s.ray_sky.load(), 0, 200) / 100.0f;
     params[27] = (float)std::clamp(s.ray_sky_reach.load(), 200, 20000);
-    rt64_jfg_lighting_params(params, 32);
+    params[28] = s.ray_gi.load() ? std::clamp(s.ray_gi_strength.load(), 0, 400) / 100.0f : 0.0f;
+    params[29] = (float)std::clamp(s.ray_gi_spacing.load(), 32, 400);
+    params[30] = std::clamp(s.ray_sky_light.load(), 0, 400) / 100.0f;
+    params[32] = std::clamp(s.sky_r.load(), 0, 255) / 255.0f;
+    params[33] = std::clamp(s.sky_g.load(), 0, 255) / 255.0f;
+    params[34] = std::clamp(s.sky_b.load(), 0, 255) / 255.0f;
+    rt64_jfg_lighting_params(params, 40);
     rt64_jfg_frame_objects((uint32_t)ctx->r4 & RDRAM_MASK, g_object_ranges.data(), (uint32_t)(g_object_ranges.size() / 3),
                            g_object_normals.data(), (uint32_t)g_object_normals.size(), g_object_lights.data(),
                            (uint32_t)(g_object_lights.size() / OBJECT_LIGHT_FLOATS));
