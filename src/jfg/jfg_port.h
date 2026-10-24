@@ -208,6 +208,8 @@ struct LightingSettings {
     std::atomic<bool> characters{ true };    // light characters and objects in RT64 (per pixel, with their normals)
     std::atomic<int> character_lights{ 40 }; // % the frame's lights add on characters (the game's own come from them)
     std::atomic<bool> ray_shadows{ false };  // ray-traced shadows instead of the shadow maps (when the GPU can)
+    std::atomic<int> ray_light_size{ 4 };    // ... the lights' size (radius, world units) for soft edges, 0 = hard
+    std::atomic<int> ray_sun_softness{ 10 }; // ... the directional light's angular radius (tenths of a degree)
     std::atomic<int> light_tint{ 0 };        // % the frame's lights on the level take each surface's own colour
     std::atomic<int> facing{ 40 };           // % the level lighting depends on a surface facing its light (0 = as the game)
     std::atomic<int> shadows{ 80 };          // % how dark shadows from the lights are

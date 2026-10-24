@@ -127,7 +127,13 @@ std::vector<Setting>& settings_table() {
           "The nearest lights are kept. Every lit pixel adds up each light." },
         { "ray_shadows", "Ray-traced shadows", nullptr, &s.ray_shadows, 0, 1, Group::Shadows, false,
           "Shadows traced with the GPU's ray tracing instead of shadow maps: every light that casts shadows gets them, "
-          "sharp and exact. Needs a GPU with ray tracing (DirectX 12 for now); without it the shadow maps stay." },
+          "with soft edges. Needs a GPU with ray tracing (DirectX 12 for now); without it the shadow maps stay." },
+        { "ray_light_size", "Light size (units)", &s.ray_light_size, nullptr, 0, 100, Group::Shadows, false,
+          "How big the lights are for ray-traced shadows: the bigger, the softer a shadow's edge, more so the further "
+          "it falls from what casts it. 0: hard edges." },
+        { "ray_sun_softness", "Directional light softness (0.1 degrees)", &s.ray_sun_softness, nullptr, 0, 100, Group::Shadows, false,
+          "How wide the directional light is in the sky, for its ray-traced shadows: the sun is about 3 (0.3 degrees). "
+          "0: hard edges." },
         { "shadows", "Shadow darkness (%)", &s.shadows, nullptr, 0, 100, Group::Shadows, false,
           "How dark shadows from the lights are. 0 is off, as in the game." },
         { "glow_shadow", "Shadows on painted glow (%)", &s.glow_shadow, nullptr, 0, 100, Group::Shadows, false,
