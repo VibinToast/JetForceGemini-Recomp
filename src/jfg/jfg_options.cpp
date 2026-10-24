@@ -117,7 +117,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "texture_filter") == 0) g.texture_filter = std::clamp(value, 0, 1);
     else if (std::strcmp(key, "output_filter") == 0) g.output_filter = std::clamp(value, 0, 2);
     else if (std::strcmp(key, "start_skips_cutscenes") == 0) g.start_skips_cutscenes = value != 0;
-    else if (std::strcmp(key, "pause_in_menu") == 0) g.pause_in_menu = value != 0;
+    else if (std::strcmp(key, "pause_in_menu") == 0) g.pause_in_menu = true; // not in the menu any more: always on (F9 can turn it off until the next start)
     else if (std::strcmp(key, "auto_save") == 0) g.auto_save = value != 0;
     else if (std::strcmp(key, "auto_save_minutes") == 0) g.auto_save_minutes = std::clamp(value, 0, 30);
     else if (std::strcmp(key, "save_notification") == 0) g.save_notification = value != 0;
