@@ -28,6 +28,7 @@ struct State {
     bool gore_keep_blood = false;  // blood splats stay on the ground and walls (jfg_gore.cpp)
     bool gore_keep_limbs = false;  // severed body parts stay (jfg_gore.cpp)
     int  blood_amount = 100;       // blood drops per spurt, percent (jfg_blood_more)
+    int  blood_splats = 64;        // splats that stay with gore_keep_blood (64 = the game's pool; jfg_gore.cpp)
     bool show_fps = false;         // frame rate in the top right corner
     bool show_level = false;       // level number and name in the top right corner
     bool show_pack = false;        // texture pack in use in the top right corner
@@ -49,8 +50,10 @@ struct State {
     bool smooth_shadows = true;    // "Smooth Shadows": character shadows follow the in-between frames (jfg_shadow_interp.cpp)
     int  interp_limit = 0;         // only read from older settings files: the old Interpolation Limit, carried over to Smooth Motion
     bool widescreen = false;       // render the 3D view to the full window width, see jfg_widescreen_active()
+    bool hud_corners = false;      // in widescreen, the HUD at the window's edges (jfg_hud_corners.cpp)
     int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
     int  hit_flash = 100;          // red screen when the character is hit: strength, percent (jfg_hit_flash)
+    int  shadow_opacity = 50;      // how dark character shadows are drawn, percent of the game's (jfg_shadow_alpha); 50 in every profile
     bool hide_floyd = false;       // Floyd is not drawn while he follows the character (jfg_hide_object)
     bool vignette = false;        // darker screen edges in RT64 (src/shaders/VignettePS.hlsl), see push_render_options()
     int  vignette_strength = 40;   // vignette: how dark the corners get, percent
@@ -80,13 +83,20 @@ struct State {
     bool sprint_swimming = false;  // sprint also works while swimming (Vela, at the surface and diving)
     int  sprint_swim_speed = 160;  // swim sprint: swimming speed while it is held, percent (on top of the Dive speed)
     bool normalize_diagonal = false; // running while sidestepping is no faster than running alone (jfg_move_scale)
+    bool aim_even_speed = false;   // while aiming the character walks as fast sideways and backwards as forwards (jfg_move_scale)
     bool camera_collision = true;  // dual stick: the camera stays inside the level (the game's own wall check)
     bool aim_from_character = false; // dual stick: on aiming, the view turns to the character instead of the character to the view
     bool dual_layout = true;       // dual stick: built-in controller layout instead of the controller bindings
     bool swap_triggers = false;    // dual stick: swap the N64 Z (fire) and R (aim) inputs
     int  camera_speed_h = 100;     // dual stick: camera speed sideways, percent
     int  camera_speed_v = 100;     // dual stick: camera speed up/down, percent
-    bool aim_shoulder = false;     // aiming: view from over the character's right shoulder
+    int  camera_distance = 100;    // dual stick: the camera's distance from the character, percent of the game's
+    int  aim_drag_margin = 15;     // dual stick, aiming: how far the character may step aside before the camera follows, percent of the half screen
+    int  aim_drag_return = 200;    // dual stick, aiming: how fast the camera comes back onto a character standing still, percent (0: never)
+    int  aim_offset_x = 0;         // dual stick, aiming: the point the camera orbits, moved right of the character (units)
+    int  aim_offset_y = 0;         // ... up
+    int  aim_offset_z = 0;         // ... and the camera this much closer in (a zoom)
+    bool aim_shoulder = false;     // aiming: view from over the character's right shoulder (dual stick: aim_view's preset)
     bool aim_centered = false;     // aiming: the view turns at once and the reticle stays in the middle
     bool aim_jump = false;         // aiming: the jump button (C-up) jumps instead of zooming, see aim_jump()
     int  aim_speed = 70;           // aiming: how fast the stick turns the view / moves the reticle, percent
@@ -111,6 +121,13 @@ struct State {
     int  skip_level = -1;
     int  skip_ticks = 0;
 };
+
+// Dual-stick aiming view (Over-the-Shoulder off: the player's sliders; on: fixed to a view from over the right
+// shoulder, the sliders greyed out). The player's own values stay saved underneath.
+struct AimView { int drag_margin, drag_return, offset_x, offset_y, zoom; };
+constexpr AimView AIM_SHOULDER_VIEW = { 0, 100, 17, 21, 125 };
+AimView aim_view();
+bool aim_view_key(const char* key, int* preset_value); // one of the sliders aim_view covers, and its value in the preset
 extern State g;
 
 // jfg_options.cpp

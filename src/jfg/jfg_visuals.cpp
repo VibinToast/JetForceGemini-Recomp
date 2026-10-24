@@ -23,9 +23,20 @@ namespace jfg {
 extern "C" int jfg_widescreen_active(void) {
     static const bool env = std::getenv("JFG_WIDESCREEN") != nullptr; // for tests
     // The renderer keeps the sides of a widescreen picture empty while the pause screen is up (see FramebufferRenderer).
-    rt64_jfg_paused.store((g_rdram != nullptr && rd8(ADDR_pauseMode) != 0) ? 1 : 0, std::memory_order_relaxed);
+    // Leaving a planet (mainChangeLevel with 0x11) shows the region stats paused, then loads the level with the pause
+    // mode cleared and the planet map as front-end mode 17 in game mode 0: that map gets the same treatment.
+    const bool paused = g_rdram != nullptr &&
+        (rd8(ADDR_pauseMode) != 0 || (rd32(ADDR_mainGameMode) == 0 && rd8(ADDR_frontEndMode) == FRONT_MODE_MAP));
+    rt64_jfg_paused.store(paused ? 1 : 0, std::memory_order_relaxed);
     if (!(g.widescreen || env) || g_rdram == nullptr) return 0;
     return rd32(ADDR_mainGameMode) == 0 ? 1 : 0;
+}
+
+// "Shadow Opacity": the alpha func_8001B8E0 draws a shadow batch with (gDPSetPrimColor; the object's fade times the
+// batch's vertex alpha, >> 8), scaled by the option. 0 skips the batch, as the game does when a shadow fades out.
+extern "C" int jfg_shadow_alpha(int alpha) {
+    if (g.shadow_opacity == 100 || alpha <= 0) return alpha;
+    return std::min(255, (alpha * g.shadow_opacity + 50) / 100);
 }
 
 // "Hit flash opacity": entry of frontFlashScreen. The characters' control code (overlays 15-17) calls it with red

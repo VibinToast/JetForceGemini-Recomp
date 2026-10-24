@@ -245,8 +245,8 @@
 			.rl-page .button { border-radius: 0dp; border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF;
 				font-family: "JetBrains Mono"; font-weight: bold; font-size: 19dp; letter-spacing: 1dp; padding: 16dp 20dp; }
 			.rl-page .button:hover, .rl-page .button:focus { background-color: #0A2660; border-color: #FFB21A; color: #E8F3FF; }
-			.rl-page .button.jfg-selected { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; }
-			.rl-page .button.jfg-selected:hover, .rl-page .button.jfg-selected:focus { background-color: #1E90E8; border-color: #FFB21A; color: #050B1C; }
+			.rl-page .button.jfg-selected { background-color: #0A2660; border-color: #FFB21A; color: #E8F3FF; } /* the chosen profile / pack: a gold outline on the hover background */
+			.rl-page .jfg-pack.jfg-selected .jfg-pack__meta { color: #E8F3FF; }
 			/* The Textures page's pack cards (as in config_menu.rml, at the launcher's size) and the focused pack's details. */
 			.rl-page .jfg-pack-list { display: block; width: 100%; margin-top: 12dp; }
 			.rl-page .jfg-pack-join { display: block; margin: 10dp 10dp 0dp; font-size: 16dp; line-height: 24dp; color: #FFB21A; }
@@ -257,7 +257,6 @@
 			.rl-page .jfg-pack__name { display: block; }
 			.rl-page .jfg-pack__meta { display: block; margin-top: 8dp; font-size: 16dp; line-height: 20dp; letter-spacing: 0.5dp; font-weight: normal; color: #8199BF; }
 			.rl-page .jfg-pack:hover .jfg-pack__meta, .rl-page .jfg-pack:focus .jfg-pack__meta { color: #E8F3FF; }
-			.rl-page .jfg-pack.jfg-selected .jfg-pack__meta { color: #050B1C; }
 			.rl-page .jfg-pack-status { white-space: nowrap; } /* the "In use" line keeps its variant bubble on the same line */
 			.rl-page .jfg-pack__variant { display: inline-block; margin-left: 10dp; padding: 2dp 10dp; border-radius: 12dp; background-color: #FFB21A; color: #050B1C;
 				font-family: "JetBrains Mono"; font-weight: bold; font-size: 15dp; line-height: 19dp; vertical-align: middle; }
@@ -267,7 +266,6 @@
 				font-family: "JetBrains Mono"; font-weight: bold; font-size: 12dp; line-height: 16dp; text-transform: uppercase; }
 			.rl-page .jfg-pack__tags .jfg-pack__kind { margin-left: 0dp; }
 			.rl-page .jfg-pack__kind { flex: 0 0 auto; margin-left: 12dp; padding: 2dp 8dp; border-width: 2dp; border-color: #FFB21A; color: #FFB21A; font-size: 14dp; line-height: 18dp; text-transform: uppercase; }
-			.rl-page .jfg-pack.jfg-selected .jfg-pack__kind { border-color: #050B1C; color: #050B1C; }
 			.rl-page .jfg-pack-detail__image { display: block; width: 128dp; height: 128dp; margin-bottom: 22dp; }
 			.rl-page .jfg-pack-detail__meta { display: block; margin: -4dp 0dp 14dp; font-family: "JetBrains Mono"; font-size: 18dp; line-height: 24dp; color: #3CC8FF; }
 			.rl-page .jfg-pack-detail__site { display: inline-block; margin-top: 18dp; padding: 10dp 14dp; font-size: 16dp; letter-spacing: 0.5dp; }

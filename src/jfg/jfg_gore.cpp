@@ -7,6 +7,12 @@
 // pool is full, frees the oldest splat for the new drop (hook in bloodSpurtAdd before the count is read), so new blood
 // always appears and the oldest stains make room. Drops still flying or splashing are never taken. With the option
 // off the game's own behaviour is unchanged.
+// The splats that make room are not lost: each is copied into a host list (Blood Splat Limit - 64 at most, a new level empties
+// it), and bloodSpurtsDraw(&gfx, &mtx, &vtx), which draws every entry of the pool by its state, is run again for them,
+// 64 at a time: the list's newest are put into the pool, drawn, and the pool is put back. The level's own frame
+// buffers are sized for its normal drawing (listReallocate), so the passes write into blocks of their own in the
+// second 8 MB of RDRAM, which the game never uses, and the frame's display list calls them. When a block is full the
+// oldest kept splats are not drawn that frame (2 MB each: far more than SPLATS_KEPT need).
 //
 // Body parts (objects.c / spranim.c): a severed limb is an object (behaviour severedLimbControl, data at object + 0x68)
 // with a life timer (data + 0x14, s16, counted down by twice the update rate) after which it fades out (object + 0x39)
@@ -21,6 +27,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <random>
 #include <unordered_map>
 
@@ -30,6 +37,7 @@
 #include "jfg_port.h"
 
 extern "C" void bloodSpurtAdd(uint8_t* rdram, recomp_context* ctx);
+extern "C" void bloodSpurtsDraw(uint8_t* rdram, recomp_context* ctx);
 
 namespace jfg {
 
@@ -78,6 +86,15 @@ bool keep_newest(Tracker& t, uint32_t addr, int keep) {
 Tracker g_splats, g_limbs;
 uint32_t g_blood_recycled = 0; // splats freed for new blood, for the test log
 
+// The splats freed for new blood, oldest first, as the pool entry's words, and the level they were made in.
+constexpr uint32_t BLOOD_ENTRY_WORDS = BLOOD_ENTRY_SIZE / 4;
+constexpr size_t SPLATS_KEPT = 4096 - BLOOD_ENTRIES; // the most Blood Splat Limit (blood_splats) keeps besides the pool
+size_t kept_limit() { return (size_t)std::clamp(g.blood_splats - BLOOD_ENTRIES, 0, (int)SPLATS_KEPT); }
+struct KeptSplat { uint32_t words[BLOOD_ENTRY_WORDS]; };
+std::deque<KeptSplat> g_kept_splats;
+int g_kept_level = -1;
+int g_extra_passes = 0, g_extra_drawn = 0; // in the last bloodSpurtsDraw, for the test log
+
 // The overlay's start as last seen by a hook (0 = not seen yet).
 uint32_t g_blood_base = 0;
 uint32_t blood_count() { return g_blood_base + BLOOD_COUNT_OFFSET; }
@@ -95,9 +112,10 @@ void blood_log() {
         if (state == BLOOD_SPLAT) splats++;
         else if (state != 0) moving++;
     }
-    char line[160];
-    std::snprintf(line, sizeof(line), "blood: %d splats, %d flying or splashing, count %d, %u recycled so far (level %d)", splats,
-        moving, (int)rd32(blood_count()), g_blood_recycled, (int)(int16_t)rd16(ADDR_currentLevel));
+    char line[224];
+    std::snprintf(line, sizeof(line), "blood: %d splats, %d flying or splashing, count %d, %u recycled so far, %d kept, %d of them "
+        "drawn in %d extra passes (level %d)", splats, moving, (int)rd32(blood_count()), g_blood_recycled, (int)g_kept_splats.size(),
+        g_extra_drawn, g_extra_passes, (int)(int16_t)rd16(ADDR_currentLevel));
     jfg_log_line("jfg_memory.log", line);
 }
 } // namespace
@@ -134,11 +152,113 @@ extern "C" void jfg_blood_make_room(uint8_t* rdram_, uint32_t base) {
         if (first < oldest_first) { oldest_first = first; oldest = entry; }
     }
     if ((free_entry && (int32_t)rd32(blood_count()) < BLOOD_ENTRIES) || oldest == 0) return;
+    const int level = (int16_t)rd16(ADDR_currentLevel);
+    if (level != g_kept_level) { g_kept_splats.clear(); g_kept_level = level; }
+    KeptSplat kept;
+    for (uint32_t w = 0; w < BLOOD_ENTRY_WORDS; w++) kept.words[w] = rd32(oldest + w * 4);
+    if (kept_limit() > 0) g_kept_splats.push_back(kept);
+    while (g_kept_splats.size() > kept_limit()) g_kept_splats.pop_front();
     wr8(oldest + BLOOD_STATE_OFFSET, 0);
     const int32_t count = (int32_t)rd32(blood_count());
     if (count > 0) wr32(blood_count(), (uint32_t)(count - 1));
     g_splats.seen.erase(oldest); // the new drop in this entry is a new splat when it lands
     g_blood_recycled++;
+}
+
+namespace {
+// Two blocks in the second 8 MB of RDRAM, which the game never uses (lib/rt64 keeps it readable for this microcode:
+// DKRAddressMask), one per frame as the game's own buffers (the frame drawn now may still be read while the next one is
+// made), each with the kept splats' display lists in its first half and their vertices in the second. bloodSpurtsDraw
+// runs once per camera, so the calls of one frame go one after the other in its block (from the start again at camera 0).
+constexpr uint32_t ADDR_frame = 0x800FD7C0;           // which of the two buffers the game draws into now
+constexpr uint32_t BLOCKS[2] = { 0x80C00000, 0x80E00000 };
+constexpr uint32_t BLOCK_SIZE = 0x200000;
+constexpr uint32_t G_DL = 0x06000000, G_ENDDL = 0xB8000000;
+} // namespace
+
+// Entry of bloodSpurtFreeLib (overlay 8 freed, the level is left): the kept splats go.
+extern "C" void jfg_blood_free_kept(uint8_t* rdram_, recomp_context* ctx) {
+    (void)rdram_; (void)ctx;
+    g_kept_splats.clear();
+}
+
+// Entry of bloodSpurtsDraw(Gfx **dList, Mtx **mtx, Vertex **vtx): draws the kept splats (see the top of the file) in
+// extra passes of the function, before it draws the pool. The passes write into this frame's block, which the frame's
+// display list calls. `base` = where overlay 8 starts now (section_addresses[8]).
+extern "C" void jfg_blood_draw_kept(uint8_t* rdram_, recomp_context* ctx, uint32_t base) {
+    static bool busy = false;
+    if (busy) return;
+    g_rdram = rdram_;
+    if (!g.gore_keep_blood || g.no_blood) {
+        g_kept_splats.clear();
+        g_extra_passes = g_extra_drawn = 0;
+        return;
+    }
+    const int level = (int16_t)rd16(ADDR_currentLevel);
+    if (level != g_kept_level) g_kept_splats.clear();
+    while (g_kept_splats.size() > kept_limit()) g_kept_splats.pop_front(); // the limit was lowered
+    if (g_kept_splats.empty()) { g_extra_passes = g_extra_drawn = 0; return; }
+    g_blood_base = base;
+
+    // Where this frame's block is filled up to (a new frame starts at its beginning).
+    static uint32_t cursor_frame = 0xFFFFFFFFu, gfx_cursor = 0, vtx_cursor = 0;
+    const uint32_t frame = rd32(ADDR_frame) & 1;
+    const uint32_t block = BLOCKS[frame];
+    if (frame != cursor_frame || rd32(ADDR_cameraNo) == 0) { // camera 0 draws first in every frame
+        cursor_frame = frame;
+        gfx_cursor = block;
+        vtx_cursor = block + BLOCK_SIZE / 2;
+        g_extra_passes = g_extra_drawn = 0;
+    }
+    const uint32_t gfx_end = block + BLOCK_SIZE / 2 - 8, vtx_end = block + BLOCK_SIZE; // 8: the G_ENDDL
+    // The most one pass of 64 has written, in bytes (a guess until one is seen).
+    static uint32_t pass_gfx = 64 * 8 * 8 + 0x100, pass_vtx = 64 * 6 * 10;
+    if (gfx_cursor + pass_gfx > gfx_end || vtx_cursor + pass_vtx > vtx_end) return;
+
+    // The frame's list calls this part of the block; the passes write into it.
+    const uint32_t gfx_at = (uint32_t)ctx->r4, vtx_at = (uint32_t)ctx->r6;
+    const uint32_t main_gfx = rd32(gfx_at), main_vtx = rd32(vtx_at);
+    wr32(main_gfx, G_DL);
+    wr32(main_gfx + 4, gfx_cursor);
+    wr32(gfx_at, gfx_cursor);
+    wr32(vtx_at, vtx_cursor);
+
+    uint32_t pool[BLOOD_ENTRIES * BLOOD_ENTRY_WORDS];
+    const uint32_t pool_at = blood_entry(0);
+    for (uint32_t w = 0; w < BLOOD_ENTRIES * BLOOD_ENTRY_WORDS; w++) pool[w] = rd32(pool_at + w * 4);
+    busy = true;
+    size_t next = g_kept_splats.size(); // newest first
+    while (next > 0 && rd32(gfx_at) + pass_gfx <= gfx_end && rd32(vtx_at) + pass_vtx <= vtx_end) {
+        const int n = (int)std::min<size_t>(next, BLOOD_ENTRIES);
+        for (int i = 0; i < BLOOD_ENTRIES; i++) {
+            const uint32_t entry = blood_entry(i);
+            if (i < n) {
+                const KeptSplat& k = g_kept_splats[next - n + i];
+                for (uint32_t w = 0; w < BLOOD_ENTRY_WORDS; w++) wr32(entry + w * 4, k.words[w]);
+                wr8(entry + BLOOD_STATE_OFFSET, BLOOD_SPLAT);
+            } else {
+                wr8(entry + BLOOD_STATE_OFFSET, 0);
+            }
+        }
+        const uint32_t g0 = rd32(gfx_at), v0 = rd32(vtx_at);
+        recomp_context c = *ctx;
+        bloodSpurtsDraw(rdram_, &c);
+        pass_gfx = std::max(pass_gfx, rd32(gfx_at) - g0);
+        pass_vtx = std::max(pass_vtx, rd32(vtx_at) - v0);
+        g_extra_passes++;
+        g_extra_drawn += n;
+        next -= n;
+    }
+    busy = false;
+    for (uint32_t w = 0; w < BLOOD_ENTRIES * BLOOD_ENTRY_WORDS; w++) wr32(pool_at + w * 4, pool[w]);
+
+    const uint32_t end = rd32(gfx_at);
+    wr32(end, G_ENDDL);
+    wr32(end + 4, 0);
+    gfx_cursor = end + 8;
+    vtx_cursor = rd32(vtx_at);
+    wr32(gfx_at, main_gfx + 8);
+    wr32(vtx_at, main_vtx);
 }
 
 // Entry of severedLimbControl(object, updateRate).

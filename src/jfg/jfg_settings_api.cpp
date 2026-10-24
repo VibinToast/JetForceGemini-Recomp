@@ -30,6 +30,9 @@ namespace jfg::settings {
 int get(const std::string& key) {
     load_options(); // the menu document can be built before the game's first frame
     if (key == "texture_dump") return g.texture_dump ? 1 : 0;
+    // With Over-the-Shoulder Aiming on, the aiming view's sliders show its fixed view (greyed out in the menu).
+    int preset = 0;
+    if (g.aim_shoulder && aim_view_key(key.c_str(), &preset)) return preset;
     const std::string text = options_text(g);
     const std::string needle = key + "=";
     size_t pos = 0;
@@ -46,6 +49,7 @@ void set(const std::string& key, int value) {
     // RmlUi writes a bound value back whenever its element is refreshed: only real changes are applied and saved.
     if (get(key) == value) return;
     if (key == "texture_dump") { g.texture_dump = value != 0; return; }
+    if (g.aim_shoulder && aim_view_key(key.c_str(), nullptr)) return; // locked to Over-the-Shoulder's view
     apply_option(key.c_str(), value);
     push_render_options();
     save_options();

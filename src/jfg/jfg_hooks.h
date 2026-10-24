@@ -45,6 +45,7 @@ int jfg_freeze_world(void);                                            // func_8
 float jfg_fov(uint8_t* rdram, float fov, uint32_t zoomed);             // camSetFOV
 void jfg_game_fog(uint8_t* rdram, uint32_t sp);                        // func_8001BF9C, right after trackGetFog
 uint32_t jfg_hit_flash(uint32_t color);                                // entry of frontFlashScreen
+int jfg_shadow_alpha(int alpha);                                       // func_8001B8E0, a shadow batch's alpha
 void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // entry of sidekickControl
 int jfg_hide_object(uint8_t* rdram, recomp_context* ctx);              // entry of objPrintObject
 void jfg_hide_shadow(uint8_t* rdram, recomp_context* ctx);             // shadowGenerate, per object
@@ -65,6 +66,8 @@ int jfg_flag_override(int flag);                                       // entry 
 void jfg_blood_more(uint8_t* rdram, recomp_context* ctx);              // entry of bloodSpurtAdd (after jfg_no_blood)
 void jfg_gore_splat(uint8_t* rdram, recomp_context* ctx);              // bloodSpurtUpdateAll, a splat's life countdown
 void jfg_blood_make_room(uint8_t* rdram, uint32_t base);              // bloodSpurtAdd, before the count is read
+void jfg_blood_draw_kept(uint8_t* rdram, recomp_context* ctx, uint32_t base); // bloodSpurtsDraw entry: the kept splats
+void jfg_blood_free_kept(uint8_t* rdram, recomp_context* ctx);       // bloodSpurtFreeLib entry: the kept splats go
 void jfg_gore_limb(uint8_t* rdram, recomp_context* ctx);               // entry of severedLimbControl
 // jfg_area_progress.cpp
 void jfg_region_reset_begin(uint8_t* rdram, recomp_context* ctx);      // entry of mainResetRegion
@@ -77,6 +80,7 @@ void jfg_bolt_init(uint8_t* rdram, recomp_context* ctx);               // end of
 void jfg_mm_alloc_check(uint8_t* rdram, recomp_context* ctx);          // mmAlloc and mmAlloc2, after mempool_slot_find
 void jfg_squad_spawn_before(uint8_t* rdram, recomp_context* ctx);      // overlay 3 +0x14C9C, the squad member loop
 void jfg_squad_spawn_after(uint8_t* rdram, recomp_context* ctx);       // overlay 3 +0x14CA4, after its call
+int  jfg_squaddie_init_ok(uint8_t* rdram, recomp_context* ctx);       // SquaddieInitFromRomdef entry: NULL object guard
 void jfg_objsetup_enter(uint8_t* rdram, recomp_context* ctx);          // entry of objSetupObject
 void jfg_objsetup_step(uint8_t* rdram, recomp_context* ctx, int step); // objSetupObject, after each call that can fail
 void jfg_objsetup_exit(uint8_t* rdram, recomp_context* ctx);           // objSetupObject, its exit (0x80006E04)
@@ -116,6 +120,7 @@ void jfg_cpu_rain_before(uint8_t* rdram, recomp_context* ctx);         // jfg_cp
 void jfg_cpu_rain_after(uint8_t* rdram, recomp_context* ctx);          // ... and after it
 void jfg_cpu_lines_before(uint8_t* rdram, recomp_context* ctx);        // jfg_cpu_layer.cpp: entry of fxOutputLines
 void jfg_cpu_lines_after(uint8_t* rdram, recomp_context* ctx);         // ... and mainCPUeffects after it returns
+void jfg_cpu_lines_faded(uint8_t* rdram, recomp_context* ctx);      // mainCPUeffects, after fxInitLines (a fade)
 int jfg_widescreen_active(void);                                       // jfg_visuals.cpp
 int jfg_texture_three_point(void);                                     // jfg_visuals.cpp
 int jfg_output_filtering(void);                                        // jfg_visuals.cpp

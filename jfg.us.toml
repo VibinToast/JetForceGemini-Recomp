@@ -170,6 +170,19 @@ func = "bloodSpurtAdd"
 before_vram = 0x82080204
 text = "{ void jfg_blood_make_room(uint8_t*, uint32_t); jfg_blood_make_room(rdram, (uint32_t)section_addresses[8]); }"
 
+# "Blood stays": entry of bloodSpurtsDraw(&gfx, &mtx, &vtx); draws the splats that made room for new blood in extra
+# passes of the function, into heap blocks the frame's display list calls (src/jfg/jfg_gore.cpp, jfg_blood_draw_kept).
+[[patches.hook]]
+func = "bloodSpurtsDraw"
+before_vram = 0x82080AB4
+text = "{ void jfg_blood_draw_kept(uint8_t*, recomp_context*, uint32_t); jfg_blood_draw_kept(rdram, ctx, (uint32_t)section_addresses[8]); }"
+
+# "Blood stays": entry of bloodSpurtFreeLib (leaving the level): the kept splats and their heap blocks go.
+[[patches.hook]]
+func = "bloodSpurtFreeLib"
+before_vram = 0x820800C4
+text = "{ void jfg_blood_free_kept(uint8_t*, recomp_context*); jfg_blood_free_kept(rdram, ctx); }"
+
 # "Body parts stay": entry of severedLimbControl(object, updateRate).
 [[patches.hook]]
 func = "severedLimbControl"
@@ -187,6 +200,118 @@ text = "{ int jfg_no_blood(void); if (jfg_no_blood()) { recomp_exit_function(); 
 func = "frontFlashScreen"
 before_vram = 0x80059864
 text = "{ uint32_t jfg_hit_flash(uint32_t); const uint32_t c = jfg_hit_flash((uint32_t)ctx->r6); if (c == 0) { recomp_exit_function(); return; } ctx->r6 = (gpr)(int32_t)c; }"
+
+# "Shadow Opacity" option (src/jfg/jfg_visuals.cpp): func_8001B8E0 draws each shadow batch with the alpha it worked out
+# in $t7 (the object's fade times the batch's vertex alpha, >> 8); right before the test that skips a batch at 0 it is
+# scaled by the option.
+[[patches.hook]]
+func = "func_8001B8E0_1C4E0"
+before_vram = 0x8001B9A8
+text = "{ int jfg_shadow_alpha(int); ctx->r15 = (gpr)(int32_t)jfg_shadow_alpha((int)(int32_t)ctx->r15); }"
+
+# "HUD in Screen Corners" option (src/jfg/jfg_hud_corners.cpp): while frontSingleInstruments draws (from right after
+# its camStandardOrtho to the return of frontInstruments), the entries and returns of the functions that draw HUD
+# pieces into frontgfx put RT64 alignment commands in front of each piece, so it is drawn at the window's left or right
+# edge in widescreen; the air meter, drawn in frontSingleInstruments itself, is marked from its start to the point after it.
+[[patches.hook]]
+func = "frontSingleInstruments"
+before_vram = 0x820E0C08
+text = "{ void jfg_hud_begin(uint8_t*, recomp_context*); jfg_hud_begin(rdram, ctx); }"
+
+[[patches.hook]]
+func = "frontInstruments"
+before_vram = 0x80058E70
+text = "{ void jfg_hud_end(uint8_t*, recomp_context*); jfg_hud_end(rdram, ctx); }"
+
+[[patches.hook]]
+func = "frontDrawObj"
+before_vram = 0x8005A0D0
+text = "{ void jfg_hud_object(uint8_t*, recomp_context*); jfg_hud_object(rdram, ctx); }"
+
+[[patches.hook]]
+func = "frontDrawObj"
+before_vram = 0x8005A514
+text = "{ void jfg_hud_pop(uint8_t*, recomp_context*); jfg_hud_pop(rdram, ctx); }"
+
+[[patches.hook]]
+func = "frontPrintNum"
+before_vram = 0x80058EF0
+text = "{ void jfg_hud_number(uint8_t*, recomp_context*); jfg_hud_number(rdram, ctx); }"
+
+[[patches.hook]]
+func = "frontPrintNum"
+before_vram = 0x800595EC
+text = "{ void jfg_hud_pop(uint8_t*, recomp_context*); jfg_hud_pop(rdram, ctx); }"
+
+[[patches.hook]]
+func = "fontPrintXY"
+before_vram = 0x8006FCA8
+text = "{ void jfg_hud_text(uint8_t*, recomp_context*); jfg_hud_text(rdram, ctx); }"
+
+[[patches.hook]]
+func = "fontPrintXY"
+before_vram = 0x8006FCE4
+text = "{ void jfg_hud_pop(uint8_t*, recomp_context*); jfg_hud_pop(rdram, ctx); }"
+
+[[patches.hook]]
+func = "func_overlay_14_00000220_1F0DB78"
+before_vram = 0x820E0220
+text = "{ void jfg_hud_middle(uint8_t*, recomp_context*); jfg_hud_middle(rdram, ctx); }"
+
+[[patches.hook]]
+func = "func_overlay_14_00000220_1F0DB78"
+before_vram = 0x820E0B28
+text = "{ void jfg_hud_pop(uint8_t*, recomp_context*); jfg_hud_pop(rdram, ctx); }"
+
+[[patches.hook]]
+func = "func_overlay_14_00000074_1F0D9CC"
+before_vram = 0x820E0074
+text = "{ void jfg_hud_middle(uint8_t*, recomp_context*); jfg_hud_middle(rdram, ctx); }"
+
+[[patches.hook]]
+func = "func_overlay_14_00000074_1F0D9CC"
+before_vram = 0x820E0218
+text = "{ void jfg_hud_pop(uint8_t*, recomp_context*); jfg_hud_pop(rdram, ctx); }"
+
+[[patches.hook]]
+func = "frontDrawRectangles"
+before_vram = 0x800595F4
+text = "{ void jfg_hud_rectangles(uint8_t*, recomp_context*); jfg_hud_rectangles(rdram, ctx); }"
+
+[[patches.hook]]
+func = "frontDrawRectangles"
+before_vram = 0x8005980C
+text = "{ void jfg_hud_pop(uint8_t*, recomp_context*); jfg_hud_pop(rdram, ctx); }"
+
+[[patches.hook]]
+func = "instDrawHealth"
+before_vram = 0x82060000
+text = "{ void jfg_hud_health(uint8_t*, recomp_context*); jfg_hud_health(rdram, ctx); }"
+
+[[patches.hook]]
+func = "instDrawHealth"
+before_vram = 0x82060C6C
+text = "{ void jfg_hud_pop(uint8_t*, recomp_context*); jfg_hud_pop(rdram, ctx); }"
+
+[[patches.hook]]
+func = "func_overlay_14_0000292C_1F10284"
+before_vram = 0x820E292C
+text = "{ void jfg_hud_weapon_panel(uint8_t*, recomp_context*); jfg_hud_weapon_panel(rdram, ctx); }"
+
+[[patches.hook]]
+func = "func_overlay_14_0000292C_1F10284"
+before_vram = 0x820E2CB8
+text = "{ void jfg_hud_pop(uint8_t*, recomp_context*); jfg_hud_pop(rdram, ctx); }"
+
+[[patches.hook]]
+func = "frontSingleInstruments"
+before_vram = 0x820E0D3C
+text = "{ void jfg_hud_air_begin(uint8_t*, recomp_context*); jfg_hud_air_begin(rdram, ctx); }"
+
+[[patches.hook]]
+func = "frontSingleInstruments"
+before_vram = 0x820E1068
+text = "{ void jfg_hud_air_end(uint8_t*, recomp_context*); jfg_hud_air_end(rdram, ctx); }"
 
 # "Hide Floyd" option (src/jfg/jfg_visuals.cpp): the entry of sidekickControl(obj, ...) notes Floyd's object kind, and
 # the entry of objPrintObject(dList, mtx, vtx, obj) skips drawing an object of that kind (the function returns nothing).
@@ -583,6 +708,15 @@ func = "func_overlay_3_000148C0_1EE9DA0"
 before_vram = 0x82034CA4
 text = "{ void jfg_squad_spawn_after(uint8_t*, recomp_context*); jfg_squad_spawn_after(rdram, ctx); }"
 
+# Squad member brought back with no object: func_overlay_3_00014694 reuses a deactivated member through func_80005F14,
+# which can return NULL in a busy fight, and passes that straight to SquaddieInitFromRomdef (first read: object + 0x68;
+# crash 2026-10-23 at Game 60). The member is left out (the caller returns the same NULL, which the spawn loop counts
+# as a failed add, see jfg_squad_spawn_after); logged to bin/jfg_memory.log.
+[[patches.hook]]
+func = "SquaddieInitFromRomdef"
+before_vram = 0x8202DF84
+text = "{ int jfg_squaddie_init_ok(uint8_t*, recomp_context*); if (!jfg_squaddie_init_ok(rdram, ctx)) { recomp_exit_function(); return; } }"
+
 # Weapons tab (src/jfg/jfg_weapons.cpp): bolt size for the player's laser bolts, at the end of laserboltInit
 # (overlay 109; a0 = the new bolt).
 [[patches.hook]]
@@ -707,7 +841,7 @@ text = "{ int jfg_freeze_world(void); if (jfg_freeze_world()) ctx->r3 = 1; }"
 
 # CPU-drawn rain and reticles with in-between frames (src/jfg/jfg_cpu_layer.cpp): what rainDraw and fxOutputLines add to
 # the finished frame is taken out again and drawn on every presented frame by the render hook, while RT64 adds
-# in-between frames (Smooth Motion). Four hooks, kept together: rain (mainCPUeffects, before the rainDraw call through
+# in-between frames (Smooth Motion). Five hooks, kept together: rain (mainCPUeffects, before the rainDraw call through
 # TrapDanglingJump at 0x80045B1C, and after it, where the paths without rain join too), then the lines.
 [[patches.hook]]
 func = "mainCPUeffects"
@@ -728,6 +862,13 @@ text = "{ void jfg_cpu_lines_before(uint8_t*, recomp_context*); jfg_cpu_lines_be
 func = "mainCPUeffects"
 before_vram = 0x80045B78
 text = "{ void jfg_cpu_lines_after(uint8_t*, recomp_context*); jfg_cpu_lines_after(rdram, ctx); }"
+
+# ... and right after fxInitLines, which mainCPUeffects calls instead of fxOutputLines during a fade (a loading zone,
+# a warp): the frame's buffer gets an empty layer, so the last reticle drawn into it does not linger (jfg_cpu_lines_faded).
+[[patches.hook]]
+func = "mainCPUeffects"
+before_vram = 0x80045B88
+text = "{ void jfg_cpu_lines_faded(uint8_t*, recomp_context*); jfg_cpu_lines_faded(rdram, ctx); }"
 
 # 60 fps: a squadron's member count kept in line with its member chain (src/jfg/jfg_frame_rate.cpp,
 # jfg_squad_count_repair): at 60 fps the Lurg fight's bat squadron counted one bat fewer than it had linked, and a bat
