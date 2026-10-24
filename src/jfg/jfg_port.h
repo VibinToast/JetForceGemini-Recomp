@@ -210,6 +210,11 @@ struct LightingSettings {
     std::atomic<bool> ray_shadows{ false };  // ray-traced shadows instead of the shadow maps (when the GPU can)
     std::atomic<int> ray_light_size{ 4 };    // ... the lights' size (radius, world units) for soft edges, 0 = hard
     std::atomic<int> ray_sun_softness{ 10 }; // ... the directional light's angular radius (tenths of a degree)
+    std::atomic<bool> ray_ao{ false };       // ray-traced ambient occlusion (with ray-traced shadows on)
+    std::atomic<int> ray_ao_reach{ 60 };     // ... how far it looks (world units)
+    std::atomic<int> ray_ao_strength{ 100 }; // ... how much it darkens (%)
+    std::atomic<int> ray_sky{ 0 };           // ray-traced sky occlusion (%): darker where the sky isn't seen, 0 = off
+    std::atomic<int> ray_sky_reach{ 3000 };  // ... how far a ray must get to count as seeing the sky (world units)
     std::atomic<int> light_tint{ 0 };        // % the frame's lights on the level take each surface's own colour
     std::atomic<int> facing{ 40 };           // % the level lighting depends on a surface facing its light (0 = as the game)
     std::atomic<int> shadows{ 80 };          // % how dark shadows from the lights are

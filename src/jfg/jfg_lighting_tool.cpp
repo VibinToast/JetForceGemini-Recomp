@@ -134,6 +134,19 @@ std::vector<Setting>& settings_table() {
         { "ray_sun_softness", "Directional light softness (0.1 degrees)", &s.ray_sun_softness, nullptr, 0, 100, Group::Shadows, false,
           "How wide the directional light is in the sky, for its ray-traced shadows: the sun is about 3 (0.3 degrees). "
           "0: hard edges." },
+        { "ray_ao", "Ray-traced ambient occlusion", nullptr, &s.ray_ao, 0, 1, Group::Shadows, false,
+          "With ray-traced shadows on: corners, crevices and the ground under things are darkened, from rays traced "
+          "around each pixel's surface (not only what the screen shows, as the screen-space AO does). It takes the "
+          "screen-space AO's place and its smoothing; the Graphics menu's Ambient Occlusion need not be on." },
+        { "ray_ao_reach", "Occlusion reach (units)", &s.ray_ao_reach, nullptr, 5, 500, Group::Shadows, false,
+          "How far around a surface counts: larger darkens wider areas, smaller only tight corners." },
+        { "ray_ao_strength", "Occlusion strength (%)", &s.ray_ao_strength, nullptr, 0, 200, Group::Shadows, false,
+          "How much it darkens." },
+        { "ray_sky", "Sky occlusion (%)", &s.ray_sky, nullptr, 0, 200, Group::Shadows, false,
+          "With ray-traced shadows on: what doesn't see the open sky (under roofs and overhangs, in tunnels and caves) "
+          "is darkened, the open stays as it is. Rays traced upwards from each pixel's surface. 0 is off." },
+        { "ray_sky_reach", "Sky distance (units)", &s.ray_sky_reach, nullptr, 200, 20000, Group::Shadows, false,
+          "How far a ray must get without hitting anything to count as seeing the sky." },
         { "shadows", "Shadow darkness (%)", &s.shadows, nullptr, 0, 100, Group::Shadows, false,
           "How dark shadows from the lights are. 0 is off, as in the game." },
         { "glow_shadow", "Shadows on painted glow (%)", &s.glow_shadow, nullptr, 0, 100, Group::Shadows, false,
