@@ -150,6 +150,8 @@ GRAPHICS = [
      "How the picture is scaled to the window. <b>Anti-Aliased</b>: sharp pixels with smooth edges. <b>Linear</b>: softer. <b>Nearest</b>: sharp pixels."),
     ("range", "hit_flash", "Hit Flash Opacity", (0, 100, "%"),
      "How strongly the screen turns red when your character is hit. 100% is the original game; 0% turns the red flash off."),
+    ("range", "shadow_opacity", "Shadow Opacity", (0, 200, "%"),
+     "How dark the shadows under characters and objects are drawn. 100% is the original game; 0% turns them off."),
     ("group", None, "Objects", None, None),
     ("bool", "no_lod", "Disable LOD", None, "Characters and objects keep their full-detail model at any distance."),
     ("bool", "far_objects", "Draw Distant Objects", None, "Objects no longer fade out and disappear beyond their draw distance. Level scenery itself is not affected."),

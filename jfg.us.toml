@@ -201,6 +201,14 @@ func = "frontFlashScreen"
 before_vram = 0x80059864
 text = "{ uint32_t jfg_hit_flash(uint32_t); const uint32_t c = jfg_hit_flash((uint32_t)ctx->r6); if (c == 0) { recomp_exit_function(); return; } ctx->r6 = (gpr)(int32_t)c; }"
 
+# "Shadow Opacity" option (src/jfg/jfg_visuals.cpp): func_8001B8E0 draws each shadow batch with the alpha it worked out
+# in $t7 (the object's fade times the batch's vertex alpha, >> 8); right before the test that skips a batch at 0 it is
+# scaled by the option.
+[[patches.hook]]
+func = "func_8001B8E0_1C4E0"
+before_vram = 0x8001B9A8
+text = "{ int jfg_shadow_alpha(int); ctx->r15 = (gpr)(int32_t)jfg_shadow_alpha((int)(int32_t)ctx->r15); }"
+
 # "Hide Floyd" option (src/jfg/jfg_visuals.cpp): the entry of sidekickControl(obj, ...) notes Floyd's object kind, and
 # the entry of objPrintObject(dList, mtx, vtx, obj) skips drawing an object of that kind (the function returns nothing).
 [[patches.hook]]
