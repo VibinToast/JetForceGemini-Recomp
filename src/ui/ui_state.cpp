@@ -41,6 +41,7 @@ void jfg_config_menu_refresh(); // JFG PORT: src/ui/ui_config.cpp
 void close_config_menu(); // src/ui/ui_config.cpp (JFG_DEBUG_CONFIG_CLOSE)
 void jfg_config_step_tab(int dir); // JFG PORT: src/ui/ui_config.cpp
 void jfg_restore_menu_place(); // JFG PORT: src/ui/ui_config.cpp, the menu reopens where it was closed
+bool jfg_config_slider_step(int dir); // JFG PORT: src/ui/ui_config.cpp
 void jfg_launcher_ui_tick(); // JFG PORT: src/ui/ui_launcher.cpp
 void jfg_config_pack_join_tick(); // JFG PORT: src/ui/ui_config.cpp (split texture packs)
 void jfg_launcher_step_page(int dir); // JFG PORT: src/ui/ui_launcher.cpp (controller: LB / RB)
@@ -853,7 +854,9 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                 const uint8_t button = cur_event.cbutton.button;
                 if ((button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER || button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) && context_capturing_input &&
                     recompui::is_context_shown(recompui::get_config_context_id()) && !recompui::is_context_shown(recompui::get_config_sub_menu_context_id())) {
-                    ::jfg_config_step_tab(button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1 : -1);
+                    // On a slider they move it in steps of 10 instead.
+                    const int dir = button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER ? 1 : -1;
+                    if (!::jfg_config_slider_step(dir)) ::jfg_config_step_tab(dir);
                     non_mouse_interacted = true;
                     cont_interacted = true;
                     break;
