@@ -698,6 +698,13 @@ bool RT64Context::update_config(const ultramodern::renderer::GraphicsConfig& old
         return false;
     }
 
+    // JFG PORT: the Graphics API option only applies at the next start; a change of it alone leaves the renderer as it is.
+    ultramodern::renderer::GraphicsConfig api_only = old_config;
+    api_only.api_option = new_config.api_option;
+    if (api_only == new_config) {
+        return false;
+    }
+
     if (new_config.wm_option != old_config.wm_option) {
         app->setFullScreen(new_config.wm_option == ultramodern::renderer::WindowMode::Fullscreen);
     }
