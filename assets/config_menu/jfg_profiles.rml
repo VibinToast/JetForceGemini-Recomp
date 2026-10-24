@@ -45,11 +45,14 @@
                         <div class="jfg-note" style="display: block; margin-top: 14dp; font-size: 20dp; line-height: 28dp;">{{profile_message}}</div>
                     </div>
                 </div>
-                <div class="config__wrapper">
-                    <p>A profile is a whole set of the port's settings (the General, Gameplay, Controls and Graphics tabs, and the weapon settings of the F10 tools). Choosing one first puts every setting back to the original game, then applies the profile. Before it is applied you are shown what it changes.</p>
-                    <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and visuals, smoothed to 60 fps with Frame Interpolation (the game itself runs at its original 30; Modern and Balanced and Extreme too). Modern, Modern and Balanced and Extreme turn on dual-stick controls with the Built-in Button Layout, which takes the place of your controller bindings during play; turn on Keep My Controls first to keep your own. <b>Modern and Balanced</b>: Modern with rebalanced weapons (a subjective take on the balance). <b>Extreme</b>: everything turned up, just for fun.</p>
-                    <p>Your own profiles are kept in the profiles folder next to the game; changes made while one is active are saved to it. Not part of profiles: cheats, the Textures tab (texture pack, dumping), the volume, the Controller settings, the window, resolution, downsampling and anti-aliasing, and the button bindings.</p>
-                    <p>Controller: Up/Down and Left/Right move between buttons, A chooses.</p>
+                <!-- Description: a card like the other tabs' option descriptions (.jfg-desc in config_menu.rml), kept short
+                     enough to fit without scrolling (nothing on this side takes the controller's focus). -->
+                <div class="config__wrapper jfg-desc">
+                    <div class="jfg-desc__card"><div class="jfg-desc__title">Profiles</div>
+                        <p>Choosing one resets every setting to the original game, then applies the profile; you see what changes first.</p>
+                        <p><b>Default</b>: the original game.<br/><b>Modern</b>: modern controls and visuals, 60 fps.<br/><b>Modern and Balanced</b>: plus rebalanced weapons.<br/><b>Extreme</b>: everything turned up.</p>
+                        <p>The Modern ones use their own button layout.<br/>Turn on <b>Keep My Controls</b> to keep yours.</p>
+                        <p>Your own are saved in the profiles folder. Not included: cheats, textures, volume, controller, display, bindings.</p></div>
                 </div>
             </div>
         </form>

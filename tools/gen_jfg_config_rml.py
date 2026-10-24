@@ -13,8 +13,6 @@ GENERAL = [
     ("group", None, "Sound", None, None),
     ("range", "main_volume", "Master Volume", (0, 100, "%"), "The volume of all of the game's sound."),
     ("group", None, "Menu & Cutscenes", None, None),
-    ("bool", "pause_in_menu", "Pause in Settings Menu", None,
-     "The game stands still while the settings menu (Select / Esc) is open during play, as on the pause screen. Cutscenes keep playing."),
     ("bool", "start_skips_cutscenes", "START Skips Cutscenes", None,
      "START skips cutscenes, the logo screens at start-up and the story intro after creating a file. A skipped cutscene still runs to its end at full speed, so everything it does (flags, items, the next level) still happens."),
     ("group", None, "On Screen", None, None),
@@ -48,10 +46,12 @@ GAMEPLAY = [
     ("group", None, "Gore", None, None),
     ("bool", "no_blood", "No Blood", None, "No blood, as in the Japanese version."),
     ("bool", "gore_keep_blood", "Blood Stays", None,
-     "Blood splats stay on the ground and walls instead of fading away. Up to 64 stay; once the screen is full, the oldest makes room for new blood."),
+     "Blood splats stay on the ground and walls instead of fading away. Blood Splat Limit sets how many; once it is reached, the oldest makes room for new blood."),
+    ("range", "blood_splats", "Blood Splat Limit", (64, 4096, ""),
+     "How many blood splats stay on the screen with Blood Stays on. 64 is the original game; more are drawn from memory the game does not use. Leaving the level clears them."),
     ("bool", "gore_keep_limbs", "Body Parts Stay", None,
      "Severed limbs and heads stay where they fell instead of fading away. The newest 24 are kept, so the game does not run out of memory in big fights."),
-    ("range", "blood_amount", "Blood Amount", (100, 400, "%"), "How much blood a hit sprays. 100% is the original game."),
+    ("range", "blood_amount", "Blood Amount", (100, 800, "%"), "How much blood a hit sprays. 100% is the original game."),
     ("group", None, "Player", None, None),
     ("range", "damage_taken", "Damage Taken", (0, 400, "%"),
      "How much damage the character takes from enemies, falls and explosions. 0% takes none; the Invulnerable cheat overrides it."),
@@ -69,6 +69,8 @@ GAMEPLAY = [
     ("range", "sprint_swim_speed", "Swim Sprint Speed", (100, 300, "%"), "How fast Vela swims while sprinting, on top of Vela's Dive Speed."),
     ("bool", "normalize_diagonal", "Normalize Diagonal Speed", None,
      "In the game, running forward while sidestepping adds the two speeds together, so going diagonally is about 40% faster. With this on a diagonal is as fast as running straight."),
+    ("bool", "aim_even_speed", "Same Aim-Walk Speed in All Directions", None,
+     "While aiming the game walks forward fastest: backwards is about 25% slower and sideways about 40% slower. With this on the character walks as fast in every direction, diagonals included."),
 ]
 
 # The port's control options; the button bindings are the Bindings tab (controls.rml).
@@ -84,6 +86,7 @@ CONTROLS = [
     ("bool", "aim_from_character", "Aim Where the Character Faces", None, "On aiming, the view turns to the character instead of the character to the view."),
     ("range", "camera_speed_h", "Camera Left/Right", (10, 400, "%"), "Dual stick: how fast the right stick turns the camera sideways."),
     ("range", "camera_speed_v", "Camera Up/Down", (10, 400, "%"), "Dual stick: how fast the right stick moves the camera up and down."),
+    ("range", "camera_distance", "Camera Distance", (50, 250, "%"), "Dual stick: how far back the camera is from the character, as a share of the game's own distance. Lower is closer."),
     ("bool", "camera_collision", "Camera Collision", None, "Dual stick: the camera stays inside the level (the game's own wall check) instead of going through walls."),
     ("group", None, "Mouse & Keyboard", None, None),
     ("bool", "mouse_keyboard", "Mouse and Keyboard Controls", None,
@@ -92,7 +95,12 @@ CONTROLS = [
     ("range", "mouse_aim_speed", "Mouse Aim Speed", (10, 400, "%"), "How fast the mouse aims."),
     ("bool", "invert_mouse_y", "Invert Mouse Up/Down", None, "Mouse forward looks down."),
     ("group", None, "Aiming (any control layout)", None, None),
-    ("bool", "aim_shoulder", "Over-the-Shoulder Aiming", None, "While aiming, the view is from over the character's right shoulder."),
+    ("bool", "aim_shoulder", "Over-the-Shoulder Aiming", None, "While aiming, the view is from over the character's right shoulder. With the dual stick this sets the aiming view's sliders below to a fixed shoulder view (greyed out); off, they are yours to set."),
+    ("range", "aim_drag_margin", "Aim Drag Margin", (0, 50, "%"), "Dual stick, aiming: how far the character may step aside from the middle of the screen before the camera follows, as a share of half the screen's width. 0 keeps the camera on the character. Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_drag_return", "Aim Drag Return Speed", (0, 400, "%"), "Dual stick, aiming: how fast the camera keeps coming back onto the character, moving or not. 100% takes about a third of a second; 0 leaves it where it is. Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_offset_x", "Aim Offset Left/Right", (-50, 50, ""), "Dual stick, aiming: the point the camera turns round moves this far to the right of the character (negative: left), so the view can look past a shoulder. Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_offset_y", "Aim Offset Up/Down", (-50, 50, ""), "Dual stick, aiming: the point the camera turns round moves this far up from the middle of the character (negative: down). Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_offset_z", "Aim Zoom", (0, 300, ""), "Dual stick, aiming: the camera moves this much closer in. Fixed while Over-the-Shoulder Aiming is on."),
     ("bool", "aim_centered", "Keep the Reticle Centered", None,
      "While aiming, the view turns as soon as the stick moves and the reticle stays in the middle (instead of the reticle first travelling to the edge of a box and drifting back)."),
     ("bool", "aim_jump", "Jump While Aiming", None,
@@ -132,6 +140,7 @@ GRAPHICS = [
      "With <b>Frame Interpolation</b>, character shadows move with the in-between frames instead of at the game's rate, so they no longer trail behind the character."),
     ("group", None, "Picture", None, None),
     ("bool", "widescreen", "Widescreen", None, "During gameplay the 3D view fills the window; the HUD stays in the middle. Things at the far left and right may appear late."),
+    ("bool", "hud_corners", "HUD in Screen Corners", None, "With <b>Widescreen</b>, the HUD moves from the middle out to the left and right edges of the window."),
     ("range", "fov", "Field of View", (75, 140, "%"),
      "Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, menus, the pause screen and zoomed scopes keep the game's own."),
     ("choice", "texture_filter", "Texture Filtering", [(0, "N64 Three-Point"), (1, "Bilinear")],
@@ -140,6 +149,8 @@ GRAPHICS = [
      "How the picture is scaled to the window. <b>Anti-Aliased</b>: sharp pixels with smooth edges. <b>Linear</b>: softer. <b>Nearest</b>: sharp pixels."),
     ("range", "hit_flash", "Hit Flash Opacity", (0, 100, "%"),
      "How strongly the screen turns red when your character is hit. 100% is the original game; 0% turns the red flash off."),
+    ("range", "shadow_opacity", "Shadow Opacity", (0, 200, "%"),
+     "How dark the shadows under characters and objects are drawn. 100% is the original game; 0% turns them off."),
     ("group", None, "Objects", None, None),
     ("bool", "no_lod", "Disable LOD", None, "Characters and objects keep their full-detail model at any distance."),
     ("bool", "far_objects", "Draw Distant Objects", None, "Objects no longer fade out and disappear beyond their draw distance. Level scenery itself is not affected."),
@@ -173,6 +184,13 @@ TEXTURES = [
     ("bool", "dump_by_level", "One Folder per Level", None, "Dumps into texture_dump\\&lt;level number&gt; &lt;level name&gt; instead."),
 ]
 
+# Options shown greyed out and locked while a condition on another option holds (a data expression): the aiming view's sliders follow Over-the-Shoulder
+# Aiming's fixed view then (jfg_options.h, aim_view; jfg_settings_api.cpp shows its values and ignores changes), and the
+# gore options do nothing with No Blood on.
+LOCKED_BY = {k: "aim_shoulder == 1" for k in ("aim_drag_margin", "aim_drag_return", "aim_offset_x", "aim_offset_y", "aim_offset_z")}
+LOCKED_BY.update({k: "no_blood == 1" for k in ("gore_keep_blood", "blood_splats", "gore_keep_limbs", "blood_amount")})
+LOCKED_BY["hud_corners"] = "widescreen == 0" # it moves the widescreen HUD; without Widescreen there is nothing to move
+
 def row_ids(kind, key, extra):
     """The focusable ids of one option row, left to right."""
     if kind == "bool": return [f"jfg_{key}_on", f"jfg_{key}_off"]
@@ -184,13 +202,34 @@ def option_markup(items, first_nav_up):
     # buttons (and some rows above), and at the last row Down went sideways between its radios. Between two rows of
     # radios the column is kept (On to On); a slider row has one control. The first row goes up to first_nav_up (the
     # tab; None leaves it automatic), the last row's Down goes nowhere.
+    # A locked row (LOCKED_BY) can't take the focus, so while its lock is on, Up/Down jump over the locked rows next to it
+    # (a data-style-nav-* attribute, see nav_locked, in place of the fixed property).
     rows = [row_ids(kind, key, extra) for kind, key, _, extra, _ in items if kind != "group"]
+    locks = [LOCKED_BY.get(key) for kind, key, _, _, _ in items if kind != "group"]
     def target(row, column):
         return "#" + row[min(column, len(row) - 1)]
+    def neighbour(i, step, column):
+        j = i + step
+        if j < 0: return first_nav_up
+        return target(rows[j], column) if j < len(rows) else "none"
+    def past_lock(i, step, column):
+        """(lock, where to go while it is on) when the next row that way is locked; None otherwise."""
+        j = i + step
+        if not (0 <= j < len(rows)) or locks[j] is None or locks[j] == locks[i]: return None
+        lock = locks[j]
+        while 0 <= j < len(rows) and locks[j] == lock: j += step
+        return lock, neighbour(j - step, step, column) or "auto"
     def nav_style(i, column):
-        up = target(rows[i - 1], column) if i > 0 else first_nav_up
-        down = target(rows[i + 1], column) if i + 1 < len(rows) else "none"
-        return (f"nav-up: {up}; " if up else "") + f"nav-down: {down};"
+        up = None if past_lock(i, -1, column) else neighbour(i, -1, column)
+        down = None if past_lock(i, 1, column) else neighbour(i, 1, column)
+        return (f"nav-up: {up}; " if up else "") + (f"nav-down: {down};" if down else "")
+    def nav_locked(i, column):
+        attrs = ""
+        for step, prop in ((-1, "nav-up"), (1, "nav-down")):
+            skip = past_lock(i, step, column)
+            if skip:
+                attrs += f' data-style-{prop}="{skip[0]} ? \'{skip[1]}\' : \'{neighbour(i, step, column) or "auto"}\'"'
+        return attrs
     out, helps, idx = [], [], 0
     for kind, key, title, extra, help_text in items:
         t = html.escape(title)
@@ -199,27 +238,30 @@ def option_markup(items, first_nav_up):
             continue
         ev = f'data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index({idx})"'
         ids = rows[idx]
-        out.append(f'                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index({idx})">')
+        lock = LOCKED_BY.get(key)
+        locked_style = (' data-style-opacity="' + lock + " ? '0.4' : '1'" + '"') if lock else ''
+        locked_attr = f' data-attrif-disabled="{lock}"' if lock else ''
+        out.append(f'                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index({idx})"{locked_style}>')
         out.append(f'                        <label class="config-option__title">{t}</label>')
         if kind == "bool":
             out.append('                        <div class="config-option__list">')
             for column, (v, label) in enumerate(((1, "On"), (0, "Off"))):
                 rid = ids[column]
-                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"/>')
+                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"{nav_locked(idx, column)}{locked_attr}/>')
                 out.append(f'                            <label class="config-option__tab-label" for="{rid}">{label}</label>')
             out.append('                        </div>')
         elif kind == "choice":
             out.append('                        <div class="config-option__list">')
             for column, (v, label) in enumerate(extra):
                 rid = ids[column]
-                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"/>')
+                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"{nav_locked(idx, column)}{locked_attr}/>')
                 out.append(f'                            <label class="config-option__tab-label" for="{rid}">{html.escape(label)}</label>')
             out.append('                        </div>')
         elif kind == "range":
             lo, hi, suffix = extra
             out.append('                        <div class="config-option__range-wrapper config-option__list">')
             out.append(f'                            <label class="config-option__range-label">{{{{{key}}}}}{suffix}</label>')
-            out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}" data-value="{key}"/>')
+            out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}"{nav_locked(idx, 0)} data-value="{key}"{locked_attr}/>')
             out.append('                        </div>')
         out.append('                    </div>')
         # The focused option's description: its name as a heading, then the text (styled by .jfg-desc in config_menu.rml
@@ -348,11 +390,14 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
                         <div class="jfg-note" style="display: block; margin-top: 14dp; font-size: 20dp; line-height: 28dp;">{{profile_message}}</div>
                     </div>
                 </div>
-                <div class="config__wrapper">
-                    <p>A profile is a whole set of the port's settings (the General, Gameplay, Controls and Graphics tabs, and the weapon settings of the F10 tools). Choosing one first puts every setting back to the original game, then applies the profile. Before it is applied you are shown what it changes.</p>
-                    <p><b>Default</b>: the original game. <b>Modern</b>: modern controls and visuals, smoothed to 60 fps with Frame Interpolation (the game itself runs at its original 30; Modern and Balanced and Extreme too). Modern, Modern and Balanced and Extreme turn on dual-stick controls with the Built-in Button Layout, which takes the place of your controller bindings during play; turn on Keep My Controls first to keep your own. <b>Modern and Balanced</b>: Modern with rebalanced weapons (a subjective take on the balance). <b>Extreme</b>: everything turned up, just for fun.</p>
-                    <p>Your own profiles are kept in the profiles folder next to the game; changes made while one is active are saved to it. Not part of profiles: cheats, the Textures tab (texture pack, dumping), the volume, the Controller settings, the window, resolution, downsampling and anti-aliasing, and the button bindings.</p>
-                    <p>Controller: Up/Down and Left/Right move between buttons, A chooses.</p>
+                <!-- Description: a card like the other tabs' option descriptions (.jfg-desc in config_menu.rml), kept short
+                     enough to fit without scrolling (nothing on this side takes the controller's focus). -->
+                <div class="config__wrapper jfg-desc">
+                    <div class="jfg-desc__card"><div class="jfg-desc__title">Profiles</div>
+                        <p>Choosing one resets every setting to the original game, then applies the profile; you see what changes first.</p>
+                        <p><b>Default</b>: the original game.<br/><b>Modern</b>: modern controls and visuals, 60 fps.<br/><b>Modern and Balanced</b>: plus rebalanced weapons.<br/><b>Extreme</b>: everything turned up.</p>
+                        <p>The Modern ones use their own button layout.<br/>Turn on <b>Keep My Controls</b> to keep yours.</p>
+                        <p>Your own are saved in the profiles folder. Not included: cheats, textures, volume, controller, display, bindings.</p></div>
                 </div>
             </div>
         </form>

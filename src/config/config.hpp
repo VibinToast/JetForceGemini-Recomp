@@ -130,7 +130,7 @@ namespace dino::config {
     bool get_subtitles_enabled();
     void set_subtitles_enabled(bool enabled);
 
-    void open_quit_game_prompt();
+    void open_quit_game_prompt(const std::string& return_focus_id = "jfg_quit_game"); // JFG PORT: focus after Cancel (the Quit tab's button)
 
     bool get_debug_dll_logging_enabled();
     void set_debug_dll_logging_enabled(bool enabled);
