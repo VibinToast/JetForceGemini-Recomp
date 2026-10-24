@@ -162,6 +162,12 @@ std::vector<Setting>& settings_table() {
         { "sky_r", "Sky colour red", &s.sky_r, nullptr, 0, 255, Group::Shadows, false, "" },
         { "sky_g", "Sky colour green", &s.sky_g, nullptr, 0, 255, Group::Shadows, false, "" },
         { "sky_b", "Sky colour blue", &s.sky_b, nullptr, 0, 255, Group::Shadows, false, "" },
+        { "ray_reflect", "Reflections on shiny surfaces (%)", &s.ray_reflect, nullptr, 0, 200, Group::Shadows, false,
+          "With ray-traced shadows on: surfaces with a specular map (materials/<hash>_s.png) mirror what is around them, "
+          "as much as their map's strength says, more at a grazing angle. 0 is off." },
+        { "ray_reflect_water", "Reflections on water (%)", &s.ray_reflect_water, nullptr, 0, 200, Group::Shadows, false,
+          "With ray-traced shadows on: water (the level's see-through surfaces facing up) mirrors its surroundings and the "
+          "sky, little when looked down into, much at a grazing angle. 0 is off." },
         { "shadows", "Shadow darkness (%)", &s.shadows, nullptr, 0, 100, Group::Shadows, false,
           "How dark shadows from the lights are. 0 is off, as in the game." },
         { "glow_shadow", "Shadows on painted glow (%)", &s.glow_shadow, nullptr, 0, 100, Group::Shadows, false,

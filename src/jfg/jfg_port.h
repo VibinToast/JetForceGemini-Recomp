@@ -220,6 +220,8 @@ struct LightingSettings {
     std::atomic<int> ray_gi_spacing{ 80 };   // ... how far apart its probes are (world units)
     std::atomic<int> ray_sky_light{ 0 };     // ... the sky's light (%)
     std::atomic<int> sky_r{ 140 }, sky_g{ 170 }, sky_b{ 220 }; // ... its colour
+    std::atomic<int> ray_reflect{ 0 };       // ray-traced reflections on shiny surfaces (specular maps; %), 0 = off
+    std::atomic<int> ray_reflect_water{ 0 }; // ... on water (%), 0 = off
     std::atomic<int> light_tint{ 0 };        // % the frame's lights on the level take each surface's own colour
     std::atomic<int> facing{ 40 };           // % the level lighting depends on a surface facing its light (0 = as the game)
     std::atomic<int> shadows{ 80 };          // % how dark shadows from the lights are
