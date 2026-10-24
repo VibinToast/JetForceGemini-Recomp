@@ -33,6 +33,8 @@
 	<link type="text/template" href="config_menu/jfg_graphics.rml" />
 	<link type="text/template" href="config_menu/jfg_textures.rml" />
 	<style>
+		/* JFG PORT: the game around the menu is darkened (the recomp's backdrop lightened it a little). */
+		#window .centered-page { background-color: rgba(0, 0, 0, 0.6); }
 		.jfg-selected { border-color: #3cc8ff; background-color: rgba(60, 200, 255, 0.35); color: #e8f3ff; }
 		.jfg-note { color: #3cc8ff; }
 		/* JFG PORT: group headings in the emblem gold, as in the launcher (the options and selections are "Gemini" cyan). */
