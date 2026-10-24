@@ -69,6 +69,8 @@ constexpr uint32_t ADDR_tribaltable = 0x800FD7B8; // pointer to s8[]: tribals pe
 constexpr uint32_t ADDR_cloneTaskActive = 0x800A35E8, ADDR_refractTaskActive = 0x800A360C, ADDR_blurTaskActive = 0x800A3630; // s32
 constexpr uint32_t ADDR_sResolutionIndex     = 0x800FECA8; // s8, bit 0 = letterboxed ("widescreen") VI mode
 constexpr uint32_t ADDR_pauseMode = 0x800FD7BD;          // s8, what mainGetPauseMode() returns
+constexpr uint32_t ADDR_frontEndMode = 0x800A51B0;       // u8, frontSetMode()'s screen; 17 = the planet map
+constexpr uint8_t FRONT_MODE_MAP = 17;
 constexpr uint32_t ADDR_continues = 0x800A3280;          // s16: continues left in the region (2 on entering one)
 constexpr uint32_t ADDR_runInOneFrame        = 0x800FECCC; // s32, viFrameSync waits for one retrace only
 constexpr uint32_t ADDR_buttonsPressed       = 0x800FB0F0; // u16 gControllerButtonsPressed[4]
