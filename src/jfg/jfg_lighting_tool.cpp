@@ -764,7 +764,7 @@ void draw_level_lights() {
     changed |= slider_int("Reach (% of its own)", &edit.radius, 0, 400);
     help("0 turns it off, as unticking On does.");
     changed |= ImGui::Checkbox("Steady (the game's flicker off)", &edit.steady);
-    help("The game makes torches and fires flicker on its own. Steady holds this light at its average brightness and size "
+    help("The game makes torches and fires flicker on its own. Steady holds this light at its average colour, brightness and size "
          "instead. Flicker below adds the tool's own flicker on top (0: none).");
     changed |= slider_int("Flicker (%)", &edit.flicker, 0, 100);
     changed |= slider_int("Flicker speed (%)", &edit.flicker_speed, 10, 400);

@@ -161,6 +161,9 @@ std::vector<uint32_t> g_object_ranges;  // start, vertex count, offset into g_ob
 std::vector<uint32_t> g_object_normals; // per vertex: s8 x, y, z, slot + 1
 constexpr size_t OBJECT_LIGHT_FLOATS = 52; // RT64's JfgObjectLight: dirs, colors, positions, params
 std::vector<float> g_object_lights;     // OBJECT_LIGHT_FLOATS per slot
+// Steady lights (the lighting tool): each game light's average colour (0-255), brightness and size, and where it stood.
+struct SteadyAverage { float x, y, z, intensity, radius, rgb[3]; };
+std::unordered_map<uint32_t, SteadyAverage> g_steady;
 
 static uint32_t be32(uint32_t a) {
     return ((uint32_t)rd8(a) << 24) | ((uint32_t)rd8(a + 1) << 16) | ((uint32_t)rd8(a + 2) << 8) | rd8(a + 3);
@@ -238,6 +241,8 @@ extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
                 }
                 pos[3] = 1.0f;
                 if (const LightOverride* o = lighting_override_for(l)) {
+                    const auto steady = o->steady ? g_steady.find(l) : g_steady.end();
+                    if (steady != g_steady.end()) for (uint32_t c = 0; c < 3; c++) rgb[c] = steady->second.rgb[c] / 255.0f;
                     const float scale = (o->on && o->radius > 0) ? o->intensity / 100.0f * lighting_flicker(l, o->flicker, o->flicker_speed) : 0.0f;
                     if (o->recolour) {
                         rgb[0] = o->r / 255.0f;
@@ -515,27 +520,29 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
         float radius = rdf(l + OBJ_LIGHT_RADIUS);
         const float x = rdf(l + OBJ_LIGHT_POS), y = rdf(l + OBJ_LIGHT_POS + 4), z = rdf(l + OBJ_LIGHT_POS + 8);
         const LightOverride* own = lighting_override_for(l);
-        // Steady (the lighting tool): the game's own flicker off, at the light's average brightness and size over the
-        // last few seconds (kept per light; a light at another spot, as in another level, starts again).
+        float rgb[3]; // its colour (0-255), which the game animates for flames
+        for (uint32_t c = 0; c < 3; c++) rgb[c] = (float)rd8(l + OBJ_LIGHT_COLOUR + c);
+        // Steady (the lighting tool): the game's own flicker off, at the light's average colour, brightness and size over
+        // the last few seconds (kept per light; a light at another spot, as in another level, starts again).
         if (own && own->steady) {
-            struct Average { float x, y, z, intensity, radius; };
-            static std::unordered_map<uint32_t, Average> averages;
-            if (averages.size() > 1024) averages.clear();
-            auto it = averages.find(l);
-            if (it == averages.end() || it->second.x != x || it->second.y != y || it->second.z != z) {
-                it = averages.insert_or_assign(l, Average{ x, y, z, (float)intensity, radius }).first;
+            if (g_steady.size() > 1024) g_steady.clear();
+            auto it = g_steady.find(l);
+            if (it == g_steady.end() || it->second.x != x || it->second.y != y || it->second.z != z) {
+                it = g_steady.insert_or_assign(l, SteadyAverage{ x, y, z, (float)intensity, radius, { rgb[0], rgb[1], rgb[2] } }).first;
             }
-            Average& a = it->second;
+            SteadyAverage& a = it->second;
             a.intensity += ((float)intensity - a.intensity) * 0.02f;
             a.radius += (radius - a.radius) * 0.02f;
+            for (uint32_t c = 0; c < 3; c++) {
+                a.rgb[c] += (rgb[c] - a.rgb[c]) * 0.02f;
+                rgb[c] = a.rgb[c];
+            }
             intensity = (uint32_t)std::lround(a.intensity);
             radius = a.radius;
         }
         if (intensity == 0 || radius <= 0.0f) continue;
         float colour[3];
-        for (uint32_t c = 0; c < 3; c++) {
-            colour[c] = (float)((rd8(l + OBJ_LIGHT_COLOUR + c) * intensity) >> 8) / 255.0f * object_strength;
-        }
+        for (uint32_t c = 0; c < 3; c++) colour[c] = rgb[c] * intensity / 256.0f / 255.0f * object_strength;
         // As the lighting tool changed it: off, another colour (at the light's own brightness), brighter or dimmer,
         // larger or smaller, flickering.
         if (const LightOverride* o = own) {
@@ -544,7 +551,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
                 // reach the game gives it (as the light would have).
                 const float off = std::clamp(s.off_glow.load(), 0, 200) / 100.0f;
                 float own_colour[3];
-                for (uint32_t c = 0; c < 3; c++) own_colour[c] = (float)((rd8(l + OBJ_LIGHT_COLOUR + c) * intensity) >> 8) / 255.0f * off;
+                for (uint32_t c = 0; c < 3; c++) own_colour[c] = rgb[c] * intensity / 256.0f / 255.0f * off;
                 const size_t before = found.size();
                 if (off > 0.0f) add(l, x, y, z, radius * object_radius, radius * 0.3f, own_colour, false, false);
                 if (found.size() > before) {
