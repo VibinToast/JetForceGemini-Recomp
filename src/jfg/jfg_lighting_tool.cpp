@@ -42,6 +42,8 @@ bool rt64_jfg_emission_colour(uint64_t hash, float* rgb); // lib/rt64 src/render
 uint32_t rt64_jfg_material_kinds(uint64_t hash);          // ...
 void rt64_jfg_material_rescan();                         // ...
 void rt64_jfg_pick(bool on);                             // lib/rt64 src/hle/rt64_state.cpp
+void rt64_jfg_emitters(bool on);                         // ...
+uint32_t rt64_jfg_emitter_cells(uint64_t* hashes, float* xyza, uint32_t max_cells); // ...
 bool rt64_jfg_picked(uint64_t* hash, uint32_t* width, uint32_t* height, uint32_t* address); // ...
 void rt64_jfg_highlight(uint64_t hash, float amount);    // lib/rt64 src/render/rt64_framebuffer_renderer.cpp
 void rt64_jfg_preview_request(uint64_t hash);             // lib/rt64 src/hle/rt64_state.cpp
@@ -176,6 +178,10 @@ std::vector<Setting>& settings_table() {
           "How far they reach from a 64 x 64 patch; larger glowing areas reach further (up to twice), smaller less." },
         { "emission_shadows", "Emission lights cast shadows", nullptr, &s.emission_shadows, 0, 1, Group::Surfaces, false,
           "They take shadow maps like other lights (only the nearest lights get one)." },
+        { "emission_objects", "Objects' emission maps light too", nullptr, &s.emission_objects, 0, 1, Group::Surfaces, false,
+          "Also places lights where objects, characters and effects with emission maps are drawn (doors, panels, "
+          "pickups), following them as they move. Up to 24, the largest glowing areas first. Off: only the level's own "
+          "textures light." },
         { "detail_characters", "Detail on characters (%)", &s.detail_characters, nullptr, 0, 200, Group::Surfaces, false,
           "How much of the surface detail characters and objects get. Their textures are mostly painted features (faces, "
           "clothes), which don't make good bumps; carved objects do." },
@@ -255,6 +261,7 @@ std::vector<std::array<float, 3>> g_emission_colour; // ... its map's average co
 std::vector<EmissionPatch> g_emission_patches;
 std::vector<PlacedLight> g_emission_lights;
 uint32_t g_emission_scan_tick = 0;
+size_t g_object_emission_lights = 0; // of g_emission_lights, the last ones: from objects' emission maps (RT64 finds them)
 
 bool use_files() { return std::getenv("JFG_LIGHTING_NO_FILES") == nullptr; }
 // Test switch: JFG_LIGHTING_TOOL=open opens the tool at start, =place with "place with fire" on (JFG_DEBUG_INPUT can
@@ -905,28 +912,44 @@ void update_emission_lights() {
         }
     }
     g_emission_lights.clear();
+    g_object_emission_lights = 0;
     // Emission (%) is over both: the maps' glow and the lights from them (0: neither).
     const int emission = s.emission_maps.load() ? std::clamp(s.glow.load(), 0, 200) : 0;
-    if (!s.emission_lights.load() || emission == 0) return;
-    for (const EmissionPatch& p : g_emission_patches) {
-        const std::array<float, 3>& c = g_emission_colour[(size_t)p.texture];
+    const bool lights = s.emission_lights.load() && emission > 0;
+    rt64_jfg_emitters(lights && s.emission_objects.load() && lighting_active());
+    if (!lights) return;
+    // A light in the map's colour over a patch of `area` (square world units).
+    auto add_light = [&](float x, float y, float z, float area, const float* c) {
         const float peak = std::max({ c[0], c[1], c[2] });
-        if (peak < 0.002f) continue;
+        if (peak < 0.002f) return;
         // The hue of the map at full, as bright as how much of it glows (a map a quarter lit gives a full light).
         const float lum = std::min(1.0f, (0.299f * c[0] + 0.587f * c[1] + 0.114f * c[2]) * 4.0f);
         PlacedLight l;
-        l.x = p.x;
-        l.y = p.y;
-        l.z = p.z;
+        l.x = x;
+        l.y = y;
+        l.z = z;
         l.r = (int)std::lround(c[0] / peak * 255.0f);
         l.g = (int)std::lround(c[1] / peak * 255.0f);
         l.b = (int)std::lround(c[2] / peak * 255.0f);
         l.intensity = (int)std::lround(lum * s.emission_light.load() * emission / 100.0f);
-        l.radius = (int)std::lround(s.emission_reach.load() * std::clamp(std::sqrt(p.area) / 64.0f, 0.5f, 2.0f));
+        l.radius = (int)std::lround(s.emission_reach.load() * std::clamp(std::sqrt(area) / 64.0f, 0.5f, 2.0f));
         l.inner = 10;
         l.shadows = s.emission_shadows.load();
         g_emission_lights.push_back(l);
+    };
+    for (const EmissionPatch& p : g_emission_patches) add_light(p.x, p.y, p.z, p.area, g_emission_colour[(size_t)p.texture].data());
+    // Objects, characters and effects with emission maps, where RT64 saw them drawn last frame (they move).
+    if (!s.emission_objects.load()) return;
+    constexpr uint32_t MAX_OBJECT_LIGHTS = 24;
+    uint64_t hashes[MAX_OBJECT_LIGHTS];
+    float xyza[MAX_OBJECT_LIGHTS * 4];
+    const uint32_t cells = rt64_jfg_emitter_cells(hashes, xyza, MAX_OBJECT_LIGHTS);
+    const size_t before = g_emission_lights.size();
+    for (uint32_t i = 0; i < cells; i++) {
+        float c[3];
+        if (rt64_jfg_emission_colour(hashes[i], c)) add_light(xyza[i * 4], xyza[i * 4 + 1], xyza[i * 4 + 2], xyza[i * 4 + 3], c);
     }
+    g_object_emission_lights = g_emission_lights.size() - before;
 }
 
 // A level texture's hash as texture dumps and material maps name it (<16 hex digits>, the first of an animated one's
@@ -1141,10 +1164,14 @@ void draw_surfaces() {
     draw_key("emission_light");
     draw_key("emission_reach");
     draw_key("emission_shadows");
+    draw_key("emission_objects");
     ImGui::EndDisabled();
     int textures = 0;
     for (int c : g_emission_checked) textures += c;
-    ImGui::TextDisabled("%d textures here have emission maps (found once drawn): %zu lights from them", textures, g_emission_lights.size());
+    ImGui::TextDisabled("%d level textures here have emission maps (found once drawn): %zu lights from them", textures,
+                        g_emission_lights.size() - g_object_emission_lights);
+    if (lighting_settings().emission_objects.load())
+        ImGui::TextDisabled("%zu lights from objects' emission maps in view", g_object_emission_lights);
     ImGui::Unindent();
     ImGui::EndDisabled();
 }
@@ -1425,6 +1452,13 @@ void lighting_tool_tick(recomp_context* ctx) {
     // JFG_LIGHTING_LOG_AIM: logs the texture under the crosshair as it changes, and the level's textures (scripted runs).
     static const bool log_aim = std::getenv("JFG_LIGHTING_LOG_AIM") != nullptr;
     update_emission_lights();
+    if (log_aim && g_tick_count % 300 == 0 && g_object_emission_lights > 0) {
+        const PlacedLight& l = g_emission_lights[g_emission_lights.size() - g_object_emission_lights];
+        char line[160];
+        std::snprintf(line, sizeof(line), "object emission lights: %zu (largest at %.0f, %.0f, %.0f, colour %d %d %d, %d%%, reach %d)",
+                      g_object_emission_lights, l.x, l.y, l.z, l.r, l.g, l.b, l.intensity, l.radius);
+        jfg_log_line("jfg_lighting.log", line);
+    }
     send_glow();
     const bool emission_tab = dino::debug_ui::backend::lighting_tool_open() && g_tick_count - g_glow_tab_tick <= 3;
     rt64_jfg_pick(emission_tab || log_aim);

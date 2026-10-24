@@ -206,6 +206,7 @@ struct LightingSettings {
     std::atomic<int> emission_light{ 100 };  // % their brightness
     std::atomic<int> emission_reach{ 300 };  // their reach for a 64 x 64 unit patch (world units)
     std::atomic<bool> emission_shadows{ false }; // they cast shadows
+    std::atomic<bool> emission_objects{ true }; // also where objects, characters and effects with emission maps are drawn
     std::atomic<bool> debug_world{ false };  // show the world position as colour
     std::atomic<bool> debug_normal{ false }; // show the surface direction as colour
     std::atomic<bool> debug_shadow{ false }; // paint the lights' shadows red
