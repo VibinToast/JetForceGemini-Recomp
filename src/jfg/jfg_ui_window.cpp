@@ -68,7 +68,8 @@ void draw_options() {
             ImGui::BeginDisabled(g.no_blood);
             changed |= ImGui::Checkbox("Blood stays (splats on the ground and walls)", &g.gore_keep_blood);
             changed |= ImGui::Checkbox("Body parts stay", &g.gore_keep_limbs);
-            changed |= options_slider("Blood amount %", &g.blood_amount, 100, 400);
+            changed |= options_slider("Blood splats", &g.blood_splats, 64, 4096);
+            changed |= options_slider("Blood amount %", &g.blood_amount, 100, 800);
             ImGui::EndDisabled();
             changed |= ImGui::Checkbox("START skips cutscenes", &g.start_skips_cutscenes);
             options_help("Also skips the logo screens at start-up and the story intro after creating a file. A skipped cutscene "
