@@ -62,6 +62,10 @@ extern bool g_audio_catch_up; // a music player's event queue is nearly full: le
 extern int g_skip_real_frames;
 
 // --- jfg_controls.cpp --------------------------------------------------------------------------------------------
+// 1 brings back the former dual-stick over-the-shoulder view (a fixed glide to the shoulder); Over-the-Shoulder Aiming is
+// now a preset of the aiming view's sliders (aim_view in jfg_options.h).
+#define JFG_OLD_SHOULDER_GLIDE 0
+
 struct CameraControl {
     bool active = false;        // the right stick owns the camera this tick
     bool was_aiming = false;
@@ -93,15 +97,42 @@ struct CameraControl {
     float view_x = 0, view_y = 0, view_z = 0;
     uint16_t view_yaw = 0, view_pitch = 0;
     int aim_pitch_pending = -1; // the free camera's tilt for the aim, set once the game's aiming has started (-1: none)
+    // Dual-stick aiming (issue #14): while aiming, the free camera stays the view and the character aims at the point
+    // under the middle of the screen. The orbit's distance and the game camera's own elevation are kept from the last
+    // frame before aiming: the game's aiming camera moves in close meanwhile.
+    bool free_aim = false;
+    bool orbit_valid = false;
+    float orbit_pivot = 0, orbit_boom = 0, orbit_elevation = 0; // orbit_pivot: the height orbited above the feet, as last placed
+    bool orbit_easing = false;  // after aiming: the orbit goes back over to the game camera's (jfg_camera_override)
+    // The view as last drawn, held while "Pause in the Settings Menu" stops the game (menu_paused).
+    float drawn_x = 0, drawn_y = 0, drawn_z = 0;
+    uint16_t drawn_yaw = 0, drawn_pitch = 0;
+    bool drawn_valid = false;
+    int orbit_settle = 0;       // frames left in which it waits for the game's camera to swing back out
+    float glide = 0;            // 0..1: how far the view has glided to the over-the-shoulder spot while aiming
+    // The height orbited eases after the character's (gently in the air: jumps, Lupus's hover, issue #16).
+    float follow_look = 0;      // the height orbited, as last placed
+    uint32_t follow_tick = 0;   // g_tick_count when it was placed; anything older starts again at the character
+    // While aiming the point orbited has drag margins: its sideways offset from the character, and where that was.
+    float orbit_dx = 0, orbit_dz = 0, orbit_dy = 0, orbit_last_x = 0, orbit_last_z = 0, orbit_last_heading = 0, orbit_last_pitch = 0;
+    bool orbit_drag_valid = false;
+    float aim_offset_blend = 0;     // 0..1: how far the "Aim Offset" options are applied (aiming, Over-the-Shoulder off)
+    float aim_offset_wx = 0, aim_offset_wz = 0; // their sideways part, across the ground, as last placed
 };
+// The free camera's orbit: round the middle of the character's body, this far above its feet, from looking up at it
+// from below (-70 degrees) to looking down on it (80 degrees). The camera's pitch is positive looking down.
+constexpr float ORBIT_CENTRE = 40.0f, ORBIT_PITCH_MIN = -1.22f, ORBIT_PITCH_MAX = 1.40f;
+constexpr float ORBIT_DISTANCE = 160.0f; // the game's own follow distance on foot (161 in the first level), times "Camera Distance"
 void camera_hand_over_to_aim(uint32_t cam); // jfg_camera.cpp
+// Dual-stick aiming: the character aims at the first surface on the view's centre line (from o along the unit vector
+// f), or the point on it at its weapon's range (jfg_controls.cpp).
+void jfg_aim_along_view(recomp_context* ctx, uint32_t obj, float ox, float oy, float oz, float fx, float fy, float fz);
 extern CameraControl g_cam;
 // Sticks as last read by the input thread (jfg_dual_stick), up/right positive.
 extern std::atomic<float> g_stick_lx, g_stick_ly, g_stick_rx, g_stick_ry;
 extern float g_mouse_cam_x, g_mouse_cam_y; // mouse this tick, in radians of camera turn
 extern float g_sign_move, g_sign_cam;      // handedness of the stick and the camera
 extern uint32_t g_tick_count;              // jfg_camera_controls calls
-extern int g_boss_cam_turn;                // boss fights: the camera turned on the spot (16-bit angle units)
 bool boss_control_active();
 bool control_mods_blocked();               // cutscene or Floyd mission: the control and camera options are off
 void jfg_camera_controls(recomp_context* ctx); // game thread, right after joyRead (jfg_after_joy)
@@ -127,6 +158,7 @@ extern FlyCamera g_fly;
 extern std::atomic<bool> g_fly_toggle_request; // F10 > Tools > Fly Camera, F7 (UI thread)
 bool fly_camera_tick(recomp_context* ctx);   // true while the fly camera owns this tick's input
 void jfg_camera_restore();                   // start of the tick: the game gets its own camera back
+bool menu_paused();                          // "Pause in the Settings Menu" has the game stopped (jfg_freeze_world)
 
 // --- jfg_gameplay.cpp --------------------------------------------------------------------------------------------
 void apply_damage_taken(uint32_t obj); // "Damage taken %"

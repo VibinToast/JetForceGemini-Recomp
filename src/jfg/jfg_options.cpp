@@ -46,11 +46,27 @@ void push_render_options() {
 // apply_option: the frame_rate just read was the old "60 + Interpolated" (2), see below.
 static bool g_old_interpolated = false;
 
+AimView aim_view() {
+    if (g.aim_shoulder) return AIM_SHOULDER_VIEW;
+    return { g.aim_drag_margin, g.aim_drag_return, g.aim_offset_x, g.aim_offset_y, g.aim_offset_z };
+}
+
+bool aim_view_key(const char* key, int* preset_value) {
+    const AimView& p = AIM_SHOULDER_VIEW;
+    const struct { const char* key; int value; } keys[] = { { "aim_drag_margin", p.drag_margin }, { "aim_drag_return", p.drag_return },
+        { "aim_offset_x", p.offset_x }, { "aim_offset_y", p.offset_y }, { "aim_offset_z", p.zoom } };
+    for (const auto& k : keys) {
+        if (std::strcmp(key, k.key) == 0) { if (preset_value != nullptr) *preset_value = k.value; return true; }
+    }
+    return false;
+}
+
 void apply_option(const char* key, int value) {
     if (std::strcmp(key, "no_blood") == 0) g.no_blood = value != 0;
     else if (std::strcmp(key, "gore_keep_blood") == 0) g.gore_keep_blood = value != 0;
     else if (std::strcmp(key, "gore_keep_limbs") == 0) g.gore_keep_limbs = value != 0;
-    else if (std::strcmp(key, "blood_amount") == 0) g.blood_amount = std::clamp(value, 100, 400);
+    else if (std::strcmp(key, "blood_amount") == 0) g.blood_amount = std::clamp(value, 100, 800);
+    else if (std::strcmp(key, "blood_splats") == 0) g.blood_splats = std::clamp(value, 64, 4096);
     else if (std::strcmp(key, "show_fps") == 0) g.show_fps = value != 0;
     else if (std::strcmp(key, "show_level") == 0) g.show_level = value != 0;
     else if (std::strcmp(key, "show_pack") == 0) g.show_pack = value != 0;
@@ -84,8 +100,10 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "smooth_shadows") == 0) g.smooth_shadows = value != 0;
     else if (std::strcmp(key, "modern_lighting") == 0) g.modern_lighting = value != 0;
     else if (std::strcmp(key, "widescreen") == 0) g.widescreen = value != 0;
+    else if (std::strcmp(key, "hud_corners") == 0) g.hud_corners = value != 0;
     else if (std::strcmp(key, "fov") == 0) g.fov = std::clamp(value, 75, 140);
     else if (std::strcmp(key, "hit_flash") == 0) g.hit_flash = std::clamp(value, 0, 100);
+    else if (std::strcmp(key, "shadow_opacity") == 0) g.shadow_opacity = std::clamp(value, 0, 200);
     else if (std::strcmp(key, "hide_floyd") == 0) g.hide_floyd = value != 0;
     else if (std::strcmp(key, "vignette") == 0) g.vignette = value != 0;
     else if (std::strcmp(key, "vignette_strength") == 0) g.vignette_strength = std::clamp(value, 0, 100);
@@ -100,7 +118,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "texture_filter") == 0) g.texture_filter = std::clamp(value, 0, 1);
     else if (std::strcmp(key, "output_filter") == 0) g.output_filter = std::clamp(value, 0, 2);
     else if (std::strcmp(key, "start_skips_cutscenes") == 0) g.start_skips_cutscenes = value != 0;
-    else if (std::strcmp(key, "pause_in_menu") == 0) g.pause_in_menu = value != 0;
+    else if (std::strcmp(key, "pause_in_menu") == 0) g.pause_in_menu = true; // not in the menu any more: always on (F9 can turn it off until the next start)
     else if (std::strcmp(key, "auto_save") == 0) g.auto_save = value != 0;
     else if (std::strcmp(key, "auto_save_minutes") == 0) g.auto_save_minutes = std::clamp(value, 0, 30);
     else if (std::strcmp(key, "save_notification") == 0) g.save_notification = value != 0;
@@ -119,10 +137,17 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "sprint_swimming") == 0) g.sprint_swimming = value != 0;
     else if (std::strcmp(key, "sprint_swim_speed") == 0) g.sprint_swim_speed = std::clamp(value, 100, 300);
     else if (std::strcmp(key, "normalize_diagonal") == 0) g.normalize_diagonal = value != 0;
+    else if (std::strcmp(key, "aim_even_speed") == 0) g.aim_even_speed = value != 0;
     else if (std::strcmp(key, "invert_aim_normal") == 0) g.invert_aim_normal = value != 0;
     else if (std::strcmp(key, "invert_camera_y") == 0) g.invert_camera_y = value != 0;
     else if (std::strcmp(key, "camera_speed_h") == 0) g.camera_speed_h = std::clamp(value, 10, 400);
     else if (std::strcmp(key, "camera_speed_v") == 0) g.camera_speed_v = std::clamp(value, 10, 400);
+    else if (std::strcmp(key, "camera_distance") == 0) g.camera_distance = std::clamp(value, 50, 250);
+    else if (std::strcmp(key, "aim_drag_margin") == 0) g.aim_drag_margin = std::clamp(value, 0, 50);
+    else if (std::strcmp(key, "aim_drag_return") == 0) g.aim_drag_return = std::clamp(value, 0, 400);
+    else if (std::strcmp(key, "aim_offset_x") == 0) g.aim_offset_x = std::clamp(value, -50, 50);
+    else if (std::strcmp(key, "aim_offset_y") == 0) g.aim_offset_y = std::clamp(value, -50, 50);
+    else if (std::strcmp(key, "aim_offset_z") == 0) g.aim_offset_z = std::clamp(value, 0, 300);
     else if (std::strcmp(key, "aim_shoulder") == 0) g.aim_shoulder = value != 0;
     else if (std::strcmp(key, "aim_centered") == 0) g.aim_centered = value != 0;
     else if (std::strcmp(key, "aim_jump") == 0) g.aim_jump = value != 0;
@@ -163,7 +188,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "no_blood=%d\nstart_skips_cutscenes=%d\n", s.no_blood ? 1 : 0, s.start_skips_cutscenes ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "auto_save=%d\nauto_save_minutes=%d\nsave_notification=%d\nkeep_area_progress=%d\n", s.auto_save ? 1 : 0, s.auto_save_minutes, s.save_notification ? 1 : 0, s.keep_area_progress ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "show_fps=%d\nwidescreen=%d\nframe_rate=%d\nsmooth_motion=%d\n", s.show_fps ? 1 : 0, s.widescreen ? 1 : 0, s.frame_rate, s.smooth_motion); out += buf;
-    std::snprintf(buf, sizeof(buf), "smooth_shadows=%d\nmodern_lighting=%d\n", s.smooth_shadows ? 1 : 0, s.modern_lighting ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "smooth_shadows=%d\nshadow_opacity=%d\nhud_corners=%d\nmodern_lighting=%d\n", s.smooth_shadows ? 1 : 0, s.shadow_opacity, s.hud_corners ? 1 : 0, s.modern_lighting ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "fov=%d\nhit_flash=%d\nhide_floyd=%d\n", s.fov, s.hit_flash, s.hide_floyd ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "vignette=%d\nvignette_strength=%d\nvignette_size=%d\n", s.vignette ? 1 : 0, s.vignette_strength, s.vignette_size); out += buf;
     std::snprintf(buf, sizeof(buf), "level_fog_distance=%d\nno_level_fog=%d\n", s.level_fog_distance, s.no_level_fog ? 1 : 0); out += buf;
@@ -175,8 +200,10 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "bloom=%d\nbloom_intensity=%d\nbloom_threshold=%d\nbloom_radius=%d\n", s.bloom ? 1 : 0, s.bloom_intensity, s.bloom_threshold, s.bloom_radius); out += buf;
     std::snprintf(buf, sizeof(buf), "dual_stick=%d\ninvert_aim_y=%d\nswap_triggers=%d\ndual_layout=%d\n", s.dual_stick ? 1 : 0, s.invert_aim_y ? 1 : 0, s.swap_triggers ? 1 : 0, s.dual_layout ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "invert_aim_normal=%d\ninvert_camera_y=%d\naim_from_character=%d\n", s.invert_aim_normal ? 1 : 0, s.invert_camera_y ? 1 : 0, s.aim_from_character ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "camera_collision=%d\n", s.camera_collision ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "move_speed=%d\nnormalize_diagonal=%d\n", s.move_speed, s.normalize_diagonal ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "camera_collision=%d\ncamera_distance=%d\n", s.camera_collision ? 1 : 0, s.camera_distance); out += buf;
+    std::snprintf(buf, sizeof(buf), "aim_drag_margin=%d\naim_drag_return=%d\n", s.aim_drag_margin, s.aim_drag_return); out += buf;
+    std::snprintf(buf, sizeof(buf), "aim_offset_x=%d\naim_offset_y=%d\naim_offset_z=%d\n", s.aim_offset_x, s.aim_offset_y, s.aim_offset_z); out += buf;
+    std::snprintf(buf, sizeof(buf), "move_speed=%d\nnormalize_diagonal=%d\naim_even_speed=%d\n", s.move_speed, s.normalize_diagonal ? 1 : 0, s.aim_even_speed ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "camera_speed_h=%d\ncamera_speed_v=%d\naim_shoulder=%d\naim_centered=%d\naim_speed=%d\n", s.camera_speed_h, s.camera_speed_v, s.aim_shoulder ? 1 : 0, s.aim_centered ? 1 : 0, s.aim_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "aim_jump=%d\n", s.aim_jump ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "mouse_keyboard=%d\nmouse_camera_speed=%d\nmouse_aim_speed=%d\ninvert_mouse_y=%d\n", s.mouse_keyboard ? 1 : 0, s.mouse_camera_speed, s.mouse_aim_speed, s.invert_mouse_y ? 1 : 0); out += buf;
@@ -186,7 +213,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "sprint=%d\nsprint_speed=%d\nsprint_aiming=%d\n", s.sprint ? 1 : 0, s.sprint_speed, s.sprint_aiming ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "sprint_swimming=%d\nsprint_swim_speed=%d\n", s.sprint_swimming ? 1 : 0, s.sprint_swim_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "pause_in_menu=%d\n", s.pause_in_menu ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "gore_keep_blood=%d\ngore_keep_limbs=%d\nblood_amount=%d\n", s.gore_keep_blood ? 1 : 0, s.gore_keep_limbs ? 1 : 0, s.blood_amount); out += buf;
+    std::snprintf(buf, sizeof(buf), "gore_keep_blood=%d\ngore_keep_limbs=%d\nblood_amount=%d\nblood_splats=%d\n", s.gore_keep_blood ? 1 : 0, s.gore_keep_limbs ? 1 : 0, s.blood_amount, s.blood_splats); out += buf;
     return out;
 }
 
