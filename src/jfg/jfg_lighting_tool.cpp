@@ -125,6 +125,9 @@ std::vector<Setting>& settings_table() {
           "How much a surface turned away from a light gets less of it. 0 keeps the game's look." },
         { "max_lights", "Most lights per frame", &s.max_lights, nullptr, 0, 64, Group::Lights, true,
           "The nearest lights are kept. Every lit pixel adds up each light." },
+        { "ray_shadows", "Ray-traced shadows", nullptr, &s.ray_shadows, 0, 1, Group::Shadows, false,
+          "Shadows traced with the GPU's ray tracing instead of shadow maps: every light that casts shadows gets them, "
+          "sharp and exact. Needs a GPU with ray tracing (DirectX 12 for now); without it the shadow maps stay." },
         { "shadows", "Shadow darkness (%)", &s.shadows, nullptr, 0, 100, Group::Shadows, false,
           "How dark shadows from the lights are. 0 is off, as in the game." },
         { "glow_shadow", "Shadows on painted glow (%)", &s.glow_shadow, nullptr, 0, 100, Group::Shadows, false,
