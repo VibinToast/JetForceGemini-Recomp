@@ -196,13 +196,34 @@ def option_markup(items, first_nav_up):
     # buttons (and some rows above), and at the last row Down went sideways between its radios. Between two rows of
     # radios the column is kept (On to On); a slider row has one control. The first row goes up to first_nav_up (the
     # tab; None leaves it automatic), the last row's Down goes nowhere.
+    # A locked row (LOCKED_BY) can't take the focus, so while its lock is on, Up/Down jump over the locked rows next to it
+    # (a data-style-nav-* attribute, see nav_locked, in place of the fixed property).
     rows = [row_ids(kind, key, extra) for kind, key, _, extra, _ in items if kind != "group"]
+    locks = [LOCKED_BY.get(key) for kind, key, _, _, _ in items if kind != "group"]
     def target(row, column):
         return "#" + row[min(column, len(row) - 1)]
+    def neighbour(i, step, column):
+        j = i + step
+        if j < 0: return first_nav_up
+        return target(rows[j], column) if j < len(rows) else "none"
+    def past_lock(i, step, column):
+        """(lock, where to go while it is on) when the next row that way is locked; None otherwise."""
+        j = i + step
+        if not (0 <= j < len(rows)) or locks[j] is None or locks[j] == locks[i]: return None
+        lock = locks[j]
+        while 0 <= j < len(rows) and locks[j] == lock: j += step
+        return lock, neighbour(j - step, step, column) or "auto"
     def nav_style(i, column):
-        up = target(rows[i - 1], column) if i > 0 else first_nav_up
-        down = target(rows[i + 1], column) if i + 1 < len(rows) else "none"
-        return (f"nav-up: {up}; " if up else "") + f"nav-down: {down};"
+        up = None if past_lock(i, -1, column) else neighbour(i, -1, column)
+        down = None if past_lock(i, 1, column) else neighbour(i, 1, column)
+        return (f"nav-up: {up}; " if up else "") + (f"nav-down: {down};" if down else "")
+    def nav_locked(i, column):
+        attrs = ""
+        for step, prop in ((-1, "nav-up"), (1, "nav-down")):
+            skip = past_lock(i, step, column)
+            if skip:
+                attrs += f' data-style-{prop}="{skip[0]} == 1 ? \'{skip[1]}\' : \'{neighbour(i, step, column) or "auto"}\'"'
+        return attrs
     out, helps, idx = [], [], 0
     for kind, key, title, extra, help_text in items:
         t = html.escape(title)
@@ -219,14 +240,14 @@ def option_markup(items, first_nav_up):
             out.append('                        <div class="config-option__list">')
             for column, (v, label) in enumerate(((1, "On"), (0, "Off"))):
                 rid = ids[column]
-                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"/>')
+                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"{nav_locked(idx, column)}/>')
                 out.append(f'                            <label class="config-option__tab-label" for="{rid}">{label}</label>')
             out.append('                        </div>')
         elif kind == "choice":
             out.append('                        <div class="config-option__list">')
             for column, (v, label) in enumerate(extra):
                 rid = ids[column]
-                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"/>')
+                out.append(f'                            <input type="radio" {ev} name="jfg_{key}" data-checked="{key}" value="{v}" id="{rid}" style="{nav_style(idx, column)}"{nav_locked(idx, column)}/>')
                 out.append(f'                            <label class="config-option__tab-label" for="{rid}">{html.escape(label)}</label>')
             out.append('                        </div>')
         elif kind == "range":
@@ -234,7 +255,7 @@ def option_markup(items, first_nav_up):
             out.append('                        <div class="config-option__range-wrapper config-option__list">')
             out.append(f'                            <label class="config-option__range-label">{{{{{key}}}}}{suffix}</label>')
             locked_attr = f' data-attrif-disabled="{lock} == 1"' if lock else ''
-            out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}" data-value="{key}"{locked_attr}/>')
+            out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}"{nav_locked(idx, 0)} data-value="{key}"{locked_attr}/>')
             out.append('                        </div>')
         out.append('                    </div>')
         # The focused option's description: its name as a heading, then the text (styled by .jfg-desc in config_menu.rml
