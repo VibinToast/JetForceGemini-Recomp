@@ -92,18 +92,18 @@
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(7)">
                         <label class="config-option__title">Widescreen</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" name="jfg_widescreen" data-checked="widescreen" value="1" id="jfg_widescreen_on" style="nav-up: #jfg_smooth_shadows_on; nav-down: #jfg_hud_corners_on;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" name="jfg_widescreen" data-checked="widescreen" value="1" id="jfg_widescreen_on" style="nav-up: #jfg_smooth_shadows_on; " data-style-nav-down="widescreen == 0 ? '#jfg_fov_input' : '#jfg_hud_corners_on'"/>
                             <label class="config-option__tab-label" for="jfg_widescreen_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" name="jfg_widescreen" data-checked="widescreen" value="0" id="jfg_widescreen_off" style="nav-up: #jfg_smooth_shadows_off; nav-down: #jfg_hud_corners_off;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" name="jfg_widescreen" data-checked="widescreen" value="0" id="jfg_widescreen_off" style="nav-up: #jfg_smooth_shadows_off; " data-style-nav-down="widescreen == 0 ? '#jfg_fov_input' : '#jfg_hud_corners_off'"/>
                             <label class="config-option__tab-label" for="jfg_widescreen_off">Off</label>
                         </div>
                     </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(8)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(8)" data-style-opacity="widescreen == 0 ? '0.4' : '1'">
                         <label class="config-option__title">HUD in Screen Corners</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_hud_corners" data-checked="hud_corners" value="1" id="jfg_hud_corners_on" style="nav-up: #jfg_widescreen_on; nav-down: #jfg_fov_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_hud_corners" data-checked="hud_corners" value="1" id="jfg_hud_corners_on" style="nav-up: #jfg_widescreen_on; nav-down: #jfg_fov_input;" data-attrif-disabled="widescreen == 0"/>
                             <label class="config-option__tab-label" for="jfg_hud_corners_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_hud_corners" data-checked="hud_corners" value="0" id="jfg_hud_corners_off" style="nav-up: #jfg_widescreen_off; nav-down: #jfg_fov_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" name="jfg_hud_corners" data-checked="hud_corners" value="0" id="jfg_hud_corners_off" style="nav-up: #jfg_widescreen_off; nav-down: #jfg_fov_input;" data-attrif-disabled="widescreen == 0"/>
                             <label class="config-option__tab-label" for="jfg_hud_corners_off">Off</label>
                         </div>
                     </div>
@@ -111,7 +111,7 @@
                         <label class="config-option__title">Field of View</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{fov}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" id="jfg_fov_input" type="range" min="75" max="140" style="flex: 1; margin: 0dp; nav-up: #jfg_hud_corners_on; nav-down: #jfg_texture_filter_0;" data-value="fov"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" id="jfg_fov_input" type="range" min="75" max="140" style="flex: 1; margin: 0dp; nav-down: #jfg_texture_filter_0;" data-style-nav-up="widescreen == 0 ? '#jfg_widescreen_on' : '#jfg_hud_corners_on'" data-value="fov"/>
                         </div>
                     </div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(10)">

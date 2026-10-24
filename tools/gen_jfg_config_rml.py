@@ -13,8 +13,6 @@ GENERAL = [
     ("group", None, "Sound", None, None),
     ("range", "main_volume", "Master Volume", (0, 100, "%"), "The volume of all of the game's sound."),
     ("group", None, "Menu & Cutscenes", None, None),
-    ("bool", "pause_in_menu", "Pause in Settings Menu", None,
-     "The game stands still while the settings menu (Select / Esc) is open during play, as on the pause screen. Cutscenes keep playing."),
     ("bool", "start_skips_cutscenes", "START Skips Cutscenes", None,
      "START skips cutscenes, the logo screens at start-up and the story intro after creating a file. A skipped cutscene still runs to its end at full speed, so everything it does (flags, items, the next level) still happens."),
     ("group", None, "On Screen", None, None),
@@ -186,11 +184,12 @@ TEXTURES = [
     ("bool", "dump_by_level", "One Folder per Level", None, "Dumps into texture_dump\\&lt;level number&gt; &lt;level name&gt; instead."),
 ]
 
-# Options shown greyed out and locked while another (a bool) is on: the aiming view's sliders follow Over-the-Shoulder
+# Options shown greyed out and locked while a condition on another option holds (a data expression): the aiming view's sliders follow Over-the-Shoulder
 # Aiming's fixed view then (jfg_options.h, aim_view; jfg_settings_api.cpp shows its values and ignores changes), and the
 # gore options do nothing with No Blood on.
-LOCKED_BY = {k: "aim_shoulder" for k in ("aim_drag_margin", "aim_drag_return", "aim_offset_x", "aim_offset_y", "aim_offset_z")}
-LOCKED_BY.update({k: "no_blood" for k in ("gore_keep_blood", "blood_splats", "gore_keep_limbs", "blood_amount")})
+LOCKED_BY = {k: "aim_shoulder == 1" for k in ("aim_drag_margin", "aim_drag_return", "aim_offset_x", "aim_offset_y", "aim_offset_z")}
+LOCKED_BY.update({k: "no_blood == 1" for k in ("gore_keep_blood", "blood_splats", "gore_keep_limbs", "blood_amount")})
+LOCKED_BY["hud_corners"] = "widescreen == 0" # it moves the widescreen HUD; without Widescreen there is nothing to move
 
 def row_ids(kind, key, extra):
     """The focusable ids of one option row, left to right."""
@@ -229,7 +228,7 @@ def option_markup(items, first_nav_up):
         for step, prop in ((-1, "nav-up"), (1, "nav-down")):
             skip = past_lock(i, step, column)
             if skip:
-                attrs += f' data-style-{prop}="{skip[0]} == 1 ? \'{skip[1]}\' : \'{neighbour(i, step, column) or "auto"}\'"'
+                attrs += f' data-style-{prop}="{skip[0]} ? \'{skip[1]}\' : \'{neighbour(i, step, column) or "auto"}\'"'
         return attrs
     out, helps, idx = [], [], 0
     for kind, key, title, extra, help_text in items:
@@ -240,8 +239,8 @@ def option_markup(items, first_nav_up):
         ev = f'data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index({idx})"'
         ids = rows[idx]
         lock = LOCKED_BY.get(key)
-        locked_style = (' data-style-opacity="' + lock + " == 1 ? '0.4' : '1'" + '"') if lock else ''
-        locked_attr = f' data-attrif-disabled="{lock} == 1"' if lock else ''
+        locked_style = (' data-style-opacity="' + lock + " ? '0.4' : '1'" + '"') if lock else ''
+        locked_attr = f' data-attrif-disabled="{lock}"' if lock else ''
         out.append(f'                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index({idx})"{locked_style}>')
         out.append(f'                        <label class="config-option__title">{t}</label>')
         if kind == "bool":
