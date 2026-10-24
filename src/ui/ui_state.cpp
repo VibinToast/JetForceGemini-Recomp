@@ -40,6 +40,7 @@
 void jfg_config_menu_refresh(); // JFG PORT: src/ui/ui_config.cpp
 void close_config_menu(); // src/ui/ui_config.cpp (JFG_DEBUG_CONFIG_CLOSE)
 void jfg_config_step_tab(int dir); // JFG PORT: src/ui/ui_config.cpp
+void jfg_restore_menu_place(); // JFG PORT: src/ui/ui_config.cpp, the menu reopens where it was closed
 void jfg_launcher_ui_tick(); // JFG PORT: src/ui/ui_launcher.cpp
 void jfg_config_pack_join_tick(); // JFG PORT: src/ui/ui_config.cpp (split texture packs)
 void jfg_launcher_step_page(int dir); // JFG PORT: src/ui/ui_launcher.cpp (controller: LB / RB)
@@ -912,6 +913,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
             if (open_config) {
                 ::jfg_config_menu_refresh(); // JFG PORT
                 recompui::show_context(recompui::get_config_context_id(), "");
+                ::jfg_restore_menu_place(); // JFG PORT
             }
         }
     } // end dequeue event loop
