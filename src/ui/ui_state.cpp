@@ -1115,7 +1115,7 @@ static void jfg_retranslate_texts(Rml::Element* element, const std::map<std::str
         auto english = to_english.find(jfg::locale::ui_key(now));
         if (english == to_english.end()) return;
         auto it = ui.find(english->second);
-        const std::string want = Rml::StringUtilities::DecodeRml(it != ui.end() ? it->second : english->second);
+        const std::string want = Rml::StringUtilities::DecodeRml(jfg::locale::ui_breaks(it != ui.end() ? it->second : english->second));
         const size_t first = now.find_first_not_of(" \t\r\n"), last = now.find_last_not_of(" \t\r\n");
         const std::string out = now.substr(0, first) + want + now.substr(last + 1);
         if (out != now) text->SetText(out);
@@ -1128,7 +1128,7 @@ static void jfg_switch_language(Rml::Context* context) {
     std::map<std::string, std::string> old_ui, new_ui, to_english;
     if (!jfg::locale::take_ui_switch(old_ui, new_ui)) return;
     auto add = [&](const std::string& text, const std::string& english) {
-        const std::string decoded = Rml::StringUtilities::DecodeRml(text);
+        const std::string decoded = Rml::StringUtilities::DecodeRml(jfg::locale::ui_breaks(text));
         to_english.emplace(jfg::locale::ui_key(decoded), english);
         to_english.emplace(jfg::locale::ui_key(jfg_upper_latin(decoded)), english);
     };

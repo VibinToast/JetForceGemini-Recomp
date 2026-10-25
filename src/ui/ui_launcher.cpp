@@ -138,6 +138,24 @@ static bool queue_launcher_image(const char* name, const char* file) {
     return true;
 }
 
+// ---- the language (the Play page's top right; src/jfg/jfg_locale.h) -----------------------------------------------------
+// A drop-down of English and every locales/*.json. Picking one switches the launcher at once (its text nodes in
+// ui_state.cpp, the texts set from here by dirtying the model) and the game starts in it.
+struct LauncherLocale { Rml::String id, name; bool selected = false; };
+static std::vector<LauncherLocale> launcher_locales;
+static Rml::String launcher_locale_name;
+static bool lang_open = false;
+static std::string shown_locale = "\x01"; // the choice the launcher last showed (none yet)
+
+static void refresh_locales() {
+    const std::string chosen = jfg::locale::chosen();
+    launcher_locales.clear();
+    for (const auto& [id, name] : jfg::locale::list()) {
+        launcher_locales.push_back({ id, name, id == chosen });
+        if (id == chosen) launcher_locale_name = name;
+    }
+}
+
 // ---- the official HD texture pack (Texture Packs page; src/jfg/jfg_pack_install.cpp) -------------------------------------
 struct OfficialPackRow { Rml::String variant, size_text, action; bool installed = false; };
 static std::vector<OfficialPackRow> official_rows;    // one button per variant in the latest release
@@ -274,6 +292,17 @@ void jfg_launcher_scroll(float pixels) {
 
 // Called every UI frame (ui_state.cpp): steps the VibinToast icon while the About page is shown.
 void jfg_launcher_ui_tick() {
+    jfg::locale::debug_pick();
+    // A language picked here or anywhere else: the list's choice and every text this file sets.
+    if (model_handle) {
+        const std::string chosen = jfg::locale::chosen();
+        if (chosen != shown_locale) {
+            shown_locale = chosen;
+            refresh_locales();
+            refresh_official(true);
+            model_handle.DirtyAllVariables();
+        }
+    }
     if (!pending_focus_id.empty() && --pending_focus_frames <= 0) {
         if (recompui::is_context_shown(launcher_context)) {
             if (Rml::ElementDocument* doc = launcher_document()) {
@@ -548,6 +577,31 @@ public:
         jfg_update_check_start(version_string);
         official_shown = jfg_launcher_show_official_pack();
         jfg_official_check_start(); // the official HD texture pack's latest version (Texture Packs page)
+
+        // JFG PORT: the language drop-down (Play page).
+        if (auto locale = constructor.RegisterStruct<LauncherLocale>()) {
+            locale.RegisterMember("id", &LauncherLocale::id);
+            locale.RegisterMember("name", &LauncherLocale::name);
+            locale.RegisterMember("selected", &LauncherLocale::selected);
+        }
+        constructor.RegisterArray<std::vector<LauncherLocale>>();
+        refresh_locales();
+        constructor.Bind("rl_locales", &launcher_locales);
+        constructor.Bind("rl_locale_name", &launcher_locale_name);
+        constructor.Bind("rl_lang_open", &lang_open);
+        constructor.BindEventCallback("toggle_lang", [](Rml::DataModelHandle model, Rml::Event&, const Rml::VariantList&) {
+            lang_open = !lang_open;
+            model.DirtyVariable("rl_lang_open");
+            if (lang_open) {
+                for (size_t i = 0; i < launcher_locales.size(); i++) if (launcher_locales[i].selected) focus_soon("rl_lang_" + std::to_string(i));
+            }
+        });
+        constructor.BindEventCallback("pick_locale", [](Rml::DataModelHandle model, Rml::Event&, const Rml::VariantList& args) {
+            if (!args.empty()) jfg::locale::choose(args[0].Get<Rml::String>());
+            lang_open = false;
+            model.DirtyVariable("rl_lang_open");
+            focus_soon("rl_lang");
+        });
 
         // JFG PORT: the official HD texture pack (Texture Packs page).
         if (auto row = constructor.RegisterStruct<OfficialPackRow>()) {

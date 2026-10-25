@@ -74,9 +74,12 @@ const Locale* find(const std::string& id); // "" = english.json, if any
 std::string chosen();
 void choose(const std::string& id);
 
-// For menus (any thread): (id, label) of English and every locale, in list order. The label is the locale's name,
+// For menus (any thread): (id, label) of English and every locale, in list order. Before the game starts (the
+// launcher) it comes from the files' names alone. The label is the locale's name,
 // or its English name when the name has characters the menus' font lacks (beyond Latin: U+024F).
 std::vector<std::pair<std::string, std::string>> list();
+// JFG_DEBUG_LANGUAGE (a test switch): the game tick and the launcher's call it.
+void debug_pick();
 
 // The port's own menus: `english` in the chosen language (its file's "ui"; english.json's for English), else
 // `english` itself. Any thread. With JFG_UI_EXPORT=<file> every text asked for is collected there, as the English
@@ -84,6 +87,9 @@ std::vector<std::pair<std::string, std::string>> list();
 std::string ui(const std::string& english);
 // A text as "ui" keys it: no white space around it, each run inside as one space.
 std::string ui_key(const std::string& text);
+// `text` as the menus show it: RmlUi breaks lines only at ASCII spaces, so Japanese and Chinese punctuation
+// (、。，）」：！？) gets one after it. ui() and translate_ui() give it so.
+std::string ui_breaks(const std::string& text);
 // After choose(), once (the UI thread, src/ui/ui_state.cpp): the "ui" of the language the menus show and of the new
 // one (English -> text), to put the menus' text nodes in the new language in place; the new one is then in use.
 bool take_ui_switch(std::map<std::string, std::string>& old_ui, std::map<std::string, std::string>& new_ui);

@@ -5,6 +5,8 @@
 // pattern (as the decomp's tools/text.py lays them out): each menu string, subtitle line and hint string English has
 // is the locale's when its key is there, else English's own bytes.
 #include <algorithm>
+#include <chrono>
+#include <cstring>
 #include <atomic>
 #include <cctype>
 #include <cstdio>
@@ -56,6 +58,7 @@ void pad8(std::vector<uint8_t>& b) {
 std::vector<jfg::locale::Locale> g_locales;
 std::mutex g_mutex; // g_list and g_chosen (read by the menus)
 std::vector<std::pair<std::string, std::string>> g_list = { { "", "English" } };
+bool g_listed = false; // g_list is filled (the registry, or list_names before it)
 std::string g_chosen;
 bool g_chosen_loaded = false;
 std::atomic<bool> g_ui_switch{ false }; // choose() since the menus last took their language (take_ui_switch)
@@ -500,12 +503,8 @@ void load_choice() {
     }
 }
 
-} // namespace
-
-// The registry, at start-up before the game runs (jfg_locale.cpp, jfg_locale_start): every locales/*.json, by file
-// name. english.json, when there is one, is shown in place of the ROM's English.
-extern "C" void jfg_locale_build_registry(void) {
-    g_locales.clear();
+// locales/*.json, by name.
+std::vector<std::filesystem::path> locale_files() {
     std::vector<std::filesystem::path> files;
     std::error_code ec;
     for (const auto& e : std::filesystem::directory_iterator(FOLDER, ec)) {
@@ -514,18 +513,53 @@ extern "C" void jfg_locale_build_registry(void) {
         if (e.is_regular_file(ec) && ext == ".json") files.push_back(e.path());
     }
     std::sort(files.begin(), files.end());
-    for (const std::filesystem::path& p : files) {
-        jfg::locale::Locale l;
-        if (load_file(p, l) && !l.menu.empty()) g_locales.push_back(std::move(l));
-    }
+    return files;
+}
+
+// Under g_mutex: the Language list from `locales` (only id, name and english_name are read). english.json names the
+// first entry; two that look alike get their file's name.
+void set_list(const std::vector<jfg::locale::Locale>& locales) {
     std::map<std::string, int> names;
-    for (const jfg::locale::Locale& l : g_locales) names[label(l)]++;
-    std::lock_guard<std::mutex> lock(g_mutex);
+    for (const jfg::locale::Locale& l : locales) names[label(l)]++;
     g_list = { { "", "English" } };
-    for (const jfg::locale::Locale& l : g_locales) {
+    for (const jfg::locale::Locale& l : locales) {
         if (l.id == ENGLISH_ID) { g_list[0].second = label(l); continue; }
         g_list.emplace_back(l.id, names[label(l)] > 1 ? label(l) + " (" + l.id + ".json)" : label(l));
     }
+    g_listed = true;
+}
+
+// Under g_mutex, before the registry (the launcher's Language list): each file's names, without building its text,
+// which needs the ROM.
+void list_names() {
+    std::vector<jfg::locale::Locale> locales;
+    for (const std::filesystem::path& p : locale_files()) {
+        std::ifstream f(p, std::ios::binary);
+        const std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        const json j = json::parse(bytes, nullptr, false);
+        if (j.is_discarded() || !j.is_object() || !j.contains("name") || !j["name"].is_string()) continue;
+        jfg::locale::Locale l;
+        l.id = p.stem().string();
+        std::transform(l.id.begin(), l.id.end(), l.id.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+        l.name = j["name"].get<std::string>();
+        if (j.contains("english_name") && j["english_name"].is_string()) l.english_name = j["english_name"].get<std::string>();
+        locales.push_back(std::move(l));
+    }
+    set_list(locales);
+}
+
+} // namespace
+
+// The registry, at start-up before the game runs (jfg_locale.cpp, jfg_locale_start): every locales/*.json, by file
+// name. english.json, when there is one, is shown in place of the ROM's English.
+extern "C" void jfg_locale_build_registry(void) {
+    g_locales.clear();
+    for (const std::filesystem::path& p : locale_files()) {
+        jfg::locale::Locale l;
+        if (load_file(p, l) && !l.menu.empty()) g_locales.push_back(std::move(l));
+    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    set_list(g_locales);
     load_choice();
     char line[160];
     std::snprintf(line, sizeof line, "locale: %zu locale files in %s/", g_locales.size(), FOLDER);
@@ -559,8 +593,20 @@ void choose(const std::string& id) {
     }
 }
 
+// Test: JFG_DEBUG_LANGUAGE="secs,id" picks locale `id` ("" = English) that many seconds after the first call, as the
+// Language list does (Recomp-Docs/REFERENCE.md). Called by the game tick and the launcher's.
+void debug_pick() {
+    static const char* pick = std::getenv("JFG_DEBUG_LANGUAGE");
+    static const auto start = std::chrono::steady_clock::now();
+    if (pick == nullptr || std::chrono::steady_clock::now() - start < std::chrono::seconds(std::atoi(pick))) return;
+    const char* comma = std::strchr(pick, ',');
+    choose(comma ? comma + 1 : "");
+    pick = nullptr;
+}
+
 std::vector<std::pair<std::string, std::string>> list() {
     std::lock_guard<std::mutex> lock(g_mutex);
+    if (!g_listed) list_names();
     return g_list;
 }
 
@@ -584,6 +630,24 @@ std::string ui_key(const std::string& text) {
         if (space) out.push_back(' ');
         space = false;
         out.push_back(c);
+    }
+    return out;
+}
+
+std::string ui_breaks(const std::string& text) {
+    // UTF-8 of \u3001\u3002\uFF0C\uFF09\u300D\u300F\uFF1A\uFF01\uFF1F
+    static const char* const PUNCTUATION[] = { "\xE3\x80\x81", "\xE3\x80\x82", "\xEF\xBC\x8C", "\xEF\xBC\x89", "\xE3\x80\x8D",
+                                               "\xE3\x80\x8F", "\xEF\xBC\x9A", "\xEF\xBC\x81", "\xEF\xBC\x9F" };
+    std::string out;
+    for (size_t i = 0; i < text.size();) {
+        size_t n = 0;
+        for (const char* p : PUNCTUATION) {
+            if (text.compare(i, std::strlen(p), p) == 0) { n = std::strlen(p); break; }
+        }
+        if (n == 0) { out.push_back(text[i++]); continue; }
+        out.append(text, i, n);
+        i += n;
+        if (i < text.size() && text[i] != ' ' && text[i] != '<') out.push_back(' ');
     }
     return out;
 }
@@ -644,7 +708,7 @@ const std::string* lookup(const std::string& key) {
 std::string ui(const std::string& english) {
     std::lock_guard<std::mutex> lock(g_ui_mutex);
     const std::string* t = lookup(ui_key(english));
-    return t ? *t : english;
+    return t ? ui_breaks(*t) : english;
 }
 
 bool ui_has_accents() {
@@ -672,7 +736,7 @@ bool translate_ui(std::string& out, const std::string& in) {
     if (t == nullptr) { out = in; return false; }
     // The white space around the text stays: it separates it from the elements next to it.
     const size_t first = in.find_first_not_of(" \t\r\n"), last = in.find_last_not_of(" \t\r\n");
-    out = in.substr(0, first) + *t + in.substr(last + 1);
+    out = in.substr(0, first) + ui_breaks(*t) + in.substr(last + 1);
     return true;
 }
 
