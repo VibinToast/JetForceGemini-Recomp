@@ -568,7 +568,7 @@ void build(recomp_context* ctx) {
     const int level = ch != 0 ? jfg::Character::Resume::get(ch) >> 5 : -1;
     int open_on = -1;
     for (int k = 0; k < (int)g_planets.size() && open_on < 0; k++) {
-        if (g_planets[k].disc && level_number(g_planets[k], hero) == level) open_on = k;
+        if (g_planets[k].disc && level_number(g_planets[k], hero) == level && open_planet(k)) open_on = k;
     }
     if (open_on >= 0) {
         const Planet& p = g_planets[open_on];
