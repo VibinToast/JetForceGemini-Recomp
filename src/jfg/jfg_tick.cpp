@@ -117,6 +117,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
 
     launch_tick(ctx); // --start-level and friends (jfg_launch.cpp)
     music_tick(ctx);  // mods' OGG music for levels (jfg_music.cpp)
+    worldmap_tick();  // mods' planets: the one the hero is in counts as entered (jfg_worldmap.cpp)
     lua_tick(ctx);    // mods' Lua scripts (jfg_lua.cpp)
 
     // Scripted testing: JFG_DEBUG_ITEMS=1 gives the current character every key and object;

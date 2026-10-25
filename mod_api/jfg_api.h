@@ -9,7 +9,7 @@
 
 #include "modding.h"
 
-#define JFG_API_VERSION 2
+#define JFG_API_VERSION 3
 
 // --- helpers -------------------------------------------------------------------------------------------------------
 
@@ -27,6 +27,22 @@ RECOMP_IMPORT("*", int jfg_get_level(void));
 // English, 1 for any other. Ids: "builtin.1" to "builtin.4" for the game's own language slots, "mod.<mod id>" for a
 // locale mod (a mod with jfg_locale.json; see the port's locale notes).
 RECOMP_IMPORT("*", int jfg_get_language(char* id, int size));
+
+// (Since version 3.) Planets and galaxies that mods add to the planet-select map (jfg_world.json). A planet or galaxy
+// is named "<mod id>:<id>" ("main" is the game's own galaxy); the helpers take the index jfg_world_find /
+// jfg_galaxy_find return (-1 = not loaded). Opening, entering and completing are kept per save file.
+RECOMP_IMPORT("*", int jfg_world_find(const char* planet));
+// Bits: 1 open (shown on the map), 2 entered (its level was played), 4 completed. -1: no such planet.
+RECOMP_IMPORT("*", int jfg_world_state(int planet));
+// Opens a planet ("unlock": "script" planets wait for this).
+RECOMP_IMPORT("*", void jfg_world_unlock(int planet));
+// Marks a planet completed: planets that open after it ("unlock": {"completed": ...}) show on the map.
+RECOMP_IMPORT("*", void jfg_world_complete(int planet));
+RECOMP_IMPORT("*", int jfg_galaxy_find(const char* galaxy));
+// The galaxy the map shows, -1 while the map is closed.
+RECOMP_IMPORT("*", int jfg_galaxy_current(void));
+// The next time the map opens, it opens on this galaxy (when one of its planets is open).
+RECOMP_IMPORT("*", void jfg_galaxy_show(int galaxy));
 
 // --- event data ---------------------------------------------------------------------------------------------------
 
@@ -94,5 +110,14 @@ typedef struct {
 
 // jfg_on_language_change(void)
 //     The player chose another language; the new one is shown from this tick on (jfg_get_language).
+
+// --- events (since version 3) --------------------------------------------------------------------------------------
+
+// jfg_on_map_open(int galaxy)
+//     The planet-select map opened (from the title or the pause menu) on that galaxy.
+// jfg_on_galaxy_change(int galaxy)
+//     The player switched galaxy on the map (L / R).
+// jfg_on_planet_select(int planet)
+//     The player chose a mod's planet; its level starts next.
 
 #endif

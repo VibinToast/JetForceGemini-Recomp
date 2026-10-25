@@ -189,6 +189,21 @@ void tribal_saves_file_chosen();      // a file was chosen: what was saved for i
 void tribal_saves_on_save(int slot);  // a save to slot is carried out this tick
 void tribal_saves_forget(int slot);   // the game deletes a file (-1: all files)
 void tribal_saves_tick();             // start of the tick: notices rescues
+
+// Mods' planets and galaxies on the planet-select map (jfg_worldmap.cpp). Planets and galaxies by index; keys "mod:id".
+int world_find(const std::string& key);    // a planet's index, -1 = none
+int world_state(int planet);               // bits: 1 open, 2 entered, 4 completed; -1 = no such planet
+void world_unlock(int planet);             // opens it for the file in play
+void world_complete(int planet);           // marks it completed for the file in play (opens "completed" planets)
+int galaxy_find(const std::string& key);   // "main" = 0, -1 = none
+std::string galaxy_key(int galaxy);
+int galaxy_current();                      // the galaxy the map shows, -1 = the map is closed
+void galaxy_show(int galaxy);              // the map opens on it next
+void worldmap_tick();                      // each tick: entered planets
+void worldmap_file_chosen();               // the save file hooks, as tribal_saves_*
+void worldmap_on_save(int slot);
+void worldmap_forget(int slot);
+void register_world_api();                 // the helpers above for mods (register_api)
 void tribal_saves_region_reset();     // end of mainResetRegion: puts the region's rescues back
 
 // --- jfg_visuals.cpp ---------------------------------------------------------------------------------------------

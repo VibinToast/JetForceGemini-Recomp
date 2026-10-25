@@ -300,6 +300,44 @@ int l_weapon_stats(lua_State* L) {
     return 1;
 }
 
+// Planets and galaxies (jfg_worldmap.cpp): an id without "mod:" is the script's own mod's.
+int planet_arg(lua_State* L, int arg) {
+    std::string key = luaL_checkstring(L, arg);
+    if (key.find(':') == std::string::npos) key = self(L)->mod_id + ":" + key;
+    const int k = jfg::world_find(key);
+    if (k < 0) luaL_error(L, "no planet %s", key.c_str());
+    return k;
+}
+
+// jfg.unlock_planet(id) / jfg.complete_planet(id): for the save file in play.
+int l_unlock_planet(lua_State* L) { jfg::world_unlock(planet_arg(L, 1)); return 0; }
+int l_complete_planet(lua_State* L) { jfg::world_complete(planet_arg(L, 1)); return 0; }
+
+// jfg.planet(id): open, entered, completed (booleans).
+int l_planet(lua_State* L) {
+    const int st = jfg::world_state(planet_arg(L, 1));
+    lua_pushboolean(L, (st & 1) != 0);
+    lua_pushboolean(L, (st & 2) != 0);
+    lua_pushboolean(L, (st & 4) != 0);
+    return 3;
+}
+
+// jfg.galaxy(): the galaxy the map shows (nil when closed); jfg.show_galaxy(id): the map opens on it next.
+int l_galaxy(lua_State* L) {
+    const int g = jfg::galaxy_current();
+    if (g < 0) lua_pushnil(L);
+    else lua_pushstring(L, jfg::galaxy_key(g).c_str());
+    return 1;
+}
+int l_show_galaxy(lua_State* L) {
+    std::string key = luaL_checkstring(L, 1);
+    if (key != "main" && key.find(':') == std::string::npos) key = self(L)->mod_id + ":" + key;
+    const int g = jfg::galaxy_find(key);
+    if (g < 0) return luaL_error(L, "no galaxy %s", key.c_str());
+    jfg::galaxy_show(g);
+    return 0;
+}
+
 int l_fog(lua_State* L) {
     const uint32_t r = (uint32_t)luaL_checkinteger(L, 1), g = (uint32_t)luaL_checkinteger(L, 2);
     const uint32_t b = (uint32_t)luaL_checkinteger(L, 3), near_ = (uint32_t)luaL_checkinteger(L, 4);
@@ -361,7 +399,10 @@ void open_state(Script& s) {
     lua_setglobal(L, "print");
     static const luaL_Reg fns[] = {
         { "log", l_log }, { "on", l_on }, { "level", l_level }, { "level_id", l_level_id }, { "player", l_player },
-        { "flag", l_flag }, { "set_flag", l_set_flag }, { "unlock_door", l_unlock_door }, { "spawn", l_spawn }, { "weapon", l_weapon }, { "pressed", l_pressed }, { "held", l_held }, { "weapon_stats", l_weapon_stats },
+        { "flag", l_flag }, { "set_flag", l_set_flag }, { "unlock_door", l_unlock_door }, { "spawn", l_spawn },
+        { "weapon", l_weapon }, { "weapon_stats", l_weapon_stats }, { "pressed", l_pressed }, { "held", l_held },
+        { "unlock_planet", l_unlock_planet }, { "complete_planet", l_complete_planet }, { "planet", l_planet },
+        { "galaxy", l_galaxy }, { "show_galaxy", l_show_galaxy },
         { "door_locked", l_door_locked }, { "fog", l_fog },
         { "message", l_message }, { "music", l_music }, { "music_stop", l_music_stop }, { "warp", l_warp },
         { nullptr, nullptr } };
