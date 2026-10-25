@@ -72,8 +72,6 @@ weapon tuning, change the game's own levels, or patch the game's code.
   pickups and exits on your own geometry, set up planets and galaxies, add triggers, scripts and music, then build the
   pack and play it with one button. It reads your own ROM; nothing from the game is in what it makes.
 - **[jfg64](https://github.com/VibinToast/jfg64-blender)**: a Blender add-on for modelling level geometry for Studio.
-- Code mods are built with N64Recomp's RecompModTool against the symbols in `JFGRecompSyms`, with the port's API in
-  `mod_api/jfg_api.h`.
 
 ## Build and run
 
