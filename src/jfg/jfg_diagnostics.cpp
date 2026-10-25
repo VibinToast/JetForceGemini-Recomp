@@ -317,7 +317,8 @@ extern "C" void jfg_sync_printf(uint8_t* rdram_, recomp_context* ctx) {
 
 } // namespace jfg
 
-// mmAlloc(size, colour) and mmAlloc2 (the same function twice): jfg_mm_alloc_check on the result.
+// mmAlloc(size, colour) and mmAlloc2 (the same function twice): jfg_mm_alloc_check on the result. mmAlloc's size may
+// be raised first for translated text (jfg_locale_alloc).
 extern "C" void mmAlloc_orig(uint8_t* rdram, recomp_context* ctx);
 
 static void mm_alloc_checked(uint8_t* rdram, recomp_context* ctx) {
@@ -333,6 +334,7 @@ JFG_WRAP(SquaddieInitFromRomdef) {
 }
 
 JFG_WRAP(mmAlloc) {
+    jfg_locale_alloc(ctx);
     objsetup_step_call(rdram, ctx, mm_alloc_checked, 7);
 }
 

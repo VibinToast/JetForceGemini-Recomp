@@ -107,6 +107,22 @@
 			.rl-main { top: 34dp; right: 46dp; bottom: 46dp; left: 524dp; }
 			.rl-main-inner { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; padding: 30dp 36dp 24dp; }
 			.rl-title { display: block; flex: 0 0 auto; text-transform: uppercase; font-size: 49dp; line-height: 56dp; color: #3CC8FF; }
+			/* The page title, and on the Play page the language drop-down at its far side. */
+			.rl-title-row { display: flex; flex: 0 0 auto; flex-direction: row; justify-content: space-between; align-items: center; }
+			.rl-lang { display: block; position: relative; flex: 0 0 auto; }
+			.rl-lang-button { display: block; padding: 8dp 14dp; border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF;
+				font-family: "JetBrains Mono"; font-weight: bold; font-size: 18dp; line-height: 24dp; white-space: nowrap; cursor: pointer;
+				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
+			.rl-lang-button:hover { border-color: #FFB21A; }
+			#window:not([mouse-active]) .rl-lang-button:focus { border-color: #FFB21A; color: #E8F3FF; }
+			.rl-lang-arrow { display: inline-block; margin-left: 12dp; transform: rotate(90deg); }
+			.rl-lang-list { display: block; position: absolute; top: 46dp; right: 0dp; z-index: 10; min-width: 100%; padding: 4dp 0dp;
+				border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; }
+			.rl-lang-item { display: block; padding: 6dp 14dp; border-width: 0dp; background-color: #050B1C; color: #E8F3FF; font-family: "JetBrains Mono"; font-weight: bold; font-size: 18dp;
+				line-height: 24dp; white-space: nowrap; text-align: left; cursor: pointer; focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; }
+			.rl-lang-item.rl-on { background-color: #0A2660; color: #3CC8FF; }
+			.rl-lang-item:hover { background-color: #1F3D73; color: #FFFFFF; }
+			#window:not([mouse-active]) .rl-lang-item:focus { color: #050B1C; background-color: #3CC8FF; }
 			.rl-cursor { color: #3CC8FF; animation: 1.1s linear-in-out infinite rl-blink; }
 			@keyframes rl-blink { 0% { opacity: 1; } 49% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
 			.rl-subtitle { display: block; flex: 0 0 auto; margin: 10dp 0dp 18dp; font-size: 19dp; line-height: 26dp; color: #8199BF; }
@@ -227,6 +243,7 @@
 			.rl-page .config-option__details { color: #3CC8FF; }
 			.rl-page .jfg-note { color: #3CC8FF; }
 			.rl-page .jfg-keys-note { display: none; } /* the General page's note about F10 / F9: those are for the game */
+			.rl-page .jfg-ingame-only { display: none; } /* the Language list: locale files are read as the game starts */
 			.rl-page .config__wrapper p { font-family: "JetBrains Mono"; font-size: 18dp; line-height: 27dp; color: #E8F3FF; }
 			.rl-page .config__wrapper p b, .rl-page .config__wrapper p i { color: #3CC8FF; }
 			/* The focused option's description (generated pages): the option's name as a heading, larger text, a cyan bar. */
@@ -321,7 +338,7 @@
 							<div class="rl-separator"></div>
 							<div class="rl-btn-shadow"><button id="nav_exit" class="rl-btn rl-btn--exit" onclick="exit_game"
 								style="nav-up: #nav_about; nav-down: #nav_play;">Exit</button></div>
-							<div class="rl-version"><div class="rl-version-side"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp')">GitHub</button></div><div class="rl-version-mid">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click (or use the banner on the Play page) to see what is new and update.</div></div></div><div class="rl-version-side"></div></div>
+							<div class="rl-version"><div class="rl-version-side"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp')">GitHub</button></div><div class="rl-version-mid">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version <span>{{update_version}}</span> is available. Click (or use the banner on the Play page) to see what is new and update.</div></div></div><div class="rl-version-side"></div></div>
 						</div>
 					</div>
 				</div>
@@ -330,7 +347,17 @@
 				<div class="rl-shadow rl-main">
 					<div class="rl-card">
 						<div class="rl-main-inner">
-							<div class="rl-title rl-pixel">{{page_title}}<span class="rl-cursor">_</span></div>
+							<div class="rl-title-row">
+								<div class="rl-title rl-pixel">{{page_title}}<span class="rl-cursor">_</span></div>
+								<!-- The language (English and locales/*.json), only when there are others. -->
+								<div class="rl-lang" data-if="page == 'play' &amp;&amp; rl_locales.size &gt; 1">
+									<button class="rl-lang-button" id="rl_lang" data-event-click="toggle_lang()">{{rl_locale_name}}<span class="rl-lang-arrow">&gt;</span></button>
+									<div class="rl-lang-list" data-if="rl_lang_open">
+										<button class="rl-lang-item" data-for="l : rl_locales" data-attr-id="'rl_lang_' + it_index" data-class-rl-on="l.selected"
+											data-event-click="pick_locale(l.id)">{{l.name}}</button>
+									</div>
+								</div>
+							</div>
 							<div class="rl-subtitle">{{page_subtitle}}</div>
 							<div class="rl-content">
 
@@ -357,7 +384,7 @@
 									<div class="rl-banner-shadow" data-if="update_available">
 										<button id="rl_update_banner" class="rl-banner" data-event-click="show_update()"
 											style="nav-left: #nav_play; nav-up: #rl_browse;" data-style-nav-down="official_update ? '#rl_pack_banner' : '#rl_start'">
-											<span class="rl-banner-title">Update available: v{{update_version}}</span>
+											<span class="rl-banner-title">Update available: <span>v{{update_version}}</span></span>
 											<span class="rl-banner-text">See what is new and update. Your saves and settings are kept.</span>
 										</button>
 									</div>
@@ -379,7 +406,7 @@
 									<div data-if="rom_valid">
 										<div class="rl-skip">
 											<div class="rl-action-shadow rl-skip-shadow"><button id="rl_skip_launcher" class="rl-action" data-class-rl-action--outline="!skip_launcher" data-event-click="toggle_skip_launcher()"
-												style="nav-left: #nav_play; nav-up: #rl_start;">Skip the launcher: {{ skip_launcher ? 'On' : 'Off' }}</button></div>
+												style="nav-left: #nav_play; nav-up: #rl_start;">Skip the launcher: <span data-if="skip_launcher">On</span><span data-if="!skip_launcher">Off</span></button></div>
 											<div class="rl-skip-note">On: the game starts straight away with this ROM next time. In the game, the launcher button next to Quit in the settings menu (Select / Esc) brings you back here.</div>
 										</div>
 									</div>
@@ -485,7 +512,7 @@
 											</div></div>
 											<div class="rl-gap"></div>
 											<div class="rl-block-shadow"><div class="rl-block">
-												<div class="rl-text rl-muted" style="margin-top: 0dp;">Jet Force Gemini is a trademark of its owners. This is a fan project, not affiliated with or endorsed by Rare, Nintendo or Microsoft. Version {{version_number}}.</div>
+												<div class="rl-text rl-muted" style="margin-top: 0dp;">Jet Force Gemini is a trademark of its owners. This is a fan project, not affiliated with or endorsed by Rare, Nintendo or Microsoft. Version <span>{{version_number}}</span></div>
 											</div></div>
 										</div>
 									</div>
@@ -497,25 +524,25 @@
 				</div>
 				<div class="rl-modal" data-class-rl-on="update_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
 					<div class="rl-modal-title">Update available</div>
-					<div class="rl-modal-sub">v{{version_number}} &gt; v{{update_version}}. What is new:</div>
+					<div class="rl-modal-sub"><span>v{{version_number}} &gt; v{{update_version}}.</span> What is new:</div>
 					<div class="rl-modal-notes" id="rl_update_notes" data-rml="update_changelog"></div>
 					<div class="rl-modal-status" data-if="update_stage != 0" data-class-rl-error="update_stage == 2">{{update_status}}</div>
 					<div class="rl-progress" data-if="update_stage == 1"><div class="rl-progress-bar" data-style-width="update_percent + '%'"></div></div>
-					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install">Update to v{{update_version}}? The game restarts when it is done. Your saves and settings are kept.</div>
+					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install">Update to <span>v{{update_version}}?</span> The game restarts when it is done. Your saves and settings are kept.</div>
 					<div class="rl-modal-ask rl-warn" data-if="update_stage == 0 &amp;&amp; !update_can_install">{{update_unavailable}}</div>
 					<div class="rl-modal-buttons">
 						<div class="rl-action-shadow" data-if="update_stage == 0"><button id="rl_update_go" class="rl-action" data-event-click="update_install()"
 							style="nav-up: none; nav-down: none; nav-left: none; nav-right: #rl_update_later;">Update now</button></div>
 						<div class="rl-action-shadow" data-if="update_stage != 1 &amp;&amp; update_stage != 3"><button id="rl_update_later" class="rl-action rl-action--outline" data-event-click="update_close()"
 							data-style-nav-left="update_stage == 0 ? '#rl_update_go' : 'none'" data-style-nav-right="'#rl_update_page'"
-							style="nav-up: none; nav-down: none;">{{update_stage == 2 ? 'Close' : 'Later'}}</button></div>
+							style="nav-up: none; nav-down: none;"><span data-if="update_stage == 2">Close</span><span data-if="update_stage != 2">Later</span></button></div>
 						<div class="rl-action-shadow" data-if="update_stage == 0 || update_stage == 2"><button id="rl_update_page" class="rl-action rl-action--outline" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp/releases/latest')"
 							style="nav-up: none; nav-down: none; nav-left: #rl_update_later; nav-right: none;">Release page</button></div>
 					</div>
 				</div></div></div>
 				<div class="rl-modal" data-class-rl-on="changelog_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
 					<div class="rl-modal-title">Changelogs</div>
-					<div class="rl-modal-sub">You have v{{version_number}}. Newest first. Up/Down or the mouse wheel scrolls.</div>
+					<div class="rl-modal-sub">You have <span>v{{version_number}}.</span> Newest first. Up/Down or the mouse wheel scrolls.</div>
 					<div class="rl-modal-notes rl-modal-notes--tall" id="rl_changelog_notes" data-rml="changelog_text"></div>
 					<div class="rl-modal-buttons">
 						<div class="rl-action-shadow"><button id="rl_changelog_close" class="rl-action" data-event-click="changelog_close()" style="nav-up: none; nav-down: none; nav-left: none; nav-right: none;">Close</button></div>

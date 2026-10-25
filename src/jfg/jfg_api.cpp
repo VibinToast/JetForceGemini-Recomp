@@ -13,6 +13,7 @@
 #include "jfg_options.h"
 
 extern "C" void recomp_trigger_event(uint8_t* rdram, recomp_context* ctx, uint32_t event_index);
+std::string jfg_locale_shown(); // jfg_locale.cpp
 
 namespace jfg::api {
 namespace {
@@ -20,7 +21,7 @@ namespace {
 const char* const g_event_names[] = {
     "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", "jfg_on_blood_spurt", "jfg_on_blood_hit",
     "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
-    nullptr
+    "jfg_on_language_change", nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
@@ -52,6 +53,21 @@ void get_tick_scale(uint8_t* rdram_, recomp_context* ctx) {
 void get_level(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     ctx->r2 = (gpr)(int32_t)(int16_t)rd16(ADDR_currentLevel);
+}
+
+// jfg_get_language(char* id, int size): the shown locale's id into the mod's buffer (0 ended, cut to fit); returns 0
+// for English, 1 for any other locale.
+void get_language(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const std::string id = jfg_locale_shown();
+    const uint32_t buffer = (uint32_t)ctx->r4;
+    const int32_t size = (int32_t)ctx->r5;
+    if (buffer != 0 && size > 0) {
+        const size_t n = std::min<size_t>(id.size(), (size_t)size - 1);
+        for (size_t i = 0; i < n; i++) wr8(buffer + (uint32_t)i, (uint8_t)id[i]);
+        wr8(buffer + (uint32_t)n, 0);
+    }
+    ctx->r2 = id.empty() ? 0 : 1;
 }
 } // namespace
 
@@ -144,6 +160,7 @@ void register_api() {
     recomp::overlays::register_base_export("jfg_api_version", api_version);
     recomp::overlays::register_base_export("jfg_get_tick_scale", get_tick_scale);
     recomp::overlays::register_base_export("jfg_get_level", get_level);
+    recomp::overlays::register_base_export("jfg_get_language", get_language);
 }
 
 } // namespace jfg::api

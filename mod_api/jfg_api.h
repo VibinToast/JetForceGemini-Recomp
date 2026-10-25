@@ -9,7 +9,7 @@
 
 #include "modding.h"
 
-#define JFG_API_VERSION 1
+#define JFG_API_VERSION 2
 
 // --- helpers -------------------------------------------------------------------------------------------------------
 
@@ -22,6 +22,11 @@ RECOMP_IMPORT("*", float jfg_get_tick_scale(void));
 
 // The current level number.
 RECOMP_IMPORT("*", int jfg_get_level(void));
+
+// (Since version 2.) The language shown: copies the locale's id into `id` (0 ended, cut to `size`) and returns 0 for
+// English, 1 for any other. Ids: "builtin.1" to "builtin.4" for the game's own language slots, "mod.<mod id>" for a
+// locale mod (a mod with jfg_locale.json; see the port's locale notes).
+RECOMP_IMPORT("*", int jfg_get_language(char* id, int size));
 
 // --- event data ---------------------------------------------------------------------------------------------------
 
@@ -84,5 +89,10 @@ typedef struct {
 //     The screen is about to flash; the Hit flash opacity option has already applied.
 // jfg_on_sidekick_tick(void* floyd, int frames)
 //     Each tick Floyd is updated, before the game's code for him.
+
+// --- events (since version 2) --------------------------------------------------------------------------------------
+
+// jfg_on_language_change(void)
+//     The player chose another language; the new one is shown from this tick on (jfg_get_language).
 
 #endif

@@ -233,6 +233,8 @@ void func_overlay_15_00004658_1F17FD8(uint8_t* rdram, recomp_context* ctx);
 void func_overlay_16_00004440_1F22458(uint8_t* rdram, recomp_context* ctx);
 void func_overlay_17_00004614_1F2C15C(uint8_t* rdram, recomp_context* ctx);
 void squadsFireWeapon(uint8_t* rdram, recomp_context* ctx);
+void initFront(uint8_t* rdram, recomp_context* ctx);
+void func_8006FD98_70998(uint8_t* rdram, recomp_context* ctx);
 }
 
 namespace {
@@ -256,6 +258,8 @@ const CallerFeatures g_caller_features[] = {
     { func_overlay_17_00004614_1F2C15C, "func_overlay_17_00004614_1F2C15C (aim control)", "walking with the sniper rifle" },
     { squadsFireWeapon, "squadsFireWeapon",
       "the fix for the crash when an enemy's weapon can't be created (low memory)" },
+    { initFront, "initFront", "room for menu text longer than the original (translations)" },
+    { func_8006FD98_70998, "func_8006FD98_70998 (text drawing)", "locales with their own character pages (Japanese)" },
 };
 
 // Mod id -> the text for its page in the Mods menu.

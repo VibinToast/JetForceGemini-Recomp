@@ -12,7 +12,7 @@
 
 namespace jfg::api {
 
-constexpr int VERSION = 1;
+constexpr int VERSION = 2;
 
 // The events, in the order they are registered: a released event keeps its place, new ones go before Count.
 enum class Event : uint32_t {
@@ -26,6 +26,7 @@ enum class Event : uint32_t {
     SoundPlay,        // jfg_on_sound_play(JfgSoundPlay* sound)
     ScreenFlash,      // jfg_on_screen_flash(JfgScreenFlash* flash)
     SidekickTick,     // jfg_on_sidekick_tick(Object* floyd, int frames)
+    LanguageChange,   // jfg_on_language_change(void), since version 2
     Count
 };
 
