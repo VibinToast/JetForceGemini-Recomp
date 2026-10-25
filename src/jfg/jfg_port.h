@@ -261,6 +261,9 @@ struct ToolField {
 // --- jfg_assets.cpp ---------------------------------------------------------------------------------------------
 int asset_number(const std::string& ref); // "mod_id:name" of an appended entry -> its number this start, or -1
 
+// --- jfg_music.cpp ----------------------------------------------------------------------------------------------
+void music_tick(recomp_context* ctx); // every tick: the level's mod music, the game's tune silenced meanwhile
+
 // --- jfg_ui_items.cpp --------------------------------------------------------------------------------------------
 void draw_inventory(recomp_context* ctx);  // the Items tab (F9)
 std::vector<ToolField> item_fields();      // the Items window (F10), for the character in g.edit_character
