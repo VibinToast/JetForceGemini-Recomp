@@ -44,6 +44,7 @@ extern "C" void recomp_entrypoint(uint8_t *rdram, recomp_context *ctx);
 gpr get_entrypoint_address();
 extern "C" void jfg_apply_asset_mods(void); // JFG PORT: src/jfg/jfg_assets.cpp
 extern "C" void jfg_check_mod_replacements(void); // JFG PORT: src/jfg/jfg_mods.cpp
+extern "C" void jfg_locale_start(void); // JFG PORT: src/jfg/jfg_locale.cpp
 extern "C" int jfg_launch_arg(int argc, char** argv, int* i); // JFG PORT: src/jfg/jfg_launch.cpp
 extern "C" int jfg_launch_ready(bool* skip_launcher); // JFG PORT: src/jfg/jfg_launch.cpp
 
@@ -55,6 +56,7 @@ static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
 
     jfg_apply_asset_mods(); // JFG PORT: data replaced by mods (src/jfg/jfg_assets.cpp), once mods are loaded
     jfg_check_mod_replacements(); // JFG PORT: mods that turn port features off (src/jfg/jfg_mods.cpp)
+    jfg_locale_start(); // JFG PORT: the installed locales and the chosen one (src/jfg/jfg_locale.cpp)
 
     recomp_entrypoint(rdram, ctx);
 }

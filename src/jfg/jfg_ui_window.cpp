@@ -16,6 +16,7 @@
 #include "imgui/imgui.h"
 #include "jfg_api.h"
 #include "jfg_game.h"
+#include "jfg_locale.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
@@ -109,6 +110,20 @@ void draw_options() {
             options_help("How strongly the screen turns red when the character is hit. 0: no red flash.");
             changed |= options_slider("Shadow opacity %", &g.shadow_opacity, 0, 200);
             options_help("How dark the shadows under characters and objects are drawn. 100: the original game; 0: none.");
+            {
+                const std::vector<std::pair<std::string, std::string>> locales = jfg::locale::list();
+                const std::string chosen = jfg::locale::chosen();
+                std::string current = locales.front().second;
+                for (const auto& [id, name] : locales) if (id == chosen) current = name;
+                if (ImGui::BeginCombo("Language", current.c_str())) {
+                    for (const auto& [id, name] : locales) {
+                        if (ImGui::Selectable(name.c_str(), id == chosen)) jfg::locale::choose(id);
+                    }
+                    ImGui::EndCombo();
+                }
+                options_help("The language of menus, subtitles and hints: English and every file in the game's locales "
+                             "folder (locales/<name>.json). Text a language lacks is shown in English.");
+            }
             changed |= ImGui::Checkbox("Hide Floyd", &g.hide_floyd);
             options_help("Floyd, his shadow and his sounds are gone while he follows the character; he still flies along "
                          "and shoots. Floyd missions and a second player flying him show him as usual.");

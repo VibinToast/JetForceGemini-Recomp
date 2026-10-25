@@ -970,3 +970,94 @@ extern "C" void jfg_apply_asset_mods(void) {
     log(line);
     recomp::set_rom_contents(std::move(out));
 }
+
+// --- runtime assets (jfg_assets.h) ------------------------------------------------------------------------------------
+#include "recomp.h"
+#include "jfg_assets.h"
+#include "jfg_game.h"
+#include "jfg_hooks.h"
+
+namespace {
+struct RuntimeAsset {
+    std::string owner;
+    std::vector<uint8_t> data;
+};
+RuntimeAsset g_runtime[jfg::assets::COUNT];
+constexpr uint32_t COLOUR_TAG_GREY = 0x7F7F7FFF; // piRomLoad's mmAlloc colour (src/memory.h)
+
+const RuntimeAsset* runtime(uint32_t asset) {
+    return asset < (uint32_t)jfg::assets::COUNT && !g_runtime[asset].owner.empty() ? &g_runtime[asset] : nullptr;
+}
+
+void copy_to_rdram(uint8_t* rdram, uint32_t address, std::span<const uint8_t> data) {
+    for (size_t i = 0; i < data.size(); i++) MEM_B((int32_t)i, (gpr)(int32_t)address) = (int8_t)data[i];
+}
+} // namespace
+
+namespace jfg::assets {
+
+std::span<const uint8_t> read_rom(int asset) {
+    const std::span<const uint8_t> rom = recomp::get_rom();
+    if (rom.size() < ROM_ASSET_AREA) return {};
+    const uint32_t count = be32(rom, ROM_ASSET_TABLE);
+    if ((uint32_t)asset >= count) return {};
+    const uint64_t start = (uint64_t)ROM_ASSET_AREA + be32(rom, ROM_ASSET_TABLE + 4 + 4 * asset);
+    const uint64_t end = (uint64_t)ROM_ASSET_AREA + be32(rom, ROM_ASSET_TABLE + 8 + 4 * asset);
+    if (end < start || end > rom.size()) return {};
+    return rom.subspan(start, end - start);
+}
+
+std::span<const uint8_t> read(int asset) {
+    if (const RuntimeAsset* r = runtime((uint32_t)asset)) return r->data;
+    return read_rom(asset);
+}
+
+bool set_runtime(int asset, std::vector<uint8_t> data, const std::string& owner) {
+    if (asset < 0 || asset >= COUNT || owner.empty()) return false;
+    RuntimeAsset& r = g_runtime[asset];
+    if (!r.owner.empty() && r.owner != owner) {
+        log("assets: " + owner + " wants to serve asset " + std::to_string(asset) + ", which " + r.owner +
+            " already serves; refused");
+        return false;
+    }
+    r.owner = owner;
+    r.data = std::move(data);
+    return true;
+}
+
+void clear_runtime(int asset, const std::string& owner) {
+    if (asset < 0 || asset >= COUNT || g_runtime[asset].owner != owner) return;
+    g_runtime[asset] = {};
+}
+
+} // namespace jfg::assets
+
+// The game's loaders (src/pi.c): an asset with a runtime version is read from it, the same way the ROM's would be.
+JFG_WRAP(piRomLoad) {
+    const RuntimeAsset* r = runtime((uint32_t)ctx->r4);
+    if (r == nullptr) { piRomLoad_orig(rdram, ctx); return; }
+    ctx->r2 = 0;
+    if (r->data.empty()) return;
+    const uint32_t out = jfg::call_game(mmAlloc, ctx, { (uint32_t)r->data.size(), COLOUR_TAG_GREY });
+    if (out == 0) return;
+    copy_to_rdram(rdram, out, r->data);
+    ctx->r2 = (gpr)(int32_t)out;
+}
+
+JFG_WRAP(piRomLoadSection) {
+    const RuntimeAsset* r = runtime((uint32_t)ctx->r4);
+    if (r == nullptr) { piRomLoadSection_orig(rdram, ctx); return; }
+    const uint32_t address = (uint32_t)ctx->r5, offset = (uint32_t)ctx->r6, size = (uint32_t)ctx->r7;
+    ctx->r2 = 0;
+    if (size == 0) return;
+    std::vector<uint8_t> part(size, 0); // past the end reads as zeros (the ROM would give the next asset)
+    if (offset < r->data.size()) std::copy_n(r->data.begin() + offset, std::min<size_t>(size, r->data.size() - offset), part.begin());
+    copy_to_rdram(rdram, address, part);
+    ctx->r2 = (gpr)(int32_t)size;
+}
+
+JFG_WRAP(piRomGetFileSize) {
+    const RuntimeAsset* r = runtime((uint32_t)ctx->r4);
+    if (r == nullptr) { piRomGetFileSize_orig(rdram, ctx); return; }
+    ctx->r2 = (gpr)(int32_t)r->data.size();
+}
