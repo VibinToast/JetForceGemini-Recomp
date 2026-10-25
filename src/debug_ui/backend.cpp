@@ -74,8 +74,16 @@ static std::unique_ptr<plume::RenderCommandQueue> d3d12_upload_queue; // JFG POR
 static std::mutex frame_mutex;
 static moodycamel::ConcurrentQueue<SDL_Event> event_queue{};
 static std::unique_ptr<VulkanContext> vulkanContext;
+// JFG PORT: the API RT64 made its device with, set when RT64 starts. It can differ from the setting: Auto, a D3D12
+// device that fails to start, or RT64's driver workarounds (old Intel 6th-gen, NVIDIA and AMD drivers on D3D12) all
+// end up on Vulkan, and the hooks would treat the Vulkan device as a D3D12 one.
+static RT64::UserConfiguration::GraphicsAPI active_graphics_api = RT64::UserConfiguration::GraphicsAPI::OptionCount;
 
 static RT64::UserConfiguration::GraphicsAPI get_graphics_api() {
+    if (active_graphics_api != RT64::UserConfiguration::GraphicsAPI::OptionCount) {
+        return active_graphics_api;
+    }
+
     const ultramodern::renderer::GraphicsConfig &config = ultramodern::renderer::get_graphics_config();
 
     switch (config.api_option) {
@@ -233,6 +241,19 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
     dino_imgui_ctx->IO.IniFilename = imgui_ini_path.c_str();
 
     ImGui_ImplSDL2_InitForOther(dino::runtime::get_window());
+
+    // JFG PORT: ask the render interface which API it is (see active_graphics_api).
+    switch (_interface->getCapabilities().shaderFormat) {
+        case plume::RenderShaderFormat::DXIL:
+            active_graphics_api = RT64::UserConfiguration::GraphicsAPI::D3D12;
+            break;
+        case plume::RenderShaderFormat::SPIRV:
+            active_graphics_api = RT64::UserConfiguration::GraphicsAPI::Vulkan;
+            break;
+        default:
+            active_graphics_api = RT64::UserConfiguration::GraphicsAPI::OptionCount;
+            break;
+    }
 
     switch (get_graphics_api()) {
         case RT64::UserConfiguration::GraphicsAPI::D3D12: {
@@ -416,6 +437,7 @@ static void rt64_deinit_hook() {
 
     ImGui::DestroyContext(dino_imgui_ctx);
     ImGui::SetCurrentContext(prev_ctx);
+    active_graphics_api = RT64::UserConfiguration::GraphicsAPI::OptionCount;
 }
 
 void set_render_hooks() {
