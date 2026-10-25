@@ -151,6 +151,15 @@ if (APPLE)
     add_dependencies(JetForceGeminiRecompiled JFGMacResources)
 endif()
 
+# JFG PORT: Lua 5.4 for mods' scripts (lib/lua, vendored; src/jfg/jfg_lua.cpp)
+file(GLOB JFG_LUA_SOURCES ${CMAKE_SOURCE_DIR}/lib/lua/src/*.c)
+add_library(jfg_lua STATIC ${JFG_LUA_SOURCES})
+target_include_directories(jfg_lua PUBLIC ${CMAKE_SOURCE_DIR}/lib/lua/src)
+if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+    target_compile_definitions(jfg_lua PRIVATE LUA_USE_LINUX)
+endif()
+target_link_libraries(JetForceGeminiRecompiled PRIVATE jfg_lua)
+
 file(GLOB SOURCES ${CMAKE_SOURCE_DIR}/src/*.cpp)
 file(GLOB SOURCES_RECURSIVE
     ${CMAKE_SOURCE_DIR}/src/**/*.cpp

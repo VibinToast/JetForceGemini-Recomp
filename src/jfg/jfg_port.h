@@ -264,6 +264,11 @@ int baddy_like(int object_id);             // a mod's object type -> the stock o
 
 // --- jfg_music.cpp ----------------------------------------------------------------------------------------------
 void music_tick(recomp_context* ctx); // every tick: the level's mod music, the game's tune silenced meanwhile
+void music_force(const std::string& mod_id, const std::string& name); // a script's track for this level ("" = none)
+
+// --- jfg_lua.cpp ------------------------------------------------------------------------------------------------
+void lua_tick(recomp_context* ctx);                     // every tick: mods' scripts ("level", "tick" events)
+bool lua_overlay_text(std::string& text, float& alpha); // UI thread: a script's on-screen message, if one shows
 
 // --- jfg_ui_items.cpp --------------------------------------------------------------------------------------------
 void draw_inventory(recomp_context* ctx);  // the Items tab (F9)

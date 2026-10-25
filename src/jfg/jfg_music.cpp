@@ -197,8 +197,17 @@ void on_music_mod_enabled(recomp::mods::ModContext&, const recomp::mods::ModHand
     log("music: " + id + ": " + std::to_string(mine.size()) + " tracks");
 }
 
+// A script's choice for the current level (jfg.music / jfg.music_stop, jfg_lua.cpp): (mod, track), level.
+std::string g_forced_mod, g_forced_name;
+int g_forced_level = -1;
+
 // The track a level plays, or nullptr. Later mods in the list win.
 const MusicTrack* track_for(int level) {
+    if (level == g_forced_level && !g_forced_name.empty()) {
+        for (const auto& t : g_tracks) {
+            if (t->mod_id == g_forced_mod && t->name == g_forced_name) return t.get();
+        }
+    }
     const MusicTrack* found = nullptr;
     for (const Assignment& a : g_assignments) {
         int n = -1;
@@ -255,10 +264,17 @@ extern "C" void jfg_music_mix(float* samples, size_t frames, uint32_t rate, floa
 
 namespace jfg {
 
+// A script asks for one of its mod's tracks in the current level ("" = the level's own music again).
+void music_force(const std::string& mod_id, const std::string& name) {
+    g_forced_mod = mod_id;
+    g_forced_name = name;
+    g_forced_level = name.empty() ? -1 : (int)(int16_t)rd16(ADDR_currentLevel);
+}
+
 // Every game tick: starts or stops the level's track and keeps the game's tune silent while one plays.
 void music_tick(recomp_context* ctx) {
     static uint32_t saved_global = 0x100;
-    if (g_assignments.empty()) return;
+    if (g_assignments.empty() && g_forced_name.empty()) return;
     const int level = (int)(int16_t)rd16(ADDR_currentLevel);
     const MusicTrack* want = track_for(level);
     std::lock_guard<std::mutex> lock(g_mutex);
