@@ -96,13 +96,18 @@ void print_capabilities() {
             { "what", "game data: whole assets, and entries of offset-table sets" },
             { "assets", true },
             { "entries", { { "entry", true }, { "append", true }, { "expect", true } } },
+            { "patches", { { "set", true }, { "objlist", { "set", "delete", "append" } } } },
+            { "fixups", { { "types", { "u8", "u16", "s16", "u32", "lohi" } }, { "packed", true }, { "other_mods", true } } },
+            { "ids_kept_in", "mod_ids.json" },
             { "append_order", "next free number; mods from the top of the mod list, then file order" },
             { "numbers_logged_to", "jfg_mods.log" },
         } },
         { "rt64.json", { { "what", "texture pack" } } },
     };
-    j["planet_map"] = { { "route", "patch.bps" }, { "note", "overlay 9's map tables are read from the ROM image when "
-                        "overlay 9 loads, so a patch.bps over them reaches the game" } };
+    j["planet_map"] = { { "route", "patch.bps" }, { "in_place_only", true },
+                        { "note", "overlay 9's data is read from the ROM image when it loads, so a patch.bps over its "
+                          "tables in place reaches the game; its code is recompiled ahead of time, so moving or growing "
+                          "the overlay does not" } };
     j["launch_options"] = {
         { "--start-level", { { "arg", "level" }, { "implies", "--skip-launcher" } } },
         { "--start-point", { { "arg", "start point" }, { "default", 0 } } },
