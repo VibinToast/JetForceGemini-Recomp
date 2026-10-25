@@ -2,6 +2,8 @@
 
 #include "librecomp/mods.hpp"
 
+extern "C" const char* jfg_mod_warning(const char* mod_id); // JFG PORT: src/jfg/jfg_mods.cpp
+
 namespace recompui {
 
 extern const std::string mod_tab_id;
@@ -50,6 +52,10 @@ ModDetailsPanel::ModDetailsPanel(Element *parent) : Element(parent) {
         authors_label->set_margin_bottom(16.0f);
         description_label = context.create_element<Label>(body_container, LabelStyle::Small);
         description_label->set_margin_bottom(16.0f);
+        // JFG PORT: port features this mod turns off (jfg_mod_warning, src/jfg/jfg_mods.cpp).
+        warning_label = context.create_element<Label>(body_container, LabelStyle::Small);
+        warning_label->set_color(Color{ 255, 178, 26, 255 });
+        warning_label->set_display(Display::None);
     }
     
     buttons_container = context.create_element<Container>(this, FlexDirection::Row, JustifyContent::SpaceAround);
@@ -102,6 +108,9 @@ void ModDetailsPanel::set_mod_details(const recomp::mods::ModDetails& details, c
 
     authors_label->set_text(authors_str);
     description_label->set_text(cur_details.description);
+    const std::string warning = jfg_mod_warning(cur_details.mod_id.c_str()); // JFG PORT
+    warning_label->set_text(warning);
+    warning_label->set_display(warning.empty() ? Display::None : Display::Block);
     enable_toggle->set_checked(toggle_checked);
     enable_toggle->set_enabled(toggle_enabled);
     configure_button->set_enabled(configure_enabled);

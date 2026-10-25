@@ -538,15 +538,7 @@ struct ControlOptionsContext {
     int mouse_sensitivity; // 0 to 100
     int joystick_deadzone; // 0 to 100
     int joystick_range; // 0 to 100
-    dino::config::TargetingMode targeting_mode;
     dino::input::BackgroundInputMode background_input_mode;
-    dino::config::AutosaveMode autosave_mode;
-    dino::config::CameraInvertMode camera_invert_mode;
-    dino::config::AnalogCamMode analog_cam_mode;
-    dino::config::CameraInvertMode analog_camera_invert_mode;
-	std::atomic<int> dinomod_check = 0;
-	dino::config::HUDMode hud_mode;
-	dino::config::MinimapMode minimap_mode;
 };
 
 ControlOptionsContext control_options_context;
@@ -606,17 +598,6 @@ void dino::input::set_joystick_range(int range) {
     }
 }
 
-dino::config::TargetingMode dino::config::get_targeting_mode() {
-    return control_options_context.targeting_mode;
-}
-
-void dino::config::set_targeting_mode(dino::config::TargetingMode mode) {
-    control_options_context.targeting_mode = mode;
-    if (general_model_handle) {
-        general_model_handle.DirtyVariable("targeting_mode");
-    }
-}
-
 dino::input::BackgroundInputMode dino::input::get_background_input_mode() {
     return control_options_context.background_input_mode;
 }
@@ -634,96 +615,11 @@ void dino::input::set_background_input_mode(dino::input::BackgroundInputMode mod
     );
 }
 
-dino::config::AutosaveMode dino::config::get_autosave_mode() {
-    return control_options_context.autosave_mode;
-}
-
-void dino::config::set_autosave_mode(dino::config::AutosaveMode mode) {
-    control_options_context.autosave_mode = mode;
-    if (general_model_handle) {
-        general_model_handle.DirtyVariable("autosave_mode");
-    }
-}
-
-dino::config::CameraInvertMode dino::config::get_camera_invert_mode() {
-    return control_options_context.camera_invert_mode;
-}
-
-void dino::config::set_camera_invert_mode(dino::config::CameraInvertMode mode) {
-    control_options_context.camera_invert_mode = mode;
-    if (general_model_handle) {
-        general_model_handle.DirtyVariable("camera_invert_mode");
-    }
-}
-
-dino::config::AnalogCamMode dino::config::get_analog_cam_mode() {
-    return control_options_context.analog_cam_mode;
-}
-
-void dino::config::set_analog_cam_mode(dino::config::AnalogCamMode mode) {
-    control_options_context.analog_cam_mode = mode;
-    if (general_model_handle) {
-        general_model_handle.DirtyVariable("analog_cam_mode");
-    }
-}
-
-dino::config::CameraInvertMode dino::config::get_analog_camera_invert_mode() {
-    return control_options_context.analog_camera_invert_mode;
-}
-
-void dino::config::set_analog_camera_invert_mode(dino::config::CameraInvertMode mode) {
-    control_options_context.analog_camera_invert_mode = mode;
-    if (general_model_handle) {
-        general_model_handle.DirtyVariable("analog_camera_invert_mode");
-    }
-}
-
-bool dino::config::get_dinomod_check() {
-	return (bool)control_options_context.dinomod_check.load();
-}
-
-void dino::config::set_dinomod_check(bool enabled) {
-	control_options_context.dinomod_check.store((int)enabled);
-	if (general_model_handle) {
-		general_model_handle.DirtyVariable("dinomod_check");
-	}
-}
-
-dino::config::HUDMode dino::config::get_hud_mode() {
-	return control_options_context.hud_mode;
-}
-
-void dino::config::set_hud_mode(dino::config::HUDMode mode) {
-	control_options_context.hud_mode = mode;
-	if (general_model_handle) {
-		general_model_handle.DirtyVariable("hud_mode");
-	}
-}
-
-dino::config::MinimapMode dino::config::get_minimap_mode() {
-	return control_options_context.minimap_mode;
-}
-
-void dino::config::set_minimap_mode(dino::config::MinimapMode mode) {
-	control_options_context.minimap_mode = mode;
-	if (general_model_handle) {
-		general_model_handle.DirtyVariable("minimap_mode");
-	}
-}
-
 struct SoundOptionsContext {
     std::atomic<int> main_volume; // Option to control the volume of all sound
-    std::atomic<int> bgm_volume;
-    std::atomic<int> sfx_volume;
-    std::atomic<int> dialog_volume;
-	std::atomic<int> subtitles = 1;
 
     void reset() {
         main_volume = 100;
-        bgm_volume = 100;
-        sfx_volume = 100;
-        dialog_volume = 100;
-        subtitles = 1;
     }
     SoundOptionsContext() {
         reset();
@@ -749,60 +645,6 @@ void dino::config::set_main_volume(int volume) {
 int dino::config::get_main_volume() {
     return sound_options_context.main_volume.load();
 }
-
-void dino::config::set_bgm_volume(int volume) {
-    sound_options_context.bgm_volume.store(volume);
-    if (sound_options_model_handle) {
-        sound_options_model_handle.DirtyVariable("bgm_volume");
-    }
-}
-
-int dino::config::get_bgm_volume() {
-    return sound_options_context.bgm_volume.load();
-}
-
-void dino::config::set_sfx_volume(int volume) {
-    sound_options_context.sfx_volume.store(volume);
-    if (sound_options_model_handle) {
-        sound_options_model_handle.DirtyVariable("sfx_volume");
-    }
-}
-
-int dino::config::get_sfx_volume() {
-    return sound_options_context.sfx_volume.load();
-}
-
-void dino::config::set_dialog_volume(int volume) {
-    sound_options_context.dialog_volume.store(volume);
-    if (sound_options_model_handle) {
-        sound_options_model_handle.DirtyVariable("dialog_volume");
-    }
-}
-
-int dino::config::get_dialog_volume() {
-    return sound_options_context.dialog_volume.load();
-}
-
-bool dino::config::get_subtitles_enabled() {
-	return (bool)sound_options_context.subtitles.load();
-}
-
-void dino::config::set_subtitles_enabled(bool enabled) {
-	sound_options_context.subtitles.store((int)enabled);
-	if (general_model_handle) {
-		general_model_handle.DirtyVariable("subtitles");
-	}
-}
-
-struct DebugContext {
-    Rml::DataModelHandle model_handle;
-	std::atomic<int> debug_dll_logging_enabled = 0;
-	std::atomic<int> debug_diprintf_enabled = 0;
-	std::atomic<int> debug_reasset_loglevel = 0;
-	std::atomic<int> debug_recompsave_enabled = 0;
-};
-
-DebugContext debug_context;
 
 recompui::ContextId config_context;
 
@@ -1488,15 +1330,7 @@ public:
         constructor.Bind("mouse_sensitivity", &control_options_context.mouse_sensitivity);
         constructor.Bind("joystick_deadzone", &control_options_context.joystick_deadzone);
         constructor.Bind("joystick_range", &control_options_context.joystick_range);
-        bind_option(constructor, "targeting_mode", &control_options_context.targeting_mode);
         bind_option(constructor, "background_input_mode", &control_options_context.background_input_mode);
-        bind_option(constructor, "autosave_mode", &control_options_context.autosave_mode);
-        bind_option(constructor, "camera_invert_mode", &control_options_context.camera_invert_mode);
-        bind_option(constructor, "analog_cam_mode", &control_options_context.analog_cam_mode);
-        bind_option(constructor, "analog_camera_invert_mode", &control_options_context.analog_camera_invert_mode);
-        bind_option(constructor, "hud_mode", &control_options_context.hud_mode);
-        bind_option(constructor, "minimap_mode", &control_options_context.minimap_mode);
-        bind_atomic(constructor, general_model_handle, "dinomod_check", &control_options_context.dinomod_check);
     }
     
     void make_sound_options_bindings(Rml::Context* context) {
@@ -1510,30 +1344,8 @@ public:
         sound_options_model_handle = constructor.GetModelHandle();
 
         bind_atomic(constructor, sound_options_model_handle, "main_volume", &sound_options_context.main_volume);
-        bind_atomic(constructor, sound_options_model_handle, "bgm_volume", &sound_options_context.bgm_volume);
-        bind_atomic(constructor, sound_options_model_handle, "sfx_volume", &sound_options_context.sfx_volume);
-        bind_atomic(constructor, sound_options_model_handle, "dialog_volume", &sound_options_context.dialog_volume);
-        bind_atomic(constructor, sound_options_model_handle, "subtitles", &sound_options_context.subtitles);
     }
 
-    void make_debug_bindings(Rml::Context* context) {
-        Rml::DataModelConstructor constructor = context->CreateDataModel("debug_model");
-		if (!constructor) {
-			throw std::runtime_error("Failed to make RmlUi data model for the debug menu");
-		}
-
-		debug_context.model_handle = constructor.GetModelHandle();
-
-		bind_config_list_events(constructor);
-
-		bind_atomic(constructor, debug_context.model_handle, "debug_dll_logging_enabled", &debug_context.debug_dll_logging_enabled);
-		bind_atomic(constructor, debug_context.model_handle, "debug_diprintf_enabled", &debug_context.debug_diprintf_enabled);
-		bind_atomic(constructor, debug_context.model_handle, "debug_reasset_loglevel", &debug_context.debug_reasset_loglevel);
-		bind_atomic(constructor, debug_context.model_handle, "debug_recompsave_enabled", &debug_context.debug_recompsave_enabled);
-		
-		// Register the array type for string vectors.
-		constructor.RegisterArray<std::vector<std::string>>();
-    }
 
     // JFG PORT: one binding per option key, read and written through jfg::settings (or upstream_options).
     template <size_t N>
@@ -1684,57 +1496,12 @@ public:
         make_controls_bindings(context);
         make_graphics_bindings(context);
         make_sound_options_bindings(context);
-        make_debug_bindings(context);
         make_jfg_bindings(context); // JFG PORT
     }
 };
 
 std::unique_ptr<recompui::MenuController> recompui::create_config_menu() {
     return std::make_unique<ConfigMenu>();
-}
-
-bool dino::config::get_debug_dll_logging_enabled() {
-	return (bool)debug_context.debug_dll_logging_enabled.load();
-}
-
-void dino::config::set_debug_dll_logging_enabled(bool enabled) {
-	debug_context.debug_dll_logging_enabled.store((int)enabled);
-	if (debug_context.model_handle) {
-		debug_context.model_handle.DirtyVariable("debug_dll_logging_enabled");
-	}
-}
-
-bool dino::config::get_debug_diprintf_enabled() {
-	return (bool)debug_context.debug_diprintf_enabled.load();
-}
-
-void dino::config::set_debug_diprintf_enabled(bool enabled) {
-	debug_context.debug_diprintf_enabled.store((int)enabled);
-	if (debug_context.model_handle) {
-		debug_context.model_handle.DirtyVariable("debug_diprintf_enabled");
-	}
-}
-
-int dino::config::get_debug_reasset_loglevel() {
-	return debug_context.debug_reasset_loglevel.load();
-}
-
-void dino::config::set_debug_reasset_loglevel(int level) {
-	debug_context.debug_reasset_loglevel.store(level);
-	if (debug_context.model_handle) {
-		debug_context.model_handle.DirtyVariable("debug_reasset_loglevel");
-	}
-}
-
-bool dino::config::get_debug_recompsave_enabled() {
-	return (bool)debug_context.debug_recompsave_enabled.load();
-}
-
-void dino::config::set_debug_recompsave_enabled(bool enabled) {
-	debug_context.debug_recompsave_enabled.store((int)enabled);
-	if (debug_context.model_handle) {
-		debug_context.model_handle.DirtyVariable("debug_recompsave_enabled");
-	}
 }
 
 void recompui::update_supported_options() {

@@ -56,7 +56,7 @@ struct VulkanContext {
 };
 
 // We must use our own ImGui context to avoid conflicting with the RT64 inspector where possible
-ImGuiContext *dino_imgui_ctx;
+ImGuiContext *jfg_imgui_ctx;
 bool b_is_open = false;
 bool b_in_ui_frame = false;
 // JFG PORT: lets the game-side code draw a passive overlay (the "press F9" hint) while the debug UI is closed.
@@ -116,7 +116,7 @@ static void handle_toggle_key(const SDL_Event& event) {
 }
 
 void begin() {
-    if (!dino_imgui_ctx->Initialized) return;
+    if (!jfg_imgui_ctx->Initialized) return;
 
     if (!b_is_open) {
         // Still process the event queue but don't send any to ImGui
@@ -137,7 +137,7 @@ void begin() {
     frame_mutex.lock();
 
     prev_ctx = ImGui::GetCurrentContext();
-    ImGui::SetCurrentContext(dino_imgui_ctx);
+    ImGui::SetCurrentContext(jfg_imgui_ctx);
 
     SDL_Event event{};
     while (event_queue.try_dequeue(event)) {
@@ -183,7 +183,7 @@ void begin() {
 
 void end() {
     if (b_in_ui_frame) {
-        assert(dino_imgui_ctx->Initialized);
+        assert(jfg_imgui_ctx->Initialized);
 
         ImGui::Render();
         ImGui::SetCurrentContext(prev_ctx);
@@ -226,11 +226,11 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
 
     ImGuiContext *prev_ctx = ImGui::GetCurrentContext();
 
-    dino_imgui_ctx = ImGui::CreateContext();
-    ImGui::SetCurrentContext(dino_imgui_ctx);
+    jfg_imgui_ctx = ImGui::CreateContext();
+    ImGui::SetCurrentContext(jfg_imgui_ctx);
 
     static std::string imgui_ini_path = (dino::config::get_app_folder_path() / "imgui.ini").string();
-    dino_imgui_ctx->IO.IniFilename = imgui_ini_path.c_str();
+    jfg_imgui_ctx->IO.IniFilename = imgui_ini_path.c_str();
 
     ImGui_ImplSDL2_InitForOther(dino::runtime::get_window());
 
@@ -338,9 +338,9 @@ static void render_draw_data(plume::RenderCommandList* command_list, ImDrawData*
 // every presented frame, unlike the overlay, whose draw data is made once per game tick. Needs the font atlas only for
 // its white pixel, so nothing is drawn before the first overlay or debug window frame created it.
 static void draw_cpu_layer(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
-    if (dino_imgui_ctx == nullptr || !dino_imgui_ctx->Initialized) return;
+    if (jfg_imgui_ctx == nullptr || !jfg_imgui_ctx->Initialized) return;
     ImGuiContext *prev_ctx = ImGui::GetCurrentContext();
-    ImGui::SetCurrentContext(dino_imgui_ctx);
+    ImGui::SetCurrentContext(jfg_imgui_ctx);
     ImGuiIO &io = ImGui::GetIO();
     if (io.Fonts != nullptr && io.Fonts->TexRef.GetTexID() != ImTextureID_Invalid) {
         static ImDrawList *list = nullptr;
@@ -374,7 +374,7 @@ static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::Render
     const std::lock_guard<std::mutex> frame_lock(frame_mutex);
 
     ImGuiContext *prev_ctx = ImGui::GetCurrentContext();
-    ImGui::SetCurrentContext(dino_imgui_ctx);
+    ImGui::SetCurrentContext(jfg_imgui_ctx);
 
     ImDrawData *draw_data = ImGui::GetDrawData();
     if (draw_data != nullptr) {
@@ -390,7 +390,7 @@ static void rt64_deinit_hook() {
     b_is_open = false;
 
     ImGuiContext *prev_ctx = ImGui::GetCurrentContext();
-    ImGui::SetCurrentContext(dino_imgui_ctx);
+    ImGui::SetCurrentContext(jfg_imgui_ctx);
 
     switch (get_graphics_api()) {
         case RT64::UserConfiguration::GraphicsAPI::D3D12:
@@ -414,7 +414,7 @@ static void rt64_deinit_hook() {
 
     ImGui_ImplSDL2_Shutdown();
 
-    ImGui::DestroyContext(dino_imgui_ctx);
+    ImGui::DestroyContext(jfg_imgui_ctx);
     ImGui::SetCurrentContext(prev_ctx);
 }
 

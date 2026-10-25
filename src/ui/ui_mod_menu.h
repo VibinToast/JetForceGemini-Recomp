@@ -113,6 +113,8 @@ private:
     float mod_drag_start_coordinates[2] = {};
     float mod_drag_view_coordinates[2] = {};
     uint32_t mod_drag_target_index = 0;
+    float mod_drag_spacer_height = 0.0f; // JFG PORT: the dragged entry's height, in pixels
+    Label *ingame_note = nullptr;        // JFG PORT: in game, instead of Install Mods and Refresh
     std::vector<recomp::mods::ModDetails> mod_details{};
     std::unordered_set<std::string> loaded_thumbnails;
     std::string game_mod_id;

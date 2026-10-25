@@ -18,6 +18,8 @@
 #include "imgui/imgui.h"
 #include "debug_ui/debug_ui.hpp"
 #include "debug_ui/backend.hpp"
+#include "jfg_api.h"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -46,6 +48,7 @@ static float toolbar_offset() {
 // Called once per game tick on the game's main thread (hook at the entry of func_80044FAC_45BAC).
 extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     g_rdram = rdram;
+    jfg::api::fire(rdram, ctx, jfg::api::Event::GameTick, (int32_t)rd32(ADDR_delayDat));
     jfg_camera_restore();
     load_options();
     update_dump_folder();
@@ -114,7 +117,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         const int c = (int16_t)rd16(ADDR_currentCharacter);
         const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
         if (ch != 0 && rd32(ADDR_mainGameMode) == 0) {
-            if (items) for (uint32_t b = 0; b < 4; b++) wr8(ch + CHAR_COLLECTED_OFFSET + b, 0xFF);
+            if (items) for (uint32_t b = 0; b < 4; b++) Character::Collected::set(ch, b, 0xFF);
             if (weapons != nullptr) set_owned_weapons(ch, (uint16_t)std::strtoul(weapons, nullptr, 0));
         }
     }
@@ -126,9 +129,9 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
         if (hold != nullptr && ch != 0 && rd32(ADDR_mainGameMode) == 0) {
             const int slot = std::atoi(hold);
-            if (rd8(ch + CHAR_WEAPON_OFFSET) != slot && select_weapon(ctx, slot)) {
+            if (Character::CurrentWeapon::get(ch) != slot && select_weapon(ctx, slot)) {
                 const uint32_t obj = player_object(ctx);
-                if (obj != 0 && valid_ptr(rd32(obj + 0x68))) wr8(rd32(obj + 0x68) + 0x585, (uint8_t)slot);
+                if (obj != 0 && valid_ptr(Obj::Data::get(obj))) PlayerData::LastWeapon::set(Obj::Data::get(obj), (uint8_t)slot);
             }
         }
     }

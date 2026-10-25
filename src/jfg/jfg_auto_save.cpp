@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -39,7 +40,6 @@ constexpr uint32_t SAVE_REQUEST = 0x40000000;         // mainSaveGame's request 
 constexpr uint32_t DELETE_REQUEST = 0x20000000;       // mainDeleteGame (slot in bits 6-8)
 constexpr uint32_t ERASE_REQUESTS = 0x10000000 | 0x01000000; // mainResetSaveGames, mainEraseFlashRom
 constexpr int LEVEL_FRONT_END = 0; // the logo screens and the file-select menus (in front-end game mode)
-constexpr uint32_t GAME_SLOT_OFFSET = 0x03;           // s8 Game.unk3: the save file the game is played from, -1 = none
 constexpr int SAVE_SLOTS = 6;
 constexpr float SETTLE_SECONDS = 3.0f; // after arriving: the door / respawn camera has settled, nothing is changing
 
@@ -57,12 +57,12 @@ int save_slot(recomp_context* ctx) {
     if (rd32(ADDR_load_save_flags) != 0) return -5;                  // the game is saving or loading this tick
     const uint32_t game = rd32(ADDR_gameplay);
     if (!valid_ptr(game)) return -6;
-    const int slot = (int8_t)rd8(game + GAME_SLOT_OFFSET);
+    const int slot = Game::SaveSlot::get(game);
     if (slot < 0 || slot >= SAVE_SLOTS) return -7;
     const uint32_t obj = player_object(ctx);
     if (obj == 0) return -8;
-    const uint32_t hit = rd32(obj + 0x4C); // the character's damage data; +6 is its health (see apply_damage_taken)
-    if (!valid_ptr(hit) || (int16_t)rd16(hit + 6) <= 0) return -9;
+    const uint32_t hit = Obj::Damage::get(obj); // the character's damage data (see apply_damage_taken)
+    if (!valid_ptr(hit) || Damage::Health::get(hit) <= 0) return -9;
     return slot;
 }
 } // namespace

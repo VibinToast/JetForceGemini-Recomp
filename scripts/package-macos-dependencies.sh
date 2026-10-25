@@ -8,7 +8,7 @@ fi
 
 bundle="$1"
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-binary="$bundle/Contents/MacOS/Diddy Kong Racing Recompiled"
+binary="$bundle/Contents/MacOS/Jet Force Gemini Recompiled"
 frameworks="$bundle/Contents/Frameworks"
 source_assets="$project_dir/assets"
 packaged_assets="$bundle/Contents/Resources/assets"
@@ -105,7 +105,7 @@ fi
 # codesign reject an otherwise valid bundle. Signing an attribute-free staging
 # copy and copying its signed bytes back avoids that race while leaving the
 # build output at the path CMake expects.
-signing_dir="$(mktemp -d "${TMPDIR:-/tmp}/dkr-macos-sign.XXXXXX")"
+signing_dir="$(mktemp -d "${TMPDIR:-/tmp}/jfg-macos-sign.XXXXXX")"
 trap 'rm -rf "$signing_dir"' EXIT
 signing_bundle="$signing_dir/$(basename "$bundle")"
 ditto --norsrc --noextattr --noacl "$bundle" "$signing_bundle"

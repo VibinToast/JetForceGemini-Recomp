@@ -361,3 +361,8 @@ build_pixel_shader(JetForceGeminiRecompiled "shaders/InterfacePS.hlsl" "shaders/
 target_sources(JetForceGeminiRecompiled PRIVATE ${SOURCES} ${SOURCES_RECURSIVE} ${SOURCES_EXTRA})
 
 set_property(TARGET JetForceGeminiRecompiled PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# JFG PORT: a build check that the game's overlay pre-linker (src/jfg/jfg_prelink.cpp, for mods' hooks) gives the
+# bytes tools/prepare_overlays.py gave the recompiler; run by build_windows.bat and build_linux.sh.
+add_executable(jfg_prelink_check ${CMAKE_SOURCE_DIR}/tools/prelink_check.cpp ${CMAKE_SOURCE_DIR}/src/jfg/jfg_prelink.cpp)
+target_include_directories(jfg_prelink_check PRIVATE ${CMAKE_SOURCE_DIR}/src)

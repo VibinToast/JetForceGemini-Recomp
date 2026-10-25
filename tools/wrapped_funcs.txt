@@ -1,0 +1,142 @@
+# Game functions the port wraps instead of changing them ([wrappers] in jfg.us.toml). Each needs a wrapper in src/jfg/
+# declared with JFG_WRAP(name) (jfg_hooks.h). Mods' patches and hooks apply to the original inside the wrapper.
+
+# 60 fps squad cadence (jfg_frame_rate.cpp)
+SquaddieControl
+SquadronControl
+squadsModuleTick
+
+# Mod API events (jfg_api.cpp)
+mainChangeLevel
+girlBossControl
+boyBossControl
+dogBossControl
+bloodSpurtAdd
+bloodHitSpriteAdd
+severedLimbControl
+
+# Gore options (jfg_gore.cpp)
+bloodSpurtUpdateAll
+
+# Calls between overlays from code a mod hook regenerated (jfg_mods.cpp)
+TrapDanglingJump
+
+# 60 fps and gameplay fixes, error handling (wrappers next to their handlers)
+FlowerBoltControl
+dAngle
+objAnimDframe
+objMoveXYZ
+laserboltInit
+mineInit
+mainGetGameFlag
+mainResetRegion
+mmAlloc
+mmAlloc2
+mathBreakPoint
+squadsCheckEnemyPointers
+TidyLinkedList
+squadsFireWeapon
+mantisControl
+amSndPlayXYZ
+GalaxianBatsSoundsHandler
+osSyncPrintf
+
+# Mod API events (jfg_api.cpp): drawing, sounds, screen flash, Floyd
+objPrintObject
+amSndPlay
+frontFlashScreen
+sidekickControl
+
+# Hide Floyd: his shadow (jfg_visuals.cpp)
+shadowGenerate
+
+# Frame interpolation: matrix tags (jfg_interpolation.cpp)
+camPushModelMtx
+camPushFloatModelMtx
+camPushMuzzleMtx
+camScaleModelMtx
+
+# Engine, main loop, overlays, squads, platforms, object setup (jfg_engine_wrappers.cpp, jfg_controls.cpp, jfg_diagnostics.cpp)
+rcpFast3d
+ad_sndp_play
+n_alEvtqPostEvent
+n_alEvtqNextEvent
+__scTaskReady
+func_80044FAC_45BAC
+joyRead
+viFrameSync
+func_8001BF9C_1CB9C
+trackGetFog
+runlinkDownloadCode
+runlinkResumeCode
+runlinkFreeCode
+runlinkUnloadOverlay
+romCopy
+mmFree
+func_overlay_3_000148C0_1EE9DA0
+func_overlay_3_00014694_1EE9B74
+controlPlatform
+objSetupObject
+objGetObjdef
+func_8000F978_10578
+texLoadTexture
+modLoadModel
+texLoadSprite
+mmAllocR
+
+# World tick and scene, scheduler, target lock, FOV, refuel, sniper (jfg_engine_wrappers.cpp, jfg_frame_rate.cpp, jfg_visuals.cpp, jfg_gameplay.cpp)
+func_80045F00_46B00
+objCutCameraActive
+objObjectsPauseTick
+trackDraw
+__scHandleRetrace
+frontPlayerTarget
+camSetFOV
+refuelControl
+objTvTimes
+func_overlay_15_00004658_1F17FD8
+func_overlay_16_00004440_1F22458
+func_overlay_17_00004614_1F2C15C
+frontGetTargetControl
+Powerf
+controlGetManualAim
+
+# Audio: AI_LEN read directly (jfg_engine_wrappers.cpp)
+__amHandleFrameMsg
+
+# CPU-drawn rain and reticles with in-between frames (jfg_cpu_layer.cpp)
+rainDraw
+fxOutputLines
+
+# Gore: kept blood splats drawn in extra passes (jfg_gore.cpp)
+bloodSpurtsDraw
+
+# Shadow Opacity (jfg_visuals.cpp)
+func_8001B8E0_1C4E0
+
+# HUD in Screen Corners (jfg_hud_corners.cpp)
+frontSingleInstruments
+camStandardOrtho
+frontInstruments
+texDPInit
+sprSetTextureFilter
+fxDrawDigitalNumber
+frontDrawObj
+frontPrintNum
+fontPrintXY
+frontDrawRectangles
+instDrawHealth
+func_overlay_14_0000292C_1F10284
+func_overlay_14_00000220_1F0DB78
+func_overlay_14_00000074_1F0D9CC
+
+# The aim reticle's 3D part with in-between frames (jfg_interpolation.cpp)
+frontDrawTarget
+
+# CPU-drawn reticle: an empty layer during a fade (jfg_cpu_layer.cpp)
+mainCPUeffects
+fxInitLines
+
+# Crash fixes: a reused squad member with no object, the 60 fps squadron count (jfg_diagnostics.cpp, jfg_frame_rate.cpp)
+SquaddieInitFromRomdef
+objDoFrees

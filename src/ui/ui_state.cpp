@@ -915,7 +915,6 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                 kb_interacted = true;
                 if (cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F8) {
                     // TODO: debug mode toggle
-                    //if (zelda64::get_debug_mode_enabled()) {
                         Rml::Debugger::SetVisible(!Rml::Debugger::IsVisible());
                     //}
                 }

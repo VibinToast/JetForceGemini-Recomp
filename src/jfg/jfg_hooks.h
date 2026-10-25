@@ -1,9 +1,8 @@
 // Jet Force Gemini port: every function the rest of the program calls in src/jfg, by caller.
 //
-// They have C linkage. The game hooks are called from the recompiled game code, from the [[patches.hook]] entries of
-// jfg.us.toml (which declare them in their `text`); the others from the base project's code as changed by
-// patches/jfg-base.patch (which declares them where they are used). Most are defined inside namespace jfg in the file
-// named below; with extern "C" they keep their plain name.
+// They have C linkage. The game handlers are called from the wrappers around game functions (JFG_WRAP below) and from
+// the mod API's internal handlers (jfg_api.cpp); the others from the base project's code. Most are defined inside namespace jfg in the file named below; with extern "C" they
+// keep their plain name.
 #pragma once
 
 #include <cstdint>
@@ -12,7 +11,7 @@
 
 extern "C" {
 
-// --- game hooks (jfg.us.toml) ---------------------------------------------------------------------------------------
+// --- game handlers (called around game functions) ------------------------------------------------------------------
 // jfg_tick.cpp
 void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx);             // entry of the main loop tick func_80044FAC
 // jfg_cutscene_skip.cpp
@@ -27,75 +26,76 @@ uint32_t jfg_frame_sync(uint8_t* rdram, uint32_t frames);              // main l
 int jfg_sched_extra_frame(void);                                       // __scHandleRetrace
 void jfg_sched_retrace(void);                                          // entry of __scHandleRetrace
 int jfg_sched_task_ready(void);                                        // entry of __scTaskReady
-int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames);     // SquaddieControl, SquadronControl, squadsModuleTick, FlowerBoltControl
+int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames);     // FlowerBoltControl; the squad wrappers below
 int jfg_cadence_skip(void);                                            // frontPlayerTarget, the target lock countdown
-void jfg_squad_count_repair(uint8_t* rdram);                           // objDoFrees entry: 60 fps squadron count
+void jfg_squad_count_repair(uint8_t* rdram);                           // objDoFrees' wrapper: 60 fps squadron count
 void jfg_squad_draw_begin(uint8_t* rdram);                             // func_80045F00, right before trackDraw
-void jfg_dangle(uint8_t* rdram, recomp_context* ctx);                  // replaces dAngle (angle easing)
 void jfg_squad_draw_end(uint8_t* rdram);                               // func_80045F00, right after trackDraw
 // jfg_controls.cpp
-void jfg_move_scale(uint8_t* rdram, recomp_context* ctx);              // entry of objMoveXYZ
-void jfg_boss_tick(void);                                              // entry of boyBossControl, dogBossControl, girlBossControl
+void jfg_move_scale(uint8_t* rdram, recomp_context* ctx);              // objMoveXYZ's wrapper
+void jfg_boss_tick(uint8_t* rdram, recomp_context* ctx);               // jfg_on_boss_fight_control handler (jfg_api.cpp)
 void jfg_platform_move(int on);                                        // controlPlatform, around its objMoveXYZ call
-void jfg_floyd_steer(uint8_t* rdram, recomp_context* ctx, int phase);  // sidekickControl, around Floyd's roll easing
+void jfg_sidekick_begin(uint8_t* rdram, recomp_context* ctx);          // sidekickControl's wrapper (jfg_controls.cpp)
+void jfg_sidekick_end(void);
+int jfg_floyd_roll_before(uint8_t* rdram, recomp_context* ctx);       // dAngle's wrapper: Floyd missions' mouse steering
+void jfg_floyd_roll_after(uint8_t* rdram, recomp_context* ctx);
 // jfg_camera.cpp
 void jfg_camera_override(uint8_t* rdram, recomp_context* ctx);         // func_80045F00, right before the scene is drawn
 int jfg_freeze_world(void);                                            // func_80045F00, world tick or pause tick
 // jfg_visuals.cpp
 float jfg_fov(uint8_t* rdram, float fov, uint32_t zoomed);             // camSetFOV
 void jfg_game_fog(uint8_t* rdram, uint32_t sp);                        // func_8001BF9C, right after trackGetFog
-uint32_t jfg_hit_flash(uint32_t color);                                // entry of frontFlashScreen
-int jfg_shadow_alpha(int alpha);                                       // func_8001B8E0, a shadow batch's alpha
-void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // entry of sidekickControl
-int jfg_hide_object(uint8_t* rdram, recomp_context* ctx);              // entry of objPrintObject
-void jfg_hide_shadow(uint8_t* rdram, recomp_context* ctx);             // shadowGenerate, per object
-void jfg_floyd_done(void);                                             // return of sidekickControl
-int jfg_floyd_mute(uint32_t id);                                       // entry of amSndPlay
+uint32_t jfg_hit_flash(uint32_t color);                                // the hit flash's colour (jfg_visuals.cpp)
+int jfg_shadow_alpha(int alpha);                                       // func_8001B8E0's wrapper: a shadow batch's alpha
+void jfg_hit_flash_event(uint8_t* rdram, recomp_context* ctx);        // jfg_on_screen_flash handler
+void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // jfg_on_sidekick_tick handler
+void jfg_hide_object(uint8_t* rdram, recomp_context* ctx);             // jfg_on_object_draw handler
+void jfg_floyd_done(void);                                             // after sidekickControl
+void jfg_floyd_mute(uint8_t* rdram, recomp_context* ctx);             // jfg_on_sound_play handler
 // jfg_interpolation.cpp
-void jfg_interp_object(uint8_t* rdram, recomp_context* ctx);            // entry of objPrintObject
-void jfg_interp_object_done(uint8_t* rdram, recomp_context* ctx);       // return of objPrintObject
-void jfg_interp_push(uint8_t* rdram, recomp_context* ctx);              // entry of the four matrix push functions
-void jfg_interp_pushed(uint8_t* rdram, recomp_context* ctx);            // ... after they note the matrix written
+void jfg_interp_object(uint8_t* rdram, recomp_context* ctx);            // objPrintObject's wrapper, before
+void jfg_interp_object_done(uint8_t* rdram, recomp_context* ctx);       // ... and after
+void jfg_interp_push(uint8_t* rdram, recomp_context* ctx);              // the four matrix push functions' wrappers, before
+void jfg_interp_pushed(uint8_t* rdram, recomp_context* ctx);            // ... and after
 // jfg_gameplay.cpp
-int jfg_no_blood(void);                                                // entry of bloodSpurtAdd, bloodHitSpriteAdd
+int jfg_no_blood(void);                                                // the blood event handlers (jfg_gore.cpp)
 int jfg_refuel_amount(int amount);                                     // refuelControl
 float jfg_sniper_zoom(float zoom);                                     // controlGetManualAim
 int jfg_sniper_walk(int weapon);                                       // the characters' aim control (overlays 15-17)
-int jfg_flag_override(int flag);                                       // entry of mainGetGameFlag
+int jfg_flag_override(int flag);                                       // mainGetGameFlag's wrapper
 // jfg_gore.cpp
-void jfg_blood_more(uint8_t* rdram, recomp_context* ctx);              // entry of bloodSpurtAdd (after jfg_no_blood)
-void jfg_gore_splat(uint8_t* rdram, recomp_context* ctx);              // bloodSpurtUpdateAll, a splat's life countdown
-void jfg_blood_make_room(uint8_t* rdram, uint32_t base);              // bloodSpurtAdd, before the count is read
-void jfg_blood_draw_kept(uint8_t* rdram, recomp_context* ctx, uint32_t base); // bloodSpurtsDraw entry: the kept splats
-void jfg_blood_free_kept(uint8_t* rdram, recomp_context* ctx);       // bloodSpurtFreeLib entry: the kept splats go
-void jfg_gore_limb(uint8_t* rdram, recomp_context* ctx);               // entry of severedLimbControl
+void jfg_gore_on_blood_spurt(uint8_t* rdram, recomp_context* ctx);     // jfg_on_blood_spurt handler (jfg_api.cpp)
+void jfg_gore_on_blood_hit(uint8_t* rdram, recomp_context* ctx);       // jfg_on_blood_hit handler
+void jfg_gore_make_room(uint8_t* rdram, recomp_context* ctx);          // jfg_on_blood_spurt handler (Blood stays)
+void jfg_gore_level_change(uint8_t* rdram, recomp_context* ctx);       // jfg_on_level_change handler (Blood stays)
+void jfg_gore_limb(uint8_t* rdram, recomp_context* ctx);               // jfg_on_severed_limb_tick handler
+void jfg_blood_extra_drops(uint8_t* rdram, recomp_context* ctx, int amount); // bloodSpurtAdd's wrapper
 // jfg_area_progress.cpp
-void jfg_region_reset_begin(uint8_t* rdram, recomp_context* ctx);      // entry of mainResetRegion
-void jfg_region_reset_end(uint8_t* rdram, recomp_context* ctx);        // mainResetRegion, before it returns
+void jfg_region_reset_begin(uint8_t* rdram, recomp_context* ctx);      // mainResetRegion's wrapper, before
+void jfg_region_reset_end(uint8_t* rdram, recomp_context* ctx);        // ... and after
 // jfg_weapons.cpp
-uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_bits); // entry of objAnimDframe
-void jfg_mine_init(uint8_t* rdram, recomp_context* ctx);               // end of mineInit
-void jfg_bolt_init(uint8_t* rdram, recomp_context* ctx);               // end of laserboltInit
+uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_bits); // objAnimDframe's wrapper
+void jfg_mine_init(uint8_t* rdram, uint32_t mine);                     // after mineInit (its wrapper)
+void jfg_bolt_init(uint8_t* rdram, recomp_context* ctx);               // after laserboltInit, a0 = the bolt
 // jfg_diagnostics.cpp
-void jfg_mm_alloc_check(uint8_t* rdram, recomp_context* ctx);          // mmAlloc and mmAlloc2, after mempool_slot_find
+void jfg_mm_alloc_check(uint8_t* rdram, recomp_context* ctx, uint32_t size, uint32_t colour); // after mmAlloc/mmAlloc2
 void jfg_squad_spawn_before(uint8_t* rdram, recomp_context* ctx);      // overlay 3 +0x14C9C, the squad member loop
 void jfg_squad_spawn_after(uint8_t* rdram, recomp_context* ctx);       // overlay 3 +0x14CA4, after its call
-int  jfg_squaddie_init_ok(uint8_t* rdram, recomp_context* ctx);       // SquaddieInitFromRomdef entry: NULL object guard
+int  jfg_squaddie_init_ok(uint8_t* rdram, recomp_context* ctx);       // SquaddieInitFromRomdef's wrapper: NULL object guard
 void jfg_objsetup_enter(uint8_t* rdram, recomp_context* ctx);          // entry of objSetupObject
 void jfg_objsetup_step(uint8_t* rdram, recomp_context* ctx, int step); // objSetupObject, after each call that can fail
-void jfg_objsetup_exit(uint8_t* rdram, recomp_context* ctx);           // objSetupObject, its exit (0x80006E04)
-void jfg_squads_check_enemy(uint8_t* rdram, recomp_context* ctx);      // replaces squadsCheckEnemyPointers
-int jfg_bats_link_ok(uint8_t* rdram, uint32_t ptr, int which, int link); // GalaxianBatsSoundsHandler's member walk
-void jfg_tidy_linked_list_after(uint8_t* rdram, recomp_context* ctx);  // end of TidyLinkedList: a member it missed
-void jfg_game_break(uint8_t* rdram, recomp_context* ctx);              // mathBreakPoint
-void jfg_change_level_log(uint8_t* rdram, recomp_context* ctx);        // entry of mainChangeLevel
-void jfg_sync_printf(uint8_t* rdram, recomp_context* ctx);             // replaces osSyncPrintf
+void jfg_objsetup_exit(uint8_t* rdram, recomp_context* ctx, int type); // objSetupObject's wrapper, after
+void jfg_squads_check_enemy(uint8_t* rdram, recomp_context* ctx);      // squadsCheckEnemyPointers' wrapper (replaces it)
+void jfg_tidy_linked_list_after(uint8_t* rdram, uint32_t obj);         // TidyLinkedList's wrapper: a member it missed
+int jfg_bats_chain_ok(uint8_t* rdram, uint32_t data);                  // GalaxianBatsSoundsHandler's wrapper
+void jfg_game_break(uint8_t* rdram, recomp_context* ctx);              // mathBreakPoint's wrapper
+void jfg_change_level_log(uint8_t* rdram, recomp_context* ctx);        // jfg_on_level_change handler (jfg_api.cpp)
+void jfg_sync_printf(uint8_t* rdram, recomp_context* ctx);             // osSyncPrintf's wrapper (replaces it)
 // jfg_glue.cpp
-void jfg_overlay_loaded(uint8_t* rdram, recomp_context* ctx);          // runlinkDownloadCode, runlinkResumeCode
-void jfg_overlay_unloading(uint8_t* rdram, recomp_context* ctx);       // runlinkFreeCode, runlinkUnloadOverlay
-uint32_t jfg_cart_read32(uint32_t address);                            // osCartTest3_6105, osCartTest4_6105
+void jfg_overlay_loaded(uint8_t* rdram, recomp_context* ctx);          // runlinkDownloadCode, runlinkResumeCode (wrappers)
+void jfg_overlay_unloading(uint8_t* rdram, recomp_context* ctx);       // runlinkFreeCode, runlinkUnloadOverlay (wrappers)
 
-// --- base project (jfg-base.patch) ----------------------------------------------------------------------------------
+// --- base project --------------------------------------------------------------------------------------------------
 // jfg_controls.cpp: src/input/controls.cpp, src/input/input.cpp
 int jfg_dual_stick_active(void);
 int jfg_dual_stick_layout(void);
@@ -116,21 +116,58 @@ void jfg_texture_dump_scene(char* buf, int size);                      // jfg_te
 int jfg_texture_pack_current(char* buf, int size);                     // jfg_texture_packs.cpp
 int jfg_refresh_override(void);                                        // jfg_frame_rate.cpp
 int jfg_interp_limit(void);                                            // jfg_frame_rate.cpp
-void jfg_cpu_rain_before(uint8_t* rdram, recomp_context* ctx);         // jfg_cpu_layer.cpp: mainCPUeffects, before rainDraw
-void jfg_cpu_rain_after(uint8_t* rdram, recomp_context* ctx);          // ... and after it
-void jfg_cpu_lines_before(uint8_t* rdram, recomp_context* ctx);        // jfg_cpu_layer.cpp: entry of fxOutputLines
-void jfg_cpu_lines_after(uint8_t* rdram, recomp_context* ctx);         // ... and mainCPUeffects after it returns
-void jfg_cpu_lines_faded(uint8_t* rdram, recomp_context* ctx);      // mainCPUeffects, after fxInitLines (a fade)
+void jfg_cpu_rain_before(uint8_t* rdram, recomp_context* ctx);         // jfg_cpu_layer.cpp: rainDraw's wrapper, before
+void jfg_cpu_rain_after(uint8_t* rdram, recomp_context* ctx);          // ... and after
+void jfg_cpu_lines_before(uint8_t* rdram, recomp_context* ctx);        // jfg_cpu_layer.cpp: fxOutputLines' wrapper, before
+void jfg_cpu_lines_after(uint8_t* rdram, recomp_context* ctx);         // ... and after
+void jfg_cpu_lines_faded(uint8_t* rdram, recomp_context* ctx);         // ... and fxInitLines' wrapper, after mainCPUeffects' call
 int jfg_widescreen_active(void);                                       // jfg_visuals.cpp
 int jfg_texture_three_point(void);                                     // jfg_visuals.cpp
 int jfg_output_filtering(void);                                        // jfg_visuals.cpp
 int jfg_skip_render_active(void);                                      // jfg_cutscene_skip.cpp
 // src/main.cpp
 void jfg_on_init(uint8_t* rdram, recomp_context* ctx);                 // jfg_glue.cpp
+void jfg_register_mod_exports(void);                                   // jfg_mods.cpp: functions mods import ("*")
+void jfg_apply_asset_mods(void);                                       // jfg_assets.cpp: data replaced by mods
 // src/ui/ui_state.cpp
 void jfg_settings_menu_open(int open);                                 // jfg_camera.cpp, every UI frame
 void jfg_tools_ui_frame(void);                                         // jfg_ui_tools.cpp, every UI frame (F10's tools)
 // src/debug_ui/backend.cpp
 void jfg_tools_key(int scancode, int down, int repeat);                // jfg_ui_tools.cpp, F10, Alt, End, F8 (SDL event filter)
+// jfg_mods.cpp (jfg_register_mod_exports)
+void jfg_register_asset_mods(void);                                    // jfg_assets.cpp: the jfg_assets.json content type
+// jfg_glue.cpp (jfg_on_init)
+void jfg_mods_alias_overlays(void);                                    // jfg_mods.cpp: overlay funcs at private addresses
+
+// --- functions mods import ("*"; registered by jfg_register_mod_exports) -------------------------------------------
+void jfg_recomp_printf(uint8_t* rdram, recomp_context* ctx);           // jfg_mods.cpp: recomp_printf
 
 } // extern "C"
+
+// --- game functions the port wraps (tools/wrapped_funcs.txt) -------------------------------------------------------
+// The port never changes a game function itself: N64Recomp ([wrappers] in jfg.us.toml) generates the recompiled <name>
+// as <name>_orig and makes every call to <name> run jfg_wrap_<name>, defined with this macro. The wrapper runs the port's code and
+// calls <name>_orig; mods' patches and hooks apply to <name>_orig, so the wrapper keeps running around them.
+#define JFG_WRAP(name)                                                     \
+    extern "C" void name##_orig(uint8_t* rdram, recomp_context* ctx);     \
+    extern "C" void jfg_wrap_##name(uint8_t* rdram, recomp_context* ctx)
+
+// A wrapper that acts on one caller's own call of another function. The caller's wrapper opens a JfgCaller::Scope
+// around its _orig with the caller's frame size (its prologue's addiu $sp); the callee's wrapper checks direct(ctx): a
+// call made from deeper down (by a function the caller called) is entered with a lower $sp.
+struct JfgCaller {
+    struct Scope {
+        Scope(JfgCaller& c, recomp_context* ctx, uint32_t frame) : c(c), prev(c.sp) { c.sp = ctx->r29 - frame; }
+        ~Scope() { c.sp = prev; }
+        JfgCaller& c;
+        gpr prev;
+    };
+    bool direct(const recomp_context* ctx) const { return sp != 0 && ctx->r29 == sp; }
+    gpr sp = 0;
+};
+
+#include <span>
+#include <vector>
+// src/main.cpp, GameEntry::decompression_routine: the ROM the runtime regenerates hooked functions from, with every
+// overlay pre-linked as tools/prepare_overlays.py does for the build (jfg_mods.cpp).
+std::vector<uint8_t> jfg_prelink_rom(std::span<const uint8_t> rom);

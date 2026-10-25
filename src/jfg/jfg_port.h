@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 
 namespace jfg {
@@ -79,7 +80,7 @@ struct CameraControl {
     float shoulder_blend = 0;   // 0..1: how far the view has moved from the game's camera to the shoulder
     bool overridden = false;    // the camera in RDRAM currently holds our values; saved[] holds the game's
     uint32_t camera_addr = 0;
-    uint8_t saved[CAMERA_SIZE] = {};
+    uint8_t saved[Camera::Size] = {};
     float collide_scale = 1.0f; // how much of the way from the character to the wanted camera spot is free (eases back out)
     // Arriving somewhere new (another room through a door, a respawn, a teleport): the free camera starts again
     // behind the character, looking the way it faces, instead of keeping the heading from the place it came from.
@@ -141,8 +142,7 @@ void jfg_camera_controls(recomp_context* ctx); // game thread, right after joyRe
 // copy +0x106, and the object's yaw) and the view pitch (+0x1E2, limited to 60 degrees); the reticle's offset from
 // them (yaw +0x1CE, copies +0x1DC and +0x246; pitch +0x1E0); and their sums, the aim direction (yaw +0x1C6/+0x1CA;
 // pitch +0x1C8/+0x1CC/+0x1D0/+0x1DE). The byte at +0x568 is the character's state: 0x0B aiming, 3 jumping (and falling).
-constexpr uint32_t PD_BODY_YAW = 0x11C, PD_BODY_YAW_COPY = 0x106, PD_VIEW_PITCH = 0x1E2, PD_RETICLE_YAW = 0x1CE, PD_RETICLE_PITCH = 0x1E0, PD_STATE = 0x568;
-constexpr uint8_t PD_STATE_AIMING = 0x0B, PD_STATE_JUMP = 3;
+// The fields are PlayerData in jfg_fields.h.
 
 // --- jfg_camera.cpp ----------------------------------------------------------------------------------------------
 // Fly camera (F7 / F10 > Tools): a free camera for screenshots. While it is on, the sticks / WASD and the mouse fly

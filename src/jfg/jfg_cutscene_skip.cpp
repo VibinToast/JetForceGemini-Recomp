@@ -20,6 +20,7 @@
 #include <thread>
 #include <vector>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -104,7 +105,7 @@ extern "C" void jfg_after_joy(uint8_t* rdram_, recomp_context* ctx) {
         for (Step& st : steps) {
             if (now < st.t || now >= st.t + st.dur) continue;
             wr16(pad, (uint16_t)(rd16(pad) | st.buttons));
-            if (st.x != 0 || st.y != 0) { wr8(pad + 2, (uint8_t)(int8_t)st.x); wr8(pad + 3, (uint8_t)(int8_t)st.y); }
+            if (st.x != 0 || st.y != 0) { Pad::StickX::set(pad, (int8_t)st.x); Pad::StickY::set(pad, (int8_t)st.y); }
             if (!st.started) { st.started = true; wr16(ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u), (uint16_t)(rd16(ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u)) | st.buttons)); }
         }
     }
@@ -153,7 +154,7 @@ extern "C" void jfg_after_joy(uint8_t* rdram_, recomp_context* ctx) {
         else if (level != g.skip_level || !skippable_scene() || timeout) {
             std::fprintf(stderr, "[jfg] cutscene skip: end (level %d -> %d%s)\n", g.skip_level, level, timeout ? ", time limit" : "");
             std::fprintf(stderr, "[jfg] cutscene skip: %d ticks (%d with a real frame for the audio thread) in %.2f s; tune %d state %d\n", g_skip_ticks, g_skip_real_frames, std::chrono::duration<double>(std::chrono::steady_clock::now() - g_skip_started).count(),
-                (int)rd8(ADDR_tuneSeqNo), valid_ptr(rd32(ADDR_tuneSeqPlayer)) ? (int)rd32(rd32(ADDR_tuneSeqPlayer) + 0x2C) : -1);
+                (int)rd8(ADDR_tuneSeqNo), valid_ptr(rd32(ADDR_tuneSeqPlayer)) ? (int)MusicPlayer::State::get(rd32(ADDR_tuneSeqPlayer)) : -1);
             g.skipping = false;
             jfg_skip_render = false;
         }
@@ -197,7 +198,7 @@ constexpr int SNDP_RESERVE = 16; // free queue items kept for everything but the
 
 int free_events(uint32_t evtq, int limit) { // evtq->freeList.next chain, counted up to limit
     int n = 0;
-    for (uint32_t p = rd32(evtq); p >= 0x80000000u && p < 0x80800000u && n < limit; p = rd32(p)) n++;
+    for (uint32_t p = EventQueue::FreeList::get(evtq); p >= 0x80000000u && p < 0x80800000u && n < limit; p = rd32(p)) n++;
     return n;
 }
 
@@ -210,11 +211,11 @@ extern "C" int jfg_evt_skip(uint8_t* rdram_, uint32_t evtq, uint32_t evt) {
     if (std::this_thread::get_id() != g_main_thread) return 0;
     g_rdram = rdram_;
     if (!g.skipping) {
-        if (evtq != rd32(ADDR_gSoundPlayerPtr) + 0x14 || (rd16(evt) & SNDP_UPDATE_EVTS) == 0) return 0;
+        if (evtq != rd32(ADDR_gSoundPlayerPtr) + SoundPlayer::EventQueue || (rd16(evt) & SNDP_UPDATE_EVTS) == 0) return 0;
         return free_events(evtq, SNDP_RESERVE) < SNDP_RESERVE ? 1 : 0;
     }
     const int free_items = free_events(evtq, 12);
-    if (evtq != rd32(ADDR_gSoundPlayerPtr) + 0x14) {
+    if (evtq != rd32(ADDR_gSoundPlayerPtr) + SoundPlayer::EventQueue) {
         // A sequence player (music, ambience): everything goes through, or the music of the skipped cutscene would
         // never be stopped or replaced. If its queue is filling up, the next tick waits for a real video frame so the
         // audio thread can work the queue off (jfg_vi_skip).
@@ -234,13 +235,13 @@ extern "C" void jfg_evt_next(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t evtq = (uint32_t)ctx->r4;
     const uint32_t sndp = rd32(ADDR_gSoundPlayerPtr);
-    if (sndp == 0 || evtq != sndp + 0x14 || rd32(evtq + 8) != 0 || rd32(evtq) == 0) return; // other queue, events queued, or no free item
+    if (sndp == 0 || evtq != sndp + SoundPlayer::EventQueue || EventQueue::AllocList::get(evtq) != 0 || EventQueue::FreeList::get(evtq) == 0) return; // other queue, events queued, or no free item
     const uint32_t evt = ((uint32_t)ctx->r29 - 0x40u) & ~0x7u; // inside the gap call_game leaves below $sp
     for (uint32_t i = 0; i < 0x10; i += 4) wr32(evt + i, 0);
     wr16(evt, AL_SNDP_API_EVT);
-    call_game(n_alEvtqPostEvent, ctx, { evtq, evt, rd32(sndp + 0x4C) });
+    call_game(n_alEvtqPostEvent, ctx, { evtq, evt, SoundPlayer::FrameTime::get(sndp) });
     static int logged = 0;
-    if (logged++ < 3) std::fprintf(stderr, "[jfg] sound player lost its periodic event (%u events dropped so far); put back\n", (unsigned)rd16(evtq + 0x12));
+    if (logged++ < 3) std::fprintf(stderr, "[jfg] sound player lost its periodic event (%u events dropped so far); put back\n", (unsigned)EventQueue::EventCount::get(evtq));
 }
 
 } // namespace jfg

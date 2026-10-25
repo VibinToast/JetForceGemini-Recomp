@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "imgui/imgui.h"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -38,7 +39,7 @@
 namespace jfg {
 
 namespace {
-constexpr uint32_t ADDR_weaponTable = 0x800A1490, WEAPON_DEF_SIZE = 0x30;
+constexpr uint32_t ADDR_weaponTable = 0x800A1490; // WeaponDef[]
 constexpr int WEAPON_COUNT = 15;
 constexpr const char* WEAPONS_FILE = "jfg_weapons.txt";
 
@@ -86,29 +87,36 @@ bool g_weapons_loaded = false;
 std::vector<std::pair<uint32_t, uint32_t>> g_player_mines; // the player's mines (object, data), oldest first
 
 WeaponStats read_weapon_stats(int w) {
-    const uint32_t d = ADDR_weaponTable + WEAPON_DEF_SIZE * (uint32_t)w;
+    const uint32_t d = ADDR_weaponTable + WeaponDef::Size * (uint32_t)w;
     WeaponStats s;
-    s.damage = rd8(d + 3); s.delay = rd8(d + 5); s.throw_delay = (int8_t)rd8(d + 6); s.life = rd8(d + 7);
-    s.spread_x = (int16_t)rd16(d + 8); s.spread_y = (int16_t)rd16(d + 0xA); s.speed = rdf(d + 0x10);
+    s.damage = WeaponDef::Damage::get(d); s.delay = WeaponDef::Delay::get(d); s.throw_delay = WeaponDef::ThrowDelay::get(d); s.life = WeaponDef::Life::get(d);
+    s.spread_x = WeaponDef::SpreadX::get(d); s.spread_y = WeaponDef::SpreadY::get(d); s.speed = WeaponDef::Speed::get(d);
     return s;
 }
 
 void write_weapon_stats(int w, const WeaponStats& s, const WeaponStats& orig) {
-    const uint32_t d = ADDR_weaponTable + WEAPON_DEF_SIZE * (uint32_t)w;
+    const uint32_t d = ADDR_weaponTable + WeaponDef::Size * (uint32_t)w;
     const uint32_t f = WEAPON_INFO[w].fields;
-    if (f & WF_DAMAGE) { wr8(d + 3, (uint8_t)std::clamp(s.damage, 0, 255)); wr8(d + 4, (uint8_t)std::clamp(s.damage, 0, 255)); }
-    if (f & WF_DELAY) wr8(d + 5, (uint8_t)std::clamp(s.delay, 0, 255));
-    if ((f & WF_THROW) && orig.throw_delay > 0) wr8(d + 6, (uint8_t)std::clamp(s.throw_delay, 1, 127));
-    if (f & WF_LIFE) wr8(d + 7, (uint8_t)std::clamp(s.life, 1, 255));
-    if (f & WF_SPREAD) { wr16(d + 8, (uint16_t)std::clamp(s.spread_x, 0, 8192)); wr16(d + 0xA, (uint16_t)std::clamp(s.spread_y, 0, 8192)); }
-    if (f & WF_SPEED) wrf(d + 0x10, std::clamp(s.speed, 0.1f, 2000.0f));
+    if (f & WF_DAMAGE) {
+        WeaponDef::Damage::set(d, (uint8_t)std::clamp(s.damage, 0, 255));
+        WeaponDef::Damage2::set(d, (uint8_t)std::clamp(s.damage, 0, 255));
+    }
+    if (f & WF_DELAY) WeaponDef::Delay::set(d, (uint8_t)std::clamp(s.delay, 0, 255));
+    if ((f & WF_THROW) && orig.throw_delay > 0) WeaponDef::ThrowDelay::set(d, (int8_t)std::clamp(s.throw_delay, 1, 127));
+    if (f & WF_LIFE) WeaponDef::Life::set(d, (uint8_t)std::clamp(s.life, 1, 255));
+    if (f & WF_SPREAD) {
+        WeaponDef::SpreadX::set(d, (int16_t)std::clamp(s.spread_x, 0, 8192));
+        WeaponDef::SpreadY::set(d, (int16_t)std::clamp(s.spread_y, 0, 8192));
+    }
+    if (f & WF_SPEED) WeaponDef::Speed::set(d, std::clamp(s.speed, 0.1f, 2000.0f));
 }
 
 void restore_weapon_stats(int w) {
-    const uint32_t d = ADDR_weaponTable + WEAPON_DEF_SIZE * (uint32_t)w;
+    const uint32_t d = ADDR_weaponTable + WeaponDef::Size * (uint32_t)w;
     const WeaponStats& o = g_weapon_orig[w];
-    wr8(d + 3, (uint8_t)o.damage); wr8(d + 4, (uint8_t)o.damage); wr8(d + 5, (uint8_t)o.delay); wr8(d + 6, (uint8_t)o.throw_delay);
-    wr8(d + 7, (uint8_t)o.life); wr16(d + 8, (uint16_t)o.spread_x); wr16(d + 0xA, (uint16_t)o.spread_y); wrf(d + 0x10, o.speed);
+    WeaponDef::Damage::set(d, (uint8_t)o.damage); WeaponDef::Damage2::set(d, (uint8_t)o.damage); WeaponDef::Delay::set(d, (uint8_t)o.delay);
+    WeaponDef::ThrowDelay::set(d, (int8_t)o.throw_delay); WeaponDef::Life::set(d, (uint8_t)o.life);
+    WeaponDef::SpreadX::set(d, (int16_t)o.spread_x); WeaponDef::SpreadY::set(d, (int16_t)o.spread_y); WeaponDef::Speed::set(d, o.speed);
 }
 } // namespace
 
@@ -181,7 +189,7 @@ void save_weapons() {
 // original also plays the animation and runs the lock that much faster (factor = original / new delay, at most 8).
 float g_throw_factor = 1.0f;
 bool is_throw_anim(uint32_t obj) {
-    const int anim = (int8_t)rd8(obj + 0x3B);
+    const int anim = Obj::Anim::get(obj);
     switch ((int16_t)rd16(ADDR_currentCharacter)) {
     case 0: return anim == 0x16 || anim == 0x31; // Vela
     case 1: return anim == 0x15 || anim == 0x2E; // Juno
@@ -206,14 +214,14 @@ void apply_weapons() {
 
     const uint32_t obj = g_cam.player;
     if (obj == 0 || rd32(ADDR_mainGameMode) != 0) return;
-    const uint32_t data = rd32(obj + 0x68);
+    const uint32_t data = Obj::Data::get(obj);
     const int c = (int16_t)rd16(ADDR_currentCharacter);
     const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
     if (!valid_ptr(data) || ch == 0) return;
-    const int weapon = rd8(ch + CHAR_WEAPON_OFFSET);
+    const int weapon = Character::CurrentWeapon::get(ch);
 
     // Pistol: no rapid-fire limit.
-    if (weapon == 0 && g_weapon_mod[0].on && g_weapon_mod[0].no_heat) wr8(data + 0x542, 0);
+    if (weapon == 0 && g_weapon_mod[0].on && g_weapon_mod[0].no_heat) PlayerData::PistolHeat::set(data, 0);
 
     // Throwing: faster animation and shorter control lock with a shorter throw delay (see g_throw_factor).
     g_throw_factor = 1.0f;
@@ -222,23 +230,23 @@ void apply_weapons() {
         if (o > 0 && m > 0 && m < o) g_throw_factor = std::min(8.0f, (float)o / (float)m);
     }
     if (g_throw_factor > 1.0f && is_throw_anim(obj)) {
-        const int lock = (int8_t)rd8(data + 0x577);
+        const int lock = PlayerData::ThrowLock::get(data);
         if (lock > 0) {
             const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
             const int extra = (int)std::lround((g_throw_factor - 1.0f) * frames);
-            wr8(data + 0x577, (uint8_t)std::max(0, lock - extra));
+            PlayerData::ThrowLock::set(data, (int8_t)std::max(0, lock - extra));
         }
     }
 
     // Plasma shotgun: faster (or slower) charge.
     static int last_charge = 0;
-    const int charge = (int16_t)rd16(data + 0x53E);
+    const int charge = PlayerData::Charge::get(data);
     if (weapon == 3 && g_weapon_mod[3].on && g_weapon_mod[3].charge != 100 && charge > last_charge) {
         const int grown = charge - last_charge;
-        const int max_charge = (int)rd8(ch + 0x54 + 3) << 5;
+        const int max_charge = (int)Character::MaxCharge::get(ch, 3) << 5;
         const int extra = grown * (g_weapon_mod[3].charge - 100) / 100;
         const int next = std::clamp(charge + extra, 0, std::max(max_charge, charge));
-        wr16(data + 0x53E, (uint16_t)next);
+        PlayerData::Charge::set(data, (int16_t)next);
         last_charge = next;
     }
     else last_charge = charge;
@@ -247,15 +255,15 @@ void apply_weapons() {
     const bool mines_on = g_weapon_mod[11].on || g_weapon_mod[12].on;
     for (size_t i = 0; i < g_player_mines.size();) { // drop mines that are gone (object freed or reused, or already going)
         const uint32_t mo = g_player_mines[i].first, md = g_player_mines[i].second;
-        const bool alive = valid_ptr(mo) && rd32(mo + 0x68) == md && rd8(md + 1) != 5 && rd8(md + 1) != 6;
+        const bool alive = valid_ptr(mo) && Obj::Data::get(mo) == md && MineData::State::get(md) != 5 && MineData::State::get(md) != 6;
         if (alive) i++; else g_player_mines.erase(g_player_mines.begin() + (long)i);
     }
     if (mines_on) {
         const int limit = g_weapon_mod[11].on ? g_weapon_mod[11].mines : g_weapon_mod[12].mines;
         while ((int)g_player_mines.size() > limit) {
             const uint32_t md = g_player_mines.front().second;
-            wr8(md + 1, 6);   // what mineRemove does
-            wr8(md + 0xAC, 0);
+            MineData::State::set(md, 6); // what mineRemove does
+            MineData::Armed::set(md, 0);
             g_player_mines.erase(g_player_mines.begin());
         }
     }
@@ -270,8 +278,8 @@ extern "C" uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_
     g_rdram = rdram;
     const bool throwing = g_throw_factor > 1.0f && is_throw_anim(obj);
     if (!throwing) {
-        const uint32_t data = rd32(obj + 0x68);
-        if (g_cam.sprint_factor == 1.0f || !valid_ptr(data) || rd8(data + PD_STATE) == PD_STATE_JUMP) return speed_bits;
+        const uint32_t data = Obj::Data::get(obj);
+        if (g_cam.sprint_factor == 1.0f || !valid_ptr(data) || PlayerData::State::get(data) == PlayerData::StateJumping) return speed_bits;
     }
     float speed; std::memcpy(&speed, &speed_bits, 4);
     speed *= throwing ? g_throw_factor : g_cam.sprint_factor;
@@ -279,35 +287,36 @@ extern "C" uint32_t jfg_anim_speed(uint8_t* rdram, uint32_t obj, uint32_t speed_
     return speed_bits;
 }
 
-// Hook at the end of mineInit (overlay 112): s1 = the new mine, s0 = its data. Mines placed while the player holds a
+// After mineInit (overlay 112; its wrapper): the new mine and its data (mine + 0x68). Mines placed while the player holds a
 // mine weapon are the player's.
-extern "C" void jfg_mine_init(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void jfg_mine_init(uint8_t* rdram, uint32_t mine) {
     g_rdram = rdram;
-    const uint32_t mine = (uint32_t)ctx->r17, md = (uint32_t)ctx->r16;
+    const uint32_t md = valid_ptr(mine) ? Obj::Data::get(mine) : 0;
     if (!valid_ptr(mine) || !valid_ptr(md) || g_cam.player == 0) return;
     const int c = (int16_t)rd16(ADDR_currentCharacter);
     const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
     if (ch == 0) return;
-    const int weapon = rd8(ch + CHAR_WEAPON_OFFSET);
+    const int weapon = Character::CurrentWeapon::get(ch);
     if (weapon != 11 && weapon != 12) return;
     std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex);
     g_player_mines.emplace_back(mine, md);
 }
 
-// Hook at the end of laserboltInit (overlay 109): a0 = the new bolt. Scales bolts the player fires.
+// After laserboltInit (overlay 109; its wrapper): a0 = the new bolt. Scales bolts the player fires.
 extern "C" void jfg_bolt_init(uint8_t* rdram, recomp_context* ctx) {
     g_rdram = rdram;
     const uint32_t bolt = (uint32_t)ctx->r4;
     if (!valid_ptr(bolt) || g_cam.player == 0) return;
-    const uint32_t bd = rd32(bolt + 0x68);
-    if (!valid_ptr(bd) || rd32(bd + 0x70) != g_cam.player) return;
-    const int weapon = (int8_t)rd8(bd + 0x7C);
+    const uint32_t bd = Obj::Data::get(bolt);
+    if (!valid_ptr(bd) || BoltData::Owner::get(bd) != g_cam.player) return;
+    const int weapon = BoltData::Weapon::get(bd);
     static const bool log = std::getenv("JFG_DEBUG_BOLTS") != nullptr;
-    if (log) std::fprintf(stderr, "[jfg] bolt: weapon %d damage %d speed %.1f life %d scale %.2f\n", weapon, rd8(bd + 0x61), rdf(bd + 0x64), (int)(int16_t)rd16(bd + 0x6A), rdf(bd + 0x6C));
+    if (log) std::fprintf(stderr, "[jfg] bolt: weapon %d damage %d speed %.1f life %d scale %.2f\n", weapon,
+        BoltData::Damage::get(bd), BoltData::Speed::get(bd), (int)BoltData::Life::get(bd), BoltData::Scale::get(bd));
     if (weapon < 0 || weapon >= WEAPON_COUNT || !WEAPON_INFO[weapon].bolt) return;
     const WeaponMod& m = g_weapon_mod[weapon];
     if (!m.on || m.size == 100) return;
-    wrf(bd + 0x6C, rdf(bd + 0x6C) * (float)m.size / 100.0f);
+    BoltData::Scale::set(bd, BoltData::Scale::get(bd) * (float)m.size / 100.0f);
 }
 
 namespace {
@@ -461,3 +470,23 @@ std::vector<ToolField> weapon_fields() {
 }
 
 } // namespace jfg
+
+// The ends of mineInit(mine, ...) and laserboltInit(bolt, ...), and the entry of objAnimDframe (see the handlers).
+JFG_WRAP(mineInit) {
+    const uint32_t mine = (uint32_t)ctx->r4;
+    mineInit_orig(rdram, ctx);
+    jfg_mine_init(rdram, mine);
+}
+
+JFG_WRAP(laserboltInit) {
+    const gpr bolt = ctx->r4;
+    laserboltInit_orig(rdram, ctx);
+    recomp_context c = *ctx;
+    c.r4 = bolt;
+    jfg_bolt_init(rdram, &c);
+}
+
+JFG_WRAP(objAnimDframe) {
+    ctx->r5 = (gpr)(int32_t)jfg_anim_speed(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5);
+    objAnimDframe_orig(rdram, ctx);
+}

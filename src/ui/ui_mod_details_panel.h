@@ -36,6 +36,7 @@ private:
     ScrollContainer *body_container = nullptr;
     Label *description_label = nullptr;
     Label *authors_label = nullptr;
+    Label *warning_label = nullptr; // JFG PORT
     Container *buttons_container = nullptr;
     Container *enable_container = nullptr;
     Toggle *enable_toggle = nullptr;
