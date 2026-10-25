@@ -28,6 +28,7 @@ void jfg_sched_retrace(void);                                          // entry 
 int jfg_sched_task_ready(void);                                        // entry of __scTaskReady
 int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames);     // FlowerBoltControl; the squad wrappers below
 int jfg_cadence_skip(void);                                            // frontPlayerTarget, the target lock countdown
+void jfg_squad_count_repair(uint8_t* rdram);                           // objDoFrees' wrapper: 60 fps squadron count
 void jfg_squad_draw_begin(uint8_t* rdram);                             // func_80045F00, right before trackDraw
 void jfg_squad_draw_end(uint8_t* rdram);                               // func_80045F00, right after trackDraw
 // jfg_controls.cpp
@@ -45,6 +46,7 @@ int jfg_freeze_world(void);                                            // func_8
 float jfg_fov(uint8_t* rdram, float fov, uint32_t zoomed);             // camSetFOV
 void jfg_game_fog(uint8_t* rdram, uint32_t sp);                        // func_8001BF9C, right after trackGetFog
 uint32_t jfg_hit_flash(uint32_t color);                                // the hit flash's colour (jfg_visuals.cpp)
+int jfg_shadow_alpha(int alpha);                                       // func_8001B8E0's wrapper: a shadow batch's alpha
 void jfg_hit_flash_event(uint8_t* rdram, recomp_context* ctx);        // jfg_on_screen_flash handler
 void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // jfg_on_sidekick_tick handler
 void jfg_hide_object(uint8_t* rdram, recomp_context* ctx);             // jfg_on_object_draw handler
@@ -64,6 +66,8 @@ int jfg_flag_override(int flag);                                       // mainGe
 // jfg_gore.cpp
 void jfg_gore_on_blood_spurt(uint8_t* rdram, recomp_context* ctx);     // jfg_on_blood_spurt handler (jfg_api.cpp)
 void jfg_gore_on_blood_hit(uint8_t* rdram, recomp_context* ctx);       // jfg_on_blood_hit handler
+void jfg_gore_make_room(uint8_t* rdram, recomp_context* ctx);          // jfg_on_blood_spurt handler (Blood stays)
+void jfg_gore_level_change(uint8_t* rdram, recomp_context* ctx);       // jfg_on_level_change handler (Blood stays)
 void jfg_gore_limb(uint8_t* rdram, recomp_context* ctx);               // jfg_on_severed_limb_tick handler
 void jfg_blood_extra_drops(uint8_t* rdram, recomp_context* ctx, int amount); // bloodSpurtAdd's wrapper
 // jfg_area_progress.cpp
@@ -77,6 +81,7 @@ void jfg_bolt_init(uint8_t* rdram, recomp_context* ctx);               // after 
 void jfg_mm_alloc_check(uint8_t* rdram, recomp_context* ctx, uint32_t size, uint32_t colour); // after mmAlloc/mmAlloc2
 void jfg_squad_spawn_before(uint8_t* rdram, recomp_context* ctx);      // overlay 3 +0x14C9C, the squad member loop
 void jfg_squad_spawn_after(uint8_t* rdram, recomp_context* ctx);       // overlay 3 +0x14CA4, after its call
+int  jfg_squaddie_init_ok(uint8_t* rdram, recomp_context* ctx);       // SquaddieInitFromRomdef's wrapper: NULL object guard
 void jfg_objsetup_enter(uint8_t* rdram, recomp_context* ctx);          // entry of objSetupObject
 void jfg_objsetup_step(uint8_t* rdram, recomp_context* ctx, int step); // objSetupObject, after each call that can fail
 void jfg_objsetup_exit(uint8_t* rdram, recomp_context* ctx, int type); // objSetupObject's wrapper, after
@@ -115,6 +120,7 @@ void jfg_cpu_rain_before(uint8_t* rdram, recomp_context* ctx);         // jfg_cp
 void jfg_cpu_rain_after(uint8_t* rdram, recomp_context* ctx);          // ... and after
 void jfg_cpu_lines_before(uint8_t* rdram, recomp_context* ctx);        // jfg_cpu_layer.cpp: fxOutputLines' wrapper, before
 void jfg_cpu_lines_after(uint8_t* rdram, recomp_context* ctx);         // ... and after
+void jfg_cpu_lines_faded(uint8_t* rdram, recomp_context* ctx);         // ... and fxInitLines' wrapper, after mainCPUeffects' call
 int jfg_widescreen_active(void);                                       // jfg_visuals.cpp
 int jfg_texture_three_point(void);                                     // jfg_visuals.cpp
 int jfg_output_filtering(void);                                        // jfg_visuals.cpp

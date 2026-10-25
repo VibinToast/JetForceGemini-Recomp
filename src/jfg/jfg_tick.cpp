@@ -170,7 +170,8 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     const float save_toast_t = std::chrono::duration<float>(std::chrono::steady_clock::now() - g_save_toast).count();
     const bool save_toast = g.save_notification && g_save_toast.time_since_epoch().count() != 0 && save_toast_t < 2.5f;
     // A newer release (src/jfg/jfg_update_check.cpp): shown once per run in the game too, for players who skip the
-    // launcher, where it is otherwise only shown. Polled once a second; shown from 3 s after start, for 10 s.
+    // launcher, where it is otherwise only shown. Polled once a second; shown from 3 s after start, for UPDATE_SHOW s.
+    constexpr float UPDATE_SHOW = 5.0f; // the last second fades out
     static std::chrono::steady_clock::time_point update_seen{}, update_poll{};
     static std::string update_version;
     if (update_version.empty() && std::chrono::steady_clock::now() >= update_poll) {
@@ -180,7 +181,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     }
     const float update_t = update_version.empty() ? -1.0f
         : std::chrono::duration<float>(std::chrono::steady_clock::now() - std::max(update_seen, hint_start + std::chrono::seconds(3))).count();
-    const bool update_toast = update_t >= 0.0f && update_t < 10.0f && jfg_launcher_check_updates(); // not once turned off
+    const bool update_toast = update_t >= 0.0f && update_t < UPDATE_SHOW && jfg_launcher_check_updates(); // not once turned off
     dino::debug_ui::backend::set_overlay(hint_active || g.show_fps || g.show_level || g.show_pack || pack_toast || save_toast || update_toast);
 
     dino::debug_ui::ui_frame_begin();
@@ -223,7 +224,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     if (update_toast && dino::debug_ui::backend::in_ui_frame()) {
         // Top middle, out of the way of the start-up key hint at the bottom: two lines in the launcher's gold.
         const std::string line1 = "Update v" + update_version + " is available";
-        const char* line2 = "Select / Esc, then the launcher button next to Quit, to install it";
+        const char* line2 = "Select / Esc, then Return to Launcher on the Quit tab, to install it";
         const ImVec2 size = ImGui::GetIO().DisplaySize;
         ImFont* font = ImGui::GetFont();
         const float font_size = std::max(18.0f, size.y / 34.0f), small = font_size * 0.75f;
@@ -231,7 +232,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         const ImVec2 e2 = font->CalcTextSizeA(small, FLT_MAX, 0.0f, line2);
         const float pad = font_size * 0.5f, width = std::max(e1.x, e2.x), height = e1.y + pad * 0.3f + e2.y;
         const ImVec2 box0(size.x * 0.5f - width * 0.5f - pad, size.y * 0.05f), box1(size.x * 0.5f + width * 0.5f + pad, size.y * 0.05f + height + pad * 2.0f);
-        float alpha = update_t > 9.0f ? 10.0f - update_t : 1.0f;
+        float alpha = update_t > UPDATE_SHOW - 1.0f ? UPDATE_SHOW - update_t : 1.0f;
         if (update_t < 0.3f) alpha = update_t / 0.3f;
         ImDrawList* dl = ImGui::GetForegroundDrawList();
         dl->AddRectFilled(box0, box1, ImGui::GetColorU32(ImVec4(5 / 255.0f, 11 / 255.0f, 28 / 255.0f, 0.85f * alpha)), pad * 0.4f);

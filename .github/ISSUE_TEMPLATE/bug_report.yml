@@ -1,0 +1,87 @@
+name: Bug report
+description: Something doesn't work, crashes or looks wrong in Jet Force Gemini Recompiled.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please check first whether it's already reported in
+        [Issues](https://github.com/VibinToast/JetForceGemini-Recomp/issues) or listed in
+        [Known issues](https://github.com/VibinToast/JetForceGemini-Recomp/blob/main/KNOWN_ISSUES.md).
+        **Never attach your ROM.**
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown in the launcher (for example 1.2.1). If you built it yourself, the commit.
+      placeholder: "1.2.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - Linux (AppImage)
+        - Linux (portable tar.gz)
+        - Steam Deck
+        - Built it myself
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: GPU and monitor refresh rate
+      placeholder: "RTX 3070, 144 Hz"
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: Include steps to make it happen again, if you know them.
+      placeholder: |
+        1. Go to ...
+        2. Fire ...
+        3. The game ...
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: >-
+        The level and roughly where in it (turn on Show Level in the settings menu's General tab to see the level
+        number), or the menu or cutscene.
+      placeholder: "Level 195, boss fight, right after the first rocket"
+
+  - type: textarea
+    id: settings
+    attributes:
+      label: Settings
+      description: >-
+        The ones that could matter: profile, Game Frame Rate, Frame Interpolation (Graphics tab), widescreen,
+        anti-aliasing (MSAA), texture pack, mouse and keyboard or controller.
+      placeholder: "Modern profile, Game Frame Rate 60, Frame Interpolation 120, widescreen on, MSAA off, 1K HD pack"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Crash or error logs
+      description: |
+        If the game crashed or showed an error, drag in `crash.log`, `jfg_error.log` and `jfg_memory.log` (whichever
+        exist). Where they are:
+        - Windows: next to `JetForceGeminiRecompiled.exe`
+        - Linux AppImage and Steam Deck: `~/.local/share/JetForceGeminiRecompiled`
+        - Linux portable (tar.gz): the game folder
+        - Built yourself: `bin`
+
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots or video
+      description: For anything visual. Drag files in here.

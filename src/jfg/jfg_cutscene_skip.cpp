@@ -7,8 +7,10 @@
 //     the most the game allows. Nothing is bypassed in the game's logic, so whatever the cutscene sets up (flags,
 //     items, the level it leads to) still happens; it just takes a fraction of a second instead of its real length.
 // The skip ends when the level changes, when the cutscene is over, or after a time limit.
-// A cutscene is recognised by the letterboxed VI mode the game switches to for most of them (sResolutionIndex bit 0)
-// or by the level being one of the developers' sequence levels (name containing "Seq" or "Intro").
+// A cutscene is recognised by the level being letterboxed, as most of them are (bit 0 of the level's own screen mode,
+// levelGetScreenMode), or by the level being one of the developers' sequence levels (name containing "Seq" or "Intro",
+// and 398). Not by the VI mode itself: the game's own Widescreen screen option letterboxes every level, and gameplay
+// then counted as a cutscene (no mouse and keyboard, START fast-forwarding instead of pausing: issue #10).
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -33,9 +35,26 @@ bool level_is_sequence(int level) {
     return contains_ci(n, "seq") || contains_ci(n, "intro");
 }
 
+// The level's own screen mode (levelGetScreenMode: the level table's screenMode, bits 2:0 of byte 3 of its 5-byte
+// entries); bit 0 = letterboxed. With the game's screen option at Normal or Hi-res the VI mode's bit 0 is this bit
+// (frontGetLevelScreenMode); the Widescreen options set it on every level.
+int level_screen_mode(int level) {
+    const int count = (int)rd32(ADDR_levelCount);
+    const uint32_t table = rd32(ADDR_levelTable);
+    if (level < 0 || level >= count || !valid_ptr(table)) return 0;
+    return rd8(table + 5u * (uint32_t)level + 3u) & 7;
+}
+
+// Scene levels that are not letterboxed and not named as sequences: 398 "Fake RacePits" (the level table gives it the
+// type of the sequence levels; it plays out by itself and ends in 363 "Before RacePits", entrance 1).
+bool level_is_unlettered_scene(int level) {
+    return level == 398;
+}
+
 bool in_cutscene() {
     if (rd32(ADDR_mainGameMode) != 0) return false; // not in the game proper (front end, title)
-    return (rd8(ADDR_sResolutionIndex) & 1) != 0 || level_is_sequence((int16_t)rd16(ADDR_currentLevel));
+    const int level = (int16_t)rd16(ADDR_currentLevel);
+    return (level_screen_mode(level) & 1) != 0 || level_is_sequence(level) || level_is_unlettered_scene(level);
 }
 
 // Two stretches of the front end that START may also skip:
@@ -101,7 +120,7 @@ extern "C" void jfg_after_joy(uint8_t* rdram_, recomp_context* ctx) {
     if (!g.skipping) {
         bool start = false;
         for (uint32_t i = 0; i < 4; i++) start |= (rd16(ADDR_buttonsPressed + 2 * i) & START_BUTTON) != 0;
-        { static const bool log = std::getenv("JFG_DEBUG_STATS") != nullptr; if (log && start) std::fprintf(stderr, "[jfg] START pressed: level %d, game mode %d, skippable %d, option %d\n", level, (int)rd32(ADDR_mainGameMode), int(skippable_scene()), int(g.start_skips_cutscenes)); }
+        { static const bool log = std::getenv("JFG_DEBUG_STATS") != nullptr; if (log && start) std::fprintf(stderr, "[jfg] START pressed: level %d, game mode %d, skippable %d, option %d, level screen mode %d, vi mode %d, game screen option %d\n", level, (int)rd32(ADDR_mainGameMode), int(skippable_scene()), int(g.start_skips_cutscenes), level_screen_mode(level), (int)rd8(ADDR_sResolutionIndex), (int)rd8(ADDR_screenOption)); }
         if (g.start_skips_cutscenes && start && level >= LEVEL_STORY_FIRST && level <= LEVEL_STORY_LAST) {
             // Story intro after creating a file: 322 JFG ship, 324 ship look-in, 323 control room, 325 ant attack,
             // 326 spawn attack, 327 character select sequence. These scenes wait for their music, so fast-forwarding

@@ -120,3 +120,35 @@ __amHandleFrameMsg
 # CPU-drawn rain and reticles with in-between frames (jfg_cpu_layer.cpp)
 rainDraw
 fxOutputLines
+
+# Gore: kept blood splats drawn in extra passes (jfg_gore.cpp)
+bloodSpurtsDraw
+
+# Shadow Opacity (jfg_visuals.cpp)
+func_8001B8E0_1C4E0
+
+# HUD in Screen Corners (jfg_hud_corners.cpp)
+frontSingleInstruments
+camStandardOrtho
+frontInstruments
+texDPInit
+sprSetTextureFilter
+frontDrawObj
+frontPrintNum
+fontPrintXY
+frontDrawRectangles
+instDrawHealth
+func_overlay_14_0000292C_1F10284
+func_overlay_14_00000220_1F0DB78
+func_overlay_14_00000074_1F0D9CC
+
+# The aim reticle's 3D part with in-between frames (jfg_interpolation.cpp)
+frontDrawTarget
+
+# CPU-drawn reticle: an empty layer during a fade (jfg_cpu_layer.cpp)
+mainCPUeffects
+fxInitLines
+
+# Crash fixes: a reused squad member with no object, the 60 fps squadron count (jfg_diagnostics.cpp, jfg_frame_rate.cpp)
+SquaddieInitFromRomdef
+objDoFrees

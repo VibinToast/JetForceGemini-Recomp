@@ -39,6 +39,7 @@ void objGetPlayerlist(uint8_t* rdram, recomp_context* ctx);
 void objGetObjList(uint8_t* rdram, recomp_context* ctx);
 void controlSelectWeapon(uint8_t* rdram, recomp_context* ctx);
 void objMoveXYZ(uint8_t* rdram, recomp_context* ctx);
+void trackNearestIntersection(uint8_t* rdram, recomp_context* ctx); // the level's first surface on a line (the crosshair's test)
 void n_alEvtqPostEvent(uint8_t* rdram, recomp_context* ctx);
 void func_8002CC70_2D870(uint8_t* rdram, recomp_context* ctx); // the follow camera's wall check, see camera_collide()
 void fb_swap(uint8_t* rdram, recomp_context* ctx);
@@ -68,6 +69,8 @@ constexpr uint32_t ADDR_tribaltable = 0x800FD7B8; // pointer to s8[]: tribals pe
 constexpr uint32_t ADDR_cloneTaskActive = 0x800A35E8, ADDR_refractTaskActive = 0x800A360C, ADDR_blurTaskActive = 0x800A3630; // s32
 constexpr uint32_t ADDR_sResolutionIndex     = 0x800FECA8; // s8, bit 0 = letterboxed ("widescreen") VI mode
 constexpr uint32_t ADDR_pauseMode = 0x800FD7BD;          // s8, what mainGetPauseMode() returns
+constexpr uint32_t ADDR_frontEndMode = 0x800A51B0;       // u8, frontSetMode()'s screen; 17 = the planet map
+constexpr uint8_t FRONT_MODE_MAP = 17;
 constexpr uint32_t ADDR_continues = 0x800A3280;          // s16: continues left in the region (2 on entering one)
 constexpr uint32_t ADDR_runInOneFrame        = 0x800FECCC; // s32, viFrameSync waits for one retrace only
 constexpr uint32_t ADDR_buttonsPressed       = 0x800FB0F0; // u16 gControllerButtonsPressed[4]
@@ -77,6 +80,9 @@ constexpr uint32_t ADDR_otherScreen          = 0x800FECB8; // s32*, the buffer v
 constexpr uint32_t ADDR_currentScreen        = 0x800FECB0; // s32*, the buffer the next frame is drawn into
 
 constexpr uint32_t ADDR_levelHeader       = 0x800FB118; // LevelHeader* (levelGetLevel); +0x102 region, +0x103 room
+constexpr uint32_t ADDR_levelCount        = 0x800FB124; // s32, levels in the level table
+constexpr uint32_t ADDR_levelTable        = 0x800FB12C; // 5-byte entries per level (levelGetScreenMode, levelGetBlurEffect)
+constexpr uint32_t ADDR_screenOption      = 0x800A51A8; // u8, the game's screen option: 0 Normal, 1 Widescreen, 2 Hi-res, 3 both
 // The fields of the game's data (characters, objects, cameras, ...): jfg_fields.h.
 constexpr int      COLLECTED_BITS         = 72;
 

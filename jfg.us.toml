@@ -54,3 +54,18 @@ value = 0x00000000
 # squadsModuleTick(frames) run on every second tick only, with the frames of both ticks.
 # Not hooks here: the three are wrapped (tools/wrapped_funcs.txt, jfg_frame_rate.cpp), so mods can hook or replace
 # them and the cadence still applies around the game's code or the mod's.
+
+# Smooth Shadows (src/jfg/jfg_shadow_interp.cpp): func_8001FA24 writes each shadow's triangles; where its scales and
+# the object's place are worked out (before the first triangle) and after the last, the batch and how far its image
+# slides on in-between frames are passed to RT64. Hooks, not a wrapper: the scales, the angle's sine and cosine and
+# the object's place are only in registers there, and the function calls nothing that could mark the point. So mods
+# can't hook func_8001FA24 (tools/refuse_mod_hooks.py); they can still replace it.
+[[patches.hook]]
+func = "func_8001FA24_20624"
+before_vram = 0x8001FCC4
+text = "{ void jfg_shadow_begin(uint8_t*, recomp_context*); jfg_shadow_begin(rdram, ctx); }"
+
+[[patches.hook]]
+func = "func_8001FA24_20624"
+before_vram = 0x8001FF6C
+text = "{ void jfg_shadow_end(uint8_t*, recomp_context*); jfg_shadow_end(rdram, ctx); }"

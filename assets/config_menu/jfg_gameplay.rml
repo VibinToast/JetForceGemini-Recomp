@@ -46,124 +46,140 @@
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(4)">
                         <label class="config-option__title">No Blood</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(4)" name="jfg_no_blood" data-checked="no_blood" value="1" id="jfg_no_blood_on" style="nav-up: #jfg_permanent_tribals_on; nav-down: #jfg_gore_keep_blood_on;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(4)" name="jfg_no_blood" data-checked="no_blood" value="1" id="jfg_no_blood_on" style="nav-up: #jfg_permanent_tribals_on; " data-style-nav-down="no_blood == 1 ? '#jfg_damage_taken_input' : '#jfg_gore_keep_blood_on'"/>
                             <label class="config-option__tab-label" for="jfg_no_blood_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(4)" name="jfg_no_blood" data-checked="no_blood" value="0" id="jfg_no_blood_off" style="nav-up: #jfg_permanent_tribals_off; nav-down: #jfg_gore_keep_blood_off;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(4)" name="jfg_no_blood" data-checked="no_blood" value="0" id="jfg_no_blood_off" style="nav-up: #jfg_permanent_tribals_off; " data-style-nav-down="no_blood == 1 ? '#jfg_damage_taken_input' : '#jfg_gore_keep_blood_off'"/>
                             <label class="config-option__tab-label" for="jfg_no_blood_off">Off</label>
                         </div>
                     </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(5)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(5)" data-style-opacity="no_blood == 1 ? '0.4' : '1'">
                         <label class="config-option__title">Blood Stays</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(5)" name="jfg_gore_keep_blood" data-checked="gore_keep_blood" value="1" id="jfg_gore_keep_blood_on" style="nav-up: #jfg_no_blood_on; nav-down: #jfg_gore_keep_limbs_on;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(5)" name="jfg_gore_keep_blood" data-checked="gore_keep_blood" value="1" id="jfg_gore_keep_blood_on" style="nav-up: #jfg_no_blood_on; nav-down: #jfg_blood_splats_input;" data-attrif-disabled="no_blood == 1"/>
                             <label class="config-option__tab-label" for="jfg_gore_keep_blood_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(5)" name="jfg_gore_keep_blood" data-checked="gore_keep_blood" value="0" id="jfg_gore_keep_blood_off" style="nav-up: #jfg_no_blood_off; nav-down: #jfg_gore_keep_limbs_off;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(5)" name="jfg_gore_keep_blood" data-checked="gore_keep_blood" value="0" id="jfg_gore_keep_blood_off" style="nav-up: #jfg_no_blood_off; nav-down: #jfg_blood_splats_input;" data-attrif-disabled="no_blood == 1"/>
                             <label class="config-option__tab-label" for="jfg_gore_keep_blood_off">Off</label>
                         </div>
                     </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(6)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(6)" data-style-opacity="no_blood == 1 ? '0.4' : '1'">
+                        <label class="config-option__title">Blood Splat Limit</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{blood_splats}}</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(6)" id="jfg_blood_splats_input" type="range" min="64" max="4096" style="flex: 1; margin: 0dp; nav-up: #jfg_gore_keep_blood_on; nav-down: #jfg_gore_keep_limbs_on;" data-value="blood_splats" data-attrif-disabled="no_blood == 1"/>
+                        </div>
+                    </div>
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(7)" data-style-opacity="no_blood == 1 ? '0.4' : '1'">
                         <label class="config-option__title">Body Parts Stay</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(6)" name="jfg_gore_keep_limbs" data-checked="gore_keep_limbs" value="1" id="jfg_gore_keep_limbs_on" style="nav-up: #jfg_gore_keep_blood_on; nav-down: #jfg_blood_amount_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" name="jfg_gore_keep_limbs" data-checked="gore_keep_limbs" value="1" id="jfg_gore_keep_limbs_on" style="nav-up: #jfg_blood_splats_input; nav-down: #jfg_blood_amount_input;" data-attrif-disabled="no_blood == 1"/>
                             <label class="config-option__tab-label" for="jfg_gore_keep_limbs_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(6)" name="jfg_gore_keep_limbs" data-checked="gore_keep_limbs" value="0" id="jfg_gore_keep_limbs_off" style="nav-up: #jfg_gore_keep_blood_off; nav-down: #jfg_blood_amount_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" name="jfg_gore_keep_limbs" data-checked="gore_keep_limbs" value="0" id="jfg_gore_keep_limbs_off" style="nav-up: #jfg_blood_splats_input; nav-down: #jfg_blood_amount_input;" data-attrif-disabled="no_blood == 1"/>
                             <label class="config-option__tab-label" for="jfg_gore_keep_limbs_off">Off</label>
                         </div>
                     </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(7)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(8)" data-style-opacity="no_blood == 1 ? '0.4' : '1'">
                         <label class="config-option__title">Blood Amount</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{blood_amount}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" id="jfg_blood_amount_input" type="range" min="100" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_gore_keep_limbs_on; nav-down: #jfg_damage_taken_input;" data-value="blood_amount"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" id="jfg_blood_amount_input" type="range" min="100" max="800" style="flex: 1; margin: 0dp; nav-up: #jfg_gore_keep_limbs_on; nav-down: #jfg_damage_taken_input;" data-value="blood_amount" data-attrif-disabled="no_blood == 1"/>
                         </div>
                     </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Player</label></div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(8)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(9)">
                         <label class="config-option__title">Damage Taken</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{damage_taken}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(8)" id="jfg_damage_taken_input" type="range" min="0" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_blood_amount_input; nav-down: #jfg_unlimited_continues_on;" data-value="damage_taken"/>
-                        </div>
-                    </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(9)">
-                        <label class="config-option__title">Unlimited Continues</label>
-                        <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" name="jfg_unlimited_continues" data-checked="unlimited_continues" value="1" id="jfg_unlimited_continues_on" style="nav-up: #jfg_damage_taken_input; nav-down: #jfg_refuel_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_unlimited_continues_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" name="jfg_unlimited_continues" data-checked="unlimited_continues" value="0" id="jfg_unlimited_continues_off" style="nav-up: #jfg_damage_taken_input; nav-down: #jfg_refuel_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_unlimited_continues_off">Off</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(9)" id="jfg_damage_taken_input" type="range" min="0" max="400" style="flex: 1; margin: 0dp; nav-down: #jfg_unlimited_continues_on;" data-style-nav-up="no_blood == 1 ? '#jfg_no_blood_on' : '#jfg_blood_amount_input'" data-value="damage_taken"/>
                         </div>
                     </div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(10)">
-                        <label class="config-option__title">Jetpack Refuel Speed</label>
-                        <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{refuel_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" id="jfg_refuel_speed_input" type="range" min="25" max="1000" style="flex: 1; margin: 0dp; nav-up: #jfg_unlimited_continues_on; nav-down: #jfg_dive_speed_input;" data-value="refuel_speed"/>
+                        <label class="config-option__title">Unlimited Continues</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_unlimited_continues" data-checked="unlimited_continues" value="1" id="jfg_unlimited_continues_on" style="nav-up: #jfg_damage_taken_input; nav-down: #jfg_refuel_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_unlimited_continues_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_unlimited_continues" data-checked="unlimited_continues" value="0" id="jfg_unlimited_continues_off" style="nav-up: #jfg_damage_taken_input; nav-down: #jfg_refuel_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_unlimited_continues_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(11)">
+                        <label class="config-option__title">Jetpack Refuel Speed</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{refuel_speed}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(11)" id="jfg_refuel_speed_input" type="range" min="25" max="1000" style="flex: 1; margin: 0dp; nav-up: #jfg_unlimited_continues_on; nav-down: #jfg_dive_speed_input;" data-value="refuel_speed"/>
+                        </div>
+                    </div>
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(12)">
                         <label class="config-option__title">Vela&#x27;s Dive Speed</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{dive_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(11)" id="jfg_dive_speed_input" type="range" min="50" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_refuel_speed_input; nav-down: #jfg_move_speed_input;" data-value="dive_speed"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" id="jfg_dive_speed_input" type="range" min="50" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_refuel_speed_input; nav-down: #jfg_move_speed_input;" data-value="dive_speed"/>
                         </div>
                     </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Movement (any control layout)</label></div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(12)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(13)">
                         <label class="config-option__title">Movement Speed</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{move_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" id="jfg_move_speed_input" type="range" min="25" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_dive_speed_input; nav-down: #jfg_sprint_on;" data-value="move_speed"/>
-                        </div>
-                    </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(13)">
-                        <label class="config-option__title">Sprint</label>
-                        <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" name="jfg_sprint" data-checked="sprint" value="1" id="jfg_sprint_on" style="nav-up: #jfg_move_speed_input; nav-down: #jfg_sprint_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_sprint_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" name="jfg_sprint" data-checked="sprint" value="0" id="jfg_sprint_off" style="nav-up: #jfg_move_speed_input; nav-down: #jfg_sprint_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_sprint_off">Off</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" id="jfg_move_speed_input" type="range" min="25" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_dive_speed_input; nav-down: #jfg_sprint_on;" data-value="move_speed"/>
                         </div>
                     </div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(14)">
-                        <label class="config-option__title">Sprint Speed</label>
-                        <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{sprint_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" id="jfg_sprint_speed_input" type="range" min="100" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_sprint_on; nav-down: #jfg_sprint_aiming_on;" data-value="sprint_speed"/>
+                        <label class="config-option__title">Sprint</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" name="jfg_sprint" data-checked="sprint" value="1" id="jfg_sprint_on" style="nav-up: #jfg_move_speed_input; nav-down: #jfg_sprint_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_sprint_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" name="jfg_sprint" data-checked="sprint" value="0" id="jfg_sprint_off" style="nav-up: #jfg_move_speed_input; nav-down: #jfg_sprint_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_sprint_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(15)">
-                        <label class="config-option__title">Sprint While Aiming</label>
-                        <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(15)" name="jfg_sprint_aiming" data-checked="sprint_aiming" value="1" id="jfg_sprint_aiming_on" style="nav-up: #jfg_sprint_speed_input; nav-down: #jfg_sprint_swimming_on;"/>
-                            <label class="config-option__tab-label" for="jfg_sprint_aiming_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(15)" name="jfg_sprint_aiming" data-checked="sprint_aiming" value="0" id="jfg_sprint_aiming_off" style="nav-up: #jfg_sprint_speed_input; nav-down: #jfg_sprint_swimming_off;"/>
-                            <label class="config-option__tab-label" for="jfg_sprint_aiming_off">Off</label>
+                        <label class="config-option__title">Sprint Speed</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{sprint_speed}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(15)" id="jfg_sprint_speed_input" type="range" min="100" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_sprint_on; nav-down: #jfg_sprint_aiming_on;" data-value="sprint_speed"/>
                         </div>
                     </div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(16)">
-                        <label class="config-option__title">Sprint While Swimming</label>
+                        <label class="config-option__title">Sprint While Aiming</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" name="jfg_sprint_swimming" data-checked="sprint_swimming" value="1" id="jfg_sprint_swimming_on" style="nav-up: #jfg_sprint_aiming_on; nav-down: #jfg_sprint_swim_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_sprint_swimming_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" name="jfg_sprint_swimming" data-checked="sprint_swimming" value="0" id="jfg_sprint_swimming_off" style="nav-up: #jfg_sprint_aiming_off; nav-down: #jfg_sprint_swim_speed_input;"/>
-                            <label class="config-option__tab-label" for="jfg_sprint_swimming_off">Off</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" name="jfg_sprint_aiming" data-checked="sprint_aiming" value="1" id="jfg_sprint_aiming_on" style="nav-up: #jfg_sprint_speed_input; nav-down: #jfg_sprint_swimming_on;"/>
+                            <label class="config-option__tab-label" for="jfg_sprint_aiming_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" name="jfg_sprint_aiming" data-checked="sprint_aiming" value="0" id="jfg_sprint_aiming_off" style="nav-up: #jfg_sprint_speed_input; nav-down: #jfg_sprint_swimming_off;"/>
+                            <label class="config-option__tab-label" for="jfg_sprint_aiming_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(17)">
-                        <label class="config-option__title">Swim Sprint Speed</label>
-                        <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{sprint_swim_speed}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" id="jfg_sprint_swim_speed_input" type="range" min="100" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_sprint_swimming_on; nav-down: #jfg_normalize_diagonal_on;" data-value="sprint_swim_speed"/>
+                        <label class="config-option__title">Sprint While Swimming</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_sprint_swimming" data-checked="sprint_swimming" value="1" id="jfg_sprint_swimming_on" style="nav-up: #jfg_sprint_aiming_on; nav-down: #jfg_sprint_swim_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_sprint_swimming_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_sprint_swimming" data-checked="sprint_swimming" value="0" id="jfg_sprint_swimming_off" style="nav-up: #jfg_sprint_aiming_off; nav-down: #jfg_sprint_swim_speed_input;"/>
+                            <label class="config-option__tab-label" for="jfg_sprint_swimming_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(18)">
+                        <label class="config-option__title">Swim Sprint Speed</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{sprint_swim_speed}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" id="jfg_sprint_swim_speed_input" type="range" min="100" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_sprint_swimming_on; nav-down: #jfg_normalize_diagonal_on;" data-value="sprint_swim_speed"/>
+                        </div>
+                    </div>
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(19)">
                         <label class="config-option__title">Normalize Diagonal Speed</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_normalize_diagonal" data-checked="normalize_diagonal" value="1" id="jfg_normalize_diagonal_on" style="nav-up: #jfg_sprint_swim_speed_input; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" name="jfg_normalize_diagonal" data-checked="normalize_diagonal" value="1" id="jfg_normalize_diagonal_on" style="nav-up: #jfg_sprint_swim_speed_input; nav-down: #jfg_aim_even_speed_on;"/>
                             <label class="config-option__tab-label" for="jfg_normalize_diagonal_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_normalize_diagonal" data-checked="normalize_diagonal" value="0" id="jfg_normalize_diagonal_off" style="nav-up: #jfg_sprint_swim_speed_input; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" name="jfg_normalize_diagonal" data-checked="normalize_diagonal" value="0" id="jfg_normalize_diagonal_off" style="nav-up: #jfg_sprint_swim_speed_input; nav-down: #jfg_aim_even_speed_off;"/>
                             <label class="config-option__tab-label" for="jfg_normalize_diagonal_off">Off</label>
+                        </div>
+                    </div>
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(20)">
+                        <label class="config-option__title">Same Aim-Walk Speed in All Directions</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_aim_even_speed" data-checked="aim_even_speed" value="1" id="jfg_aim_even_speed_on" style="nav-up: #jfg_normalize_diagonal_on; nav-down: none;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_even_speed_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_aim_even_speed" data-checked="aim_even_speed" value="0" id="jfg_aim_even_speed_off" style="nav-up: #jfg_normalize_diagonal_off; nav-down: none;"/>
+                            <label class="config-option__tab-label" for="jfg_aim_even_speed_off">Off</label>
                         </div>
                     </div>
 
@@ -175,20 +191,22 @@
                     <div data-if="cur_config_index == 2"><div class="jfg-desc__card"><div class="jfg-desc__title">Keep Area Progress</div><p>Saving in the middle of an area (auto save or Z on the pause screen) also keeps what was done there: Tribals rescued or lost, cleared rooms, continues, and the room you were in. Loading the file puts it all back. Off: the game's own behaviour, where an area starts over from its entrance after loading.</p></div></div>
                     <div data-if="cur_config_index == 3"><div class="jfg-desc__card"><div class="jfg-desc__title">Permanent Tribal Saves</div><p>A Tribal you rescued stays rescued: going back into its area, a game over or loading your file no longer brings it back to be rescued again, so the Tribals of an area can be rescued over several visits. Rescues are kept each time the game saves (including auto saves).</p></div></div>
                     <div data-if="cur_config_index == 4"><div class="jfg-desc__card"><div class="jfg-desc__title">No Blood</div><p>No blood, as in the Japanese version.</p></div></div>
-                    <div data-if="cur_config_index == 5"><div class="jfg-desc__card"><div class="jfg-desc__title">Blood Stays</div><p>Blood splats stay on the ground and walls instead of fading away. The newest 40 are kept; older ones still fade so new blood always has room.</p></div></div>
-                    <div data-if="cur_config_index == 6"><div class="jfg-desc__card"><div class="jfg-desc__title">Body Parts Stay</div><p>Severed limbs and heads stay where they fell instead of fading away. The newest 24 are kept, so the game does not run out of memory in big fights.</p></div></div>
-                    <div data-if="cur_config_index == 7"><div class="jfg-desc__card"><div class="jfg-desc__title">Blood Amount</div><p>How much blood a hit sprays. 100% is the original game.</p></div></div>
-                    <div data-if="cur_config_index == 8"><div class="jfg-desc__card"><div class="jfg-desc__title">Damage Taken</div><p>How much damage the character takes from enemies, falls and explosions. 0% takes none; the Invulnerable cheat overrides it.</p></div></div>
-                    <div data-if="cur_config_index == 9"><div class="jfg-desc__card"><div class="jfg-desc__title">Unlimited Continues</div><p>Dying never uses up your continues, so you always come back where you died instead of the game over that restarts the area from its entrance.</p></div></div>
-                    <div data-if="cur_config_index == 10"><div class="jfg-desc__card"><div class="jfg-desc__title">Jetpack Refuel Speed</div><p>How fast a fuel pad fills the jetpack.</p></div></div>
-                    <div data-if="cur_config_index == 11"><div class="jfg-desc__card"><div class="jfg-desc__title">Vela&#x27;s Dive Speed</div><p>How fast Vela swims underwater, in every direction.</p></div></div>
-                    <div data-if="cur_config_index == 12"><div class="jfg-desc__card"><div class="jfg-desc__title">Movement Speed</div><p>How fast the character moves over the ground. The extra distance is collision-checked like normal movement.</p></div></div>
-                    <div data-if="cur_config_index == 13"><div class="jfg-desc__card"><div class="jfg-desc__title">Sprint</div><p>Hold the left stick click (controller) or Left Shift (mouse and keyboard) to run faster. In the built-in dual-stick layout the left stick click then sprints instead of crouching; B still crouches.</p></div></div>
-                    <div data-if="cur_config_index == 14"><div class="jfg-desc__card"><div class="jfg-desc__title">Sprint Speed</div><p>How fast the character runs while sprinting, on top of the Movement Speed.</p></div></div>
-                    <div data-if="cur_config_index == 15"><div class="jfg-desc__card"><div class="jfg-desc__title">Sprint While Aiming</div><p>Sprinting also works while aiming, so the character moves faster with the aim held.</p></div></div>
-                    <div data-if="cur_config_index == 16"><div class="jfg-desc__card"><div class="jfg-desc__title">Sprint While Swimming</div><p>Sprinting also works in the water: Vela swims and dives faster while the sprint button is held.</p></div></div>
-                    <div data-if="cur_config_index == 17"><div class="jfg-desc__card"><div class="jfg-desc__title">Swim Sprint Speed</div><p>How fast Vela swims while sprinting, on top of Vela's Dive Speed.</p></div></div>
-                    <div data-if="cur_config_index == 18"><div class="jfg-desc__card"><div class="jfg-desc__title">Normalize Diagonal Speed</div><p>In the game, running forward while sidestepping adds the two speeds together, so going diagonally is about 40% faster. With this on a diagonal is as fast as running straight.</p></div></div>
+                    <div data-if="cur_config_index == 5"><div class="jfg-desc__card"><div class="jfg-desc__title">Blood Stays</div><p>Blood splats stay on the ground and walls instead of fading away. Blood Splat Limit sets how many; once it is reached, the oldest makes room for new blood.</p></div></div>
+                    <div data-if="cur_config_index == 6"><div class="jfg-desc__card"><div class="jfg-desc__title">Blood Splat Limit</div><p>How many blood splats stay on the screen with Blood Stays on. 64 is the original game; more are drawn from memory the game does not use. Leaving the level clears them.</p></div></div>
+                    <div data-if="cur_config_index == 7"><div class="jfg-desc__card"><div class="jfg-desc__title">Body Parts Stay</div><p>Severed limbs and heads stay where they fell instead of fading away. The newest 24 are kept, so the game does not run out of memory in big fights.</p></div></div>
+                    <div data-if="cur_config_index == 8"><div class="jfg-desc__card"><div class="jfg-desc__title">Blood Amount</div><p>How much blood a hit sprays. 100% is the original game.</p></div></div>
+                    <div data-if="cur_config_index == 9"><div class="jfg-desc__card"><div class="jfg-desc__title">Damage Taken</div><p>How much damage the character takes from enemies, falls and explosions. 0% takes none; the Invulnerable cheat overrides it.</p></div></div>
+                    <div data-if="cur_config_index == 10"><div class="jfg-desc__card"><div class="jfg-desc__title">Unlimited Continues</div><p>Dying never uses up your continues, so you always come back where you died instead of the game over that restarts the area from its entrance.</p></div></div>
+                    <div data-if="cur_config_index == 11"><div class="jfg-desc__card"><div class="jfg-desc__title">Jetpack Refuel Speed</div><p>How fast a fuel pad fills the jetpack.</p></div></div>
+                    <div data-if="cur_config_index == 12"><div class="jfg-desc__card"><div class="jfg-desc__title">Vela&#x27;s Dive Speed</div><p>How fast Vela swims underwater, in every direction.</p></div></div>
+                    <div data-if="cur_config_index == 13"><div class="jfg-desc__card"><div class="jfg-desc__title">Movement Speed</div><p>How fast the character moves over the ground. The extra distance is collision-checked like normal movement.</p></div></div>
+                    <div data-if="cur_config_index == 14"><div class="jfg-desc__card"><div class="jfg-desc__title">Sprint</div><p>Hold the left stick click (controller) or Left Shift (mouse and keyboard) to run faster. In the built-in dual-stick layout the left stick click then sprints instead of crouching; B still crouches.</p></div></div>
+                    <div data-if="cur_config_index == 15"><div class="jfg-desc__card"><div class="jfg-desc__title">Sprint Speed</div><p>How fast the character runs while sprinting, on top of the Movement Speed.</p></div></div>
+                    <div data-if="cur_config_index == 16"><div class="jfg-desc__card"><div class="jfg-desc__title">Sprint While Aiming</div><p>Sprinting also works while aiming, so the character moves faster with the aim held.</p></div></div>
+                    <div data-if="cur_config_index == 17"><div class="jfg-desc__card"><div class="jfg-desc__title">Sprint While Swimming</div><p>Sprinting also works in the water: Vela swims and dives faster while the sprint button is held.</p></div></div>
+                    <div data-if="cur_config_index == 18"><div class="jfg-desc__card"><div class="jfg-desc__title">Swim Sprint Speed</div><p>How fast Vela swims while sprinting, on top of Vela's Dive Speed.</p></div></div>
+                    <div data-if="cur_config_index == 19"><div class="jfg-desc__card"><div class="jfg-desc__title">Normalize Diagonal Speed</div><p>In the game, running forward while sidestepping adds the two speeds together, so going diagonally is about 40% faster. With this on a diagonal is as fast as running straight.</p></div></div>
+                    <div data-if="cur_config_index == 20"><div class="jfg-desc__card"><div class="jfg-desc__title">Same Aim-Walk Speed in All Directions</div><p>While aiming the game walks forward fastest: backwards is about 25% slower and sideways about 40% slower. With this on the character walks as fast in every direction, diagonals included.</p></div></div>
                 </div>
             </div>
         </form>

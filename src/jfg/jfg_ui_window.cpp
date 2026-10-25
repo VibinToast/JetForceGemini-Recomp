@@ -70,7 +70,8 @@ void draw_options() {
             ImGui::BeginDisabled(g.no_blood);
             changed |= ImGui::Checkbox("Blood stays (splats on the ground and walls)", &g.gore_keep_blood);
             changed |= ImGui::Checkbox("Body parts stay", &g.gore_keep_limbs);
-            changed |= options_slider("Blood amount %", &g.blood_amount, 100, 400);
+            changed |= options_slider("Blood splats", &g.blood_splats, 64, 4096);
+            changed |= options_slider("Blood amount %", &g.blood_amount, 100, 800);
             ImGui::EndDisabled();
             changed |= ImGui::Checkbox("START skips cutscenes", &g.start_skips_cutscenes);
             options_help("Also skips the logo screens at start-up and the story intro after creating a file. A skipped cutscene "
@@ -100,11 +101,15 @@ void draw_options() {
             changed |= ImGui::Checkbox("Show texture pack", &g.show_pack);
             changed |= ImGui::Checkbox("Widescreen (fill the window)", &g.widescreen);
             options_help("During gameplay only; the HUD stays in the middle. Things at the far left and right may appear late.");
+            changed |= ImGui::Checkbox("HUD in screen corners", &g.hud_corners);
+            options_help("With Widescreen, the HUD moves out to the left and right edges of the window.");
             changed |= options_slider("Field of view %", &g.fov, 75, 140);
             options_help("Widens or narrows the view during gameplay, relative to each level's own field of view. Cutscenes, "
                          "menus, the pause screen and zoomed scopes keep the game's own.");
             changed |= options_slider("Hit flash opacity %", &g.hit_flash, 0, 100);
             options_help("How strongly the screen turns red when the character is hit. 0: no red flash.");
+            changed |= options_slider("Shadow opacity %", &g.shadow_opacity, 0, 200);
+            options_help("How dark the shadows under characters and objects are drawn. 100: the original game; 0: none.");
             {
                 const std::vector<std::pair<std::string, std::string>> locales = jfg::locale::list();
                 const std::string chosen = jfg::locale::chosen();
@@ -128,7 +133,7 @@ void draw_options() {
             options_help("Objects normally fade out and disappear beyond a set distance. With this they stay drawn. Takes effect "
                          "for the objects in play; level scenery itself is not affected.");
             if (FRAME_RATE_OPTION) {
-                static const char* const rates[] = { "30 (Original, drops to 20)", "60" };
+                static const char* const rates[] = { "30 (Original, drops to 20)", "60 (experimental)" };
                 ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
                 changed |= ImGui::Combo("Game frame rate", &g.frame_rate, rates, IM_ARRAYSIZE(rates));
                 if (frame_rate_needs_restart()) {
@@ -137,18 +142,22 @@ void draw_options() {
                     if (ImGui::Button("Restart now")) jfg::settings::restart_game();
                 }
                 options_help("How many times a second the game itself updates. 60: the game updates every video frame instead "
-                             "of every second one; game speed stays the same.");
+                             "of every second one; game speed stays the same. 60 is experimental: some enemies and bosses can "
+                             "behave differently than at 30.");
                 static const int smooth[] = { 0, 60, 90, 120, 144, 240, 1 };
                 static const char* const smooth_names[] = { "Off", "60", "90", "120", "144", "240", "Monitor" };
                 int smooth_index = 0;
                 for (int i = 0; i < IM_ARRAYSIZE(smooth); i++) if (g.smooth_motion == smooth[i]) smooth_index = i;
                 ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
-                if (ImGui::Combo("Smooth motion", &smooth_index, smooth_names, IM_ARRAYSIZE(smooth_names))) {
+                if (ImGui::Combo("Frame interpolation", &smooth_index, smooth_names, IM_ARRAYSIZE(smooth_names))) {
                     g.smooth_motion = smooth[smooth_index];
                     changed = true;
                 }
                 options_help("How many frames a second you see: the renderer adds in-between frames to the game's own. Monitor: "
-                             "up to your monitor's refresh rate. The shadow and a few effects still move at the game's rate.");
+                             "up to your monitor's refresh rate. Rain and a few effects still move at the game's rate.");
+                changed |= ImGui::Checkbox("Smooth shadows", &g.smooth_shadows);
+                options_help("With Frame Interpolation, character shadows move with the in-between frames instead of at the "
+                             "game's rate, so they no longer trail behind the character.");
             }
             ImGui::EndTabItem();
         }
@@ -232,6 +241,7 @@ void draw_options() {
                              "game's own wall check. With it off the camera can end up outside the level.");
                 changed |= options_slider("Camera left/right %", &g.camera_speed_h, 10, 400);
                 changed |= options_slider("Camera up/down %", &g.camera_speed_v, 10, 400);
+                changed |= options_slider("Camera distance %", &g.camera_distance, 50, 250);
                 ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight() * 0.3f));
                 changed |= ImGui::Checkbox("Built-in button layout", &g.dual_layout);
                 options_help("LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. "
@@ -270,9 +280,29 @@ void draw_options() {
             changed |= ImGui::Checkbox("Normalize diagonal speed", &g.normalize_diagonal);
             options_help("In the game, running forward while sidestepping adds the two speeds together, so going diagonally "
                          "is about 40% faster. With this on a diagonal is as fast as running straight.");
+            changed |= ImGui::Checkbox("Same aim-walk speed in all directions", &g.aim_even_speed);
+            options_help("While aiming the game walks forward fastest: backwards is about 25% slower and sideways about 40% "
+                         "slower. With this on the character walks as fast in every direction, diagonals included.");
 
             options_section("Aiming (any control layout)");
             changed |= ImGui::Checkbox("Over-the-shoulder view while aiming", &g.aim_shoulder);
+            {
+                // The dual-stick aiming view (aim_view): the player's sliders, or with the box above ticked its fixed
+                // shoulder view, shown greyed out (the player's own values stay saved underneath).
+                AimView shown = aim_view();
+                ImGui::BeginDisabled(g.aim_shoulder);
+                int* margin = g.aim_shoulder ? &shown.drag_margin : &g.aim_drag_margin;
+                int* back = g.aim_shoulder ? &shown.drag_return : &g.aim_drag_return;
+                int* x = g.aim_shoulder ? &shown.offset_x : &g.aim_offset_x;
+                int* y = g.aim_shoulder ? &shown.offset_y : &g.aim_offset_y;
+                int* zoom = g.aim_shoulder ? &shown.zoom : &g.aim_offset_z;
+                changed |= options_slider("Aim drag margin %", margin, 0, 50);
+                changed |= options_slider("Aim drag return speed %", back, 0, 400);
+                changed |= options_slider("Aim offset left/right", x, -50, 50);
+                changed |= options_slider("Aim offset up/down", y, -50, 50);
+                changed |= options_slider("Aim zoom", zoom, 0, 300);
+                ImGui::EndDisabled();
+            }
             changed |= ImGui::Checkbox("Keep the reticle centered", &g.aim_centered);
             changed |= ImGui::Checkbox("Jump while aiming", &g.aim_jump);
             options_help("The jump button (C-up; A in the dual-stick layout, Space with mouse and keyboard) jumps while aiming, "
