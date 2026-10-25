@@ -8,12 +8,18 @@
 // - weapon, ammo, the box that opens for pick-ups, the weapon strip, health - is all on the left); a piece whose own
 // position is clearly in the middle (the target, centred texts and bars) stays, and one right of the middle goes to the
 // right edge. Those commands go into frontgfx in front of each piece; the game's own scissors are aligned the same way. A viewport alignment only applies when a viewport is set, so the
-// HUD's orthographic viewport (camStandardOrtho's) is set again after each change. The lines and digits the CPU
-// draws into the picture (fxDrawLine, fxDrawDigitalNumber: the target box, the air meter's number) are not moved.
+// HUD's orthographic viewport (camStandardOrtho's) is set again after each change. The lines the CPU draws into the
+// picture (fxDrawLine: the target box) are not moved. The jetpack fuel meter's number is CPU-drawn too
+// (fxDrawDigitalNumber), into the 4:3 picture, so it could not follow the meter to the edge: with the HUD at the edges
+// the same digits are drawn as HUD rectangles instead (draw_fuel_digits).
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <vector>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -21,6 +27,7 @@
 
 extern "C" int jfg_widescreen_active(void); // jfg_visuals.cpp
 extern "C" void instShowBearBar(uint8_t* rdram, recomp_context* ctx); // overlay 14
+extern "C" void frontDrawRectangles(uint8_t* rdram, recomp_context* ctx);
 
 namespace jfg {
 
@@ -213,13 +220,15 @@ extern "C" void jfg_hud_pop(uint8_t* rdram_, recomp_context*) {
     pop();
 }
 
-// frontSingleInstruments's air meter (drawn there, around (-50, -80)): its start, and the point after it that every
-// path reaches.
+// frontSingleInstruments's jetpack fuel meter (drawn there, around (-50, -80): frame, "FUEL", its bar and number): its
+// start, and the point after it that every path reaches. It goes to the left edge as one block: its bar's middle is
+// near the screen's, so on its own it stayed while the frame moved.
 extern "C" void jfg_hud_air_begin(uint8_t* rdram_, recomp_context*) {
     g_rdram = rdram_;
     if (!g_on || g_air_region) return;
     g_air_region = true;
-    push(side_of(-50.0f));
+    push(LEFT);
+    if (g_block == 0) g_block = g_depth;
 }
 
 extern "C" void jfg_hud_air_end(uint8_t* rdram_, recomp_context*) {
@@ -227,6 +236,79 @@ extern "C" void jfg_hud_air_end(uint8_t* rdram_, recomp_context*) {
     if (!g_air_region) return;
     g_air_region = false;
     pop();
+}
+
+namespace {
+// fxDrawDigitalNumber's digits (fx.c, func_8006DF90 / func_8006DD20): 9 x 17 seven-segment cells 10 apart, each pixel
+// of a row a 3-bit segment number (0: none); the digit's mask says which segments are lit. A lit segment adds 16 (of
+// 31) to the pixel's green (red when `red`), an unlit one 4. Here the same pixels are runs of HUD rectangles, blended
+// in at those strengths.
+constexpr uint32_t ADDR_digitRows = 0x800A6B64;  // D_800A6B64: s32[17], nine 3-bit segment numbers per row
+constexpr uint32_t ADDR_digitMasks = 0x800A6BA8; // D_800A6BA8: u8[12], 0-9, minus, blank
+constexpr uint32_t RECT_SIZE = 12;               // FrontRectangle: s16 x1, y1, x2, y2, u32 colour
+constexpr int RECTS_PER_CALL = 64;
+}
+
+// fxDrawDigitalNumber(x, y, value, digits, red) from frontSingleInstruments with the HUD at the edges: the number drawn
+// through frontDrawRectangles (so in the fuel meter's block). False: leave it to the game.
+bool draw_fuel_digits(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    if (!g_on || !g_air_region) return false;
+    int x = (int)(int32_t)ctx->r4;
+    const int y = (int)(int32_t)ctx->r5, value = (int)(int32_t)ctx->r6, width = (int)(int32_t)ctx->r7;
+    const bool red = rd32((uint32_t)ctx->r29 + 0x10) != 0;
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%d", value);
+    int len = (int)std::strlen(buf);
+    if (len > width) return true; // the game draws nothing either
+    std::vector<uint8_t> masks;
+    for (int i = 0; len < width || buf[i] != '\0';) {
+        uint8_t mask = rd8(ADDR_digitMasks + 11);
+        if (len < width) len++;
+        else {
+            const char c = buf[i++];
+            if (c == '-') mask = rd8(ADDR_digitMasks + 10);
+            else if (c >= '0' && c <= '9') mask = rd8(ADDR_digitMasks + (uint32_t)(c - '0'));
+        }
+        masks.push_back(mask);
+    }
+    const uint32_t tint = red ? 0xFF000000u : 0x00FF0000u, lit = tint | 132u, unlit = tint | 33u; // 16 and 4 of 31
+
+    // The rectangles go below the stack (call_game's frame goes below them).
+    recomp_context c = *ctx;
+    c.r29 = (gpr)(int32_t)(((uint32_t)ctx->r29 - 0x800u) & ~0xFu);
+    const uint32_t rects = (uint32_t)c.r29;
+    int count = 0;
+    auto flush = [&] {
+        if (count > 0) call_game(frontDrawRectangles, &c, { ADDR_frontgfx, (uint32_t)count, rects, 0 });
+        count = 0;
+    };
+    for (const uint8_t mask : masks) {
+        for (int row = 0; row < 17; row++) {
+            uint32_t bits = rd32(ADDR_digitRows + (uint32_t)row * 4);
+            int run_start = -1;
+            uint32_t run_colour = 0;
+            for (int col = 0; col <= 9; col++) {
+                const uint32_t segment = col < 9 ? (bits & 7) : 0;
+                bits >>= 3;
+                const uint32_t colour = segment == 0 ? 0 : (mask & (1u << segment)) ? lit : unlit;
+                if (run_start >= 0 && colour != run_colour) {
+                    const uint32_t r = rects + (uint32_t)count * RECT_SIZE;
+                    wr16(r + 0, (uint16_t)(x + run_start));
+                    wr16(r + 2, (uint16_t)(y + row));
+                    wr16(r + 4, (uint16_t)(x + col));
+                    wr16(r + 6, (uint16_t)(y + row + 1));
+                    wr32(r + 8, run_colour);
+                    if (++count == RECTS_PER_CALL) flush();
+                    run_start = -1;
+                }
+                if (colour != 0 && run_start < 0) { run_start = col; run_colour = colour; }
+            }
+        }
+        x += 10;
+    }
+    flush();
+    return true;
 }
 
 }
@@ -241,6 +323,13 @@ bool g_hud_begun = false;
 }
 
 JFG_WRAP(frontSingleInstruments) {
+    // JFG_DEBUG_HUD_FUEL=1: the jetpack fuel meter stays shown, as while flying (player data + 0x592: its timer).
+    static const bool fuel = std::getenv("JFG_DEBUG_HUD_FUEL") != nullptr;
+    if (fuel && jfg::valid_ptr((uint32_t)ctx->r4)) {
+        jfg::g_rdram = rdram;
+        const uint32_t player = jfg::Obj::Data::get((uint32_t)ctx->r4);
+        if (jfg::valid_ptr(player)) jfg::wr16(player + 0x592, 30);
+    }
     JfgCaller::Scope scope(g_single, ctx, 0xB0);
     g_hud_begun = false;
     frontSingleInstruments_orig(rdram, ctx);
@@ -264,6 +353,11 @@ JFG_WRAP(frontInstruments) {
 JFG_WRAP(texDPInit) {
     if (g_single.direct(ctx)) jfg::jfg_hud_air_begin(rdram, ctx);
     texDPInit_orig(rdram, ctx);
+}
+
+JFG_WRAP(fxDrawDigitalNumber) {
+    if (g_single.direct(ctx) && jfg::draw_fuel_digits(rdram, ctx)) return;
+    fxDrawDigitalNumber_orig(rdram, ctx);
 }
 
 JFG_WRAP(sprSetTextureFilter) {
