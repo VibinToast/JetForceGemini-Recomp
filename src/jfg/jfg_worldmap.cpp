@@ -35,6 +35,7 @@
 // game saves to that file (as Permanent Tribal Saves does). Map coordinates: x right, y down, the view centred on the
 // selected point (scroll x, scroll y + 120).
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -119,7 +120,12 @@ constexpr uint32_t ADDR_racingCharacter = 0x800A4FC0; // u8
 constexpr uint32_t CHARACTER_WORLDS = 0x64;          // MultiCharacter +0x64: u16, the worlds open to the hero (bit = world)
 
 constexpr uint16_t SND_MOVE = 0x16B, SND_CHOOSE = 0x16D, SND_NO_ROUTE = 0x16E;
-constexpr uint16_t BUTTON_A = 0x8000, BUTTON_L = 0x0020, BUTTON_R = 0x0010;
+constexpr uint16_t BUTTON_A = 0x8000, BUTTON_L = 0x0020, BUTTON_R = 0x0010, BUTTON_Z = 0x2000;
+constexpr uint16_t DPAD_LEFT = 0x0200, DPAD_RIGHT = 0x0100;
+// Galaxy switch: R (RB, the right trigger, the R key) or D-pad right for the next galaxy; L (LB, the E key), Z (the left
+// trigger) or D-pad left for the previous one. The map reads none of these (decomp MSR mod #6, "Buttons on the planet
+// map opened from the pause menu").
+constexpr uint16_t SWITCH_NEXT = BUTTON_R | DPAD_RIGHT, SWITCH_PREVIOUS = BUTTON_L | BUTTON_Z | DPAD_LEFT;
 constexpr uint32_t BLOCK_COLOUR = 0x7F7F7FFF;
 constexpr int SAVE_SLOTS = 6;
 constexpr int MAIN = 0; // the game's galaxy
@@ -177,6 +183,7 @@ std::map<int, int> g_last; // galaxy -> its last selected planet
 int g_rate = 1;        // this frame's update rate
 int g_show = -1;       // jfg_galaxy_show: the galaxy the map opens on next
 uint32_t g_cheat = 0;  // the all-levels cheat as it was before a hidden frame
+std::atomic<bool> g_switching{ false }; // the map is up with more than one galaxy to go to (read by the input thread)
 
 uint32_t o9(uint32_t offset) { return (uint32_t)section_addresses[MAP_SECTION] + offset; }
 
@@ -650,10 +657,20 @@ void input(recomp_context* ctx) {
     auto hold_stick = [&]() { wr8(ADDR_frontJoyDx + player, 0); wr8(ADDR_frontJoyDy + player, 0); };
     const uint32_t pressed_at = jfg::ADDR_buttonsPressed + 2u * (rd8(jfg::ADDR_sPlayerID + player) & 3u);
     const uint16_t pressed = rd16(pressed_at);
+    static const bool debug = std::getenv("JFG_DEBUG_WORLDMAP") != nullptr; // the map's buttons, when they change
+    if (debug) {
+        static uint32_t last = 0;
+        const uint32_t pad = jfg::ADDR_sControllerCurrData + jfg::Pad::Size * (rd8(jfg::ADDR_sPlayerID + player) & 3u);
+        const uint32_t now = ((uint32_t)rd16(pad) << 16) | pressed;
+        if (now != last) {
+            last = now;
+            log("worldmap debug: buttons " + std::to_string(now >> 16) + " pressed " + std::to_string(pressed));
+        }
+    }
 
     // L / R: the previous / next galaxy with an open planet.
-    if ((pressed & (BUTTON_L | BUTTON_R)) && !closing) {
-        const int n = (int)g_galaxies.size(), step = (pressed & BUTTON_R) ? 1 : n - 1;
+    if ((pressed & (SWITCH_NEXT | SWITCH_PREVIOUS)) && !closing) {
+        const int n = (int)g_galaxies.size(), step = (pressed & SWITCH_NEXT) ? 1 : n - 1;
         for (int g = (g_galaxy + step) % n; g != g_galaxy; g = (g + step) % n) {
             if (galaxy_open(g)) {
                 sound(ctx, SND_MOVE);
@@ -756,6 +773,7 @@ void draw(recomp_context* ctx, int rate) {
     // The galaxy line, when there is more than one galaxy to go to: "L  <name>  R" at the top.
     int open_count = 0;
     for (int g = 0; g < (int)g_galaxies.size(); g++) open_count += galaxy_open(g) ? 1 : 0;
+    g_switching.store(open_count > 1, std::memory_order_relaxed);
     if (open_count > 1) {
         static uint32_t text = 0;
         if (!text) text = call_game(mmAlloc, ctx, { 0x50, BLOCK_COLOUR }); // kept for the whole run
@@ -973,8 +991,14 @@ JFG_WRAP(func_overlay_9_000039F0_1F047C8) {
 }
 
 JFG_WRAP(frontCleanupMap) {
+    g_switching.store(false, std::memory_order_relaxed);
     if (g_built) free_blocks(ctx);
     frontCleanupMap_orig(rdram, ctx);
+}
+
+// Input thread (src/input/controls.cpp): 1 while the shoulder buttons switch galaxy.
+extern "C" int jfg_worldmap_switching(void) {
+    return g_switching.load(std::memory_order_relaxed) ? 1 : 0;
 }
 
 extern "C" void jfg_register_world_mods(void) {

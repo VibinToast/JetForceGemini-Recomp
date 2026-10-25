@@ -15,6 +15,7 @@ extern "C" int jfg_mouse_keyboard_active(void);
 extern "C" int jfg_floyd_mouse_active(void);
 extern "C" void jfg_dual_stick_release(void);
 extern "C" int jfg_sprint_enabled(void);
+extern "C" int jfg_worldmap_switching(void);
 extern "C" void jfg_sprint_input(int held);
 
 namespace dino::input {
@@ -247,6 +248,14 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
             bool held = get_input_digital(InputField{ controller_digital, SDL_CONTROLLER_BUTTON_LEFTSTICK });
             if (mouse_keyboard && !floyd) held = held || get_input_digital(InputField{ keyboard, SDL_SCANCODE_LSHIFT });
             jfg_sprint_input(held ? 1 : 0);
+        }
+
+        // The planet map with more than one galaxy (jfg_worldmap.cpp): the shoulder buttons switch galaxy. LB is N64 L
+        // in the default bindings; RB is bound to nothing there, so it gives N64 R while the map is up.
+        if (jfg_worldmap_switching() != 0) {
+            constexpr uint32_t controller_digital = 3; // InputType::ControllerDigital (input.cpp)
+            if (get_input_digital(InputField{ controller_digital, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER })) cur_buttons |= 0x0010;
+            if (get_input_digital(InputField{ controller_digital, SDL_CONTROLLER_BUTTON_LEFTSHOULDER })) cur_buttons |= 0x0020;
         }
 
         if (dual_stick) {
