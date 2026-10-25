@@ -1,7 +1,9 @@
 // Jet Force Gemini port: launch options for mod tools (JFG-Studio's "test" starts the game with these).
 //
 //   --start-level N         start straight in level N: the game boots, goes to the title screen as F5 does, then
-//                           changes level the way JFG_DEBUG_WARP does (supported; the debug switch stays for agents)
+//                           changes level the way JFG_DEBUG_WARP does (supported; the debug switch stays for agents).
+//                           N can also be MOD_ID:NAME, a level a mod appends (its "append" name): the number the
+//                           content linker gave it this start
 //   --start-point N         the start point (entrance) in that level, default 0
 //   --character NAME        vela, juno or lupus (or 0-2), default juno
 //   --front-mode N          the front-end mode the level starts with, default 16 (in game with the HUD; 0 has none)
@@ -37,6 +39,7 @@ namespace {
 
 struct LaunchOptions {
     int start_level = -1;
+    std::string start_ref; // --start-level MOD_ID:NAME, resolved once the mods' entries have numbers
     int start_point = 0;
     int character = 1; // Juno
     int front_mode = 16;
@@ -109,7 +112,7 @@ void print_capabilities() {
                           "tables in place reaches the game; its code is recompiled ahead of time, so moving or growing "
                           "the overlay does not" } };
     j["launch_options"] = {
-        { "--start-level", { { "arg", "level" }, { "implies", "--skip-launcher" } } },
+        { "--start-level", { { "arg", "level" }, { "implies", "--skip-launcher" }, { "by_name", "MOD_ID:NAME" } } },
         { "--start-point", { { "arg", "start point" }, { "default", 0 } } },
         { "--character", { { "arg", "character" }, { "values", { "vela", "juno", "lupus" } }, { "default", "juno" } } },
         { "--front-mode", { { "arg", "front-end mode" }, { "default", 16 } } },
@@ -141,7 +144,10 @@ extern "C" int jfg_launch_arg(int argc, char** argv, int* i) {
     };
     if (std::strcmp(arg, "--start-level") == 0) {
         const char* v = value();
-        if (!parse_int(v, g_launch.start_level, 0, 2047)) refuse(std::string("--start-level ") + v + ": not a level number");
+        if (std::strchr(v, ':') != nullptr) g_launch.start_ref = v;
+        else if (!parse_int(v, g_launch.start_level, 0, 2047)) {
+            refuse(std::string("--start-level ") + v + ": not a level number or MOD_ID:NAME");
+        }
     } else if (std::strcmp(arg, "--start-point") == 0) {
         const char* v = value();
         if (!parse_int(v, g_launch.start_point, 0, 255)) refuse(std::string("--start-point ") + v + ": not 0-255");
@@ -176,7 +182,7 @@ extern "C" int jfg_launch_ready(bool* skip_launcher) {
         print_capabilities();
         return 0;
     }
-    if (g_launch.start_level >= 0) *skip_launcher = true;
+    if (g_launch.start_level >= 0 || !g_launch.start_ref.empty()) *skip_launcher = true;
     if (g_launch.has_mods_only) recomp::mods::set_run_only_mods(g_launch.mods_only);
     return -1;
 }
@@ -199,6 +205,16 @@ void launch_tick(recomp_context* ctx) {
             }
             log(line);
         }
+    }
+    if (g_launch.start_level < 0 && !g_launch.start_ref.empty() && step == Step::Boot) {
+        const int n = asset_number(g_launch.start_ref);
+        if (n < 0) {
+            log("launch: --start-level " + g_launch.start_ref + ": no mod loaded this run appends a level by that name");
+            step = Step::Done;
+            return;
+        }
+        g_launch.start_level = n;
+        log("launch: --start-level " + g_launch.start_ref + " is level " + std::to_string(n) + " this start");
     }
     if (g_launch.start_level < 0 || step == Step::Done) return;
     ticks++;

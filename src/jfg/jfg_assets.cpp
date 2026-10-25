@@ -55,6 +55,7 @@
 namespace jfg {
 void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
 std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& data); // jfg_deflate.cpp
+int asset_number(const std::string& ref);
 }
 
 namespace {
@@ -598,6 +599,12 @@ int replace_entries(std::vector<uint8_t>& table, std::vector<uint8_t>& data, int
 }
 
 } // namespace
+
+// The number an appended entry got this start ("mod_id:append name"), or -1 (jfg_launch: --start-level by name).
+int jfg::asset_number(const std::string& ref) {
+    auto it = g_numbers.find(ref);
+    return it == g_numbers.end() ? -1 : it->second;
+}
 
 // Called from jfg_register_mod_exports (src/main.cpp, before the runtime starts): mods with a jfg_assets.json carry
 // asset replacements. They can't be switched while the game runs (the game reads its data as it goes).
