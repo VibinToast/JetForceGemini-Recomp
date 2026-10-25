@@ -4,6 +4,11 @@
 // pack's own textures, under a new object id. The squad code picks its per-type data (the baddy row, animation sets,
 // sounds) through BaddyTypeToIndex, a switch on the stock object ids; for a mod's id it is asked about the stock id the
 // type was made from, so the new enemy moves, fights and dies like that one.
+//
+// The level loader asks the same of func_800050A8 (is this object id a squad member?) for each list entry: members are
+// not spawned there but kept for their squadron, which spawns them. Without the stock id a mod's members were spawned
+// on their own at load - outside the squad, idle, at the wrong size - and the squadron made one member of its own
+// (play-tested 2026-10-25; the level then crashed while drawing them).
 #include <cstdint>
 #include <set>
 #include <string>
@@ -28,4 +33,10 @@ JFG_WRAP(BaddyTypeToIndex) {
         ctx->r4 = (gpr)like;
     }
     BaddyTypeToIndex_orig(rdram, ctx);
+}
+
+JFG_WRAP(func_800050A8_5CA8) {
+    const int like = jfg::baddy_like((int)(int32_t)ctx->r4);
+    if (like >= 0) ctx->r4 = (gpr)like;
+    func_800050A8_5CA8_orig(rdram, ctx);
 }
