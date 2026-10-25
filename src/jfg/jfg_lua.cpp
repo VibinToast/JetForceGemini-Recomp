@@ -239,6 +239,37 @@ int l_spawn(lua_State* L) {
     return 1;
 }
 
+// jfg.weapon(n, {damage=, delay=, throw_delay=, lifetime=, spread_x=, spread_y=, speed=}): the pack's values for the
+// hero's weapon n (0-15), under the player's own Weapons tab settings.
+int l_weapon(lua_State* L) {
+    const int w = (int)luaL_checkinteger(L, 1);
+    luaL_checktype(L, 2, LUA_TTABLE);
+    lua_pushnil(L);
+    while (lua_next(L, 2) != 0) {
+        const char* field = lua_tostring(L, -2);
+        if (!lua_isstring(L, -2) || !lua_isnumber(L, -1) || !jfg::set_pack_weapon(w, field, lua_tonumber(L, -1)))
+            return luaL_error(L, "weapon %d: can't set %s", w, field ? field : "?");
+        lua_pop(L, 1);
+    }
+    return 0;
+}
+
+// jfg.weapon_stats(n): the weapon's values now in play (a table with jfg.weapon's fields).
+int l_weapon_stats(lua_State* L) {
+    const int w = (int)luaL_checkinteger(L, 1);
+    if (w < 0 || w >= 16 || !g_ctx) { lua_pushnil(L); return 1; }
+    const uint32_t d = jfg::ADDR_weaponTable + jfg::WeaponDef::Size * (uint32_t)w;
+    lua_createtable(L, 0, 7);
+    lua_pushinteger(L, jfg::WeaponDef::Damage::get(d)); lua_setfield(L, -2, "damage");
+    lua_pushinteger(L, jfg::WeaponDef::Delay::get(d)); lua_setfield(L, -2, "delay");
+    lua_pushinteger(L, jfg::WeaponDef::ThrowDelay::get(d)); lua_setfield(L, -2, "throw_delay");
+    lua_pushinteger(L, jfg::WeaponDef::Life::get(d)); lua_setfield(L, -2, "lifetime");
+    lua_pushinteger(L, jfg::WeaponDef::SpreadX::get(d)); lua_setfield(L, -2, "spread_x");
+    lua_pushinteger(L, jfg::WeaponDef::SpreadY::get(d)); lua_setfield(L, -2, "spread_y");
+    lua_pushnumber(L, jfg::WeaponDef::Speed::get(d)); lua_setfield(L, -2, "speed");
+    return 1;
+}
+
 int l_fog(lua_State* L) {
     const uint32_t r = (uint32_t)luaL_checkinteger(L, 1), g = (uint32_t)luaL_checkinteger(L, 2);
     const uint32_t b = (uint32_t)luaL_checkinteger(L, 3), near_ = (uint32_t)luaL_checkinteger(L, 4);
@@ -300,7 +331,7 @@ void open_state(Script& s) {
     lua_setglobal(L, "print");
     static const luaL_Reg fns[] = {
         { "log", l_log }, { "on", l_on }, { "level", l_level }, { "level_id", l_level_id }, { "player", l_player },
-        { "flag", l_flag }, { "set_flag", l_set_flag }, { "unlock_door", l_unlock_door }, { "spawn", l_spawn },
+        { "flag", l_flag }, { "set_flag", l_set_flag }, { "unlock_door", l_unlock_door }, { "spawn", l_spawn }, { "weapon", l_weapon }, { "weapon_stats", l_weapon_stats },
         { "door_locked", l_door_locked }, { "fog", l_fog },
         { "message", l_message }, { "music", l_music }, { "music_stop", l_music_stop }, { "warp", l_warp },
         { nullptr, nullptr } };

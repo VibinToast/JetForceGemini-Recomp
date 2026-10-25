@@ -200,6 +200,7 @@ std::string depth_fog_status();         // the F9 menu's depth fog status line
 extern bool g_weapon_orig_read;            // the weapon table's original values have been read
 extern std::recursive_mutex g_weapon_mutex; // UI thread edits, game thread applies
 void apply_weapon_key(const char* key, int value); // "<slot>.<field>" as saved
+bool set_pack_weapon(int weapon, const char* field, double value); // a pack's value (jfg.weapon)
 void reset_weapons();                      // every weapon back to its original values, "Modify" off
 std::string weapons_text(const char* prefix);
 void save_weapons();
