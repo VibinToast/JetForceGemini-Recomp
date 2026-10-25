@@ -16,6 +16,8 @@
 //   jfg.player()                            x, y, z of the first player, or nil
 //   jfg.flag(n), jfg.set_flag(n, on)        the game's flags (mainGetGameFlag / mainSetGameFlag)
 //   jfg.unlock_door(id)                     as a squadron's death does (doorUnlock)
+//   jfg.door_locked(id)                     true while the door with that id is locked (squadrons alive, a key
+//                                           missing...), false once open to the player, nil when there is none
 //   jfg.fog(r, g, b, near, far, ticks)      fades the level's fog (trackFadeFog)
 //   jfg.message(text [, seconds])           a line on screen (the port's overlay), 3 s by default
 //   jfg.music(name), jfg.music_stop()       one of this mod's OGG tracks (jfg_music.json names) in this level
@@ -156,6 +158,29 @@ int l_unlock_door(lua_State* L) {
     return 0;
 }
 
+// The doors (behaviour 7) with an id: DoorData (spranim.c) at the object's +0x68: +0x44 id, +0x4A locks left, +0x3E
+// flags (0x8 = locked).
+int l_door_locked(lua_State* L) {
+    const int id = (int)luaL_checkinteger(L, 1);
+    if (!g_ctx) { lua_pushnil(L); return 1; }
+    const uint32_t scratch = ((uint32_t)g_ctx->r29 - 0x40u) & ~0x7u; // inside the gap call_game leaves below $sp
+    jfg::wr32(scratch, 0);
+    jfg::wr32(scratch + 4, 0);
+    const uint32_t list = call_game(objGetObjList, g_ctx, { scratch, scratch + 4 });
+    const int first = (int)rd32(scratch), last = (int)rd32(scratch + 4);
+    if (!jfg::valid_ptr(list) || first < 0 || last < first || last > 4096) { lua_pushnil(L); return 1; }
+    for (int i = first; i < last; i++) {
+        const uint32_t obj = rd32(list + 4 * i);
+        if (!jfg::valid_ptr(obj) || (int16_t)rd16(obj + 0x48) != 7) continue;
+        const uint32_t door = rd32(obj + 0x68);
+        if (!jfg::valid_ptr(door) || jfg::rd8(door + 0x44) != id) continue;
+        lua_pushboolean(L, jfg::rd8(door + 0x4A) > 0 || (rd16(door + 0x3E) & 8) != 0);
+        return 1;
+    }
+    lua_pushnil(L);
+    return 1;
+}
+
 int l_fog(lua_State* L) {
     const uint32_t r = (uint32_t)luaL_checkinteger(L, 1), g = (uint32_t)luaL_checkinteger(L, 2);
     const uint32_t b = (uint32_t)luaL_checkinteger(L, 3), near_ = (uint32_t)luaL_checkinteger(L, 4);
@@ -217,7 +242,8 @@ void open_state(Script& s) {
     lua_setglobal(L, "print");
     static const luaL_Reg fns[] = {
         { "log", l_log }, { "on", l_on }, { "level", l_level }, { "level_id", l_level_id }, { "player", l_player },
-        { "flag", l_flag }, { "set_flag", l_set_flag }, { "unlock_door", l_unlock_door }, { "fog", l_fog },
+        { "flag", l_flag }, { "set_flag", l_set_flag }, { "unlock_door", l_unlock_door },
+        { "door_locked", l_door_locked }, { "fog", l_fog },
         { "message", l_message }, { "music", l_music }, { "music_stop", l_music_stop }, { "warp", l_warp },
         { nullptr, nullptr } };
     lua_newtable(L);
