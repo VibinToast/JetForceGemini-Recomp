@@ -16,6 +16,13 @@
 // tools/textures.py in the decomp for the entry format). The files are the game's own formats, and they go in the
 // .nrm through RecompModTool's additional_files. When two mods replace the same asset or entry, the one higher in the
 // mod list wins, as with texture packs.
+// "copyOf": N in place of "file" makes the entry from entry N of the same set in the player's own data (with "set":
+// [{ "at", "hex" }] byte edits and fixups on top; into the unpacked bytes when "packed"), so a mod that only changes a
+// copy of game data carries none of it (a reskinned enemy: its definition and model, pointing at the mod's textures).
+// "objtypes": [{ "append": "name", "def": "objdef name", "like": stock object id, "expect": N }] adds object ids (asset
+// 0x30, the object index) for appended definitions; the squad code treats each like its "like" id (BaddyTypeToIndex).
+// "animRows": [{ "model": "model name", "from": stock model id }] gives an appended model the animation lists and joint
+// slots of a stock one (assets 0x28/0x29 and 0x2C/0x2D are indexed by model number).
 // "append" in place of "entry" adds a new entry after the set's last one (the -1 end stays). Its number is kept
 // between game starts in bin/mod_ids.json (by mod and name); a new one gets "expect" (the number the mod was made
 // for) when that is free, else the lowest free number, mods from the top of the mod list down. jfg_mods.log says which
@@ -56,6 +63,7 @@ namespace jfg {
 void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
 std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& data); // jfg_deflate.cpp
 int asset_number(const std::string& ref);
+int baddy_like(int object_id);
 }
 
 namespace {
@@ -66,6 +74,9 @@ constexpr uint32_t ROM_ASSET_TABLE = 0xB1750;
 constexpr uint32_t ROM_ASSET_AREA = 0xB1880;
 constexpr uint32_t ROM_LIMIT = 0x0FC00000; // the cartridge window of the PI bus (0x10000000-0x1FBFFFFF)
 constexpr char CONTENT_FILE[] = "jfg_assets.json";
+constexpr uint32_t OBJINDEX = 0x30;                   // the object index: s16 definition number per object id
+constexpr uint32_t ANIM_LISTS = 0x28, ANIM_IDS = 0x29;   // u16 byte offsets per model into u16 animation ids
+constexpr uint32_t ANIM_SLOTS = 0x2C, ANIM_SLOT_DATA = 0x2D; // s32 offsets per model into the joint-slot bytes
 
 // A number a mod's data needs but can't know: another appended entry's ("ref": "name" for the mod's own, "mod:name"
 // for another mod's), written at "at" when the numbers are given out. Types: "u8", "u16", "s16", "u32" (big endian,
@@ -89,7 +100,23 @@ struct Replacement {
     std::vector<uint8_t> data;
     std::vector<Fixup> fixups;
     bool packed = false; // fixups go into the unpacked bytes of a packed (model or track) entry
+    int copy_of = -1;    // "copyOf": the entry of the same set the bytes are copied from (the player's own data)
+    std::vector<std::pair<int, std::vector<uint8_t>>> sets; // byte edits, before the fixups
 };
+
+struct ObjType {             // "objtypes": a new object id for an appended definition
+    size_t order;
+    std::string mod_id, append, def; // def: "mod:name" of the appended definition
+    int like = -1;           // the stock object id the squad code treats it as
+    int expect = -1;
+};
+struct AnimRows {            // "animRows": an appended model gets a stock model's animation rows
+    std::string mod_id, model; // model: "mod:name"
+    int from = -1;
+};
+std::vector<ObjType> g_objtypes;
+std::vector<AnimRows> g_animrows;
+std::map<int, int> g_baddy_like; // object id -> the stock id the squad code treats it as (BaddyTypeToIndex wrapper)
 
 struct ObjOp {
     enum Kind { Set, Delete, Append } kind;
@@ -217,11 +244,22 @@ std::vector<uint8_t> pack_entry(const std::vector<uint8_t>& data) {
 }
 
 // An entry's bytes with its fixups written in (into the unpacked bytes for a packed entry).
+void apply_sets(std::vector<uint8_t>& bytes, const Replacement& r) {
+    for (const auto& [at, value] : r.sets) {
+        if (at < 0 || (size_t)at + value.size() > bytes.size()) {
+            log("assets: " + r.mod_id + ": " + r.file + ": a byte edit at " + std::to_string(at) + " is past the entry");
+            continue;
+        }
+        std::copy(value.begin(), value.end(), bytes.begin() + at);
+    }
+}
+
 std::vector<uint8_t> linked(const Replacement& r) {
-    if (r.fixups.empty()) return r.data;
+    if (r.fixups.empty() && r.sets.empty()) return r.data;
     const std::string what = r.file;
     if (!r.packed) {
         std::vector<uint8_t> out = r.data;
+        apply_sets(out, r);
         apply_fixups(out, r.fixups, r.mod_id, what);
         return out;
     }
@@ -230,6 +268,7 @@ std::vector<uint8_t> linked(const Replacement& r) {
         log("assets: " + r.mod_id + ": " + what + " says it is packed but doesn't unpack - its fixups are skipped");
         return r.data;
     }
+    apply_sets(plain, r);
     apply_fixups(plain, r.fixups, r.mod_id, what);
     std::vector<uint8_t> packed = pack_entry(plain);
     if (packed.empty()) {
@@ -295,6 +334,79 @@ std::vector<int> assign_numbers(int table_asset, int data_asset, size_t count,
     }
     for (size_t k = 0; k < appends.size(); k++) g_numbers[appends[k]->mod_id + ":" + appends[k]->append] = out[k];
     return out;
+}
+
+// Model m gets model `from`'s animation list and joint slots, appended at the end of the id list and slot data. The
+// rows of the models between the last stock one and m (numbers kept for mods not loaded) stay empty. Returns false
+// when the tables aren't what the game's code expects.
+bool give_anim_rows(std::vector<std::vector<uint8_t>>& assets, int m, int from) {
+    std::vector<uint8_t>& lists = assets[ANIM_LISTS];
+    std::vector<uint8_t>& ids = assets[ANIM_IDS];
+    std::vector<uint8_t>& slots = assets[ANIM_SLOTS];
+    std::vector<uint8_t>& slot_data = assets[ANIM_SLOT_DATA];
+    auto u16 = [](const std::vector<uint8_t>& b, size_t o) { return (uint32_t)(b[o] << 8 | b[o + 1]); };
+    if (lists.size() < 2 * (size_t)(from + 2) || slots.size() < 4 * (size_t)(from + 2)) return false;
+    // animation ids: [lists[from], lists[from + 1]) in bytes of `ids`
+    const uint32_t a0 = u16(lists, 2 * from), a1 = u16(lists, 2 * from + 2);
+    const int32_t s0 = (int32_t)be32(slots, 4 * from), s1 = (int32_t)be32(slots, 4 * from + 4);
+    if (a1 < a0 || a1 > ids.size() || s0 < 0 || s1 < s0 || (size_t)s1 > slot_data.size()) return false;
+    // Where the stock rows end: the largest offset in each table (the end of the last model's row).
+    uint32_t ids_end = 0;
+    for (size_t o = 0; o + 2 <= lists.size(); o += 2) ids_end = std::max(ids_end, u16(lists, o));
+    int32_t slot_end = 0;
+    size_t slot_words = 0;
+    for (size_t o = 0; o + 4 <= slots.size(); o += 4, slot_words++) {
+        const int32_t v = (int32_t)be32(slots, o);
+        if (v == -1) break;
+        slot_end = std::max(slot_end, v);
+    }
+    const std::vector<uint8_t> copy_ids(ids.begin() + a0, ids.begin() + a1);
+    const std::vector<uint8_t> copy_slots(slot_data.begin() + s0, slot_data.begin() + s1);
+    if (ids_end + copy_ids.size() > 0xFFFF) return false; // u16 offsets
+    ids.resize(std::max<size_t>(ids.size(), ids_end));
+    ids.insert(ids.begin() + ids_end, copy_ids.begin(), copy_ids.end());
+    slot_data.resize(std::max<size_t>(slot_data.size(), (size_t)slot_end));
+    slot_data.insert(slot_data.begin() + slot_end, copy_slots.begin(), copy_slots.end());
+    // Grow the offset tables to model m + 1; rows up to m start at the old end (empty), m's ends after its copy.
+    const size_t old_lists = lists.size() / 2;
+    if (lists.size() < 2 * (size_t)(m + 2)) lists.resize(2 * (size_t)(m + 2), 0);
+    // Past the stock rows the table may hold padding (zeros): every row up to m that would start before the previous
+    // one starts at the end instead (an empty row).
+    for (size_t k = 1; k <= (size_t)m; k++) {
+        if (k >= old_lists || u16(lists, 2 * k) < u16(lists, 2 * k - 2)) {
+            lists[2 * k] = (uint8_t)(ids_end >> 8);
+            lists[2 * k + 1] = (uint8_t)ids_end;
+        }
+    }
+    lists[2 * m] = (uint8_t)(ids_end >> 8);
+    lists[2 * m + 1] = (uint8_t)ids_end;
+    const uint32_t ids_new_end = ids_end + (uint32_t)copy_ids.size();
+    lists[2 * m + 2] = (uint8_t)(ids_new_end >> 8);
+    lists[2 * m + 3] = (uint8_t)ids_new_end;
+    std::vector<uint8_t> new_slots;
+    int32_t prev = 0;
+    for (size_t k = 0; k <= (size_t)m + 1; k++) {
+        int32_t v;
+        if (k < slot_words && k <= (size_t)m) v = std::min((int32_t)be32(slots, 4 * k), slot_end);
+        else v = slot_end;
+        if (v < prev) v = slot_end;  // padding past the stock rows (the US table has zeros, no -1): an empty row
+        if (k == (size_t)m) v = slot_end;
+        if (k == (size_t)m + 1) v = slot_end + (int32_t)copy_slots.size();
+        prev = v;
+        new_slots.resize(new_slots.size() + 4);
+        put_be32(new_slots, new_slots.size() - 4, (uint32_t)v);
+    }
+    new_slots.resize(new_slots.size() + 4);
+    put_be32(new_slots, new_slots.size() - 4, 0xFFFFFFFFu);
+    if (4 * (slot_words + 1) < slots.size()) {  // words after the -1 stay after it
+        new_slots.insert(new_slots.end(), slots.begin() + 4 * (slot_words + 1), slots.end());
+    }
+    slots = std::move(new_slots);
+    pad16(lists);
+    pad16(ids);
+    pad16(slots);
+    pad16(slot_data);
+    return true;
 }
 
 // The "patches" of one mod's jfg_assets.json.
@@ -433,6 +545,13 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
     }
     const size_t order = context.get_mod_order_index(id);
     auto add = [&](const nlohmann::json& e, Replacement r) {
+        if (r.copy_of >= 0) {  // the bytes come from the player's own data when the assets are laid out
+            r.order = order;
+            r.mod_id = id;
+            r.file = "copy of entry " + std::to_string(r.copy_of);
+            g_pending.push_back(std::move(r));
+            return;
+        }
         if (!e.contains("file") || !e["file"].is_string()) {
             log("assets: " + id + ": an entry without \"file\": " + e.dump());
             return;
@@ -456,6 +575,24 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
         g_pending.push_back(std::move(r));
     };
     read_patches(j, id, order);
+    for (const nlohmann::json& e : j.value("objtypes", nlohmann::json::array())) {
+        ObjType t{ order, id, e.value("append", ""), e.value("def", ""), json_int(e, "like"), json_int(e, "expect") };
+        if (t.append.empty() || t.def.empty()) {
+            log("assets: " + id + ": an object type needs \"append\" and \"def\": " + e.dump());
+            continue;
+        }
+        if (t.def.find(':') == std::string::npos) t.def = id + ":" + t.def;
+        g_objtypes.push_back(std::move(t));
+    }
+    for (const nlohmann::json& e : j.value("animRows", nlohmann::json::array())) {
+        AnimRows a{ id, e.value("model", ""), json_int(e, "from") };
+        if (a.model.empty() || a.from < 0) {
+            log("assets: " + id + ": animation rows need \"model\" and \"from\": " + e.dump());
+            continue;
+        }
+        if (a.model.find(':') == std::string::npos) a.model = id + ":" + a.model;
+        g_animrows.push_back(std::move(a));
+    }
     for (const nlohmann::json& e : j.value("assets", nlohmann::json::array())) {
         Replacement r;
         r.asset = json_int(e, "asset");
@@ -483,6 +620,13 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
         bool ok = true;
         r.fixups = read_fixups(e, id, ok);
         r.packed = e.value("packed", false);
+        r.copy_of = json_int(e, "copyOf");
+        for (const nlohmann::json& s : e.value("set", nlohmann::json::array())) {
+            std::vector<uint8_t> bytes;
+            const int at = json_int(s, "at");
+            if (at < 0 || !json_hex(s, bytes)) { ok = false; break; }
+            r.sets.emplace_back(at, std::move(bytes));
+        }
         if (!ok) {
             log("assets: " + id + ": a fixup is malformed - the entry is skipped: " + e.dump());
             continue;
@@ -600,6 +744,12 @@ int replace_entries(std::vector<uint8_t>& table, std::vector<uint8_t>& data, int
 
 } // namespace
 
+// The stock object id a mod's object type stands in for in the squad code, or -1 (the BaddyTypeToIndex wrapper).
+int jfg::baddy_like(int object_id) {
+    auto it = g_baddy_like.find(object_id);
+    return it == g_baddy_like.end() ? -1 : it->second;
+}
+
 // The number an appended entry got this start ("mod_id:append name"), or -1 (jfg_launch: --start-level by name).
 int jfg::asset_number(const std::string& ref) {
     auto it = g_numbers.find(ref);
@@ -713,6 +863,24 @@ extern "C" void jfg_apply_asset_mods(void) {
         }
         it->second.patches[p.entry].push_back(&p);
     }
+    // Entries copied from the player's own data ("copyOf").
+    for (Replacement& r : reps) {
+        if (r.copy_of < 0) continue;
+        const std::vector<uint8_t>& table = assets[r.table];
+        const std::vector<uint8_t>& data = assets[r.asset];
+        const size_t at = 4 * (size_t)r.copy_of;
+        if (at + 8 > table.size()) {
+            log("assets: " + r.mod_id + ": copyOf " + std::to_string(r.copy_of) + ": no such entry in table " +
+                std::to_string(r.table));
+            continue;
+        }
+        const int32_t a = (int32_t)be32(table, at), b = (int32_t)be32(table, at + 4);
+        if (a < 0 || b < a || (size_t)b > data.size()) {
+            log("assets: " + r.mod_id + ": copyOf " + std::to_string(r.copy_of) + " has offsets that don't fit");
+            continue;
+        }
+        r.data.assign(data.begin() + a, data.begin() + b);
+    }
     // Numbers first, for every set, so a fixup can name an entry of any set (a level's track, a track's textures).
     load_ids();
     std::map<int, std::vector<int>> numbers;
@@ -724,10 +892,62 @@ extern "C" void jfg_apply_asset_mods(void) {
         }
         numbers[data_asset] = assign_numbers(set.table, data_asset, stock, set.appends);
     }
+    // New object ids: numbered like appended entries (key "48/48", the object index asset), before any fixup names one.
+    std::vector<ObjType> objtypes = std::move(g_objtypes);
+    g_objtypes.clear();
+    std::stable_sort(objtypes.begin(), objtypes.end(), [](const ObjType& a, const ObjType& b) { return a.order < b.order; });
+    std::vector<Replacement> type_reps(objtypes.size());
+    std::vector<const Replacement*> type_ptrs;
+    for (size_t k = 0; k < objtypes.size(); k++) {
+        type_reps[k].mod_id = objtypes[k].mod_id;
+        type_reps[k].append = objtypes[k].append;
+        type_reps[k].expect = objtypes[k].expect;
+        type_ptrs.push_back(&type_reps[k]);
+    }
+    std::vector<int> type_numbers;
+    if (!type_ptrs.empty() && OBJINDEX < count) {
+        type_numbers = assign_numbers(OBJINDEX, OBJINDEX, assets[OBJINDEX].size() / 2, type_ptrs);
+    }
     save_ids();
     for (auto& [data_asset, set] : sets) {
         entries += std::max(0, replace_entries(assets[set.table], assets[data_asset], set.table, data_asset, set.entries,
                                                set.appends, numbers[data_asset], set.patches));
+    }
+    // The object index for the new ids (their definitions' numbers are known now).
+    for (size_t k = 0; k < type_numbers.size(); k++) {
+        const ObjType& t = objtypes[k];
+        const int def = jfg::asset_number(t.def);
+        const int n = type_numbers[k];
+        if (def < 0) {
+            log("assets: " + t.mod_id + ": object type \"" + t.append + "\" names definition " + t.def +
+                ", which no loaded mod appends - skipped");
+            continue;
+        }
+        std::vector<uint8_t>& index = assets[OBJINDEX];
+        if (index.size() < 2 * (size_t)(n + 1)) index.resize(2 * (size_t)(n + 1), 0xFF); // -1: no definition
+        index[2 * n] = (uint8_t)(def >> 8);
+        index[2 * n + 1] = (uint8_t)def;
+        if (t.like >= 0) g_baddy_like[n] = t.like;
+        log("assets: " + t.mod_id + ": object type \"" + t.append + "\" is object id " + std::to_string(n) +
+            " (definition " + std::to_string(def) + (t.like >= 0 ? ", squads treat it as " + std::to_string(t.like) : "") + ")");
+        entries++;
+    }
+    // Animation rows for appended models.
+    std::vector<AnimRows> animrows = std::move(g_animrows);
+    g_animrows.clear();
+    for (const AnimRows& a : animrows) {
+        const int m = jfg::asset_number(a.model);
+        if (m < 0) {
+            log("assets: " + a.mod_id + ": animation rows for " + a.model + ", which no loaded mod appends - skipped");
+            continue;
+        }
+        if (give_anim_rows(assets, m, a.from)) {
+            log("assets: " + a.mod_id + ": model " + std::to_string(m) + " has the animation rows of model " +
+                std::to_string(a.from));
+            entries++;
+        } else {
+            log("assets: " + a.mod_id + ": model " + std::to_string(a.from) + "'s animation rows couldn't be copied");
+        }
     }
     if (whole == 0 && entries == 0) return;
 

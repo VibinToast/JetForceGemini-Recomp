@@ -140,3 +140,6 @@ fxInitLines
 # Crash fixes: a reused squad member with no object, the 60 fps squadron count (jfg_diagnostics.cpp, jfg_frame_rate.cpp)
 SquaddieInitFromRomdef
 objDoFrees
+
+# Mods' new enemy types (object types made from a stock one): the squad code treats them as it (jfg_kinds.cpp)
+BaddyTypeToIndex

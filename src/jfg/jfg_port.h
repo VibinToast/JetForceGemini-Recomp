@@ -260,6 +260,7 @@ struct ToolField {
 
 // --- jfg_assets.cpp ---------------------------------------------------------------------------------------------
 int asset_number(const std::string& ref); // "mod_id:name" of an appended entry -> its number this start, or -1
+int baddy_like(int object_id);             // a mod's object type -> the stock object id squads treat it as, or -1
 
 // --- jfg_music.cpp ----------------------------------------------------------------------------------------------
 void music_tick(recomp_context* ctx); // every tick: the level's mod music, the game's tune silenced meanwhile
