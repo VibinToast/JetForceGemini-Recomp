@@ -156,3 +156,8 @@ objDoFrees
 
 # Mods' new enemy types (object types made from a stock one): the squad code treats them as it (jfg_kinds.cpp)
 BaddyTypeToIndex
+
+# Mods' planets on the planet-select map (jfg_worldmap.cpp)
+frontMap
+frontCleanupMap
+func_overlay_9_000039F0_1F047C8
