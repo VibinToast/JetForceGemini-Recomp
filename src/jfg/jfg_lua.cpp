@@ -45,6 +45,8 @@ void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
 extern "C" {
 void doorUnlock(uint8_t* rdram, recomp_context* ctx);
 void trackFadeFog(uint8_t* rdram, recomp_context* ctx);
+void objSetupObject(uint8_t* rdram, recomp_context* ctx);
+void mmFree(uint8_t* rdram, recomp_context* ctx);
 }
 
 namespace {
@@ -182,6 +184,61 @@ int l_door_locked(lua_State* L) {
     return 1;
 }
 
+// Spawning (the decomp's MOD_SUPPORT_REQUESTS "Spawning objects at run time"): the game builds an object from an
+// object-list entry and keeps a pointer to that entry, so each entry gets its own heap block for the rest of the level.
+// The blocks are freed when the next level starts (its objects, and so their pointers, are gone by then).
+constexpr uint32_t ADDR_FreeRAM = 0x800FDD90;     // s32: free bytes in the main heap
+constexpr uint32_t SPAWN_MIN_FREE = 0xC001;       // the game's own check before optional spawns
+constexpr uint32_t SPAWN_COLOUR = 0x7F7F7FFF;
+constexpr int SPAWN_MAX_PER_LEVEL = 64;
+constexpr uint32_t SPAWN_MAIN_LIST = 0x1;
+std::vector<uint32_t> g_spawn_entries; // heap blocks of this level's spawned objects' entries
+
+void free_spawn_entries(recomp_context* ctx) {
+    for (uint32_t block : g_spawn_entries) call_game(mmFree, ctx, { block });
+    g_spawn_entries.clear();
+}
+
+// jfg.spawn(list_id, x, y, z [, {bytes from +0xA}]): an object as if it were in the level's object list. The bytes are
+// the type's parameters (the entry's tail, as Studio's object schemas lay it out). Returns true, or nil and a reason.
+int l_spawn(lua_State* L) {
+    const int id = (int)luaL_checkinteger(L, 1);
+    const double x = luaL_checknumber(L, 2), y = luaL_checknumber(L, 3), z = luaL_checknumber(L, 4);
+    std::vector<uint8_t> tail;
+    if (lua_istable(L, 5)) {
+        const lua_Integer n = luaL_len(L, 5);
+        if (n > 0x40) return luaL_error(L, "spawn: at most 64 parameter bytes");
+        for (lua_Integer i = 1; i <= n; i++) {
+            lua_geti(L, 5, i);
+            tail.push_back((uint8_t)luaL_checkinteger(L, -1));
+            lua_pop(L, 1);
+        }
+    }
+    auto fail = [L](const char* why) { lua_pushnil(L); lua_pushstring(L, why); return 2; };
+    if (!g_ctx || rd32(ADDR_mainGameMode) != 0) return fail("not in a level");
+    if (id <= 0 || id > 0x7FFF) return fail("bad object id");
+    if ((int)g_spawn_entries.size() >= SPAWN_MAX_PER_LEVEL) return fail("too many spawns in this level");
+    if ((int32_t)rd32(ADDR_FreeRAM) < (int32_t)SPAWN_MIN_FREE) return fail("not enough free memory");
+    const uint32_t size = (0xA + (uint32_t)tail.size() + 1) & ~1u;
+    const uint32_t entry = call_game(mmAlloc, g_ctx, { (size + 7) & ~7u, SPAWN_COLOUR });
+    if (!jfg::valid_ptr(entry)) return fail("no heap block for the entry");
+    for (uint32_t i = 0; i < size; i++) jfg::wr8(entry + i, 0);
+    jfg::wr16(entry + 0x0, (uint16_t)id);
+    jfg::wr8(entry + 0x2, (uint8_t)size);
+    jfg::wr16(entry + 0x4, (uint16_t)(int16_t)x);
+    jfg::wr16(entry + 0x6, (uint16_t)(int16_t)y);
+    jfg::wr16(entry + 0x8, (uint16_t)(int16_t)z);
+    for (size_t i = 0; i < tail.size(); i++) jfg::wr8(entry + 0xA + (uint32_t)i, tail[i]);
+    const uint32_t obj = call_game(objSetupObject, g_ctx, { entry, SPAWN_MAIN_LIST });
+    if (!jfg::valid_ptr(obj)) {
+        call_game(mmFree, g_ctx, { entry });
+        return fail("the game could not create it (full lists, memory, or a type it rejects)");
+    }
+    g_spawn_entries.push_back(entry);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 int l_fog(lua_State* L) {
     const uint32_t r = (uint32_t)luaL_checkinteger(L, 1), g = (uint32_t)luaL_checkinteger(L, 2);
     const uint32_t b = (uint32_t)luaL_checkinteger(L, 3), near_ = (uint32_t)luaL_checkinteger(L, 4);
@@ -243,7 +300,7 @@ void open_state(Script& s) {
     lua_setglobal(L, "print");
     static const luaL_Reg fns[] = {
         { "log", l_log }, { "on", l_on }, { "level", l_level }, { "level_id", l_level_id }, { "player", l_player },
-        { "flag", l_flag }, { "set_flag", l_set_flag }, { "unlock_door", l_unlock_door },
+        { "flag", l_flag }, { "set_flag", l_set_flag }, { "unlock_door", l_unlock_door }, { "spawn", l_spawn },
         { "door_locked", l_door_locked }, { "fog", l_fog },
         { "message", l_message }, { "music", l_music }, { "music_stop", l_music_stop }, { "warp", l_warp },
         { nullptr, nullptr } };
@@ -355,6 +412,7 @@ void lua_tick(recomp_context* ctx) {
     if (mode == 0) {
         if (level != last_level) {
             last_level = level;
+            free_spawn_entries(ctx);
             level_start = std::chrono::steady_clock::now();
             fire("level", { (double)level });
         }
