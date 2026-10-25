@@ -30,6 +30,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "json/json.hpp"
@@ -140,6 +141,35 @@ int l_player(lua_State* L) {
     lua_pushnumber(L, jfg::Obj::PosY::get(obj));
     lua_pushnumber(L, jfg::Obj::PosZ::get(obj));
     return 3;
+}
+
+// The N64 buttons by name (the player's own controller, whatever the port's layout maps to them).
+uint16_t button_mask(lua_State* L, int arg) {
+    static const std::pair<const char*, uint16_t> names[] = {
+        { "A", 0x8000 }, { "B", 0x4000 }, { "Z", 0x2000 }, { "START", 0x1000 }, { "DUP", 0x0800 },
+        { "DDOWN", 0x0400 }, { "DLEFT", 0x0200 }, { "DRIGHT", 0x0100 }, { "L", 0x0020 }, { "R", 0x0010 },
+        { "CUP", 0x0008 }, { "CDOWN", 0x0004 }, { "CLEFT", 0x0002 }, { "CRIGHT", 0x0001 } };
+    const char* name = luaL_checkstring(L, arg);
+    for (const auto& [n, mask] : names) {
+        if (!std::strcmp(n, name)) return mask;
+    }
+    luaL_error(L, "unknown button %s (A B Z START DUP DDOWN DLEFT DRIGHT L R CUP CDOWN CLEFT CRIGHT)", name);
+    return 0;
+}
+
+// jfg.pressed(name): pressed this tick; jfg.held(name): down now.
+int l_pressed(lua_State* L) {
+    const uint16_t mask = button_mask(L, 1);
+    const uint32_t i = jfg::rd8(jfg::ADDR_sPlayerID) & 3u;
+    lua_pushboolean(L, g_ctx && (rd16(jfg::ADDR_buttonsPressed + 2u * i) & mask) != 0);
+    return 1;
+}
+
+int l_held(lua_State* L) {
+    const uint16_t mask = button_mask(L, 1);
+    const uint32_t i = jfg::rd8(jfg::ADDR_sPlayerID) & 3u;
+    lua_pushboolean(L, g_ctx && (jfg::Pad::Buttons::get(jfg::ADDR_sControllerCurrData + jfg::Pad::Size * i) & mask) != 0);
+    return 1;
 }
 
 int l_flag(lua_State* L) {
@@ -331,7 +361,7 @@ void open_state(Script& s) {
     lua_setglobal(L, "print");
     static const luaL_Reg fns[] = {
         { "log", l_log }, { "on", l_on }, { "level", l_level }, { "level_id", l_level_id }, { "player", l_player },
-        { "flag", l_flag }, { "set_flag", l_set_flag }, { "unlock_door", l_unlock_door }, { "spawn", l_spawn }, { "weapon", l_weapon }, { "weapon_stats", l_weapon_stats },
+        { "flag", l_flag }, { "set_flag", l_set_flag }, { "unlock_door", l_unlock_door }, { "spawn", l_spawn }, { "weapon", l_weapon }, { "pressed", l_pressed }, { "held", l_held }, { "weapon_stats", l_weapon_stats },
         { "door_locked", l_door_locked }, { "fog", l_fog },
         { "message", l_message }, { "music", l_music }, { "music_stop", l_music_stop }, { "warp", l_warp },
         { nullptr, nullptr } };
