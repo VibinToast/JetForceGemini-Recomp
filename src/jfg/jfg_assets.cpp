@@ -64,6 +64,8 @@ void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
 std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& data); // jfg_deflate.cpp
 int asset_number(const std::string& ref);
 int baddy_like(int object_id);
+std::string texture_owner(int tex_id);
+bool mod_textures();
 }
 
 namespace {
@@ -117,6 +119,10 @@ struct AnimRows {            // "animRows": an appended model gets a stock model
 std::vector<ObjType> g_objtypes;
 std::vector<AnimRows> g_animrows;
 std::map<int, int> g_baddy_like; // object id -> the stock id the squad code treats it as (BaddyTypeToIndex wrapper)
+// Entries a mod replaced, patched or appended (data asset, entry) -> mod id, and whole assets a mod replaced: what
+// texture dumping keeps apart from the game's own textures (jfg::texture_owner).
+std::map<std::pair<int, int>, std::string> g_entry_owner;
+std::map<int, std::string> g_asset_owner;
 
 struct ObjOp {
     enum Kind { Set, Delete, Append } kind;
@@ -750,6 +756,18 @@ int jfg::baddy_like(int object_id) {
     return it == g_baddy_like.end() ? -1 : it->second;
 }
 
+// The mod a texture id comes from (texLoadTexture's id: bit 15 = texture table 1 over data asset 0, else table 3 over
+// data asset 2), or "" for the game's own.
+std::string jfg::texture_owner(int tex_id) {
+    tex_id &= 0xFFFF;
+    const int data_asset = tex_id & 0x8000 ? 0 : 2;
+    auto it = g_entry_owner.find({ data_asset, tex_id & 0x7FFF });
+    if (it != g_entry_owner.end()) return it->second;
+    auto whole = g_asset_owner.find(data_asset);
+    return whole == g_asset_owner.end() ? std::string() : whole->second;
+}
+bool jfg::mod_textures() { return !g_entry_owner.empty() || g_asset_owner.count(0) || g_asset_owner.count(2); }
+
 // The number an appended entry got this start ("mod_id:append name"), or -1 (jfg_launch: --start-level by name).
 int jfg::asset_number(const std::string& ref) {
     auto it = g_numbers.find(ref);
@@ -912,7 +930,11 @@ extern "C" void jfg_apply_asset_mods(void) {
     for (auto& [data_asset, set] : sets) {
         entries += std::max(0, replace_entries(assets[set.table], assets[data_asset], set.table, data_asset, set.entries,
                                                set.appends, numbers[data_asset], set.patches));
+        for (const auto& [entry, r] : set.entries) g_entry_owner[{ data_asset, entry }] = r->mod_id;
+        for (const auto& [entry, list] : set.patches) g_entry_owner.try_emplace({ data_asset, entry }, list.front()->mod_id);
+        for (size_t k = 0; k < set.appends.size(); k++) g_entry_owner[{ data_asset, numbers[data_asset][k] }] = set.appends[k]->mod_id;
     }
+    for (uint32_t i = 0; i < count; i++) if (!owner[i].empty()) g_asset_owner[(int)i] = owner[i];
     // The object index for the new ids (their definitions' numbers are known now).
     for (size_t k = 0; k < type_numbers.size(); k++) {
         const ObjType& t = objtypes[k];

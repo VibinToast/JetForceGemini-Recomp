@@ -93,6 +93,7 @@ objSetupObject
 objGetObjdef
 func_8000F978_10578
 texLoadTexture
+texFreeTexture
 modLoadModel
 texLoadSprite
 mmAllocR

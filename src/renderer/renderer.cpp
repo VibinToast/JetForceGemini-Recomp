@@ -2,6 +2,7 @@ extern "C" int jfg_skip_render_active(void); // src/jfg/jfg_cutscene_skip.cpp
 extern "C" int jfg_widescreen_active(void);  // src/jfg/jfg_visuals.cpp: the "Widescreen" option of the F9 menu
 extern "C" int jfg_texture_dump_active(void);
 extern "C" void jfg_texture_dump_scene(char* buf, int size); // src/jfg/jfg_texture_packs.cpp: the scene tag of draw_trace.txt
+extern "C" int jfg_texture_dump_mod_folder(unsigned int address, char* buf, int size); // src/jfg/jfg_texture_packs.cpp: a mod's own texture
 extern "C" void jfg_texture_dump_folder(char* buf, int size); // src/jfg/jfg_texture_packs.cpp: "One folder per level"  // src/jfg/jfg_texture_packs.cpp: "Dump textures" (F9 -> Textures)
 extern "C" int jfg_texture_pack_current(char* buf, int size); // the chosen pack folder (relative, "" = none); returns a change counter
 extern "C" int jfg_texture_three_point(void); // src/jfg/jfg_visuals.cpp: "Texture filtering" (1 = the N64's three-point filter)
@@ -725,6 +726,12 @@ void RT64Context::check_texture_pack_actions() {
                 // dumping textures the game redraws on most frames (dynamic_sources.txt) instead of moving them to _dynamic.
                 app->state->textureManager.resetDump(dir);
                 app->state->dumpingTexturesSkipDynamic = std::getenv("JFG_DEBUG_DUMP_ALL") == nullptr;
+                // A mod's own textures go to texture_dump/<mod id> instead (each with its own _dynamic).
+                app->state->dumpingTexturesDirectoryFor = [](uint32_t address) {
+                    char rel[512];
+                    if (!jfg_texture_dump_mod_folder(address, rel, sizeof(rel))) return std::filesystem::path();
+                    return dino::config::get_app_folder_path() / "texture_dump" / std::filesystem::u8path(rel);
+                };
                 fprintf(stderr, "[JFG] dumping textures to %s\n", dir.string().c_str());
             }
             else {
