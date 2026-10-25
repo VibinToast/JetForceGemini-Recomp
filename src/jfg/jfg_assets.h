@@ -6,7 +6,7 @@
 //   - Runtime assets: a port feature serves its own version of an asset while the game runs, and can change or drop
 //     it at any time; the loaders' wrappers read it instead of the ROM. Each runtime asset has one owner, so two
 //     features can't fight over an asset unnoticed: a second owner is refused and logged. The locale system
-//     (jfg_locale_mods.cpp) is the first user.
+//     (jfg_locale.cpp) is the first user.
 // Runtime assets are read from the game thread; set and clear them there too (a tick, a wrapper).
 #pragma once
 

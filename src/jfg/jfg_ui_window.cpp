@@ -116,8 +116,8 @@ void draw_options() {
                     }
                     ImGui::EndCombo();
                 }
-                options_help("The language of menus, subtitles and hints: English, the game's own other languages, and "
-                             "every locale mod installed (Mods). Text a language lacks is shown in English.");
+                options_help("The language of menus, subtitles and hints: English and every file in the game's locales "
+                             "folder (locales/<name>.json). Text a language lacks is shown in English.");
             }
             changed |= ImGui::Checkbox("Hide Floyd", &g.hide_floyd);
             options_help("Floyd, his shadow and his sounds are gone while he follows the character; he still flies along "

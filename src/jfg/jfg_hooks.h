@@ -129,7 +129,6 @@ void jfg_tools_ui_frame(void);                                         // jfg_ui
 // src/debug_ui/backend.cpp
 void jfg_tools_key(int scancode, int down, int repeat);                // jfg_ui_tools.cpp, F10, Alt, End, F8 (SDL event filter)
 // jfg_mods.cpp (jfg_register_mod_exports)
-void jfg_register_locale_mods(void);                                   // jfg_locale_mods.cpp: the jfg_locale.json content type
 void jfg_register_asset_mods(void);                                    // jfg_assets.cpp: the jfg_assets.json content type
 // jfg_diagnostics.cpp (mmAlloc's wrapper)
 void jfg_locale_alloc(recomp_context* ctx);                            // jfg_locale.cpp: room for translated menu text

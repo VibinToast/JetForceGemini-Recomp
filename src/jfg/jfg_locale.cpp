@@ -1,4 +1,4 @@
-// Jet Force Gemini port: showing the chosen locale (jfg_locale.h; which locales exist: jfg_locale_mods.cpp).
+// Jet Force Gemini port: showing the chosen locale (jfg_locale.h; which locales exist: jfg_locale_files.cpp).
 //
 // The game has language slots (frontGetLanguage(), a byte no US menu changes): setLanguage(n) loads menu block n,
 // subtitleStart adds 47 + n - 1 to the id for n > 0, and the hint loader (overlay 7) reads slot n's own assets. The
@@ -40,7 +40,7 @@
 
 extern "C" void frontSetLanguage(uint8_t* rdram, recomp_context* ctx);
 extern "C" void fontCreateDisplayList(uint8_t* rdram, recomp_context* ctx);
-extern "C" void jfg_locale_build_registry(void); // jfg_locale_mods.cpp
+extern "C" void jfg_locale_build_registry(void); // jfg_locale_files.cpp
 
 namespace jfg {
 void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
@@ -237,13 +237,13 @@ void refresh_fonts() {
 
 void show(const std::string& id) {
     g_shown_id = id;
-    g_shown = id.empty() ? nullptr : jfg::locale::find(id);
+    g_shown = jfg::locale::find(id); // "": english.json, else the ROM's
     if (!id.empty() && g_shown == nullptr) log("locale: " + id + " isn't installed; English is shown");
     serve_text(g_shown);
     serve_fonts(g_shown);
     refresh_fonts();
     g_loaded = -1;
-    log("locale: showing " + (g_shown ? g_shown->name : std::string("English")));
+    log("locale: showing " + (g_shown ? g_shown->name + " (locales/" + g_shown->id + ".json)" : std::string("English (the game's own)")));
 }
 
 } // namespace

@@ -358,9 +358,9 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
 </template>
 '''
 
-# The Language list (General tab): English, the game's own languages and every locale mod, from the jfg_general_model's
-# "locales" (src/ui/ui_config.cpp). Locale mods load with the game, so only the game's menu shows it (the launcher
-# hides .jfg-ingame-only).
+# The Language list (General tab): English and every locale file (locales/*.json), from the jfg_general_model's
+# "locales" (src/ui/ui_config.cpp). Locale files are read as the game starts, so only the game's menu shows it (the
+# launcher hides .jfg-ingame-only).
 LANGUAGE_LIST = '''                    <div class="jfg-ingame-only">
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Language</label></div>
                     <div class="config-option jfg-option">
@@ -368,7 +368,7 @@ LANGUAGE_LIST = '''                    <div class="jfg-ingame-only">
                             <button class="button" data-for="l : locales" data-attr-id="'jfg_locale_' + it_index" data-event-click="set_locale(l.id)" data-class-jfg-selected="l.selected" style="display: inline-block; margin: 6dp; nav-up: auto; nav-down: auto;">{{l.name}}</button>
                         </div>
                     </div>
-                    <div class="jfg-note" style="display: block; margin: 4dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Menus, subtitles and hints. More languages come as locale mods (Mods); text a language lacks is shown in English.</div>
+                    <div class="jfg-note" style="display: block; margin: 4dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Menus, subtitles and hints. More languages are files in the game's locales folder; text a language lacks is shown in English.</div>
                     </div>'''
 
 # In a wrapper the launcher hides (it has no F10 or F9: it is the game's menu that has them).

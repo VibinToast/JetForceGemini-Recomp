@@ -216,7 +216,6 @@ extern "C" void jfg_register_mod_exports(void) {
     jfg_register_wrapped(recomp::overlays::register_base_wrapper); // mods patch and hook the originals, not the wrappers
     jfg::api::register_api(); // the JFG mod API's events and helpers (jfg_api.cpp)
     jfg_register_asset_mods(); // mods that replace game data (jfg_assets.json)
-    jfg_register_locale_mods(); // mods that add a language (jfg_locale.json)
 }
 
 // --- mods replacing a function a port feature needs as the caller ---------------------------------------------------
