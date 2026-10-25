@@ -118,10 +118,10 @@
 			.rl-lang-arrow { display: inline-block; margin-left: 12dp; transform: rotate(90deg); }
 			.rl-lang-list { display: block; position: absolute; top: 46dp; right: 0dp; z-index: 10; min-width: 100%; padding: 4dp 0dp;
 				border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; }
-			.rl-lang-item { display: block; padding: 6dp 14dp; color: #8199BF; font-family: "JetBrains Mono"; font-weight: bold; font-size: 18dp;
+			.rl-lang-item { display: block; padding: 6dp 14dp; border-width: 0dp; background-color: #050B1C; color: #E8F3FF; font-family: "JetBrains Mono"; font-weight: bold; font-size: 18dp;
 				line-height: 24dp; white-space: nowrap; text-align: left; cursor: pointer; focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; }
-			.rl-lang-item.rl-on { color: #3CC8FF; }
-			.rl-lang-item:hover { color: #E8F3FF; background-color: #0A2660; }
+			.rl-lang-item.rl-on { background-color: #0A2660; color: #3CC8FF; }
+			.rl-lang-item:hover { background-color: #1F3D73; color: #FFFFFF; }
 			#window:not([mouse-active]) .rl-lang-item:focus { color: #050B1C; background-color: #3CC8FF; }
 			.rl-cursor { color: #3CC8FF; animation: 1.1s linear-in-out infinite rl-blink; }
 			@keyframes rl-blink { 0% { opacity: 1; } 49% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
