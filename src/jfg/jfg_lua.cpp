@@ -35,6 +35,7 @@
 #include "json/json.hpp"
 #include "librecomp/mods.hpp"
 #include "lua.hpp"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_port.h"
 
@@ -133,9 +134,9 @@ int l_level_id(lua_State* L) {
 int l_player(lua_State* L) {
     const uint32_t obj = g_ctx ? jfg::player_object(g_ctx) : 0;
     if (!obj) { lua_pushnil(L); return 1; }
-    lua_pushnumber(L, rdf(obj + 0x0C));
-    lua_pushnumber(L, rdf(obj + 0x10));
-    lua_pushnumber(L, rdf(obj + 0x14));
+    lua_pushnumber(L, jfg::Obj::PosX::get(obj));
+    lua_pushnumber(L, jfg::Obj::PosY::get(obj));
+    lua_pushnumber(L, jfg::Obj::PosZ::get(obj));
     return 3;
 }
 
@@ -158,8 +159,7 @@ int l_unlock_door(lua_State* L) {
     return 0;
 }
 
-// The doors (behaviour 7) with an id: DoorData (spranim.c) at the object's +0x68: +0x44 id, +0x4A locks left, +0x3E
-// flags (0x8 = locked).
+// The doors with an id (jfg_fields.h's DoorData).
 int l_door_locked(lua_State* L) {
     const int id = (int)luaL_checkinteger(L, 1);
     if (!g_ctx) { lua_pushnil(L); return 1; }
@@ -171,10 +171,11 @@ int l_door_locked(lua_State* L) {
     if (!jfg::valid_ptr(list) || first < 0 || last < first || last > 4096) { lua_pushnil(L); return 1; }
     for (int i = first; i < last; i++) {
         const uint32_t obj = rd32(list + 4 * i);
-        if (!jfg::valid_ptr(obj) || (int16_t)rd16(obj + 0x48) != 7) continue;
-        const uint32_t door = rd32(obj + 0x68);
-        if (!jfg::valid_ptr(door) || jfg::rd8(door + 0x44) != id) continue;
-        lua_pushboolean(L, jfg::rd8(door + 0x4A) > 0 || (rd16(door + 0x3E) & 8) != 0);
+        if (!jfg::valid_ptr(obj) || jfg::Obj::Kind::get(obj) != jfg::DoorData::Kind) continue;
+        const uint32_t door = jfg::Obj::Data::get(obj);
+        if (!jfg::valid_ptr(door) || jfg::DoorData::Id::get(door) != id) continue;
+        lua_pushboolean(L, jfg::DoorData::Locks::get(door) > 0
+                               || (jfg::DoorData::Flags::get(door) & jfg::DoorData::Locked) != 0);
         return 1;
     }
     lua_pushnil(L);

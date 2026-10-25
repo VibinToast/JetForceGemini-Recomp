@@ -40,7 +40,7 @@ extern "C" void amTuneSetGlobalVolume(uint8_t* rdram, recomp_context* ctx); // t
 namespace {
 
 constexpr char CONTENT_FILE[] = "jfg_music.json";
-constexpr uint32_t ADDR_musicVolume = 0x800FF38A;   // u16, 0-0x100: the options menu's music volume (menu.c)
+constexpr uint32_t ADDR_musicVolume = 0x800FF38A;   // u16, 0-0x100: the options menu's music volume
 constexpr uint32_t ADDR_tuneVolume = 0x800A0668;    // u8, 0-0x7F: amTuneSetVolume's value (pauses, fades)
 constexpr uint32_t ADDR_tuneGlobal = 0x800A0690;    // s32: amTuneSetGlobalVolume's value (music volume x)
 
