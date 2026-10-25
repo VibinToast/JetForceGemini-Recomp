@@ -9,7 +9,7 @@
                      look into one from outside. -->
                 <div class="config__wrapper" style="overflow-y: auto; height: 100%;">
                     <div style="display: block; margin: 16dp 12dp 0dp;">
-                        <label class="config-option__title config-group__title" style="display: block; padding: 0dp;">Profile: {{active_profile}}</label>
+                        <label class="config-option__title config-group__title" style="display: block; padding: 0dp;">Profile: <span>{{active_profile}}</span></label>
                         <div class="jfg-note" style="display: block; margin-top: 14dp; font-size: 20dp; line-height: 28dp;">{{profile_description}}</div>
                     </div>
                     <div style="display: block; margin: 32dp 12dp 0dp;">

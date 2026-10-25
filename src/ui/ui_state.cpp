@@ -24,7 +24,9 @@
 #include "RmlUi/../../Source/Core/Elements/ElementLabel.h"
 #include "RmlUi_Platform_SDL.h"
 #include "jfg/jfg_locale.h" // JFG PORT: the menus in the chosen language
-static void jfg_upper_latin_texts(Rml::Element* element); // JFG PORT: below deinit_hook
+static void jfg_upper_latin_texts(Rml::Element* element);
+static void jfg_switch_language(Rml::Context* context);
+static std::string jfg_upper_latin(const std::string& text); // JFG PORT: below deinit_hook
 
 #include "config/config.hpp"
 #include "input/input.hpp"
@@ -1060,6 +1062,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
         jfg_launcher_ui_tick(); // JFG PORT: animates the launcher's About page
         jfg_config_pack_join_tick(); // JFG PORT: joins split texture packs, shows the progress
+        jfg_switch_language(ui_state->context); // JFG PORT: a language picked from the Language list
         if (jfg::locale::ui_has_accents()) { // JFG PORT: capitals with accents (jfg_upper_latin_texts)
             for (int i = 0; i < ui_state->context->GetNumDocuments(); i++) jfg_upper_latin_texts(ui_state->context->GetDocument(i));
         }
@@ -1099,6 +1102,40 @@ static void jfg_upper_latin_texts(Rml::Element* element) {
         return;
     }
     for (int i = 0; i < element->GetNumChildren(); i++) jfg_upper_latin_texts(element->GetChild(i));
+}
+
+// JFG PORT: a new language (jfg_locale.h "ui"): every text node of the menus is put in it where it is. A node's text
+// is looked up as the language shown so far wrote it (also in the capitals above), which gives its English, then
+// written as the new one has it. Text with {{ data }} is left to its data view, and what is made from now on goes
+// through TranslateString in the new language. Two English texts one language translates alike can swap.
+static void jfg_retranslate_texts(Rml::Element* element, const std::map<std::string, std::string>& to_english,
+                                  const std::map<std::string, std::string>& ui) {
+    if (Rml::ElementText* text = rmlui_dynamic_cast<Rml::ElementText*>(element)) {
+        const std::string& now = text->GetText();
+        auto english = to_english.find(jfg::locale::ui_key(now));
+        if (english == to_english.end()) return;
+        auto it = ui.find(english->second);
+        const std::string want = Rml::StringUtilities::DecodeRml(it != ui.end() ? it->second : english->second);
+        const size_t first = now.find_first_not_of(" \t\r\n"), last = now.find_last_not_of(" \t\r\n");
+        const std::string out = now.substr(0, first) + want + now.substr(last + 1);
+        if (out != now) text->SetText(out);
+        return;
+    }
+    for (int i = 0; i < element->GetNumChildren(); i++) jfg_retranslate_texts(element->GetChild(i), to_english, ui);
+}
+
+static void jfg_switch_language(Rml::Context* context) {
+    std::map<std::string, std::string> old_ui, new_ui, to_english;
+    if (!jfg::locale::take_ui_switch(old_ui, new_ui)) return;
+    auto add = [&](const std::string& text, const std::string& english) {
+        const std::string decoded = Rml::StringUtilities::DecodeRml(text);
+        to_english.emplace(jfg::locale::ui_key(decoded), english);
+        to_english.emplace(jfg::locale::ui_key(jfg_upper_latin(decoded)), english);
+    };
+    for (const auto& [english, text] : old_ui) add(text, english);
+    for (const auto* ui : { &old_ui, &new_ui })
+        for (const auto& [english, text] : *ui) add(english, english);
+    for (int i = 0; i < context->GetNumDocuments(); i++) jfg_retranslate_texts(context->GetDocument(i), to_english, new_ui);
 }
 
 void deinit_hook() {

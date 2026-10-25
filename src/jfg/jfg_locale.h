@@ -34,6 +34,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -77,10 +78,15 @@ void choose(const std::string& id);
 // or its English name when the name has characters the menus' font lacks (beyond Latin: U+024F).
 std::vector<std::pair<std::string, std::string>> list();
 
-// The port's own menus: `english` in the language chosen when the game started (its file's "ui"; english.json's for
-// English), else `english` itself. Any thread. The menus are made once, so another choice shows in them from the
-// next start. With JFG_UI_EXPORT=<file> every text asked for is collected there, as the English "ui" to translate.
+// The port's own menus: `english` in the chosen language (its file's "ui"; english.json's for English), else
+// `english` itself. Any thread. With JFG_UI_EXPORT=<file> every text asked for is collected there, as the English
+// "ui" to translate.
 std::string ui(const std::string& english);
+// A text as "ui" keys it: no white space around it, each run inside as one space.
+std::string ui_key(const std::string& text);
+// After choose(), once (the UI thread, src/ui/ui_state.cpp): the "ui" of the language the menus show and of the new
+// one (English -> text), to put the menus' text nodes in the new language in place; the new one is then in use.
+bool take_ui_switch(std::map<std::string, std::string>& old_ui, std::map<std::string, std::string>& new_ui);
 // For RmlUi's SystemInterface::TranslateString (src/ui/ui_state.cpp): `in` is a text node's text, white space and
 // all. False when it has no translation (`out` = `in`).
 bool translate_ui(std::string& out, const std::string& in);

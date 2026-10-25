@@ -5,6 +5,7 @@
 // pattern (as the decomp's tools/text.py lays them out): each menu string, subtitle line and hint string English has
 // is the locale's when its key is there, else English's own bytes.
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -57,6 +58,7 @@ std::mutex g_mutex; // g_list and g_chosen (read by the menus)
 std::vector<std::pair<std::string, std::string>> g_list = { { "", "English" } };
 std::string g_chosen;
 bool g_chosen_loaded = false;
+std::atomic<bool> g_ui_switch{ false }; // choose() since the menus last took their language (take_ui_switch)
 
 // --- text ------------------------------------------------------------------------------------------------------------
 
@@ -549,6 +551,7 @@ std::string chosen() {
 void choose(const std::string& id) {
     std::lock_guard<std::mutex> lock(g_mutex);
     load_choice();
+    if (id != g_chosen) g_ui_switch = true;
     g_chosen = id;
     if (FILE* f = std::fopen(CHOICE_FILE, "w")) {
         std::fprintf(f, "# The game's language: a locale file's name (locales/<name>.json); empty = English.\nlanguage=%s\n", id.c_str());
@@ -566,8 +569,11 @@ std::vector<std::pair<std::string, std::string>> list() {
 namespace {
 std::mutex g_ui_mutex;
 bool g_ui_loaded = false;
+bool g_ui_accents = false;                     // g_ui has letters beyond ASCII
 std::map<std::string, std::string> g_ui;       // English -> the chosen language's
 std::map<std::string, std::string> g_exported; // JFG_UI_EXPORT: every text asked for
+
+} // namespace
 
 // `text` without its leading and trailing white space and with each run of white space inside as one space.
 std::string ui_key(const std::string& text) {
@@ -581,6 +587,8 @@ std::string ui_key(const std::string& text) {
     }
     return out;
 }
+
+namespace {
 
 // Whether `key` has a Latin letter outside {{ data expressions }}: only those are worth translating (not the
 // controller icons' symbols).
@@ -607,6 +615,13 @@ void load_ui() {
     if (j.is_discarded() || !j.is_object() || !j.contains("ui") || !j["ui"].is_object()) return;
     for (const auto& [english, text] : j["ui"].items())
         if (text.is_string() && !text.get_ref<const std::string&>().empty()) g_ui[ui_key(english)] = text.get<std::string>();
+    std::map<std::string, std::string> seen; // switching the menus' language reads each text back to its English
+    for (const auto& [english, text] : g_ui) {
+        for (char c : text) if ((uint8_t)c >= 0x80) g_ui_accents = true;
+        auto [it, added] = seen.emplace(ui_key(text), english);
+        if (!added) log("locale: " + id + ".json: \"" + it->second + "\" and \"" + english + "\" have the same translation; "
+                        "switching language may swap them");
+    }
     log("locale: " + id + ".json: " + std::to_string(g_ui.size()) + " menu texts");
 }
 
@@ -633,14 +648,21 @@ std::string ui(const std::string& english) {
 }
 
 bool ui_has_accents() {
-    static const bool accents = [] {
-        std::lock_guard<std::mutex> lock(g_ui_mutex);
-        load_ui();
-        for (const auto& [english, text] : g_ui)
-            for (char c : text) if ((uint8_t)c >= 0x80) return true;
-        return false;
-    }();
-    return accents;
+    std::lock_guard<std::mutex> lock(g_ui_mutex);
+    load_ui();
+    return g_ui_accents;
+}
+
+bool take_ui_switch(std::map<std::string, std::string>& old_ui, std::map<std::string, std::string>& new_ui) {
+    if (!g_ui_switch.exchange(false)) return false;
+    std::lock_guard<std::mutex> lock(g_ui_mutex);
+    load_ui();
+    old_ui = g_ui;
+    g_ui.clear();
+    g_ui_loaded = g_ui_accents = false;
+    load_ui();
+    new_ui = g_ui;
+    return true;
 }
 
 bool translate_ui(std::string& out, const std::string& in) {

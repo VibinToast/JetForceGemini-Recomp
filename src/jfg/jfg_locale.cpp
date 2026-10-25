@@ -25,6 +25,9 @@
 // the glyph lookup the renderer makes (func_80071388) runs with fontInUse = 4 + the character's page, so each glyph is
 // loaded and cached from its own page.
 #include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <cstring>
 #include <cstdint>
 #include <cstdio>
 #include <span>
@@ -262,6 +265,17 @@ extern "C" void jfg_locale_start(void) {
 // The game tick (jfg_tick.cpp): a new choice from the menus, and the slot the menus show.
 extern "C" void jfg_locale_tick(recomp_context* ctx) {
     if (!g_started) return;
+    // Test: JFG_DEBUG_LANGUAGE="secs,id" picks locale `id` ("" = English) that many seconds after start, as the
+    // Language list does (Recomp-Docs/REFERENCE.md).
+    static const char* debug_language = std::getenv("JFG_DEBUG_LANGUAGE");
+    static const auto start = std::chrono::steady_clock::now();
+    if (debug_language != nullptr) {
+        const char* comma = std::strchr(debug_language, ',');
+        if (std::chrono::steady_clock::now() - start >= std::chrono::seconds(std::atoi(debug_language))) {
+            jfg::locale::choose(comma ? comma + 1 : "");
+            debug_language = nullptr;
+        }
+    }
     const std::string chosen = jfg::locale::chosen();
     if (chosen != g_shown_id) {
         show(chosen);

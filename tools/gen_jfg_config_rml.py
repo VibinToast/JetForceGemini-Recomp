@@ -216,6 +216,10 @@ def option_markup(items, first_nav_up):
         elif kind == "range":
             lo, hi, suffix = extra
             out.append('                        <div class="config-option__range-wrapper config-option__list">')
+            # A suffix with words gets its own text node, apart from the value, so a language switch can change it
+            # (jfg_locale.h "ui": the menus' text nodes are swapped in place).
+            if any(c.isalpha() for c in suffix):
+                suffix = f'<span>{suffix}</span>'
             out.append(f'                            <label class="config-option__range-label">{{{{{key}}}}}{suffix}</label>')
             out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}" data-value="{key}"/>')
             out.append('                        </div>')
@@ -283,7 +287,7 @@ TEXTURE_PACKS = '''                    <div class="config-option" style="margin:
                             <button class="button" style="display: inline-block; margin: 8dp; nav-up: auto; nav-down: auto; nav-left: #tab_jfg_textures;" data-event-click="reload_pack()">Reload Pack</button>
                             <button class="button" style="display: inline-block; margin: 8dp; nav-up: auto; nav-down: auto; nav-left: auto;" data-event-click="open_pack_folder()">Open Texture Packs Folder</button>
                         </div>
-                        <div class="jfg-note" style="display: block; margin: 8dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Packs are the folders (or .rtz files) in the texture_packs folder next to the game. F6 switches packs while playing. Reload after adding or changing files. {{dump_status}}</div>
+                        <div class="jfg-note" style="display: block; margin: 8dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Packs are the folders (or .rtz files) in the texture_packs folder next to the game. F6 switches packs while playing. Reload after adding or changing files. <span>{{dump_status}}</span></div>
                     </div>'''
 
 # The Textures tab's right side while no option is focused: the pack last focused (at first the one in use), with its
@@ -310,7 +314,7 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
                      look into one from outside. -->
                 <div class="config__wrapper" style="overflow-y: auto; height: 100%;">
                     <div style="display: block; margin: 16dp 12dp 0dp;">
-                        <label class="config-option__title config-group__title" style="display: block; padding: 0dp;">Profile: {{active_profile}}</label>
+                        <label class="config-option__title config-group__title" style="display: block; padding: 0dp;">Profile: <span>{{active_profile}}</span></label>
                         <div class="jfg-note" style="display: block; margin-top: 14dp; font-size: 20dp; line-height: 28dp;">{{profile_description}}</div>
                     </div>
                     <div style="display: block; margin: 32dp 12dp 0dp;">
@@ -368,7 +372,7 @@ LANGUAGE_LIST = '''                    <div class="jfg-ingame-only">
                             <button class="button" data-for="l : locales" data-attr-id="'jfg_locale_' + it_index" data-event-click="set_locale(l.id)" data-class-jfg-selected="l.selected" style="display: inline-block; margin: 6dp; nav-up: auto; nav-down: auto;">{{l.name}}</button>
                         </div>
                     </div>
-                    <div class="jfg-note" style="display: block; margin: 4dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Menus, subtitles and hints. More languages are files in the game's locales folder; text a language lacks is shown in English. This settings menu changes language the next time the game starts.</div>
+                    <div class="jfg-note" style="display: block; margin: 4dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Menus, subtitles and hints. More languages are files in the game's locales folder; text a language lacks is shown in English.</div>
                     </div>'''
 
 # In a wrapper the launcher hides (it has no F10 or F9: it is the game's menu that has them).
