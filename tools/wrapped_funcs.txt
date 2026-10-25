@@ -120,6 +120,7 @@ camStandardOrtho
 frontInstruments
 texDPInit
 sprSetTextureFilter
+fxDrawDigitalNumber
 frontDrawObj
 frontPrintNum
 fontPrintXY
