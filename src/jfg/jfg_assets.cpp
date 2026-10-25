@@ -8,13 +8,18 @@
 // A mod with a jfg_assets.json at the top of its .nrm replaces data:
 //   {
 //     "assets":  [ { "asset": 34, "file": "assets/asset34.bin" } ],
-//     "entries": [ { "table": 1, "data": 0, "entry": 291, "file": "assets/tex3d_291.bin" } ]
+//     "entries": [ { "table": 1, "data": 0, "entry": 291, "file": "assets/tex3d_291.bin" },
+//                  { "table": 30, "data": 31, "append": "gemini", "expect": 412, "file": "levels/gemini.bin" } ]
 //   }
 // "assets" replaces a whole asset. "entries" replaces one entry of a set whose table asset is a list of big-endian
 // offsets into its data asset, ended by -1 (the 2D and 3D texture sets are tables 3 and 1 over data 2 and 0; see
 // tools/textures.py in the decomp for the entry format). The files are the game's own formats, and they go in the
 // .nrm through RecompModTool's additional_files. When two mods replace the same asset or entry, the one higher in the
 // mod list wins, as with texture packs.
+// "append" in place of "entry" adds a new entry after the set's last one (the -1 end stays). New entries get the next
+// free numbers in order: mods from the top of the mod list down, each mod's in the order of its file. jfg_mods.log
+// says which number each name got; "expect" (optional) is the number the mod was made for, and a different one is
+// logged as a problem.
 //
 // At game start, before the game's first instruction, the port copies the whole asset area with the replacements in
 // it to the end of the ROM and points the table there. The game never sees the difference: it reads the table at
@@ -51,6 +56,8 @@ struct Replacement {
     int asset = -1;      // whole-asset replacement, or the data asset of an entry
     int table = -1;      // entries only
     int entry = -1;      // entries only
+    std::string append;  // appended entries: the mod's name for it (entry stays -1)
+    int expect = -1;     // appended entries: the number the mod expects, -1 any
     std::vector<uint8_t> data;
 };
 
@@ -117,8 +124,17 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
         Replacement r;
         r.table = json_int(e, "table");
         r.asset = json_int(e, "data");
-        r.entry = json_int(e, "entry");
-        if (r.table < 0 || r.asset < 0 || r.entry < 0) {
+        if (e.contains("append")) {
+            if (!e["append"].is_string() || e["append"].get<std::string>().empty() || e.contains("entry")) {
+                log("assets: " + id + ": \"append\" must be a name, and without \"entry\": " + e.dump());
+                continue;
+            }
+            r.append = e["append"].get<std::string>();
+            r.expect = json_int(e, "expect");
+        } else {
+            r.entry = json_int(e, "entry");
+        }
+        if (r.table < 0 || r.asset < 0 || (r.entry < 0 && r.append.empty())) {
             log("assets: " + id + ": \"table\", \"data\" or \"entry\" missing or invalid: " + e.dump());
             continue;
         }
@@ -126,9 +142,10 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
     }
 }
 
-// Replaces entries of one table/data set; returns how many. -1 (and nothing changed) when the table isn't that format.
+// Replaces entries of one table/data set and appends new ones after its last entry; returns how many entries were
+// replaced or added. -1 (and nothing changed) when the table isn't that format.
 int replace_entries(std::vector<uint8_t>& table, std::vector<uint8_t>& data, int table_asset, int data_asset,
-                     const std::map<int, const Replacement*>& reps) {
+                     const std::map<int, const Replacement*>& reps, const std::vector<const Replacement*>& appends) {
     std::vector<int32_t> offs;
     size_t end_index = SIZE_MAX;
     for (size_t o = 0; o + 4 <= table.size(); o += 4) {
@@ -159,10 +176,15 @@ int replace_entries(std::vector<uint8_t>& table, std::vector<uint8_t>& data, int
             log(line);
         }
     }
+    // The new table: an offset per entry (old and appended), the end offset, -1, then whatever words followed the -1.
+    const size_t total = count + appends.size();
+    std::vector<uint8_t> new_table(4 * (total + 2));
+    new_table.insert(new_table.end(), table.begin() + 4 * (end_index + 1), table.end());
+    put_be32(new_table, 4 * (total + 1), 0xFFFFFFFFu);
     std::vector<uint8_t> out;
     out.reserve(data.size());
     for (size_t k = 0; k < count; k++) {
-        put_be32(table, 4 * k, (uint32_t)out.size());
+        put_be32(new_table, 4 * k, (uint32_t)out.size());
         auto it = reps.find((int)k);
         if (it != reps.end()) {
             out.insert(out.end(), it->second->data.begin(), it->second->data.end());
@@ -171,11 +193,29 @@ int replace_entries(std::vector<uint8_t>& table, std::vector<uint8_t>& data, int
             out.insert(out.end(), data.begin() + offs[k], data.begin() + offs[k + 1]);
         }
     }
-    put_be32(table, 4 * count, (uint32_t)out.size());
+    if (!appends.empty()) pad16(out);
+    for (size_t k = 0; k < appends.size(); k++) {
+        const Replacement* r = appends[k];
+        const int number = (int)(count + k);
+        put_be32(new_table, 4 * (count + k), (uint32_t)out.size());
+        out.insert(out.end(), r->data.begin(), r->data.end());
+        pad16(out);
+        char line[256];
+        std::snprintf(line, sizeof line, "assets: %s: \"%s\" is entry %d of %s (%zu bytes)", r->mod_id.c_str(),
+                      r->append.c_str(), number, where, r->data.size());
+        log(line);
+        if (r->expect >= 0 && r->expect != number) {
+            std::snprintf(line, sizeof line, "assets: %s: \"%s\" was made for entry %d, but got %d - anything that "
+                          "names it by number points elsewhere", r->mod_id.c_str(), r->append.c_str(), r->expect, number);
+            log(line);
+        }
+    }
+    put_be32(new_table, 4 * total, (uint32_t)out.size());
     out.insert(out.end(), data.begin() + offs[count], data.end()); // whatever followed the last entry
     pad16(out);
+    table = std::move(new_table);
     data = std::move(out);
-    return applied;
+    return applied + (int)appends.size();
 }
 
 } // namespace
@@ -216,7 +256,7 @@ extern "C" void jfg_apply_asset_mods(void) {
     std::vector<std::string> owner(count);
     int whole = 0, entries = 0;
     for (const Replacement& r : reps) {
-        if (r.entry >= 0) continue;
+        if (r.entry >= 0 || !r.append.empty()) continue; // entries below
         if ((uint32_t)r.asset >= count) {
             log("assets: " + r.mod_id + ": there's no asset " + std::to_string(r.asset) + " (" + r.file + ")");
             continue;
@@ -232,21 +272,38 @@ extern "C" void jfg_apply_asset_mods(void) {
         whole++;
     }
 
-    // Entries, grouped by set; within a set the first mod's entry (highest in the list) is kept.
-    std::map<int, std::pair<int, std::map<int, const Replacement*>>> sets; // data asset -> table asset, entries
+    // Entries, grouped by set; within a set the first mod's entry (highest in the list) is kept. Appended entries keep
+    // mod order, then file order (reps is sorted stably by mod order).
+    struct Set {
+        int table;
+        std::map<int, const Replacement*> entries;
+        std::vector<const Replacement*> appends;
+    };
+    std::map<int, Set> sets; // by data asset
     for (const Replacement& r : reps) {
-        if (r.entry < 0) continue;
+        if (r.entry < 0 && r.append.empty()) continue;
         if ((uint32_t)r.asset >= count || (uint32_t)r.table >= count || r.asset == r.table) {
             log("assets: " + r.mod_id + ": no such table/data pair (" + r.file + ")");
             continue;
         }
-        auto [it, fresh] = sets.try_emplace(r.asset, r.table, std::map<int, const Replacement*>{});
-        if (it->second.first != r.table) {
+        auto [it, fresh] = sets.try_emplace(r.asset, Set{ r.table, {}, {} });
+        if (it->second.table != r.table) {
             log("assets: " + r.mod_id + ": data asset " + std::to_string(r.asset) + " was given another table by a mod "
                 "higher in the mod list; skipped " + r.file);
             continue;
         }
-        const Replacement*& slot = it->second.second[r.entry];
+        if (!r.append.empty()) {
+            std::vector<const Replacement*>& appends = it->second.appends;
+            if (std::any_of(appends.begin(), appends.end(), [&](const Replacement* a) {
+                    return a->mod_id == r.mod_id && a->append == r.append; })) {
+                log("assets: " + r.mod_id + ": \"" + r.append + "\" is appended to data asset " + std::to_string(r.asset) +
+                    " twice; skipped " + r.file);
+                continue;
+            }
+            appends.push_back(&r);
+            continue;
+        }
+        const Replacement*& slot = it->second.entries[r.entry];
         if (slot != nullptr) {
             log("assets: entry " + std::to_string(r.entry) + " of data asset " + std::to_string(r.asset) + " is replaced by " +
                 slot->mod_id + " and " + r.mod_id + "; " + slot->mod_id + " wins (higher in the mod list)");
@@ -255,7 +312,8 @@ extern "C" void jfg_apply_asset_mods(void) {
         slot = &r;
     }
     for (auto& [data_asset, set] : sets) {
-        entries += std::max(0, replace_entries(assets[set.first], assets[data_asset], set.first, data_asset, set.second));
+        entries += std::max(0, replace_entries(assets[set.table], assets[data_asset], set.table, data_asset, set.entries,
+                                               set.appends));
     }
     if (whole == 0 && entries == 0) return;
 
@@ -273,7 +331,7 @@ extern "C" void jfg_apply_asset_mods(void) {
         return;
     }
     char line[200];
-    std::snprintf(line, sizeof line, "assets: %d whole assets and %d entries replaced; the asset area is now at ROM "
+    std::snprintf(line, sizeof line, "assets: %d whole assets and %d entries replaced or added; the asset area is now at ROM "
                   "0x%08zX (ROM %.1f MB)", whole, entries, area, out.size() / 1048576.0);
     log(line);
     recomp::set_rom_contents(std::move(out));

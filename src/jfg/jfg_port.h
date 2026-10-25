@@ -20,6 +20,11 @@ namespace jfg {
 // --- jfg_tick.cpp ------------------------------------------------------------------------------------------------
 extern bool g_story_skip_pending; // START in the story intro: go to character select at the next tick
 extern bool g_reset_pending, g_reset_press_start; // F5, see jfg_debug_frame
+// A level change at the next tick, as the level warp does; front_mode -1 keeps the game's front-end mode.
+void request_warp(int level, int character, int entrance, int front_mode);
+
+// --- jfg_launch.cpp ----------------------------------------------------------------------------------------------
+void launch_tick(recomp_context* ctx); // every tick: --start-level, --mods-only report
 
 // --- jfg_texture_packs.cpp ---------------------------------------------------------------------------------------
 extern std::atomic<int> g_texture_pack_count; // textures listed in the pack's rt64.json, -1 = pack not in use

@@ -129,6 +129,8 @@ int jfg_skip_render_active(void);                                      // jfg_cu
 void jfg_on_init(uint8_t* rdram, recomp_context* ctx);                 // jfg_glue.cpp
 void jfg_register_mod_exports(void);                                   // jfg_mods.cpp: functions mods import ("*")
 void jfg_apply_asset_mods(void);                                       // jfg_assets.cpp: data replaced by mods
+int jfg_launch_arg(int argc, char** argv, int* i);                     // jfg_launch.cpp: --start-level, --mods-only...
+int jfg_launch_ready(bool* skip_launcher);                             // jfg_launch.cpp: after the arguments
 // src/ui/ui_state.cpp
 void jfg_settings_menu_open(int open);                                 // jfg_camera.cpp, every UI frame
 void jfg_tools_ui_frame(void);                                         // jfg_ui_tools.cpp, every UI frame (F10's tools)

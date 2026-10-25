@@ -45,6 +45,8 @@ gpr get_entrypoint_address();
 extern "C" void jfg_apply_asset_mods(void); // JFG PORT: src/jfg/jfg_assets.cpp
 extern "C" void jfg_check_mod_replacements(void); // JFG PORT: src/jfg/jfg_mods.cpp
 extern "C" void jfg_locale_start(void); // JFG PORT: src/jfg/jfg_locale.cpp
+extern "C" int jfg_launch_arg(int argc, char** argv, int* i); // JFG PORT: src/jfg/jfg_launch.cpp
+extern "C" int jfg_launch_ready(bool* skip_launcher); // JFG PORT: src/jfg/jfg_launch.cpp
 
 static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
     printf("Initialized RDRAM at %p\n", rdram);
@@ -159,7 +161,13 @@ int main(int argc, char** argv) {
                     cli_args.window_height = height;
                 }
             }
+        } else if (jfg_launch_arg(argc, argv, &i)) {
+            // JFG PORT: --start-level, --mods-only, --capabilities... (src/jfg/jfg_launch.cpp)
         }
+    }
+    // JFG PORT: --capabilities prints and ends here; --start-level skips the launcher; --mods-only limits this run's mods.
+    if (const int exit_code = jfg_launch_ready(&cli_args.skip_launcher); exit_code >= 0) {
+        return exit_code;
     }
 
 #if !defined(__APPLE__)
