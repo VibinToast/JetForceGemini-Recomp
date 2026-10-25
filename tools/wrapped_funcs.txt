@@ -163,3 +163,8 @@ func_800050A8_5CA8
 frontMap
 frontCleanupMap
 func_overlay_9_000039F0_1F047C8
+
+# Mods' regions: names on the area title and the Tribal screen (jfg_regions.cpp)
+frontDisplayRegion
+tribalScreen
+frontGetWorldName

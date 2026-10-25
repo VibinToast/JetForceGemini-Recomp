@@ -27,6 +27,12 @@
 // between game starts in bin/mod_ids.json (by mod and name); a new one gets "expect" (the number the mod was made
 // for) when that is free, else the lowest free number, mods from the top of the mod list down. jfg_mods.log says which
 // number each name got, and a number other than "expect" is logged.
+// "regions": [{ "append": "name", "name": "Zephyra", "world": "Zephyra Expanse", "expect": 31 }] adds regions (a level
+// header's +0x102: the Tribal / stats region; the game uses 1-30 and its save keeps records for 40), numbered 31-39
+// like appended entries (key "regions"). A level in one gets the region's stats screen when an exit (+0x1A bit 0, as
+// most of the game's) leads into another region, the area title with "name" and "world" when it is entered, and the
+// game's continues; the Tribal table (object table 0x34) is lengthened so the mods' regions have 0 Tribals. A level
+// takes the number with a fixup { "at": 258, "type": "u8", "ref": "name" } (jfg_regions.cpp shows the names).
 // "fixups" on an entry (or on a patch's object-list operation) write numbers the mod can't know into its bytes once
 // they are given out: { "at": 0x54, "type": "s16", "ref": "track_field" } ("ref": a name of the mod's own, or
 // "mod:name" of another mod's; types u8, u16, s16, u32, and "lohi" for an exit's target level). With "packed": true the
@@ -63,6 +69,7 @@ namespace jfg {
 void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
 std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& data); // jfg_deflate.cpp
 int asset_number(const std::string& ref);
+bool mod_region(int region, std::string* name, std::string* world);
 int baddy_like(int object_id);
 std::string texture_owner(int tex_id);
 bool mod_textures();
@@ -116,8 +123,15 @@ struct AnimRows {            // "animRows": an appended model gets a stock model
     std::string mod_id, model; // model: "mod:name"
     int from = -1;
 };
+struct Region {              // "regions": a Tribal / stats region of a mod's own
+    size_t order;
+    std::string mod_id, append, name, world;
+    int expect = -1;
+};
 std::vector<ObjType> g_objtypes;
 std::vector<AnimRows> g_animrows;
+std::vector<Region> g_regions;
+std::map<int, std::pair<std::string, std::string>> g_region_names; // region number -> name, world
 std::map<int, int> g_baddy_like; // object id -> the stock id the squad code treats it as (BaddyTypeToIndex wrapper)
 // Entries a mod replaced, patched or appended (data asset, entry) -> mod id, and whole assets a mod replaced: what
 // texture dumping keeps apart from the game's own textures (jfg::texture_owner).
@@ -309,9 +323,7 @@ void save_ids() {
 }
 
 // The numbers of one set's appended entries (count = its stock entries), remembered ones first.
-std::vector<int> assign_numbers(int table_asset, int data_asset, size_t count,
-                                const std::vector<const Replacement*>& appends) {
-    const std::string key = std::to_string(table_asset) + "/" + std::to_string(data_asset);
+std::vector<int> assign_numbers(const std::string& key, size_t count, const std::vector<const Replacement*>& appends) {
     nlohmann::json& known = g_ids[key];
     if (!known.is_object()) known = nlohmann::json::object();
     std::map<int, std::string> taken; // number -> ref, every remembered one (loaded or not) is reserved
@@ -340,6 +352,36 @@ std::vector<int> assign_numbers(int table_asset, int data_asset, size_t count,
     }
     for (size_t k = 0; k < appends.size(); k++) g_numbers[appends[k]->mod_id + ":" + appends[k]->append] = out[k];
     return out;
+}
+std::vector<int> assign_numbers(int table_asset, int data_asset, size_t count,
+                                const std::vector<const Replacement*>& appends) {
+    return assign_numbers(std::to_string(table_asset) + "/" + std::to_string(data_asset), count, appends);
+}
+
+// The object tables (objGetTable): asset 0x19 is s32 word offsets into asset 0x18, ended by -1. Table 0x34 is the
+// Tribals of each region (s8, 32 of them). Lengthens it to SAVE_REGIONS (the later tables move up) and gives the mods'
+// regions 0 Tribals. False when the tables aren't what the game's code expects.
+constexpr uint32_t OBJ_TABLES = 0x18, OBJ_TABLE_INDEX = 0x19;
+constexpr int TRIBAL_TABLE = 0x34, STOCK_REGIONS = 31, SAVE_REGIONS = 40;
+bool give_tribal_room(std::vector<std::vector<uint8_t>>& assets, const std::vector<int>& regions) {
+    std::vector<uint8_t>& index = assets[OBJ_TABLE_INDEX];
+    std::vector<uint8_t>& data = assets[OBJ_TABLES];
+    if (index.size() < 4 * (size_t)(TRIBAL_TABLE + 2)) return false;
+    const int32_t a = (int32_t)be32(index, 4 * TRIBAL_TABLE);
+    int32_t b = (int32_t)be32(index, 4 * (TRIBAL_TABLE + 1));
+    if (b == -1) b = (int32_t)(data.size() / 4);
+    if (a < 0 || b < a || 4 * (size_t)b > data.size()) return false;
+    const size_t have = 4 * (size_t)(b - a), want = (SAVE_REGIONS + 3) & ~3;
+    if (have < want) {
+        data.insert(data.begin() + 4 * (size_t)b, want - have, 0);
+        for (size_t o = 4 * (TRIBAL_TABLE + 1); o + 4 <= index.size(); o += 4) {
+            const int32_t w = (int32_t)be32(index, o);
+            if (w == -1) break;
+            put_be32(index, o, (uint32_t)(w + (int32_t)((want - have) / 4)));
+        }
+    }
+    for (int r : regions) data[4 * (size_t)a + r] = 0;
+    return true;
 }
 
 // Model m gets model `from`'s animation list and joint slots, appended at the end of the id list and slot data. The
@@ -590,6 +632,14 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
         if (t.def.find(':') == std::string::npos) t.def = id + ":" + t.def;
         g_objtypes.push_back(std::move(t));
     }
+    for (const nlohmann::json& e : j.value("regions", nlohmann::json::array())) {
+        Region r{ order, id, e.value("append", ""), e.value("name", ""), e.value("world", ""), json_int(e, "expect") };
+        if (r.append.empty()) {
+            log("assets: " + id + ": a region needs \"append\": " + e.dump());
+            continue;
+        }
+        g_regions.push_back(std::move(r));
+    }
     for (const nlohmann::json& e : j.value("animRows", nlohmann::json::array())) {
         AnimRows a{ id, e.value("model", ""), json_int(e, "from") };
         if (a.model.empty() || a.from < 0) {
@@ -769,6 +819,14 @@ std::string jfg::texture_owner(int tex_id) {
 bool jfg::mod_textures() { return !g_entry_owner.empty() || g_asset_owner.count(0) || g_asset_owner.count(2); }
 
 // The number an appended entry got this start ("mod_id:append name"), or -1 (jfg_launch: --start-level by name).
+bool jfg::mod_region(int region, std::string* name, std::string* world) {
+    auto it = g_region_names.find(region);
+    if (it == g_region_names.end()) return false;
+    if (name) *name = it->second.first;
+    if (world) *world = it->second.second;
+    return true;
+}
+
 int jfg::asset_number(const std::string& ref) {
     auto it = g_numbers.find(ref);
     return it == g_numbers.end() ? -1 : it->second;
@@ -793,6 +851,8 @@ extern "C" void jfg_apply_asset_mods(void) {
     g_pending.clear();
     std::vector<Patch> patches = std::move(g_patches);
     g_patches.clear();
+    std::vector<Region> regions = std::move(g_regions);
+    g_regions.clear();
     if (reps.empty() && patches.empty()) return;
     std::stable_sort(reps.begin(), reps.end(), [](const Replacement& a, const Replacement& b) { return a.order < b.order; });
     std::stable_sort(patches.begin(), patches.end(), [](const Patch& a, const Patch& b) { return a.order < b.order; });
@@ -926,7 +986,37 @@ extern "C" void jfg_apply_asset_mods(void) {
     if (!type_ptrs.empty() && OBJINDEX < count) {
         type_numbers = assign_numbers(OBJINDEX, OBJINDEX, assets[OBJINDEX].size() / 2, type_ptrs);
     }
+    // Regions: numbered from 31 like appended entries (key "regions"). Past the save's 40 they are refused, and the
+    // levels that name one keep the region their headers have.
+    std::stable_sort(regions.begin(), regions.end(), [](const Region& a, const Region& b) { return a.order < b.order; });
+    std::vector<Replacement> region_reps(regions.size());
+    std::vector<const Replacement*> region_ptrs;
+    for (size_t k = 0; k < regions.size(); k++) {
+        region_reps[k].mod_id = regions[k].mod_id;
+        region_reps[k].append = regions[k].append;
+        region_reps[k].expect = regions[k].expect;
+        region_ptrs.push_back(&region_reps[k]);
+    }
+    std::vector<int> region_numbers;
+    if (!region_ptrs.empty()) region_numbers = assign_numbers("regions", STOCK_REGIONS, region_ptrs);
+    std::vector<int> given_regions;
+    for (size_t k = 0; k < region_numbers.size(); k++) {
+        const Region& r = regions[k];
+        if (region_numbers[k] >= SAVE_REGIONS) {
+            log("assets: " + r.mod_id + ": region \"" + r.append + "\" would be region " + std::to_string(region_numbers[k]) +
+                ", past the save's " + std::to_string(SAVE_REGIONS) + " - its levels keep the region their headers have");
+            g_numbers.erase(r.mod_id + ":" + r.append);
+            continue;
+        }
+        given_regions.push_back(region_numbers[k]);
+        g_region_names[region_numbers[k]] = { r.name.empty() ? r.append : r.name, r.world };
+        log("assets: " + r.mod_id + ": region \"" + r.append + "\" is region " + std::to_string(region_numbers[k]));
+    }
     save_ids();
+    if (!given_regions.empty()) {
+        if (give_tribal_room(assets, given_regions)) entries++;
+        else log("assets: the object tables aren't what the game expects - the mods' regions have no Tribal counts");
+    }
     for (auto& [data_asset, set] : sets) {
         entries += std::max(0, replace_entries(assets[set.table], assets[data_asset], set.table, data_asset, set.entries,
                                                set.appends, numbers[data_asset], set.patches));
