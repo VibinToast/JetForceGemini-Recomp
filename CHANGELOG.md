@@ -3,6 +3,12 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
+## Unreleased
+
+### Fixes
+
+- Fixed the game showing a black screen and closing at start-up on some PCs, where the renderer has to use Vulkan instead of Direct3D 12 (for example older Intel HD Graphics drivers) (#22).
+
 ## v1.2.3 (2026-10-24)
 
 ### New options
