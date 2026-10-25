@@ -23,6 +23,8 @@
 #include "RmlUi/Core/RenderInterfaceCompatibility.h"
 #include "RmlUi/../../Source/Core/Elements/ElementLabel.h"
 #include "RmlUi_Platform_SDL.h"
+#include "jfg/jfg_locale.h" // JFG PORT: the menus in the chosen language
+static void jfg_upper_latin_texts(Rml::Element* element); // JFG PORT: below deinit_hook
 
 #include "config/config.hpp"
 #include "input/input.hpp"
@@ -211,6 +213,14 @@ public:
     int last_active_mouse_position[2] = {0, 0};
     std::unique_ptr<recompui::MenuController> config_controller;
     std::unique_ptr<recompui::MenuController> launcher_controller;
+    // JFG PORT: every text node of the menus goes through TranslateString as it is made: the chosen locale's "ui"
+    // (jfg_locale.h).
+    class JfgSystemInterface : public SystemInterface_SDL {
+    public:
+        int TranslateString(Rml::String& translated, const Rml::String& input) override {
+            return jfg::locale::translate_ui(translated, input) ? 1 : 0;
+        }
+    };
     std::unique_ptr<SystemInterface_SDL> system_interface;
     recompui::RmlRenderInterface_RT64 render_interface;
     Rml::Context* context;
@@ -225,7 +235,7 @@ public:
         launcher_menu_controller = recompui::create_launcher_menu();
         config_menu_controller = recompui::create_config_menu();
 
-        system_interface = std::make_unique<SystemInterface_SDL>();
+        system_interface = std::make_unique<JfgSystemInterface>();
         system_interface->SetWindow(window);
         render_interface.init(interface, device);
 
@@ -277,6 +287,25 @@ public:
             for (const FontFace& face : font_faces) {
                 auto font = dino::runtime::get_asset_path(face.filename);
                 Rml::LoadFontFace(font.string(), face.fallback_face);
+            }
+
+            // JFG PORT: the fonts above are Latin only. For menus in a locale with other scripts (locales/*.json "ui",
+            // e.g. Japanese), the first Japanese font the system has fills in what they lack. None is shipped.
+            const std::filesystem::path cjk_fonts[] = {
+#ifdef _WIN32
+                std::filesystem::path(std::getenv("WINDIR") ? std::getenv("WINDIR") : "C:\\Windows") / "Fonts" / "YuGothM.ttc",
+                std::filesystem::path(std::getenv("WINDIR") ? std::getenv("WINDIR") : "C:\\Windows") / "Fonts" / "meiryo.ttc",
+                std::filesystem::path(std::getenv("WINDIR") ? std::getenv("WINDIR") : "C:\\Windows") / "Fonts" / "msgothic.ttc",
+#else
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+#endif
+            };
+            for (const std::filesystem::path& font : cjk_fonts) {
+                std::error_code ec;
+                if (std::filesystem::exists(font, ec) && Rml::LoadFontFace(font.string(), true)) break;
             }
         }
     }
@@ -1031,10 +1060,45 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
         jfg_launcher_ui_tick(); // JFG PORT: animates the launcher's About page
         jfg_config_pack_join_tick(); // JFG PORT: joins split texture packs, shows the progress
+        if (jfg::locale::ui_has_accents()) { // JFG PORT: capitals with accents (jfg_upper_latin_texts)
+            for (int i = 0; i < ui_state->context->GetNumDocuments(); i++) jfg_upper_latin_texts(ui_state->context->GetDocument(i));
+        }
         ui_state->context->Update();
         ui_state->context->Render();
         ui_state->render_interface.end(command_list, swap_chain_framebuffer);
     }
+}
+
+// JFG PORT: RmlUi's text-transform: uppercase only changes a-z, so a translated menu (jfg_locale.h "ui") styled in
+// capitals would show "FENêTRé". The text nodes it styles so get their Latin letters (U+00E0-U+017F) in capitals here.
+static std::string jfg_upper_latin(const std::string& text) {
+    std::string out;
+    for (size_t i = 0; i < text.size(); i++) {
+        const uint8_t c = (uint8_t)text[i];
+        if ((c == 0xC3 || c == 0xC4 || c == 0xC5) && i + 1 < text.size()) {
+            uint32_t cp = (uint32_t)(c & 0x1F) << 6 | ((uint8_t)text[i + 1] & 0x3F);
+            if (cp >= 0xE0 && cp <= 0xFE && cp != 0xF7) cp -= 0x20;
+            else if ((cp >= 0x100 && cp <= 0x137 && cp != 0x131) || (cp >= 0x14A && cp <= 0x177)) cp &= ~1u;
+            else if ((cp >= 0x139 && cp <= 0x148) || (cp >= 0x179 && cp <= 0x17E)) cp -= (cp % 2 == 0) ? 1 : 0;
+            out.push_back((char)(0xC0 | cp >> 6));
+            out.push_back((char)(0x80 | (cp & 0x3F)));
+            i++;
+            continue;
+        }
+        out.push_back((char)c);
+    }
+    return out;
+}
+
+static void jfg_upper_latin_texts(Rml::Element* element) {
+    if (Rml::ElementText* text = rmlui_dynamic_cast<Rml::ElementText*>(element)) {
+        if (text->GetComputedValues().text_transform() == Rml::Style::TextTransform::Uppercase) {
+            const std::string upper = jfg_upper_latin(text->GetText());
+            if (upper != text->GetText()) text->SetText(upper);
+        }
+        return;
+    }
+    for (int i = 0; i < element->GetNumChildren(); i++) jfg_upper_latin_texts(element->GetChild(i));
 }
 
 void deinit_hook() {

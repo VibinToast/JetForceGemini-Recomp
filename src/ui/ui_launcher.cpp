@@ -16,6 +16,7 @@
 static std::string version_string;
 #include "jfg/jfg_update_check.h"
 #include "jfg/jfg_pack_install.h"
+#include "jfg/jfg_locale.h" // JFG PORT: texts set from here in the chosen language (jfg::locale::ui)
 // A newer release exists (src/jfg/jfg_update_check.cpp): a banner on the Play page and a warning triangle next to the
 // version open the dialog with what is new and a confirmation, and the update is then downloaded and installed. The dialog
 // does not open by itself. bin\jfg_launcher.txt can turn the check off (check_for_updates=0).
@@ -175,7 +176,7 @@ static void refresh_official(bool scan) {
     const bool update = !updates.empty();
     Rml::String title, text, variant;
     if (update) {
-        title = "HD texture pack update: " + updates[0].latest;
+        title = jfg::locale::ui("HD texture pack update:") + " " + updates[0].latest;
         text = "The " + updates[0].variant + " pack you have is " + updates[0].installed + ". Open Texture Packs to update it.";
         variant = updates[0].variant;
     }
@@ -189,15 +190,15 @@ static void refresh_official(bool scan) {
     }
     official_rows.clear();
     for (const JfgOfficialPack& pack : state.packs) {
-        official_rows.push_back({ pack.variant, official_size_text(pack.size), pack.action, pack.action == "Installed" });
+        official_rows.push_back({ pack.variant, official_size_text(pack.size), jfg::locale::ui(pack.action), pack.action == "Installed" });
     }
     model_handle.DirtyVariable("official_rows");
     Rml::String status;
-    if (!jfg_launcher_check_updates()) status = "Turn on Check for Updates (General page) to download it here.";
-    else if (state.stage <= 1) status = "Looking for the latest version...";
-    else if (state.stage == 3) status = "Could not reach GitHub to look for it.";
-    else if (state.packs.empty()) status = "The latest release has nothing to download yet.";
-    else status = "Latest version: " + state.latest;
+    if (!jfg_launcher_check_updates()) status = jfg::locale::ui("Turn on Check for Updates (General page) to download it here.");
+    else if (state.stage <= 1) status = jfg::locale::ui("Looking for the latest version...");
+    else if (state.stage == 3) status = jfg::locale::ui("Could not reach GitHub to look for it.");
+    else if (state.packs.empty()) status = jfg::locale::ui("The latest release has nothing to download yet.");
+    else status = jfg::locale::ui("Latest version:") + " " + state.latest;
     if (status != official_status) { official_status = status; model_handle.DirtyVariable("official_status"); }
 }
 
@@ -539,7 +540,7 @@ public:
             jfg_update_install();
             update_stage = 1;
             update_percent = 0;
-            update_status = "Starting...";
+            update_status = jfg::locale::ui("Starting...");
             model_handle.DirtyVariable("update_stage");
             model_handle.DirtyVariable("update_percent");
             model_handle.DirtyVariable("update_status");
@@ -588,9 +589,9 @@ public:
         constructor.Bind("page", &launcher_page);
         constructor.Bind("toast_frame", &toast_frame);
         constructor.Bind("logo_available", &logo_available);
-        constructor.BindFunc("page_title", [](Rml::Variant& out) { out = Rml::String(launcher_page_info().title); });
-        constructor.BindFunc("page_subtitle", [](Rml::Variant& out) { out = Rml::String(launcher_page_info().subtitle); });
-        constructor.BindFunc("browse_label", [](Rml::Variant& out) { out = Rml::String(rom_valid ? "Change ROM..." : "Browse for ROM..."); });
+        constructor.BindFunc("page_title", [](Rml::Variant& out) { out = jfg::locale::ui(launcher_page_info().title); });
+        constructor.BindFunc("page_subtitle", [](Rml::Variant& out) { out = jfg::locale::ui(launcher_page_info().subtitle); });
+        constructor.BindFunc("browse_label", [](Rml::Variant& out) { out = jfg::locale::ui(rom_valid ? "Change ROM..." : "Browse for ROM..."); });
         constructor.BindEventCallback("set_page", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
             if (!args.empty()) set_launcher_page(args[0].Get<Rml::String>());
         });

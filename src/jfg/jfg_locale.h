@@ -22,6 +22,8 @@
 //                                             font 2: 8)
 //     "pages": { "descriptor": "<hex>", "glyphs": [ ... ] },  up to 4 pages of 256 glyphs (fonts 4-7), for scripts
 //                                             that need more than one font's 256: codes 80 XX - 83 XX draw page 0-3
+//     "ui": { "Master Volume": "Volume général" },  the port's own menus (launcher, settings): English text ->
+//                                             this language's; it may hold RML markup (<b>On</b>)
 //     "layout": {                             for text from another release, which fitted some of it to its own:
 //       "hint.007": "<hex>",                  a hint section's own head (its strings: hint.007.0..n in its order)
 //       "subtitle.07.0": { "time": 30 }       a caption line's id / colour / font / align / time
@@ -74,5 +76,15 @@ void choose(const std::string& id);
 // For menus (any thread): (id, label) of English and every locale, in list order. The label is the locale's name,
 // or its English name when the name has characters the menus' font lacks (beyond Latin: U+024F).
 std::vector<std::pair<std::string, std::string>> list();
+
+// The port's own menus: `english` in the language chosen when the game started (its file's "ui"; english.json's for
+// English), else `english` itself. Any thread. The menus are made once, so another choice shows in them from the
+// next start. With JFG_UI_EXPORT=<file> every text asked for is collected there, as the English "ui" to translate.
+std::string ui(const std::string& english);
+// For RmlUi's SystemInterface::TranslateString (src/ui/ui_state.cpp): `in` is a text node's text, white space and
+// all. False when it has no translation (`out` = `in`).
+bool translate_ui(std::string& out, const std::string& in);
+// Whether the menus' translation has letters beyond ASCII (src/ui/ui_state.cpp then sets their capitals itself).
+bool ui_has_accents();
 
 } // namespace jfg::locale

@@ -368,7 +368,7 @@ LANGUAGE_LIST = '''                    <div class="jfg-ingame-only">
                             <button class="button" data-for="l : locales" data-attr-id="'jfg_locale_' + it_index" data-event-click="set_locale(l.id)" data-class-jfg-selected="l.selected" style="display: inline-block; margin: 6dp; nav-up: auto; nav-down: auto;">{{l.name}}</button>
                         </div>
                     </div>
-                    <div class="jfg-note" style="display: block; margin: 4dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Menus, subtitles and hints. More languages are files in the game's locales folder; text a language lacks is shown in English.</div>
+                    <div class="jfg-note" style="display: block; margin: 4dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Menus, subtitles and hints. More languages are files in the game's locales folder; text a language lacks is shown in English. This settings menu changes language the next time the game starts.</div>
                     </div>'''
 
 # In a wrapper the launcher hides (it has no F10 or F9: it is the game's menu that has them).

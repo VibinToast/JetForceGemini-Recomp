@@ -5,6 +5,7 @@
 // pattern (as the decomp's tools/text.py lays them out): each menu string, subtitle line and hint string English has
 // is the locale's when its key is there, else English's own bytes.
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -558,6 +559,99 @@ void choose(const std::string& id) {
 std::vector<std::pair<std::string, std::string>> list() {
     std::lock_guard<std::mutex> lock(g_mutex);
     return g_list;
+}
+
+// --- the port's menus -------------------------------------------------------------------------------------------------
+
+namespace {
+std::mutex g_ui_mutex;
+bool g_ui_loaded = false;
+std::map<std::string, std::string> g_ui;       // English -> the chosen language's
+std::map<std::string, std::string> g_exported; // JFG_UI_EXPORT: every text asked for
+
+// `text` without its leading and trailing white space and with each run of white space inside as one space.
+std::string ui_key(const std::string& text) {
+    std::string out;
+    bool space = false;
+    for (char c : text) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') { space = !out.empty(); continue; }
+        if (space) out.push_back(' ');
+        space = false;
+        out.push_back(c);
+    }
+    return out;
+}
+
+// Whether `key` has a Latin letter outside {{ data expressions }}: only those are worth translating (not the
+// controller icons' symbols).
+bool has_words(const std::string& key) {
+    int depth = 0;
+    for (size_t i = 0; i < key.size(); i++) {
+        if (key.compare(i, 2, "{{") == 0) { depth++; i++; }
+        else if (key.compare(i, 2, "}}") == 0 && depth > 0) { depth--; i++; }
+        else if (depth == 0 && std::isalpha((unsigned char)key[i])) return true;
+    }
+    return false;
+}
+
+// Under g_ui_mutex.
+void load_ui() {
+    if (g_ui_loaded) return;
+    g_ui_loaded = true;
+    std::string id = jfg::locale::chosen();
+    if (id.empty()) id = ENGLISH_ID;
+    std::ifstream f(std::filesystem::path(FOLDER) / (id + ".json"), std::ios::binary);
+    if (!f) return;
+    const std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    const json j = json::parse(bytes, nullptr, false);
+    if (j.is_discarded() || !j.is_object() || !j.contains("ui") || !j["ui"].is_object()) return;
+    for (const auto& [english, text] : j["ui"].items())
+        if (text.is_string() && !text.get_ref<const std::string&>().empty()) g_ui[ui_key(english)] = text.get<std::string>();
+    log("locale: " + id + ".json: " + std::to_string(g_ui.size()) + " menu texts");
+}
+
+// Under g_ui_mutex: JFG_UI_EXPORT=<file> collects `key` (rewritten whenever one is new).
+void export_key(const std::string& key) {
+    static const char* path = std::getenv("JFG_UI_EXPORT");
+    if (path == nullptr || g_exported.count(key) || !has_words(key)) return;
+    g_exported[key] = key;
+    std::ofstream(path, std::ios::binary) << json(g_exported).dump(1);
+}
+
+const std::string* lookup(const std::string& key) {
+    load_ui();
+    export_key(key);
+    auto it = g_ui.find(key);
+    return it == g_ui.end() ? nullptr : &it->second;
+}
+} // namespace
+
+std::string ui(const std::string& english) {
+    std::lock_guard<std::mutex> lock(g_ui_mutex);
+    const std::string* t = lookup(ui_key(english));
+    return t ? *t : english;
+}
+
+bool ui_has_accents() {
+    static const bool accents = [] {
+        std::lock_guard<std::mutex> lock(g_ui_mutex);
+        load_ui();
+        for (const auto& [english, text] : g_ui)
+            for (char c : text) if ((uint8_t)c >= 0x80) return true;
+        return false;
+    }();
+    return accents;
+}
+
+bool translate_ui(std::string& out, const std::string& in) {
+    const std::string key = ui_key(in);
+    std::lock_guard<std::mutex> lock(g_ui_mutex);
+    const std::string* t = key.empty() ? nullptr : lookup(key);
+    if (t == nullptr) { out = in; return false; }
+    // The white space around the text stays: it separates it from the elements next to it.
+    const size_t first = in.find_first_not_of(" \t\r\n"), last = in.find_last_not_of(" \t\r\n");
+    out = in.substr(0, first) + *t + in.substr(last + 1);
+    return true;
 }
 
 } // namespace jfg::locale
