@@ -60,6 +60,7 @@ extern "C" int32_t* section_addresses; // librecomp: each code section's address
 
 namespace jfg {
 void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
+bool appended_entry(int data_asset, int entry, std::string* owner); // jfg_assets.cpp
 }
 extern "C" {
 void amSndPlay(uint8_t* rdram, recomp_context* ctx);
@@ -68,6 +69,7 @@ void texDPInit(uint8_t* rdram, recomp_context* ctx);
 void fontUseFont(uint8_t* rdram, recomp_context* ctx);
 void fontColour(uint8_t* rdram, recomp_context* ctx);
 void fontPrintXY(uint8_t* rdram, recomp_context* ctx);
+void fontStringWidth(uint8_t* rdram, recomp_context* ctx);
 void pauseSetNewLevel(uint8_t* rdram, recomp_context* ctx);
 void mmFree(uint8_t* rdram, recomp_context* ctx);
 void func_overlay_9_00002880_1F03658(uint8_t* rdram, recomp_context* ctx); // select a stock map point
@@ -423,6 +425,21 @@ int level_number(const Planet& p, int hero) {
     return ref.empty() ? -1 : jfg::asset_number(p.mod_id + ":" + ref);
 }
 
+// The galaxy a level belongs to: the game's for its own levels, else the galaxy of the planets of the mod that added it
+// (when they are all on one). -1: unknown (a mod with no planets, or planets on several galaxies).
+constexpr int LEVEL_HEADERS = 0x1F; // the level headers' data asset
+int galaxy_of_level(int level) {
+    std::string owner;
+    if (!jfg::appended_entry(LEVEL_HEADERS, level, &owner)) return MAIN;
+    int g = -1;
+    for (const Planet& p : g_planets) {
+        if (p.mod_id != owner || p.galaxy < 0) continue;
+        if (g >= 0 && g != p.galaxy) return -1;
+        g = p.galaxy;
+    }
+    return g;
+}
+
 // A stock route already leaves `point` in direction `dir`.
 bool stock_route_taken(int point, int dir) {
     for (uint32_t r = o9(O9_ROUTES); rd8(r) != 0xFF; r += ROUTE_SIZE) {
@@ -561,8 +578,8 @@ void build(recomp_context* ctx) {
     wr32(o9(O9_BUILT), built);
     settle_routes();
 
-    // Where the map opens: on the planet whose level the hero is in, else the galaxy asked for (jfg_galaxy_show), else
-    // the one this file was last on.
+    // Where the map opens: on the planet whose level the hero is in; else the galaxy asked for (jfg_galaxy_show); else
+    // the galaxy of the level the hero is in (the game's for its own levels); else the one this file was last on.
     const int hero = (int)rd32(o9(O9_HERO));
     const uint32_t ch = jfg::character_ptr(hero);
     const int level = ch != 0 ? jfg::Character::Resume::get(ch) >> 5 : -1;
@@ -581,7 +598,8 @@ void build(recomp_context* ctx) {
         select_planet(open_on, true);
         log("worldmap: opens on " + p.key);
     } else {
-        int g = g_show >= 0 ? g_show : galaxy_index(state().galaxy);
+        int g = g_show >= 0 ? g_show : level >= 0 ? galaxy_of_level(level) : -1;
+        if (g < 0) g = galaxy_index(state().galaxy);
         if (g > MAIN && g < (int)g_galaxies.size() && galaxy_open(g)) switch_galaxy(ctx, g, true);
     }
     g_show = -1;
@@ -770,19 +788,59 @@ void draw(recomp_context* ctx, int rate) {
         print(ctx, x + 30, y - 15, p.text);
     }
 
-    // The galaxy line, when there is more than one galaxy to go to: "L  <name>  R" at the top.
+    // The galaxy line, when there is more than one galaxy to go to: the name at the top, with the L and R buttons in the
+    // selected planet's yellow well clear of it on either side.
     int open_count = 0;
     for (int g = 0; g < (int)g_galaxies.size(); g++) open_count += galaxy_open(g) ? 1 : 0;
     g_switching.store(open_count > 1, std::memory_order_relaxed);
     if (open_count > 1) {
         static uint32_t text = 0;
-        if (!text) text = call_game(mmAlloc, ctx, { 0x50, BLOCK_COLOUR }); // kept for the whole run
+        if (!text) text = call_game(mmAlloc, ctx, { 0x60, BLOCK_COLOUR }); // kept for the whole run
         if (jfg::valid_ptr(text)) {
-            const std::string s = "L  " + g_galaxies[g_galaxy].name.substr(0, 0x40) + "  R";
-            for (size_t i = 0; i <= s.size(); i++) wr8(text + (uint32_t)i, i < s.size() ? (uint8_t)s[i] : 0);
+            const uint32_t name = text, left = text + 0x48, right = text + 0x50;
+            auto put = [](uint32_t at, const std::string& s) {
+                for (size_t i = 0; i <= s.size(); i++) wr8(at + (uint32_t)i, i < s.size() ? (uint8_t)s[i] : 0);
+            };
+            put(name, g_galaxies[g_galaxy].name.substr(0, 0x40));
+            put(left, "L");
+            put(right, "R");
+            // The game's font has no arrows, so the buttons are drawn: a frame around each letter and a small arrow
+            // pointing out from it, filled like the routes.
+            constexpr int GAP = 22, Y = 34, PAD = 3, TOP = Y - 3, BOTTOM = Y + 11, MID = (TOP + BOTTOM) / 2;
+            call_game(fontUseFont, ctx, { 2u });
+            const int half = (int)call_game(fontStringWidth, ctx, { name, 2u, 1u }) / 2;
+            const int lw = (int)call_game(fontStringWidth, ctx, { left, 2u, 1u });
+            const int rw = (int)call_game(fontStringWidth, ctx, { right, 2u, 1u });
+            const int lx2 = 160 - half - GAP, lx1 = lx2 - lw - 2 * PAD; // L's frame
+            const int rx1 = 160 + half + GAP, rx2 = rx1 + rw + 2 * PAD; // R's frame
+            auto rect = [&](int x1, int y1, int x2, int y2) {
+                call_game(func_overlay_9_00002FB0_1F03D88, ctx, { (uint32_t)(int16_t)x1, (uint32_t)(int16_t)y1,
+                                                                 (uint32_t)(int16_t)x2, (uint32_t)(int16_t)y2 });
+            };
+            auto frame = [&](int x1, int x2) {
+                rect(x1, TOP, x2, TOP);
+                rect(x1, BOTTOM, x2, BOTTOM);
+                rect(x1, TOP, x1, BOTTOM);
+                rect(x2, TOP, x2, BOTTOM);
+            };
+            call_game(texDPInit, ctx, { ADDR_frontgfx });
+            gfx(0xE7000000, 0);
+            gfx(0xBA001402, 0);
+            gfx(0xFCFFFFFF, 0xFFFDF6FB);
+            gfx(0xFA000000, 0xFFFF00FF); // the selected planet's yellow
+            frame(lx1, lx2);
+            frame(rx1, rx2);
+            for (int c = 0; c < 4; c++) { // columns of an arrow, the tallest by the frame
+                rect(lx1 - 3 - c, MID - (3 - c), lx1 - 3 - c, MID + (3 - c));
+                rect(rx2 + 3 + c, MID - (3 - c), rx2 + 3 + c, MID + (3 - c));
+            }
+            call_game(texDPInit, ctx, { ADDR_frontgfx });
             call_game(fontUseFont, ctx, { 2u });
             call_game(fontColour, ctx, { 0xFFu, 0xFFu, 0xFFu, 0xFFu, 0xFFu });
-            print(ctx, 160 - (int)s.size() * 5 / 2, 34, text);
+            print(ctx, 160 - half, Y, name);
+            call_game(fontColour, ctx, { 0xFFu, 0xFFu, 0u, 0xFFu, 0xFFu });
+            print(ctx, lx1 + PAD + 1, Y, left);
+            print(ctx, rx1 + PAD + 1, Y, right);
         }
     }
 }

@@ -70,6 +70,7 @@ void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
 std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& data); // jfg_deflate.cpp
 int asset_number(const std::string& ref);
 bool mod_region(int region, std::string* name, std::string* world);
+bool appended_entry(int data_asset, int entry, std::string* owner);
 int baddy_like(int object_id);
 std::string texture_owner(int tex_id);
 bool mod_textures();
@@ -136,6 +137,7 @@ std::map<int, int> g_baddy_like; // object id -> the stock id the squad code tre
 // Entries a mod replaced, patched or appended (data asset, entry) -> mod id, and whole assets a mod replaced: what
 // texture dumping keeps apart from the game's own textures (jfg::texture_owner).
 std::map<std::pair<int, int>, std::string> g_entry_owner;
+std::map<int, size_t> g_stock_entries; // by data asset: the player's own entries in the sets mods append to
 std::map<int, std::string> g_asset_owner;
 
 struct ObjOp {
@@ -818,7 +820,7 @@ std::string jfg::texture_owner(int tex_id) {
 }
 bool jfg::mod_textures() { return !g_entry_owner.empty() || g_asset_owner.count(0) || g_asset_owner.count(2); }
 
-// The number an appended entry got this start ("mod_id:append name"), or -1 (jfg_launch: --start-level by name).
+// A mod region's name and world text (jfg_regions.cpp); false when `region` isn't one.
 bool jfg::mod_region(int region, std::string* name, std::string* world) {
     auto it = g_region_names.find(region);
     if (it == g_region_names.end()) return false;
@@ -827,6 +829,17 @@ bool jfg::mod_region(int region, std::string* name, std::string* world) {
     return true;
 }
 
+// True when `entry` of a set was appended by a mod (not one of the player's own data), with that mod's id.
+bool jfg::appended_entry(int data_asset, int entry, std::string* owner) {
+    auto stock = g_stock_entries.find(data_asset);
+    if (stock == g_stock_entries.end() || entry < (int)stock->second) return false;
+    auto it = g_entry_owner.find({ data_asset, entry });
+    if (it == g_entry_owner.end()) return false;
+    if (owner) *owner = it->second;
+    return true;
+}
+
+// The number an appended entry got this start ("mod_id:append name"), or -1 (jfg_launch: --start-level by name).
 int jfg::asset_number(const std::string& ref) {
     auto it = g_numbers.find(ref);
     return it == g_numbers.end() ? -1 : it->second;
@@ -969,6 +982,7 @@ extern "C" void jfg_apply_asset_mods(void) {
             if ((int32_t)be32(table, o) == -1) { stock = o / 4 >= 1 ? o / 4 - 1 : 0; break; }
         }
         numbers[data_asset] = assign_numbers(set.table, data_asset, stock, set.appends);
+        g_stock_entries[data_asset] = stock;
     }
     // New object ids: numbered like appended entries (key "48/48", the object index asset), before any fixup names one.
     std::vector<ObjType> objtypes = std::move(g_objtypes);
