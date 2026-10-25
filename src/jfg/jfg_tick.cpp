@@ -45,6 +45,11 @@ static float toolbar_offset() {
 }
 } // namespace
 
+void request_warp(int level, int character, int entrance, int front_mode) {
+    g.warp_level = level; g.warp_character = character; g.warp_entrance = entrance; g.pending_warp = true;
+    g_warp_mode = front_mode;
+}
+
 // Called once per game tick on the game's main thread (hook at the entry of func_80044FAC_45BAC).
 extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     g_rdram = rdram;
@@ -108,6 +113,8 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
             g.warp_level = w3[1]; g.warp_character = w3[2]; g.warp_entrance = w3[3]; g.pending_warp = true;
         }
     }
+
+    launch_tick(ctx); // --start-level and friends (jfg_launch.cpp)
 
     // Scripted testing: JFG_DEBUG_ITEMS=1 gives the current character every key and object;
     // JFG_DEBUG_WEAPONS=<mask> sets the current character's owned-weapon mask the way the Items tab does.
