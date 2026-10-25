@@ -3,7 +3,68 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
-## Unreleased
+## v1.2.3 (2026-10-24)
+
+### New options
+
+- HUD in Screen Corners (Graphics): in widescreen the HUD moves out to the corners of the window. It needs Widescreen on.
+- Shadow Opacity (Graphics): how dark the shadows under characters are drawn (50% in every profile).
+- Blood Splat Limit (Gameplay): with Blood Stays on, how many blood splats stay, from 64 (the original game) up to 4096. Blood Amount now goes up to 800%.
+- Camera Distance, Aim Offset and Aim Zoom (Controls): where the dual-stick camera sits and how the aiming view looks. Over-the-Shoulder Aiming is now a preset of these sliders.
+- Same Aim-Walk Speed in All Directions (Controls): while aiming, walking backwards and sideways is as fast as walking forwards.
+- A Quit tab in the settings menu (Return to Launcher, Quit Game) replaces the two small icon buttons.
+
+### Changes
+
+- Dual stick: the camera pivots on the middle of the character, while aiming too. The crosshair is in the middle of the screen from the first frame you aim, with a small drag margin when you strafe. In boss fights the game's own camera stays in charge and the view turns with the aim. Lupus's hover no longer looks like a drop (#14, #16).
+- Settings menu: the game behind it is darkened, it reopens on the last tab and remembers your place in each tab, and the Profiles tab's description is a card like the other tabs'.
+- The selected profile and texture pack have a gold outline, in the settings menu and the launcher.
+- With a controller: with a slider selected, LB / RB move it by 10 (hold to keep moving), and holding a direction speeds it up. The last option scrolls the list to the bottom, and locked options are skipped.
+- Touch in the menus on the Steam Deck's screen: tap to select, drag to scroll, and drag a slider.
+- Profiles: Blood Splat Limit 64 in Default, 128 in Modern and Modern and Balanced, and 4096 in Extreme (with Blood Stays and Blood Amount 800%). Normalize Diagonal Speed and Same Aim-Walk Speed in All Directions are on in all but Default. Extreme sprints, also while aiming and swimming.
+- The game always pauses while the settings menu is open (the Pause in Settings Menu option is gone).
+- The in-game "Update available" notice shows for 5 seconds.
+
+### Fixes
+
+- Lupus's jetpack flames no longer flicker or lag behind while hovering at frame rates above 30.
+- The machine gun's crosshair shakes again while firing.
+- The reticle no longer stays on screen through a loading zone or warp with Frame Interpolation on.
+- Widescreen: the planet map shown after leaving a planet keeps its planets inside the picture.
+- Blood Stays keeps every splat up to the Blood Splat Limit, instead of old ones disappearing to make room.
+- Fixed a rare crash in busy fights at Game Frame Rate 60.
+
+## v1.2.2 (2026-10-22)
+
+### New options
+
+- Smooth Shadows (Graphics, on by default): with Frame Interpolation, character shadows move smoothly with the character instead of trailing behind it.
+
+### Fixes
+
+- Blood Stays: new blood always appears; the oldest stains make room once the screen is full.
+- Game Frame Rate 60 is now marked experimental in the settings menu.
+- The Modern, Modern and Balanced and Extreme profiles now keep the game at its original 30 and smooth it to 60 fps with Frame Interpolation (choose the profile again to get the new settings).
+- The settings menu scrolls all the way to the top with a controller or the keyboard, so the text and titles above the first options show again.
+- Fixed a crash in the Lurg boss fight (Tawfret) at 60 fps.
+- The aiming reticle of the Tri-Rocket, Homing Missiles, mines, grenades and the other weapons whose reticle the game draws itself no longer shakes while you aim and turn with Frame Interpolation above the game's frame rate.
+- With Frame Interpolation, those reticles use the exact in-between point each frame was drawn at, so they stay in step when an in-between frame is dropped (issue #8).
+- At Game Frame Rate 30 with Frame Interpolation on, those reticles no longer flicker between two positions when you swing the aim quickly.
+- The aiming reticle no longer shakes up and down while you aim and turn with Frame Interpolation on (most noticeable with the mouse).
+- The star in the middle of the aiming reticle (e.g. the blaster's) no longer flickers between two places while you aim and turn with Frame Interpolation on.
+- With the game's own Widescreen screen option on, mouse and keyboard controls work again and START opens the pause menu instead of fast-forwarding (#10).
+- In the Bindings tab, Ctrl, Alt and the Windows key show their key symbols instead of a number (such as 224 for Left Ctrl), and keys shown by name (such as Keypad 1) fit their box (#10).
+- START now skips the scene in level 398, the last one that couldn't be skipped.
+- Dual stick: pressing aim after turning the camera now starts the aim where you were looking, up and down included, instead of snapping back to the way the character faces (#14).
+
+## v1.2.1 (2026-10-22)
+
+### Fixes
+
+- In-app updates now install completely, even when the game can't swap its own exe straight away. Before, the menus and launcher could stay on the old version.
+- If you updated to 1.2.0 inside the game and your launcher or menus look old, update to 1.2.1, or download it from the release page.
+
+## v1.2.0 (2026-10-22)
 
 ### New options
 
@@ -24,9 +85,9 @@ are written here by hand and become that version's notes when it is released.
 
 - Two new options in the Graphics tab replace the old Frame Rate setting:
 - Game Frame Rate: 30 (like the N64) or 60. Game speed stays the same either way.
-- Smooth Motion: adds in-between frames so movement looks smoother, with either Game Frame Rate. Choose Off, 60, 90, 120, 144, 240 or Monitor (your monitor's refresh rate).
+- Frame Interpolation: adds in-between frames so movement looks smoother, with either Game Frame Rate. Choose Off, 60, 90, 120, 144, 240 or Monitor (your monitor's refresh rate).
 - Changes to either option apply at once, with no restart.
-- The old "60 + Interpolated" choice is gone: it is now Game Frame Rate 60 with Smooth Motion on Monitor. If you had it chosen, the update switches you to that by itself.
+- The old "60 + Interpolated" choice is gone: it is now Game Frame Rate 60 with Frame Interpolation on Monitor. If you had it chosen, the update switches you to that by itself.
 - Show FPS shows both the game's frame rate and the frame rate on screen.
 - At 60 fps, ants, Tribals and other enemies move on every frame instead of looking like 30 fps.
 - At 60 fps, the slug boss's bolts and the target lock keep their original timing.
@@ -81,7 +142,9 @@ are written here by hand and become that version's notes when it is released.
 - Fixed the game freezing when the menu was closed twice in a row.
 - Fixed a freeze at start-up, and when going fullscreen or changing the frame rate during play, with in-between frames on (#3).
 - Fixed a crash in cutscenes with anti-aliasing and in-between frames on.
-- Weapon reticles drawn by the game (Tri-Rocket, Homing Missiles, mines, grenades and others) show again with Smooth Motion on.
+- Fixed a rare crash in the alien boss fight where the boss throws a volley of rocks.
+- After closing a menu, the mouse buttons fire and aim again, and holding fire (or a Steam Deck screen tap) while closing it no longer keeps you firing.
+- Weapon reticles drawn by the game (Tri-Rocket, Homing Missiles, mines, grenades and others) show again with Frame Interpolation on.
 - The start-up key hint no longer mentions F9 (the debug window).
 
 ## v1.1.8 (2026-10-18)

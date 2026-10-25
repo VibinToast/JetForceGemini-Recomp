@@ -3,9 +3,13 @@
 A native 100% playable PC port of Jet Force Gemini (N64, US) for Windows and Linux, made by static recompilation. No emulator:
 the game's code is translated from your ROM and compiled for your PC.
 
-**Current Progress:** Quality of Life features & Mod support.
+**Current Progress:** Quality of Life features. Mod support is next: see the [Roadmap](ROADMAP.md).
 
 **No game code or assets are included.** You need your own ROM.
+
+**Contents:** [ROM](#rom) · [Features](#features) · [Build and run](#build-and-run) · [Steam Deck](#steam-deck) ·
+[Keys](#keys) · [Reporting bugs](#reporting-bugs) · [How it works](#how-it-works) · [AI disclosure](#ai-disclosure) ·
+[Legal](#legal) · [Credits](#credits) · [Roadmap](ROADMAP.md) · [Known issues](KNOWN_ISSUES.md)
 
 ## ROM
 
@@ -14,21 +18,23 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 ## Features
 
 **Controls**
-- Mouse and keyboard controls.
+- Mouse and keyboard controls, including Floyd missions.
 - Dual-stick controls with a camera-relative left stick and a modern button layout.
-- Over-the-shoulder aim with a centred reticle, and adjustable aim speed.
-- Adjustable movement speed
+- Over-the-shoulder aim with a centered reticle, and adjustable aim and movement speed.
+- Sprint on land and in water.
+- Full controller support in the menus, launcher and tools.
 - Rumble Pak support, and rebindable controls.
 
 **Gameplay**
-- Skips cutscenes
-- A Weapons editor for each weapon
-- No blood option.
-- Cheats (Skip Tribals yay!)
+- Auto Save, Unlimited Continues, and Tribals that stay rescued.
+- Profiles: play the original game or a modern setup in one click.
+- Skip cutscenes.
+- A weapons editor for each weapon.
+- Gore options: no blood, or blood and body parts that stay.
 
 **Visuals**
-- 60 FPS
-- HD Texture Pack
+- Smoother, more responsive play: the game can run at 60 ticks per second instead of 30 for quicker controls (experimental), and
+  Frame Interpolation fills in extra frames to match your monitor's refresh rate (up to 240 Hz).
 - Widescreen.
 - Ambient occlusion (SSAO) and bloom.
 - Disable LOD and draw distant objects.
@@ -36,7 +42,7 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 - On-screen FPS, level and texture pack.
 
 **Texture packs**
-- The JFG HD texture pack is a separate download. See
+- The official JFG HD texture pack installs and updates from the launcher. See
   [vibintoast.com/projects/jfg-4k](https://vibintoast.com/projects/jfg-4k) for more info.
 - Texture dumping, all in one folder or one folder per level.
 - HD texture packs, picked from a list and switched in-game with F6. A pack is a folder in `bin/texture_packs/<name>`
@@ -86,6 +92,24 @@ The game ends up in `bin`, together with its saves and settings. The build also 
 (`lib`, `build-tools`, `build-windows` / `build-linux`, `RecompiledFuncs`), none of which is committed.
 Keep `bin` private, because it holds a copy of the ROM.
 
+## Steam Deck
+
+Use the Linux AppImage, and always start the game **through Steam**, in Desktop Mode too:
+
+1. In Desktop Mode, make the AppImage executable (right-click it, Properties > Permissions), then add it to Steam
+   (right-click > Add to Steam, or "Add a Non-Steam Game" in Steam).
+2. Start it from your Steam library, in Game Mode or Desktop Mode.
+3. Choose your ROM the first time in Desktop Mode: Game Mode may have no file picker. Or write its path in
+   `~/.local/share/JetForceGeminiRecompiled/jfg_launcher.txt` as `rom=/home/deck/path/to/baserom.us.z64`.
+
+Keep **Mouse and Keyboard Controls** (settings menu, **Controls** tab) **Off** on the Deck. The Modern profiles turn
+it on, so set it back to Off after choosing one, or turn on **Keep My Controls** (Profiles tab) first.
+
+Why: started from the file manager, Steam turns the Deck's controls into a keyboard and mouse as well as a controller,
+so every press counts twice (Start opens the settings menu, and menu moves skip a button). With Mouse and Keyboard
+Controls on, the touchscreen and trackpads act as a mouse that aims and fires, and firing can stay stuck after you
+close the settings menu.
+
 ## Keys
 
 | Key | Action |
@@ -100,20 +124,30 @@ Keep `bin` private, because it holds a copy of the ROM.
 ## Reporting bugs
 
 Report bugs on the [Issues page](https://github.com/VibinToast/JetForceGemini-Recomp/issues). Check first whether it
-is already reported there or listed in [KnownIssues.md](KnownIssues.md).
+is already reported there or listed in [Known issues](KNOWN_ISSUES.md).
 
 Please include:
+- **Your version.** It's shown in the launcher (for example 1.2.1). If you built the game yourself, the commit.
 - **What happened and what you expected.** Steps to make it happen again, if you know them.
-- **Where.** The level and roughly where in it (Settings > Visuals > Show Level puts the level on screen), or the
-  menu or cutscene.
-- **Your setup.** The release version or commit, Windows or Linux, your GPU, and your monitor's refresh rate.
-- **Your settings**, if they could matter: the profile, Frame Rate, Widescreen, and the Graphics menu's Framerate.
-  `jfg_port_options.txt` and `graphics.json` from the `bin` folder hold them.
+- **Where.** The level and roughly where in it (turn on **Show Level** in the settings menu's **General** tab to put
+  the level number on screen), or the menu or cutscene.
+- **Your setup.** Windows, Linux or Steam Deck, your GPU, and your monitor's refresh rate.
+- **Your settings**, if they could matter: the profile, **Game Frame Rate**, **Frame Interpolation** (Graphics tab),
+  widescreen, and the texture pack, if any.
 - **A screenshot or video**, for anything visual.
-- **Logs**, if the game crashed or stopped with an error: `crash.log`, `jfg_error.log` and `jfg_memory.log` from the
-  `bin` folder, whichever exist.
+- **Logs**, if the game crashed or stopped with an error: `crash.log`, `jfg_error.log` and `jfg_memory.log`,
+  whichever exist. Settings files help too: `jfg_port_options.txt` and `graphics.json`.
 
-Do not attach your ROM, or anything else from `bin` beyond the files above.
+Where those files are:
+
+| Game | Folder |
+|---|---|
+| Windows zip | next to `JetForceGeminiRecompiled.exe` |
+| Linux AppImage and Steam Deck | `~/.local/share/JetForceGeminiRecompiled` |
+| Linux portable (tar.gz) | the game folder |
+| Built yourself | `bin` |
+
+Do not attach your ROM, or any other file from those folders beyond the ones above.
 
 ## How it works
 

@@ -89,6 +89,24 @@ extern "C" void jfg_squad_spawn_after(uint8_t* rdram_, recomp_context* ctx) {
     jfg_log_line("jfg_memory.log", line);
 }
 
+// SquaddieInitFromRomdef(object, ...)'s wrapper: 0 (skip it) when the object is NULL. func_overlay_3_00014694 reuses a
+// deactivated member through func_80005F14, which can return NULL in a busy fight, and passes that straight on (first
+// read: object + 0x68; crash 2026-10-23 at Game 60). The member is left out (the caller returns the same NULL, which
+// the spawn loop counts as a failed add, see jfg_squad_spawn_after).
+extern "C" int jfg_squaddie_init_ok(uint8_t* rdram_, recomp_context* ctx) {
+    if ((uint32_t)ctx->r4 != 0) return 1;
+    g_rdram = rdram_;
+    static int logged = 0;
+    if (logged++ < 20) {
+        char line[200];
+        std::snprintf(line, sizeof(line), "reused squad member came back with no object (level %d, %d bytes of heap free); left out",
+            (int)(int16_t)rd16(ADDR_currentLevel), (int)rd32(ADDR_FreeRAM));
+        jfg_log_line("jfg_memory.log", line);
+    }
+    ctx->r2 = 0; // what it returns to the callers that use it
+    return 0;
+}
+
 // objSetupObject(entry, flags) returning NULL: which of its steps failed, logged to jfg_memory.log. A squadron member and
 // a gun turret's shot could not be created in level 248 with 200 KB of heap free (the shot's NULL then crashed
 // squadsFireWeapon), so the heap is not the only thing that runs out. Its wrapper keeps a record per depth (calls nest:
@@ -309,6 +327,10 @@ static void mm_alloc_checked(uint8_t* rdram, recomp_context* ctx) {
 }
 
 static void objsetup_step_call(uint8_t* rdram, recomp_context* ctx, recomp_func_t* orig, int step);
+
+JFG_WRAP(SquaddieInitFromRomdef) {
+    if (jfg_squaddie_init_ok(rdram, ctx)) SquaddieInitFromRomdef_orig(rdram, ctx);
+}
 
 JFG_WRAP(mmAlloc) {
     objsetup_step_call(rdram, ctx, mm_alloc_checked, 7);

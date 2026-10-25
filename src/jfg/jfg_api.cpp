@@ -132,6 +132,8 @@ void register_api() {
     add_internal(Event::BossFightControl, jfg_boss_tick);   // boss-fight control layout (jfg_controls.cpp)
     add_internal(Event::BloodSpurt, jfg_gore_on_blood_spurt, // No blood, Blood amount (jfg_gore.cpp)
                  [] { return jfg_no_blood() != 0 || g.blood_amount != 100; });
+    add_internal(Event::BloodSpurt, jfg_gore_make_room, [] { return g.gore_keep_blood; });   // Blood stays: room for it
+    add_internal(Event::LevelChange, jfg_gore_level_change, [] { return g.gore_keep_blood; }); // Blood stays: kept splats go
     add_internal(Event::BloodHit, jfg_gore_on_blood_hit, [] { return jfg_no_blood() != 0; }); // No blood
     add_internal(Event::SeveredLimbTick, jfg_gore_limb, [] { return g.gore_keep_limbs; });     // Body parts stay
     add_internal(Event::SidekickTick, jfg_floyd_seen);       // Hide Floyd: his object kind (jfg_visuals.cpp)
