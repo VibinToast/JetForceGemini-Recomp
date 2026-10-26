@@ -33,12 +33,20 @@
 //   which never show (the pistol never runs out). They are pointed at the slot's names (English) at each level load,
 //   after the menu text is (re)loaded.
 //
+// Heavy brute's beam (SpannerHand, laser beam 0xF4): squadsFireWeapon aims its end once, at the target's hit centre,
+// and the beam never moves it (BTSBSpannerHand only moves the start to the hand); its hit sphere is radius 4 at the end
+// (LaserBeamInit). So it only hit a hero standing still. Before BTSBSpannerHand the end now eases 1/8 of the way to
+// the current target's hit centre each tick (overlay 3's target, D_overlay_3_0001A1E4), so it sweeps after the hero
+// and can be dodged; the original then puts the beam object (and its hit) on the end. After LaserBeamInit the hit is
+// widened to BEAM_RADIUS. Stock enemies with this beam: only the cut SpannerHand (decomp MSR "Hub code survey", bot2).
+//
 // Player bodies (jfg_assets.json "playerBodies"): a mod can play a hero in another body in its own levels, the cut
 // Tribal man (0x4) and yellow ant (0x21) for example (multiplayer skins with the heroes' rigs):
 //     "playerBodies": [ { "level": "level_my_room", "juno": 4, "vela": 33 } ]
 // objSetupPlayers takes each hero's object id from a table (skin 0, D_800A08A0: Vela, Juno, Lupus, ship, then the
 // same in the power suit); its wrapper puts the mod's ids in (both suits) while it sets up the players of that level,
 // and puts the stock ids back. Only the body changes: the hero keeps their code, animations, weapons and voice.
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -74,6 +82,10 @@ constexpr int ORB_KIND = 0xE6;
 constexpr uint8_t ORB_DAMAGE_PERCENT = 100;
 constexpr int16_t FROG = 0x15;
 constexpr uint32_t FROG_DATA_TAKEN = 0x44;
+constexpr uint32_t SQUAD_TARGET = 0x1A1E4;        // overlay 3: the object the current squad member aims at
+constexpr uint32_t SPANNER_BEAM = 0xAC;           // SquadMemberData: its beam object, while it fires
+constexpr uint32_t BEAM_END = 0x10;               // LaserBeamData: Vec3f end
+constexpr float BEAM_SWEEP = 1.0f / 8.0f, BEAM_RADIUS = 14.0f;
 struct WeaponSlot {
     uint8_t slot;
     int fires_as;      // the weapon whose shot it fires, -1 = its own
@@ -320,3 +332,31 @@ JFG_WRAP(objSetupPlayers) {
     objSetupPlayers_orig(rdram, ctx);
     for (int i = 0; i < 8; i++) wr16(ADDR_PLAYER_BODIES + 2 * i, (uint16_t)STOCK_BODIES[i]);
 }
+
+JFG_WRAP(BTSBSpannerHand) {
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const uint32_t data = Obj::Data::get(obj);
+    const uint32_t beam = valid_ptr(data) ? rd32(data + SPANNER_BEAM) : 0;
+    const uint32_t base = jfg_overlay_loaded_at(OVERLAY_3_ROM);
+    const uint32_t target = base != 0 ? rd32(base + SQUAD_TARGET) : 0;
+    const uint32_t beam_data = valid_ptr(beam) ? Obj::Data::get(beam) : 0;
+    const uint32_t hit = valid_ptr(target) ? Obj::Damage::get(target) : 0;
+    if (valid_ptr(beam_data) && valid_ptr(hit)) {
+        const float to[3] = { Damage::CentreX::get(hit), Damage::CentreY::get(hit), Damage::CentreZ::get(hit) };
+        for (uint32_t k = 0; k < 3; k++) {
+            const float now = rdf(beam_data + BEAM_END + 4 * k);
+            wrf(beam_data + BEAM_END + 4 * k, now + (to[k] - now) * BEAM_SWEEP);
+        }
+    }
+    BTSBSpannerHand_orig(rdram, ctx);
+}
+
+JFG_WRAP(LaserBeamInit) {
+    const uint32_t obj = (uint32_t)ctx->r4;
+    LaserBeamInit_orig(rdram, ctx);
+    const uint32_t hit = Obj::Damage::get(obj);
+    if (!valid_ptr(hit)) return;
+    Damage::Radius::set(hit, BEAM_RADIUS);
+    Damage::Radius2::set(hit, BEAM_RADIUS);
+}
+

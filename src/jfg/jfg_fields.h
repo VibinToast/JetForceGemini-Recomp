@@ -121,6 +121,11 @@ using LodDistance = Field<float, 0xCC>;    // past this depth the next, simpler 
 // Damage data (Obj::Damage).
 namespace Damage {
 using Health      = Field<int16_t, 0x06>;  // 256 per unit
+using CentreX     = Field<float, 0x18>;    // where it is hit (its hit centre)
+using CentreY     = Field<float, 0x1C>;
+using CentreZ     = Field<float, 0x20>;
+using Radius      = Field<float, 0x24>;
+using Radius2     = Field<float, 0x28>;    // set with Radius
 using SphereCount = Field<int16_t, 0x32>;  // its hit spheres (HitSphere)
 using Spheres     = Field<uint32_t, 0x40>; // the first HitSphere
 }
