@@ -15,6 +15,11 @@ bloodSpurtAdd
 bloodHitSpriteAdd
 severedLimbControl
 
+# The "Enemies ignore you" cheat (jfg_squad_cheat.cpp)
+CheckLineOfSight
+squadsAddInterestingEvent
+squadsPlayerShootsSquaddie
+
 # Gore options (jfg_gore.cpp)
 bloodSpurtUpdateAll
 

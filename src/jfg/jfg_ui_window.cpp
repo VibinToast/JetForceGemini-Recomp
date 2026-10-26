@@ -393,8 +393,10 @@ void draw_cheats() {
         wr32(ADDR_debugMenuEnable, game_debug ? 1 : 0);
     }
     ImGui::Checkbox("Skip the Tribal check (all Tribals count as rescued)", &g.skip_tribal_check);
+    ImGui::Checkbox("Enemies ignore you (watch squads patrol)", &g.squads_ignore);
     ImGui::TextDisabled("The first four switch the game's own retail cheat flags. The Tribal check makes the game's\n"
-                        "\"all Tribals rescued\" test pass (game flag 88) without changing your save.");
+                        "\"all Tribals rescued\" test pass (game flag 88) without changing your save. Enemies that\n"
+                        "ignore you don't see, hear or fight back; turn it on before they spot you.");
 }
 
 void draw_warp() {

@@ -117,6 +117,7 @@ struct State {
     bool fly_freeze = true;        // fly camera: the game stands still while flying
     bool fly_hide_hud = true;      // fly camera: no HUD (the game's frontSetInstrumentsHide flag) while flying
     bool skip_tribal_check = false; // cheat (not saved): game flag 88 "all Tribals rescued" reads as set
+    bool squads_ignore = false;    // cheat (not saved): squads never see, hear or react to the heroes (jfg_squad_cheat.cpp)
     // cutscene fast-forward state
     bool skipping = false;
     int  skip_level = -1;
