@@ -33,12 +33,6 @@
 //   which never show (the pistol never runs out). They are pointed at the slot's names (English) at each level load,
 //   after the menu text is (re)loaded.
 //
-// Light show (behaviour 0x7F): the object update's switch (func_8000FBF0_107F0, objControl) sends 0x7F to another
-// overlay's code (blastdoorControl, by the decomp), which writes through the light show's missing hit block and
-// crashes, and no case reaches lightShowControl: in game, the calls for 0x7F..0x81 go to 0x802A83A0 and two
-// unfilled overlay calls (TrapDanglingJump). Its wrapper hands a light show to the switch as 0x7E (a case that runs
-// nothing) for the rest of the update, then runs lightShowControl itself, while its overlay (64) is loaded.
-//
 // Player bodies (jfg_assets.json "playerBodies"): a mod can play a hero in another body in its own levels, the cut
 // Tribal man (0x4) and yellow ant (0x21) for example (multiplayer skins with the heroes' rigs):
 //     "playerBodies": [ { "level": "level_my_room", "juno": 4, "vela": 33 } ]
@@ -97,9 +91,6 @@ const WeaponSlot* weapon_slot(int weapon) {
     for (const WeaponSlot& s : WEAPON_SLOTS) if (s.slot == weapon) return &s;
     return nullptr;
 }
-constexpr int16_t LIGHT_SHOW = 0x7F, NO_CONTROL = 0x7E;
-constexpr uint32_t OVERLAY_64_ROM = 0x01F85A18; // the light show's code
-constexpr uint32_t CONTROL_CALLS = 0x80010370;  // the update switch's calls for 0x7F, 0x80, 0x81 (0x10 apart)
 constexpr uint32_t ADDR_front_text = 0x800A51C8; // char**, NULL until initFront
 constexpr int WEAPON_NAMES = 0x39, AMMO_NAMES = 0x48;
 constexpr uint32_t ADDR_PLAYER_BODIES = 0x800A08A0; // s16[8]: skin 0's object id per character & 7
@@ -224,26 +215,6 @@ JFG_WRAP(func_800386B0_392B0) {
         Game::WeaponShots::set(game, s->slot, Game::WeaponShots::get(game, s->slot) + (shots - as_shots));
         Game::WeaponShots::set(game, as, as_shots);
     }
-}
-
-JFG_WRAP(func_8000FBF0_107F0) {
-    const uint32_t obj = (uint32_t)ctx->r4;
-    if (Obj::Kind::get(obj) != LIGHT_SHOW) {
-        func_8000FBF0_107F0_orig(rdram, ctx);
-        return;
-    }
-    const uint32_t update_rate = (uint32_t)ctx->r5;
-    static bool logged = false;
-    if (!logged) { // decomp MSR: the ROM's relocations link 0x7F to blastdoorControl, 0x81 to lightShowControl
-        std::fprintf(stderr, "[jfg] cut objects: light show: overlay 64 at %08X; the update's calls for 0x7F 0x80 0x81 "
-                     "are %08X %08X %08X\n", jfg_overlay_loaded_at(OVERLAY_64_ROM), rd32(CONTROL_CALLS),
-                     rd32(CONTROL_CALLS + 0x10), rd32(CONTROL_CALLS + 0x20));
-        logged = true;
-    }
-    Obj::Kind::set(obj, NO_CONTROL);
-    func_8000FBF0_107F0_orig(rdram, ctx);
-    Obj::Kind::set(obj, LIGHT_SHOW);
-    if (jfg_overlay_loaded_at(OVERLAY_64_ROM) != 0) call_game(lightShowControl, ctx, { obj, update_rate });
 }
 
 namespace jfg {
