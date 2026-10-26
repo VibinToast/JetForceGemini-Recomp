@@ -50,6 +50,7 @@
 // "append" adds an entry at the end. Indices are the list's own before the patch; "id" must be the object id at that
 // index, or the operation is skipped and logged (the mod was made for other data). Patches apply after replacements,
 // mods from the top of the mod list down, each mod's in file order.
+// "baddies" patches the squad code's animation table (overlay 3 data, not an asset) by field: jfg_baddies.cpp.
 //
 // At game start, before the game's first instruction, the port copies the whole asset area with the replacements in
 // it to the end of the ROM and points the table there. The game never sees the difference: it reads the table at
@@ -72,6 +73,8 @@ std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& data); // jfg_defla
 int asset_number(const std::string& ref);
 bool mod_region(int region, std::string* name, std::string* world);
 bool appended_entry(int data_asset, int entry, std::string* owner);
+void read_baddy_patches(const nlohmann::json& j, const std::string& id, size_t order); // jfg_baddies.cpp
+void activate_baddy_patches();
 int baddy_like(int object_id);
 std::string texture_owner(int tex_id);
 bool mod_textures();
@@ -628,6 +631,7 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
         g_pending.push_back(std::move(r));
     };
     read_patches(j, id, order);
+    jfg::read_baddy_patches(j, id, order);
     for (const nlohmann::json& e : j.value("objtypes", nlohmann::json::array())) {
         ObjType t{ order, id, e.value("append", ""), e.value("def", ""), json_int(e, "like"), json_int(e, "expect") };
         if (t.append.empty() || t.def.empty()) {
@@ -864,6 +868,7 @@ extern "C" void jfg_register_asset_mods(void) {
 
 // Called from the game's entry point (src/main.cpp), after the runtime has loaded mods and before the game runs.
 extern "C" void jfg_apply_asset_mods(void) {
+    jfg::activate_baddy_patches();
     std::vector<Replacement> reps = std::move(g_pending);
     g_pending.clear();
     std::vector<Patch> patches = std::move(g_patches);
