@@ -119,7 +119,30 @@ using LodDistance = Field<float, 0xCC>;    // past this depth the next, simpler 
 
 // Damage data (Obj::Damage).
 namespace Damage {
-using Health = Field<int16_t, 0x06>; // 256 per unit
+using Health      = Field<int16_t, 0x06>;  // 256 per unit
+using SphereCount = Field<int16_t, 0x32>;  // its hit spheres (HitSphere)
+using Spheres     = Field<uint32_t, 0x40>; // the first HitSphere
+}
+
+// A hit sphere (Damage::Spheres, SphereCount of them in a row).
+namespace HitSphere {
+using Joint         = Field<int8_t, 0x08>;  // the model joint it follows, -1 = placed by the object's own code
+using Index         = Field<uint8_t, 0x09>;
+using DamagePercent = Field<uint8_t, 0x2F>; // a hit's damage x this / 100; 0xFF takes all the health, 0 none
+constexpr uint32_t Size = 0x34;
+}
+
+// The squad code's animation table (overlay 3 data): one set per baddy type, a run of entries in the table.
+namespace BaddyAnimSet {
+using First = Field<uint16_t, 0x00>; // its first BaddyAnim
+using Count = Field<uint16_t, 0x02>;
+constexpr uint32_t Size = 0x4;
+}
+
+namespace BaddyAnim {
+using Action    = Field<uint8_t, 0x02>; // the action it plays for (1 idle, 5 attack, 0x35 dying, ...)
+using AltAction = Field<uint8_t, 0x03>; // a second action it also answers
+constexpr uint32_t Size = 0x8;
 }
 
 // A 3D model instance (Obj::Models[Obj::ModelIndex]).

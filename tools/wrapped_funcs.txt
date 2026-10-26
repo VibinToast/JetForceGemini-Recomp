@@ -176,3 +176,7 @@ func_overlay_9_000039F0_1F047C8
 frontDisplayRegion
 tribalScreen
 frontGetWorldName
+
+# Cut enemies: the animation picker's list of 16, the orb creature's hit spheres (jfg_cut_enemies.cpp)
+func_overlay_3_00004614_1ED9AF4
+func_80007528_8128
