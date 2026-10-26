@@ -59,6 +59,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <map>
+#include <set>
 #include <span>
 #include <string>
 #include <vector>
@@ -91,6 +92,7 @@ constexpr char CONTENT_FILE[] = "jfg_assets.json";
 constexpr uint32_t OBJINDEX = 0x30;                   // the object index: s16 definition number per object id
 constexpr uint32_t ANIM_LISTS = 0x28, ANIM_IDS = 0x29;   // u16 byte offsets per model into u16 animation ids
 constexpr uint32_t ANIM_SLOTS = 0x2C, ANIM_SLOT_DATA = 0x2D; // s32 offsets per model into the joint-slot bytes
+constexpr int MODEL_DATA = 0x27;                            // the models (table 0x26)
 
 // A number a mod's data needs but can't know: another appended entry's ("ref": "name" for the mod's own, "mod:name"
 // for another mod's), written at "at" when the numbers are given out. Types: "u8", "u16", "s16", "u32" (big endian,
@@ -390,6 +392,24 @@ bool give_tribal_room(std::vector<std::vector<uint8_t>>& assets, const std::map<
     }
     for (auto [r, count] : regions) data[4 * (size_t)a + r] = (uint8_t)count;
     return true;
+}
+
+// Model m (appended, with no "animRows") gets an empty animation list, so the game draws it static. The game counts a
+// model's animations as (lists[m + 1] - lists[m]) / 2: past the stock rows the table is short or padded with zeros, so
+// m's two entries could hold anything (a non-zero count on a model with no joints crashes its draw in gen_anim_data).
+// The table is lengthened to m + 1, and every entry after the stock models' end (entry `stock_models`) that would go
+// back carries the one before it. Runs after give_anim_rows, whose rows are in order and start where the rows before
+// them end, so m's two entries come out equal.
+void give_empty_anim_row(std::vector<std::vector<uint8_t>>& assets, int m, size_t stock_models) {
+    std::vector<uint8_t>& lists = assets[ANIM_LISTS];
+    auto u16 = [&](size_t k) { return (uint32_t)(lists[2 * k] << 8 | lists[2 * k + 1]); };
+    if (lists.size() < 2 * (size_t)(m + 2)) lists.resize(2 * (size_t)(m + 2), 0);
+    for (size_t k = stock_models + 1; k <= (size_t)m + 1; k++) {
+        if (u16(k) < u16(k - 1)) {
+            lists[2 * k] = lists[2 * k - 2];
+            lists[2 * k + 1] = lists[2 * k - 1];
+        }
+    }
 }
 
 // Model m gets model `from`'s animation list and joint slots, appended at the end of the id list and slot data. The
@@ -1071,6 +1091,7 @@ extern "C" void jfg_apply_asset_mods(void) {
     // Animation rows for appended models.
     std::vector<AnimRows> animrows = std::move(g_animrows);
     g_animrows.clear();
+    std::set<int> with_rows;
     for (const AnimRows& a : animrows) {
         const int m = jfg::asset_number(a.model);
         if (m < 0) {
@@ -1080,9 +1101,18 @@ extern "C" void jfg_apply_asset_mods(void) {
         if (give_anim_rows(assets, m, a.from)) {
             log("assets: " + a.mod_id + ": model " + std::to_string(m) + " has the animation rows of model " +
                 std::to_string(a.from));
+            with_rows.insert(m);
             entries++;
         } else {
             log("assets: " + a.mod_id + ": model " + std::to_string(a.from) + "'s animation rows couldn't be copied");
+        }
+    }
+    // Appended models with no rows of their own get an empty row (a static model: props made from a copied model).
+    if (auto models = numbers.find(MODEL_DATA); models != numbers.end()) {
+        for (const int m : models->second) {
+            if (m < 0 || with_rows.count(m)) continue;
+            give_empty_anim_row(assets, m, g_stock_entries[MODEL_DATA]);
+            entries++;
         }
     }
     if (whole == 0 && entries == 0) return;
