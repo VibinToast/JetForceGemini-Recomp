@@ -178,10 +178,11 @@ tribalScreen
 frontGetWorldName
 
 # Cut enemies and objects: the animation picker's list of 16, the orb creature's hit spheres, the frog's data block,
-# the proximity mine's shot, the light show's update, mods' player bodies (jfg_cut_enemies.cpp)
+# the proximity mine's shot and throw, the light show's update, mods' player bodies (jfg_cut_enemies.cpp)
 func_overlay_3_00004614_1ED9AF4
 func_80007528_8128
 func_8000E680_F280
 func_800386B0_392B0
+controlThrowWeapon
 func_8000FBF0_107F0
 objSetupPlayers

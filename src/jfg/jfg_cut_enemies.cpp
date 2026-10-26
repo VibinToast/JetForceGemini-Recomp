@@ -17,11 +17,21 @@
 // data block (Obj::Data 0) and frogInit wrote its 0x40 bytes through a null pointer. Its wrapper gives it the block
 // the setup had ready: the data pointer, and 0x44 bytes taken (0x40, rounded and plus 4, as the switch returns).
 //
-// Proximity mine (weapon 15): the fire code (func_800386B0_392B0) sends weapon 15 to the default shot, a laser bolt.
-// Its wrapper fires it as a mine instead: for that one shot the hero holds weapon 11 (the mine case of the switch,
-// throwing mine object 0x127, uncharged), with weapon 15's ammo in 11's slot and the charge at its uncharged value;
-// then everything is put back, the ammo used and the shot counted on weapon 15. The shot's rate, spread and power
-// are still weapon 15's (the caller passes its WeaponDef). The stock game never gives weapon 15.
+// Weapon slots the port fills in (WEAPON_SLOTS): a slot that fires through another slot's case, is thrown or not,
+// takes another slot's WeaponDef row and has names of its own. Weapon 15, the cut proximity mine, is the one now (the
+// stock game never gives it; decomp MSR "Hub batch 3"); a weapons API for packs (JFG-Modding-Tools
+// Docs/MODDING_API_PLAN.md section 1, "base_slot") would add its own entries.
+// - Firing: the fire code (func_800386B0_392B0) picks the shot by the current weapon; 15 fell to the default shot, a
+//   laser bolt. For one shot of a slot with `fires_as`, the hero holds that weapon instead, with this slot's ammo in its
+//   place and the charge set to `charge` (11's case with 0x20: mine type 0, object 0x127, the proximity mine); then all
+//   is put back, the ammo used and the shot counted on the slot.
+// - Throwing: controlThrowWeapon(slot) answers 1 for a thrown slot (the hero's throw).
+// - Row: at the first level load the slot's WeaponDef becomes a copy of `row_from`'s (15: weapon 12's refire, speed,
+//   10 mines, +5 a pickup, no charge). The port's weapon options and jfg.weapon cover 0-14 only.
+// - Names: the game reads front_text[0x39 + weapon] (the HUD, the stats screen, the pickup message) and
+//   front_text[0x48 + weapon] (more ammo). Weapon 15's are texts 72 and 87, otherwise only the pistol's ammo messages,
+//   which never show (the pistol never runs out). They are pointed at the slot's names (English) at each level load,
+//   after the menu text is (re)loaded.
 //
 // Light show (behaviour 0x7F): the object update's switch (func_8000FBF0_107F0, objControl) sends 0x7F to another
 // overlay's code (blastdoorControl, by the decomp), which writes through the light show's missing hit block and
@@ -38,6 +48,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <iterator>
 #include <set>
 #include <string>
 #include <vector>
@@ -48,6 +60,8 @@
 #include "json/json.hpp"
 
 extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
+
+namespace recomp { void* alloc(uint8_t* rdram, size_t size); }
 
 namespace jfg {
 void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
@@ -66,10 +80,28 @@ constexpr int ORB_KIND = 0xE6;
 constexpr uint8_t ORB_DAMAGE_PERCENT = 100;
 constexpr int16_t FROG = 0x15;
 constexpr uint32_t FROG_DATA_TAKEN = 0x44;
-constexpr uint8_t PROXIMITY_MINE = 15, TIMED_MINE = 11;
-constexpr int16_t MINE_UNCHARGED = 0x20; // the timed mine's charge for mine type 0 ((charge - 0x20) >> 4 == 0)
+struct WeaponSlot {
+    uint8_t slot;
+    int fires_as;      // the weapon whose shot it fires, -1 = its own
+    int16_t charge;    // the charge for that shot, -1 = as it is
+    bool thrown;
+    int row_from;      // the weapon whose WeaponDef row it takes, -1 = its own
+    const char* name;  // front_text[0x39 + slot], nullptr = the game's
+    const char* ammo_name; // front_text[0x48 + slot]
+};
+// 15: fires as the timed mine uncharged ((0x20 - 0x20) >> 4 == 0: mine type 0, the proximity mine), thrown, the remote
+// mine's row
+constexpr WeaponSlot WEAPON_SLOTS[] = { { 15, 11, 0x20, true, 12, "Proximity Mine", "Proximity Mines" } };
+
+const WeaponSlot* weapon_slot(int weapon) {
+    for (const WeaponSlot& s : WEAPON_SLOTS) if (s.slot == weapon) return &s;
+    return nullptr;
+}
 constexpr int16_t LIGHT_SHOW = 0x7F, NO_CONTROL = 0x7E;
 constexpr uint32_t OVERLAY_64_ROM = 0x01F85A18; // the light show's code
+constexpr uint32_t CONTROL_CALLS = 0x80010370;  // the update switch's calls for 0x7F, 0x80, 0x81 (0x10 apart)
+constexpr uint32_t ADDR_front_text = 0x800A51C8; // char**, NULL until initFront
+constexpr int WEAPON_NAMES = 0x39, AMMO_NAMES = 0x48;
 constexpr uint32_t ADDR_PLAYER_BODIES = 0x800A08A0; // s16[8]: skin 0's object id per character & 7
 constexpr int VELA = 0, JUNO = 1, POWER_SUIT = 4;
 constexpr int16_t STOCK_BODIES[8] = { 0x0000, 0x007E, 0x0006, 0x0044, 0x001C, 0x001D, 0x0032, 0x0044 };
@@ -165,30 +197,32 @@ JFG_WRAP(func_8000E680_F280) {
 JFG_WRAP(func_800386B0_392B0) {
     const int c = (int16_t)rd16(ADDR_currentCharacter);
     const uint32_t ch = (rd32(ADDR_mainGameMode) == 0 && c >= 0 && c < 3) ? character_ptr(c) : 0;
-    if (ch == 0 || Character::CurrentWeapon::get(ch) != PROXIMITY_MINE) {
+    const WeaponSlot* s = ch != 0 ? weapon_slot(Character::CurrentWeapon::get(ch)) : nullptr;
+    if (s == nullptr || s->fires_as < 0) {
         func_800386B0_392B0_orig(rdram, ctx);
         return;
     }
     static bool logged = false;
-    if (!logged) std::fprintf(stderr, "[jfg] cut objects: weapon 15 fires as a mine\n");
+    if (!logged) std::fprintf(stderr, "[jfg] cut objects: weapon %d fires as weapon %d\n", s->slot, s->fires_as);
     logged = true;
+    const uint32_t as = (uint32_t)s->fires_as;
     const uint32_t player = (uint32_t)ctx->r5;
     const uint32_t game = rd32(ADDR_gameplay);
-    const uint16_t mine_ammo = Character::Ammo::get(ch, TIMED_MINE);
-    const uint32_t mine_shots = Game::WeaponShots::get(game, TIMED_MINE);
+    const uint16_t as_ammo = Character::Ammo::get(ch, as);
+    const uint32_t as_shots = Game::WeaponShots::get(game, as);
     const int16_t charge = PlayerData::Charge::get(player);
-    Character::Ammo::set(ch, TIMED_MINE, Character::Ammo::get(ch, PROXIMITY_MINE));
-    Character::CurrentWeapon::set(ch, TIMED_MINE);
-    PlayerData::Charge::set(player, MINE_UNCHARGED);
+    Character::Ammo::set(ch, as, Character::Ammo::get(ch, s->slot));
+    Character::CurrentWeapon::set(ch, (uint8_t)as);
+    if (s->charge >= 0) PlayerData::Charge::set(player, s->charge);
     func_800386B0_392B0_orig(rdram, ctx);
-    Character::Ammo::set(ch, PROXIMITY_MINE, Character::Ammo::get(ch, TIMED_MINE));
-    Character::Ammo::set(ch, TIMED_MINE, mine_ammo);
-    Character::CurrentWeapon::set(ch, PROXIMITY_MINE);
+    Character::Ammo::set(ch, s->slot, Character::Ammo::get(ch, as));
+    Character::Ammo::set(ch, as, as_ammo);
+    Character::CurrentWeapon::set(ch, s->slot);
     PlayerData::Charge::set(player, charge);
-    const uint32_t shots = Game::WeaponShots::get(game, TIMED_MINE);
-    if (shots != mine_shots) {
-        Game::WeaponShots::set(game, PROXIMITY_MINE, Game::WeaponShots::get(game, PROXIMITY_MINE) + (shots - mine_shots));
-        Game::WeaponShots::set(game, TIMED_MINE, mine_shots);
+    const uint32_t shots = Game::WeaponShots::get(game, as);
+    if (shots != as_shots) {
+        Game::WeaponShots::set(game, s->slot, Game::WeaponShots::get(game, s->slot) + (shots - as_shots));
+        Game::WeaponShots::set(game, as, as_shots);
     }
 }
 
@@ -199,6 +233,13 @@ JFG_WRAP(func_8000FBF0_107F0) {
         return;
     }
     const uint32_t update_rate = (uint32_t)ctx->r5;
+    static bool logged = false;
+    if (!logged) { // decomp MSR: the ROM's relocations link 0x7F to blastdoorControl, 0x81 to lightShowControl
+        std::fprintf(stderr, "[jfg] cut objects: light show: overlay 64 at %08X; the update's calls for 0x7F 0x80 0x81 "
+                     "are %08X %08X %08X\n", jfg_overlay_loaded_at(OVERLAY_64_ROM), rd32(CONTROL_CALLS),
+                     rd32(CONTROL_CALLS + 0x10), rd32(CONTROL_CALLS + 0x20));
+        logged = true;
+    }
     Obj::Kind::set(obj, NO_CONTROL);
     func_8000FBF0_107F0_orig(rdram, ctx);
     Obj::Kind::set(obj, LIGHT_SHOW);
@@ -231,7 +272,56 @@ void read_player_bodies(const nlohmann::json& j, const std::string& id) {
 }
 } // namespace jfg
 
+namespace {
+// The slots' rows (once) and names (see the top of the file), at each level load.
+void set_up_weapon_slots(uint8_t* rdram) {
+    static bool rows_done = false;
+    if (!rows_done) {
+        for (const WeaponSlot& s : WEAPON_SLOTS) {
+            if (s.row_from < 0) continue;
+            const uint32_t from = ADDR_weaponTable + WeaponDef::Size * (uint32_t)s.row_from;
+            const uint32_t to = ADDR_weaponTable + WeaponDef::Size * s.slot;
+            for (uint32_t i = 0; i < WeaponDef::Size; i++) wr8(to + i, rd8(from + i));
+        }
+        rows_done = true;
+    }
+    // The names' strings, made once in the runtime's heap: [slot index * 2 + 0 / 1]
+    static uint32_t strings[2 * std::size(WEAPON_SLOTS)] = {};
+    const auto put = [&](const char* text) -> uint32_t {
+        const size_t n = std::strlen(text) + 1;
+        void* block = recomp::alloc(rdram, (n + 3) & ~size_t(3));
+        if (block == nullptr) return 0;
+        const uint32_t at = 0x80000000u + (uint32_t)((uint8_t*)block - rdram);
+        for (size_t i = 0; i < n; i++) wr8(at + (uint32_t)i, (uint8_t)text[i]);
+        return at;
+    };
+    const uint32_t table = rd32(ADDR_front_text);
+    for (size_t k = 0; k < std::size(WEAPON_SLOTS); k++) {
+        const WeaponSlot& s = WEAPON_SLOTS[k];
+        const char* texts[2] = { s.name, s.ammo_name };
+        const int bases[2] = { WEAPON_NAMES, AMMO_NAMES };
+        for (int i = 0; i < 2; i++) {
+            if (texts[i] == nullptr) continue;
+            uint32_t& at = strings[2 * k + i];
+            if (at == 0) at = put(texts[i]);
+            if (at != 0 && valid_ptr(table)) wr32(table + 4 * (uint32_t)(bases[i] + s.slot), at);
+        }
+    }
+}
+} // namespace
+
+JFG_WRAP(controlThrowWeapon) {
+    const int weapon = (int32_t)ctx->r4;
+    const WeaponSlot* s = weapon >= 0 && weapon < 256 ? weapon_slot(weapon) : nullptr;
+    if (s != nullptr && s->thrown) {
+        ctx->r2 = 1;
+        return;
+    }
+    controlThrowWeapon_orig(rdram, ctx);
+}
+
 JFG_WRAP(objSetupPlayers) {
+    set_up_weapon_slots(rdram);
     const int level = (int16_t)rd16(ADDR_currentLevel);
     const PlayerBodies* found = nullptr;
     for (const PlayerBodies& b : g_player_bodies) {
