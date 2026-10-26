@@ -20,6 +20,9 @@ CheckLineOfSight
 squadsAddInterestingEvent
 squadsPlayerShootsSquaddie
 
+# More memory for levels: the main heap to 8 MB (jfg_memory.cpp)
+mempool_init
+
 # Gore options (jfg_gore.cpp)
 bloodSpurtUpdateAll
 

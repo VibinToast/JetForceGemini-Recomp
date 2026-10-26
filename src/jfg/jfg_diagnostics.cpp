@@ -333,12 +333,16 @@ JFG_WRAP(SquaddieInitFromRomdef) {
     if (jfg_squaddie_init_ok(rdram, ctx)) SquaddieInitFromRomdef_orig(rdram, ctx);
 }
 
+extern "C" void jfg_memory_alloc_size(recomp_context* ctx); // jfg_memory.cpp: the bigger track buffer
+
 JFG_WRAP(mmAlloc) {
+    jfg_memory_alloc_size(ctx);
     jfg_locale_alloc(ctx);
     objsetup_step_call(rdram, ctx, mm_alloc_checked, 7);
 }
 
 JFG_WRAP(mmAlloc2) {
+    jfg_memory_alloc_size(ctx);
     const uint32_t size = (uint32_t)ctx->r4, colour = (uint32_t)ctx->r5;
     mmAlloc2_orig(rdram, ctx);
     jfg_mm_alloc_check(rdram, ctx, size, colour);
