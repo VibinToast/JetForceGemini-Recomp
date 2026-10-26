@@ -6,7 +6,9 @@
 // - The track buffer: one heap block of 0x9F000 bytes (func_overlay_24_000001F8) that the level's track unpacks into,
 //   followed by tables of about 44 bytes per triangle, with no check. A pack level bigger than the game's own wrote
 //   past it into the heap and the game crashed. It is asked for at TRACK_BUFFER bytes instead; the loader shrinks the
-//   block to what the track uses afterwards, so a stock level ends up the same.
+//   block to what the track uses afterwards, so a stock level ends up the same. Only the tables gain the room: the
+//   loader still reads the packed track to 0x9F000 - its size and unpacks in place, so the unpacked and packed
+//   track together must still fit 0x9F000 (the constant at o24 +0x378/+0x380; not raised yet).
 #include <cstdint>
 
 #include "jfg_hooks.h"
