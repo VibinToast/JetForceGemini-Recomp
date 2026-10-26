@@ -205,6 +205,9 @@ JFG_WRAP(TrapDanglingJump) {
 }
 
 extern "C" void jfg_register_asset_mods(void); // jfg_assets.cpp
+extern "C" void jfg_register_music_mods(void); // jfg_music.cpp
+extern "C" void jfg_register_script_mods(void); // jfg_lua.cpp
+extern "C" void jfg_register_world_mods(void); // jfg_worldmap.cpp
 
 // Called from src/main.cpp before the runtime starts.
 // RecompiledFuncs/jfg_wrapped.c (N64Recomp, [wrappers] in jfg.us.toml): every game function the port wraps, with its
@@ -216,6 +219,9 @@ extern "C" void jfg_register_mod_exports(void) {
     jfg_register_wrapped(recomp::overlays::register_base_wrapper); // mods patch and hook the originals, not the wrappers
     jfg::api::register_api(); // the JFG mod API's events and helpers (jfg_api.cpp)
     jfg_register_asset_mods(); // mods that replace game data (jfg_assets.json)
+    jfg_register_music_mods(); // mods' OGG music for levels (jfg_music.json)
+    jfg_register_script_mods(); // mods' Lua scripts (jfg_scripts.json)
+    jfg_register_world_mods(); // mods' planets on the planet-select map (jfg_world.json)
 }
 
 // --- mods replacing a function a port feature needs as the caller ---------------------------------------------------

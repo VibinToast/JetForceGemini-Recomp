@@ -86,13 +86,14 @@ void auto_save_tick(recomp_context* ctx) {
         saved_level = (int16_t)rd16(ADDR_currentLevel);
         area_progress_on_save((int)((requests >> 3) & 7));
         tribal_saves_on_save((int)((requests >> 3) & 7));
+        worldmap_on_save((int)((requests >> 3) & 7));
     }
-    if (requests & DELETE_REQUEST) { area_progress_forget((int)((requests >> 6) & 7)); tribal_saves_forget((int)((requests >> 6) & 7)); }
-    if (requests & ERASE_REQUESTS) { area_progress_forget(-1); tribal_saves_forget(-1); }
+    if (requests & DELETE_REQUEST) { area_progress_forget((int)((requests >> 6) & 7)); tribal_saves_forget((int)((requests >> 6) & 7)); worldmap_forget((int)((requests >> 6) & 7)); }
+    if (requests & ERASE_REQUESTS) { area_progress_forget(-1); tribal_saves_forget(-1); worldmap_forget(-1); }
     const int current = (int16_t)rd16(ADDR_currentLevel);
     if (current == LEVEL_FRONT_END && rd32(ADDR_mainGameMode) != 0) { g_file_in_play = false; g_port_warped = false; }
     if ((current == LEVEL_CHARACTER_SELECT && !g_port_warped) || (requests & SAVE_REQUEST)) {
-        if (!g_file_in_play) { area_progress_arm(); tribal_saves_file_chosen(); } // a file was just chosen: its first region entry may be restored
+        if (!g_file_in_play) { area_progress_arm(); tribal_saves_file_chosen(); worldmap_file_chosen(); } // a file was just chosen: its first region entry may be restored
         g_file_in_play = true;
     }
     const int slot = (g.auto_save && g_file_in_play) ? save_slot(ctx) : 0;
@@ -120,6 +121,7 @@ void auto_save_tick(recomp_context* ctx) {
     call_game(mainSaveGame, ctx, { (uint32_t)slot }); // carried out by joyRead later in this tick
     area_progress_on_save(slot);
     tribal_saves_on_save(slot);
+    worldmap_on_save(slot);
     std::fprintf(stderr, "[jfg] auto save: file %d, level %d (%s)\n", slot + 1, level, arrived ? "arrived" : "timer");
     saved_level = level;
     last_save = now;

@@ -333,12 +333,16 @@ JFG_WRAP(SquaddieInitFromRomdef) {
     if (jfg_squaddie_init_ok(rdram, ctx)) SquaddieInitFromRomdef_orig(rdram, ctx);
 }
 
+extern "C" void jfg_memory_alloc_size(recomp_context* ctx); // jfg_memory.cpp: the bigger track buffer
+
 JFG_WRAP(mmAlloc) {
+    jfg_memory_alloc_size(ctx);
     jfg_locale_alloc(ctx);
     objsetup_step_call(rdram, ctx, mm_alloc_checked, 7);
 }
 
 JFG_WRAP(mmAlloc2) {
+    jfg_memory_alloc_size(ctx);
     const uint32_t size = (uint32_t)ctx->r4, colour = (uint32_t)ctx->r5;
     mmAlloc2_orig(rdram, ctx);
     jfg_mm_alloc_check(rdram, ctx, size, colour);
@@ -508,7 +512,12 @@ static void objsetup_step_call(uint8_t* rdram, recomp_context* ctx, recomp_func_
 
 JFG_WRAP(objGetObjdef) { objsetup_step_call(rdram, ctx, objGetObjdef_orig, 0); }
 JFG_WRAP(func_8000F978_10578) { objsetup_step_call(rdram, ctx, func_8000F978_10578_orig, 1); }
-JFG_WRAP(texLoadTexture) { objsetup_step_call(rdram, ctx, texLoadTexture_orig, 2); }
+namespace jfg { void texture_loaded(int tex_id, uint32_t tex); } // jfg_texture_packs.cpp: mods' textures in a dump
+JFG_WRAP(texLoadTexture) {
+    const int tex_id = (int)ctx->r4;
+    objsetup_step_call(rdram, ctx, texLoadTexture_orig, 2);
+    jfg::texture_loaded(tex_id, (uint32_t)ctx->r2);
+}
 JFG_WRAP(modLoadModel) { objsetup_step_call(rdram, ctx, modLoadModel_orig, 4); }
 JFG_WRAP(texLoadSprite) { objsetup_step_call(rdram, ctx, texLoadSprite_orig, 5); }
 JFG_WRAP(mmAllocR) { objsetup_step_call(rdram, ctx, mmAllocR_orig, 6); }

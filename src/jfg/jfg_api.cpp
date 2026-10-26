@@ -11,6 +11,7 @@
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
+#include "jfg_port.h"
 
 extern "C" void recomp_trigger_event(uint8_t* rdram, recomp_context* ctx, uint32_t event_index);
 std::string jfg_locale_shown(); // jfg_locale.cpp
@@ -21,7 +22,7 @@ namespace {
 const char* const g_event_names[] = {
     "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", "jfg_on_blood_spurt", "jfg_on_blood_hit",
     "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
-    "jfg_on_language_change", nullptr
+    "jfg_on_language_change", "jfg_on_map_open", "jfg_on_galaxy_change", "jfg_on_planet_select", nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
@@ -161,6 +162,7 @@ void register_api() {
     recomp::overlays::register_base_export("jfg_get_tick_scale", get_tick_scale);
     recomp::overlays::register_base_export("jfg_get_level", get_level);
     recomp::overlays::register_base_export("jfg_get_language", get_language);
+    jfg::register_world_api(); // planets and galaxies (jfg_worldmap.cpp)
 }
 
 } // namespace jfg::api

@@ -811,8 +811,10 @@ void build() {
         [](recomp_context*) { return rd32(ADDR_debugMenuEnable) != 0 ? 1 : 0; },
         [](recomp_context*, int v) { wr32(ADDR_debugMenuEnable, v ? 1u : 0u); } }, GROUP_BAR);
     add_field(cheats, flag_field("Skip the Tribal check (all Tribals count as rescued)", &g.skip_tribal_check), GROUP_BAR);
+    add_field(cheats, flag_field("Enemies ignore you (watch squads patrol)", &g.squads_ignore), GROUP_BAR);
     text(cheats, "The first four switch the game's own retail cheat flags. The Tribal check makes the game's\n"
-                 "\"all Tribals rescued\" test pass (game flag 88) without changing your save.", FONT_SMALL, TEXT_DIM);
+                 "\"all Tribals rescued\" test pass (game flag 88) without changing your save. Enemies that\n"
+                 "ignore you don't see, hear or fight back; turn it on before they spot you.", FONT_SMALL, TEXT_DIM);
 
     // Tools
     ui::Element* tools = add_menu("Tools");

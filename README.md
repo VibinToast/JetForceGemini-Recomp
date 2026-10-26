@@ -3,12 +3,13 @@
 A native 100% playable PC port of Jet Force Gemini (N64, US) for Windows and Linux, made by static recompilation. No emulator:
 the game's code is translated from your ROM and compiled for your PC.
 
-**Current Progress:** Quality of Life features. Mod support is next: see the [Roadmap](ROADMAP.md).
+**Current Progress:** Quality of Life features, and mod support (new planets, levels, enemies, music, scripts and
+weapons: see [Modding](#modding) and the [Roadmap](ROADMAP.md)).
 
 **No game code or assets are included.** You need your own ROM.
 
 **Contents:** [ROM](#rom) · [Features](#features) · [Build and run](#build-and-run) · [Steam Deck](#steam-deck) ·
-[Keys](#keys) · [Reporting bugs](#reporting-bugs) · [How it works](#how-it-works) · [AI disclosure](#ai-disclosure) ·
+[Modding](#modding) · [Keys](#keys) · [Reporting bugs](#reporting-bugs) · [How it works](#how-it-works) · [AI disclosure](#ai-disclosure) ·
 [Legal](#legal) · [Credits](#credits) · [Roadmap](ROADMAP.md) · [Known issues](KNOWN_ISSUES.md)
 
 ## ROM
@@ -58,6 +59,21 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
 - Items editor: weapons, ammo, health, keys, objects, Tribals, ship and Floyd parts, progress flags and
   multiplayer unlocks.
 - Quick profile and texture-pack switching.
+
+## Modding
+
+Mods are `.nrm` files in `bin/mods/`, turned on and off and ordered in the **Mods** tab of the settings menu. A mod can
+add planets and whole galaxies to the planet map, new levels, reskinned enemies, its own music, Lua scripts and
+weapon tuning, change the game's own levels, or patch the game's code.
+
+- **[The JFG Modding Wiki](https://jfg.vibintoast.com)**: how to make mods, with tutorials, the API's status (built,
+  partial, planned) and the pack formats.
+- **[JFG-Studio](https://github.com/VibinToast/JFG-Studio)**: a level and modpack editor. Place squads, doors, keys,
+  pickups and exits on your own geometry, set up planets and galaxies, add triggers, scripts and music, then build the
+  pack and play it with one button. It reads your own ROM; nothing from the game is in what it makes.
+- **[jfg64](https://github.com/VibinToast/jfg64-blender)**: a Blender add-on for modelling level geometry for Studio.
+- Code mods are built with N64Recomp's RecompModTool against the symbols in `JFGRecompSyms`, with the port's API in
+  `mod_api/jfg_api.h`.
 
 ## Build and run
 

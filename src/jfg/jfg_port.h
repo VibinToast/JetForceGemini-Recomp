@@ -189,6 +189,21 @@ void tribal_saves_file_chosen();      // a file was chosen: what was saved for i
 void tribal_saves_on_save(int slot);  // a save to slot is carried out this tick
 void tribal_saves_forget(int slot);   // the game deletes a file (-1: all files)
 void tribal_saves_tick();             // start of the tick: notices rescues
+
+// Mods' planets and galaxies on the planet-select map (jfg_worldmap.cpp). Planets and galaxies by index; keys "mod:id".
+int world_find(const std::string& key);    // a planet's index, -1 = none
+int world_state(int planet);               // bits: 1 open, 2 entered, 4 completed; -1 = no such planet
+void world_unlock(int planet);             // opens it for the file in play
+void world_complete(int planet);           // marks it completed for the file in play (opens "completed" planets)
+int galaxy_find(const std::string& key);   // "main" = 0, -1 = none
+std::string galaxy_key(int galaxy);
+int galaxy_current();                      // the galaxy the map shows, -1 = the map is closed
+void galaxy_show(int galaxy);              // the map opens on it next
+void worldmap_tick();                      // each tick: entered planets
+void worldmap_file_chosen();               // the save file hooks, as tribal_saves_*
+void worldmap_on_save(int slot);
+void worldmap_forget(int slot);
+void register_world_api();                 // the helpers above for mods (register_api)
 void tribal_saves_region_reset();     // end of mainResetRegion: puts the region's rescues back
 
 // --- jfg_visuals.cpp ---------------------------------------------------------------------------------------------
@@ -200,6 +215,7 @@ std::string depth_fog_status();         // the F9 menu's depth fog status line
 extern bool g_weapon_orig_read;            // the weapon table's original values have been read
 extern std::recursive_mutex g_weapon_mutex; // UI thread edits, game thread applies
 void apply_weapon_key(const char* key, int value); // "<slot>.<field>" as saved
+bool set_pack_weapon(int weapon, const char* field, double value); // a pack's value (jfg.weapon)
 void reset_weapons();                      // every weapon back to its original values, "Modify" off
 std::string weapons_text(const char* prefix);
 void save_weapons();
@@ -257,6 +273,18 @@ struct ToolField {
     std::function<void(recomp_context*, int)> set;
     std::function<std::string(recomp_context*)> text;
 };
+
+// --- jfg_assets.cpp ---------------------------------------------------------------------------------------------
+int asset_number(const std::string& ref); // "mod_id:name" of an appended entry -> its number this start, or -1
+int baddy_like(int object_id);             // a mod's object type -> the stock object id squads treat it as, or -1
+
+// --- jfg_music.cpp ----------------------------------------------------------------------------------------------
+void music_tick(recomp_context* ctx); // every tick: the level's mod music, the game's tune silenced meanwhile
+void music_force(const std::string& mod_id, const std::string& name); // a script's track for this level ("" = none)
+
+// --- jfg_lua.cpp ------------------------------------------------------------------------------------------------
+void lua_tick(recomp_context* ctx);                     // every tick: mods' scripts ("level", "tick" events)
+bool lua_overlay_text(std::string& text, float& alpha); // UI thread: a script's on-screen message, if one shows
 
 // --- jfg_ui_items.cpp --------------------------------------------------------------------------------------------
 void draw_inventory(recomp_context* ctx);  // the Items tab (F9)

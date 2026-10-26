@@ -15,6 +15,14 @@ bloodSpurtAdd
 bloodHitSpriteAdd
 severedLimbControl
 
+# The "Enemies ignore you" cheat (jfg_squad_cheat.cpp)
+CheckLineOfSight
+squadsAddInterestingEvent
+squadsPlayerShootsSquaddie
+
+# More memory for levels: the main heap to 8 MB (jfg_memory.cpp)
+mempool_init
+
 # Gore options (jfg_gore.cpp)
 bloodSpurtUpdateAll
 
@@ -93,6 +101,7 @@ objSetupObject
 objGetObjdef
 func_8000F978_10578
 texLoadTexture
+texFreeTexture
 modLoadModel
 texLoadSprite
 mmAllocR
@@ -153,3 +162,17 @@ fxInitLines
 # Crash fixes: a reused squad member with no object, the 60 fps squadron count (jfg_diagnostics.cpp, jfg_frame_rate.cpp)
 SquaddieInitFromRomdef
 objDoFrees
+
+# Mods' new enemy types (object types made from a stock one): the squad code treats them as it (jfg_kinds.cpp)
+BaddyTypeToIndex
+func_800050A8_5CA8
+
+# Mods' planets on the planet-select map (jfg_worldmap.cpp)
+frontMap
+frontCleanupMap
+func_overlay_9_000039F0_1F047C8
+
+# Mods' regions: names on the area title and the Tribal screen (jfg_regions.cpp)
+frontDisplayRegion
+tribalScreen
+frontGetWorldName

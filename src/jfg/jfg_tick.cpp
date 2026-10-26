@@ -77,8 +77,8 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     // start. With the fifth number, F5 (back to the title screen) is done first at that time: warping from the start-up
     // screens does not stay in the level (the splash sequence takes over again). The sixth replaces the front-end mode
     // passed on (from the title it is 3, the title backdrop, with no player). JFG_DEBUG_WARP2="seconds,level,character,
-    // entrance" warps a second time, the way a level exit does (an arrival through a door); JFG_DEBUG_WARP3, same
-    // fields, a third time after that.
+    // entrance[,front mode]" warps a second time, the way a level exit does (an arrival through a door); JFG_DEBUG_WARP3,
+    // same fields, a third time after that. Front mode 17 with level 0 opens the planet map.
     {
         static uint32_t tick = 0;
         static const auto start = std::chrono::steady_clock::now();
@@ -87,12 +87,12 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         static const char* warp2 = std::getenv("JFG_DEBUG_WARP2");
         static const char* warp3 = std::getenv("JFG_DEBUG_WARP3");
         static const bool cheats = std::getenv("JFG_DEBUG_CHEATS") != nullptr;
-        static int w[6] = { -1, 0, 1, 0, -1, -1 }, w2[4] = { -1, 0, 1, 0 }, w3[4] = { -1, 0, 1, 0 };
+        static int w[6] = { -1, 0, 1, 0, -1, -1 }, w2[5] = { -1, 0, 1, 0, -1 }, w3[5] = { -1, 0, 1, 0, -1 }; // WARP2/3: [4] front mode
         if (tick == 0) {
             if (cheats) g.invulnerable = g.infinite_ammo = g.all_weapons = g.all_levels = true;
             if (warp != nullptr) std::sscanf(warp, "%d,%d,%d,%d,%d,%d", &w[0], &w[1], &w[2], &w[3], &w[4], &w[5]);
-            if (warp2 != nullptr) std::sscanf(warp2, "%d,%d,%d,%d", &w2[0], &w2[1], &w2[2], &w2[3]);
-            if (warp3 != nullptr) std::sscanf(warp3, "%d,%d,%d,%d", &w3[0], &w3[1], &w3[2], &w3[3]);
+            if (warp2 != nullptr) std::sscanf(warp2, "%d,%d,%d,%d,%d", &w2[0], &w2[1], &w2[2], &w2[3], &w2[4]);
+            if (warp3 != nullptr) std::sscanf(warp3, "%d,%d,%d,%d,%d", &w3[0], &w3[1], &w3[2], &w3[3], &w3[4]);
         }
         tick++;
         const auto now = std::chrono::steady_clock::now();
@@ -108,14 +108,19 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         else if (warped && !warped2 && w2[0] >= 0 && now - start >= std::chrono::seconds(w2[0])) {
             warped2 = true;
             g.warp_level = w2[1]; g.warp_character = w2[2]; g.warp_entrance = w2[3]; g.pending_warp = true;
+            g_warp_mode = w2[4];
         }
         else if (warped2 && !warped3 && w3[0] >= 0 && now - start >= std::chrono::seconds(w3[0])) {
             warped3 = true;
             g.warp_level = w3[1]; g.warp_character = w3[2]; g.warp_entrance = w3[3]; g.pending_warp = true;
+            g_warp_mode = w3[4];
         }
     }
 
     launch_tick(ctx); // --start-level and friends (jfg_launch.cpp)
+    music_tick(ctx);  // mods' OGG music for levels (jfg_music.cpp)
+    worldmap_tick();  // mods' planets: the one the hero is in counts as entered (jfg_worldmap.cpp)
+    lua_tick(ctx);    // mods' Lua scripts (jfg_lua.cpp)
 
     // Scripted testing: JFG_DEBUG_ITEMS=1 gives the current character every key and object;
     // JFG_DEBUG_WEAPONS=<mask> sets the current character's owned-weapon mask the way the Items tab does.
@@ -189,7 +194,10 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     const float update_t = update_version.empty() ? -1.0f
         : std::chrono::duration<float>(std::chrono::steady_clock::now() - std::max(update_seen, hint_start + std::chrono::seconds(3))).count();
     const bool update_toast = update_t >= 0.0f && update_t < UPDATE_SHOW && jfg_launcher_check_updates(); // not once turned off
-    dino::debug_ui::backend::set_overlay(hint_active || g.show_fps || g.show_level || g.show_pack || pack_toast || save_toast || update_toast);
+    std::string script_text;
+    float script_alpha = 0.0f;
+    const bool script_toast = lua_overlay_text(script_text, script_alpha);
+    dino::debug_ui::backend::set_overlay(hint_active || g.show_fps || g.show_level || g.show_pack || pack_toast || save_toast || update_toast || script_toast);
 
     dino::debug_ui::ui_frame_begin();
     if (hint_active && dino::debug_ui::backend::in_ui_frame()) {
@@ -208,6 +216,20 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         dl->AddRectFilled(ImVec2(pos.x - pad, pos.y - pad * 0.5f), ImVec2(pos.x + extent.x + pad, pos.y + extent.y + pad * 0.5f),
             ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.55f * alpha)), pad * 0.5f);
         dl->AddText(font, font_size, pos, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, alpha)), text);
+    }
+    if (script_toast && dino::debug_ui::backend::in_ui_frame()) {
+        // A mod script's jfg.message: lower third, the launcher's gold on a dark band.
+        const ImVec2 size = ImGui::GetIO().DisplaySize;
+        ImFont* font = ImGui::GetFont();
+        const float font_size = std::max(20.0f, size.y / 26.0f);
+        const ImVec2 extent = font->CalcTextSizeA(font_size, FLT_MAX, size.x * 0.8f, script_text.c_str());
+        const ImVec2 pos(size.x * 0.5f - extent.x * 0.5f, size.y * 0.70f);
+        const float pad = font_size * 0.5f;
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+        dl->AddRectFilled(ImVec2(pos.x - pad, pos.y - pad * 0.5f), ImVec2(pos.x + extent.x + pad, pos.y + extent.y + pad * 0.5f),
+            ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.6f * script_alpha)), pad * 0.5f);
+        dl->AddText(font, font_size, pos, ImGui::GetColorU32(ImVec4(1.0f, 0.82f, 0.25f, script_alpha)), script_text.c_str(),
+                    nullptr, size.x * 0.8f);
     }
     if (pack_toast && dino::debug_ui::backend::in_ui_frame()) {
         // F6: which pack is now in use, for a few seconds at the top of the screen.

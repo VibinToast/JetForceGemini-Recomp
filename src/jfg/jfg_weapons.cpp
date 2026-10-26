@@ -18,7 +18,8 @@
 //     with the oldest dropped, only holds some mine types.)
 //   pistol: rapid presses build "heat" (data+0x542, +0x2A per shot, no shot at >= 0xD3); "no rapid-fire limit" clears it.
 //   laser bolt size: laserboltInit's scale (bolt data+0x6C) for bolts fired by the player (hook at its end).
-// When a weapon's "Modify" box is off its original values are written back.
+// When a weapon's "Modify" box is off its original values are written back, or a pack's values when a pack's script set
+// them (jfg.weapon, jfg_lua.cpp): the player's own "Modify" still wins over a pack.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -39,7 +40,6 @@
 namespace jfg {
 
 namespace {
-constexpr uint32_t ADDR_weaponTable = 0x800A1490; // WeaponDef[]
 constexpr int WEAPON_COUNT = 15;
 constexpr const char* WEAPONS_FILE = "jfg_weapons.txt";
 
@@ -82,8 +82,11 @@ struct WeaponMod {
 };
 
 WeaponStats g_weapon_orig[WEAPON_COUNT];
+WeaponStats g_weapon_pack[WEAPON_COUNT]; // a pack's values (g_weapon_pack_on), under the player's own
+bool g_weapon_pack_on[WEAPON_COUNT] = {};
 WeaponMod g_weapon_mod[WEAPON_COUNT];
 bool g_weapons_loaded = false;
+bool g_weapon_orig_read_once = false;
 std::vector<std::pair<uint32_t, uint32_t>> g_player_mines; // the player's mines (object, data), oldest first
 
 WeaponStats read_weapon_stats(int w) {
@@ -117,6 +120,13 @@ void restore_weapon_stats(int w) {
     WeaponDef::Damage::set(d, (uint8_t)o.damage); WeaponDef::Damage2::set(d, (uint8_t)o.damage); WeaponDef::Delay::set(d, (uint8_t)o.delay);
     WeaponDef::ThrowDelay::set(d, (int8_t)o.throw_delay); WeaponDef::Life::set(d, (uint8_t)o.life);
     WeaponDef::SpreadX::set(d, (int16_t)o.spread_x); WeaponDef::SpreadY::set(d, (int16_t)o.spread_y); WeaponDef::Speed::set(d, o.speed);
+    if (g_weapon_pack_on[w]) write_weapon_stats(w, g_weapon_pack[w], o);
+}
+
+void read_weapon_orig() {
+    if (g_weapon_orig_read_once) return;
+    for (int w = 0; w < WEAPON_COUNT; w++) g_weapon_orig[w] = read_weapon_stats(w);
+    g_weapon_orig_read_once = true;
 }
 } // namespace
 
@@ -143,6 +153,26 @@ void apply_weapon_key(const char* key, int value) {
 }
 
 // Every weapon back to its original values, "Modify" off.
+// A pack's value for one weapon field (jfg.weapon). False for an unknown weapon or field.
+bool set_pack_weapon(int w, const char* field, double value) {
+    if (g_rdram == nullptr || w < 0 || w >= WEAPON_COUNT) return false;
+    std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex);
+    read_weapon_orig();
+    WeaponStats& s = g_weapon_pack[w];
+    if (!g_weapon_pack_on[w]) s = g_weapon_orig[w];
+    const int v = (int)std::lround(value);
+    if (!std::strcmp(field, "damage")) s.damage = std::clamp(v, 0, 255);
+    else if (!std::strcmp(field, "delay")) s.delay = std::clamp(v, 0, 255);
+    else if (!std::strcmp(field, "throw_delay")) s.throw_delay = std::clamp(v, 1, 127);
+    else if (!std::strcmp(field, "lifetime")) s.life = std::clamp(v, 1, 255);
+    else if (!std::strcmp(field, "spread_x")) s.spread_x = std::clamp(v, 0, 8192);
+    else if (!std::strcmp(field, "spread_y")) s.spread_y = std::clamp(v, 0, 8192);
+    else if (!std::strcmp(field, "speed")) s.speed = std::clamp((float)value, 0.1f, 2000.0f);
+    else return false;
+    g_weapon_pack_on[w] = true;
+    return true;
+}
+
 void reset_weapons() {
     for (int w = 0; w < WEAPON_COUNT; w++) { g_weapon_mod[w] = WeaponMod(); g_weapon_mod[w].s = g_weapon_orig[w]; }
 }
@@ -201,11 +231,11 @@ bool is_throw_anim(uint32_t obj) {
 // Game thread, every tick (jfg_debug_frame).
 void apply_weapons() {
     if (g_rdram == nullptr) return;
+    std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex);
     if (!g_weapon_orig_read) {
-        for (int w = 0; w < WEAPON_COUNT; w++) g_weapon_orig[w] = read_weapon_stats(w);
+        read_weapon_orig();
         g_weapon_orig_read = true;
     }
-    std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex);
     load_weapons();
     for (int w = 0; w < WEAPON_COUNT; w++) {
         if (g_weapon_mod[w].on) write_weapon_stats(w, g_weapon_mod[w].s, g_weapon_orig[w]);

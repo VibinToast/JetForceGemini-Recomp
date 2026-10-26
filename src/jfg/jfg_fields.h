@@ -102,6 +102,15 @@ using Models     = Field<uint32_t, 0x6C>;  // for a 3D model object: its model i
 }
 
 // An object definition (Obj::Def), shared by every object of a kind.
+// A door's own data (Obj::Data of an object of kind 7).
+namespace DoorData {
+using Flags = Field<uint16_t, 0x3E>; // 0x8: locked
+using Id    = Field<uint8_t, 0x44>;  // the id squadrons, keys and switches unlock it by
+using Locks = Field<uint8_t, 0x4A>;  // locks left (squadrons still alive, keys not used)
+constexpr int16_t Kind = 7;
+constexpr uint16_t Locked = 0x8;
+}
+
 namespace ObjDef {
 using DrawRange   = Field<uint16_t, 0x16>; // drawn up to this distance, 0 = always (meaning partly a guess)
 using DrawType    = Field<uint8_t, 0x1E>;  // 0 3D model, 1 sprite, 4 custom
