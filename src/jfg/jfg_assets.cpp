@@ -31,7 +31,8 @@
 // header's +0x102: the Tribal / stats region; the game uses 1-30 and its save keeps records for 40), numbered 31-39
 // like appended entries (key "regions"). A level in one gets the region's stats screen when an exit (+0x1A bit 0, as
 // most of the game's) leads into another region, the area title with "name" and "world" when it is entered, and the
-// game's continues; the Tribal table (object table 0x34) is lengthened so the mods' regions have 0 Tribals. A level
+// game's continues; the Tribal table (object table 0x34) is lengthened so the mods' regions have their own Tribal
+// counts ("tribals", default 0: rescues there stay out of the game's own totals and its "all Tribals" flag). A level
 // takes the number with a fixup { "at": 258, "type": "u8", "ref": "name" } (jfg_regions.cpp shows the names).
 // "fixups" on an entry (or on a patch's object-list operation) write numbers the mod can't know into its bytes once
 // they are given out: { "at": 0x54, "type": "s16", "ref": "track_field" } ("ref": a name of the mod's own, or
@@ -128,6 +129,7 @@ struct Region {              // "regions": a Tribal / stats region of a mod's ow
     size_t order;
     std::string mod_id, append, name, world;
     int expect = -1;
+    int tribals = 0; // the Tribals to rescue in its levels ("tribals"): the HUD's count and the stats screen's total
 };
 std::vector<ObjType> g_objtypes;
 std::vector<AnimRows> g_animrows;
@@ -362,10 +364,11 @@ std::vector<int> assign_numbers(int table_asset, int data_asset, size_t count,
 
 // The object tables (objGetTable): asset 0x19 is s32 word offsets into asset 0x18, ended by -1. Table 0x34 is the
 // Tribals of each region (s8, 32 of them). Lengthens it to SAVE_REGIONS (the later tables move up) and gives the mods'
-// regions 0 Tribals. False when the tables aren't what the game's code expects.
+// regions their own Tribal counts (0 unless a mod's "regions" entry says "tribals"). False when the tables aren't what
+// the game's code expects.
 constexpr uint32_t OBJ_TABLES = 0x18, OBJ_TABLE_INDEX = 0x19;
 constexpr int TRIBAL_TABLE = 0x34, STOCK_REGIONS = 31, SAVE_REGIONS = 40;
-bool give_tribal_room(std::vector<std::vector<uint8_t>>& assets, const std::vector<int>& regions) {
+bool give_tribal_room(std::vector<std::vector<uint8_t>>& assets, const std::map<int, int>& regions) {
     std::vector<uint8_t>& index = assets[OBJ_TABLE_INDEX];
     std::vector<uint8_t>& data = assets[OBJ_TABLES];
     if (index.size() < 4 * (size_t)(TRIBAL_TABLE + 2)) return false;
@@ -382,7 +385,7 @@ bool give_tribal_room(std::vector<std::vector<uint8_t>>& assets, const std::vect
             put_be32(index, o, (uint32_t)(w + (int32_t)((want - have) / 4)));
         }
     }
-    for (int r : regions) data[4 * (size_t)a + r] = 0;
+    for (auto [r, count] : regions) data[4 * (size_t)a + r] = (uint8_t)count;
     return true;
 }
 
@@ -636,6 +639,7 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
     }
     for (const nlohmann::json& e : j.value("regions", nlohmann::json::array())) {
         Region r{ order, id, e.value("append", ""), e.value("name", ""), e.value("world", ""), json_int(e, "expect") };
+        r.tribals = std::clamp(e.value("tribals", 0), 0, 127);
         if (r.append.empty()) {
             log("assets: " + id + ": a region needs \"append\": " + e.dump());
             continue;
@@ -1013,7 +1017,7 @@ extern "C" void jfg_apply_asset_mods(void) {
     }
     std::vector<int> region_numbers;
     if (!region_ptrs.empty()) region_numbers = assign_numbers("regions", STOCK_REGIONS, region_ptrs);
-    std::vector<int> given_regions;
+    std::map<int, int> given_regions; // region number -> its Tribals
     for (size_t k = 0; k < region_numbers.size(); k++) {
         const Region& r = regions[k];
         if (region_numbers[k] >= SAVE_REGIONS) {
@@ -1022,9 +1026,10 @@ extern "C" void jfg_apply_asset_mods(void) {
             g_numbers.erase(r.mod_id + ":" + r.append);
             continue;
         }
-        given_regions.push_back(region_numbers[k]);
+        given_regions[region_numbers[k]] = r.tribals;
         g_region_names[region_numbers[k]] = { r.name.empty() ? r.append : r.name, r.world };
-        log("assets: " + r.mod_id + ": region \"" + r.append + "\" is region " + std::to_string(region_numbers[k]));
+        log("assets: " + r.mod_id + ": region \"" + r.append + "\" is region " + std::to_string(region_numbers[k]) +
+            (r.tribals ? ", " + std::to_string(r.tribals) + " Tribals" : ""));
     }
     save_ids();
     if (!given_regions.empty()) {
