@@ -50,6 +50,8 @@
 // "append" adds an entry at the end. Indices are the list's own before the patch; "id" must be the object id at that
 // index, or the operation is skipped and logged (the mod was made for other data). Patches apply after replacements,
 // mods from the top of the mod list down, each mod's in file order.
+// "rotateY": 90 / 180 / 270 on a packed model entry (a "copyOf" one, say) turns the model about Y as it is made: a prop
+// whose list entry has no facing (the plain 10-byte entry) can face another way. rotate_model says what it turns.
 // "baddies" patches the squad code's animation table (overlay 3 data, not an asset) by field: jfg_baddies.cpp.
 //
 // At game start, before the game's first instruction, the port copies the whole asset area with the replacements in
@@ -117,6 +119,7 @@ struct Replacement {
     std::vector<Fixup> fixups;
     bool packed = false; // fixups go into the unpacked bytes of a packed (model or track) entry
     int copy_of = -1;    // "copyOf": the entry of the same set the bytes are copied from (the player's own data)
+    int rotate_y = 0;    // "rotateY" on a packed model: quarter turns about Y (1, 2, 3) given to the copy (rotate_model)
     std::vector<std::pair<int, std::vector<uint8_t>>> sets; // byte edits, before the fixups
 };
 
@@ -283,8 +286,55 @@ void apply_sets(std::vector<uint8_t>& bytes, const Replacement& r) {
     }
 }
 
+// A model (unpacked) turned by `quarters` quarter turns about Y, counter-clockwise seen from above as the game's
+// facings go: the vertices (+0x1C, +0x12 of them, 10 bytes: s16 x y z), the vertex normals (+0x68: 6-byte entries,
+// s8 x y z first, running to the next section) and the bounding box (+0x3C: s16 min x y z, max x y z). Hit spheres
+// sit on joints and have no position of their own. A turn keeps the triangles' winding. False (unchanged) when the
+// model isn't one this knows: posed points (+0x34) or a skeleton (+0x4F joints) would need turning too.
+bool rotate_model(std::vector<uint8_t>& m, int quarters) {
+    auto s16 = [&](size_t o) { return (int16_t)(m[o] << 8 | m[o + 1]); };
+    auto put16 = [&](size_t o, int v) { m[o] = (uint8_t)(v >> 8); m[o + 1] = (uint8_t)v; };
+    auto turn = [&](int& x, int& z) {
+        for (int q = 0; q < quarters; q++) { const int t = x; x = z; z = -t; }
+    };
+    if (m.size() < 0x80 || m[0x2E] != 0 || m[0x4F] != 0) return false;
+    const size_t verts = be32(m, 0x1C), count = (size_t)s16(0x12);
+    if (verts + 10 * count > m.size()) return false;
+    for (size_t i = 0; i < count; i++) {
+        const size_t o = verts + 10 * i;
+        int x = s16(o), z = s16(o + 4);
+        turn(x, z);
+        put16(o, x);
+        put16(o + 4, z);
+    }
+    // The normals table has no count: it ends where the next section starts.
+    const size_t normals = be32(m, 0x68);
+    if (normals != 0) {
+        size_t end = m.size();
+        for (const size_t ptr : { 0x18, 0x1C, 0x20, 0x24, 0x30, 0x34, 0x38, 0x54, 0x6C, 0x70, 0x80 }) {
+            const size_t at = be32(m, ptr);
+            if (at > normals && at < end) end = at;
+        }
+        for (size_t o = normals; o + 6 <= end; o += 6) {
+            int x = (int8_t)m[o], z = (int8_t)m[o + 2];
+            turn(x, z);
+            m[o] = (uint8_t)std::clamp(x, -127, 127);
+            m[o + 2] = (uint8_t)std::clamp(z, -127, 127);
+        }
+    }
+    // The bounding box: turn both corners and take the new minimum and maximum of each axis.
+    int x0 = s16(0x3C), z0 = s16(0x40), x1 = s16(0x42), z1 = s16(0x46);
+    turn(x0, z0);
+    turn(x1, z1);
+    put16(0x3C, std::min(x0, x1));
+    put16(0x40, std::min(z0, z1));
+    put16(0x42, std::max(x0, x1));
+    put16(0x46, std::max(z0, z1));
+    return true;
+}
+
 std::vector<uint8_t> linked(const Replacement& r) {
-    if (r.fixups.empty() && r.sets.empty()) return r.data;
+    if (r.fixups.empty() && r.sets.empty() && r.rotate_y == 0) return r.data;
     const std::string what = r.file;
     if (!r.packed) {
         std::vector<uint8_t> out = r.data;
@@ -296,6 +346,9 @@ std::vector<uint8_t> linked(const Replacement& r) {
     if (!unpack_entry(r.data, plain)) {
         log("assets: " + r.mod_id + ": " + what + " says it is packed but doesn't unpack - its fixups are skipped");
         return r.data;
+    }
+    if (r.rotate_y != 0 && !rotate_model(plain, r.rotate_y)) {
+        log("assets: " + r.mod_id + ": " + what + " can't be turned (posed points or joints) - left as it is");
     }
     apply_sets(plain, r);
     apply_fixups(plain, r.fixups, r.mod_id, what);
@@ -707,6 +760,13 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
         r.fixups = read_fixups(e, id, ok);
         r.packed = e.value("packed", false);
         r.copy_of = json_int(e, "copyOf");
+        if (const int deg = json_int(e, "rotateY"); deg > 0) {
+            if (deg % 90 != 0 || deg >= 360 || !r.packed) {
+                log("assets: " + id + ": \"rotateY\" takes 90, 180 or 270 on a packed model - left as it is: " + e.dump());
+            } else {
+                r.rotate_y = deg / 90;
+            }
+        }
         for (const nlohmann::json& s : e.value("set", nlohmann::json::array())) {
             std::vector<uint8_t> bytes;
             const int at = json_int(s, "at");
