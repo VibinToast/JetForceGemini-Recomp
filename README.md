@@ -52,6 +52,7 @@ Jet Force Gemini **US**, `.z64` format, SHA-1 `493ced9008dbe932d6e91179b68e8630c
   on and off and reordered in the Mods tab of the settings menu (Select / Esc).
 
 - To make your own texture pack, see [docs/TEXTURE_PACKS.md](docs/TEXTURE_PACKS.md).
+- How the port gives levels and mods more memory than the N64 had: [docs/MEMORY.md](docs/MEMORY.md).
 
 **Tools (F10 toolbar)**
 - Cheats: invulnerable, unlimited ammo, all weapons, all levels, skip the Tribal check.

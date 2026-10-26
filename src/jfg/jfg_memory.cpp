@@ -1,8 +1,9 @@
 // Jet Force Gemini port: more memory for levels than the N64 had (decomp PORT_FINDINGS request 15).
 //
 // - The main heap: the game ends it at 0x80400000 (mmExtendedRam is 0 in the ROM, so the expansion pak's second
-//   4 MB went unused). It now ends at 0x80800000, twice the room. Past 0x80800000 is not possible: the RSP, RDP and
-//   VI take 24-bit addresses, and the port's gore blocks start at 0x80C00000.
+//   4 MB went unused). It now ends at 0x80800000, twice the room. 0x80800000-0x80C00000 is still free (the game's
+//   osMemSize says 8 MB: check what's sized from it before growing into it); the gore blocks start at 0x80C00000, and
+//   past 0x81000000 the RSP, RDP and VI can't reach (24-bit addresses). The whole map: docs/MEMORY.md.
 // - The track buffer: one heap block of 0x9F000 bytes (func_overlay_24_000001F8) that the level's track unpacks into,
 //   followed by tables of about 44 bytes per triangle, with no check. A pack level bigger than the game's own wrote
 //   past it into the heap and the game crashed. It is asked for at TRACK_BUFFER bytes instead; the loader shrinks the
