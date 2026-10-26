@@ -207,7 +207,15 @@ void launch_tick(recomp_context* ctx) {
         }
     }
     if (g_launch.start_level < 0 && !g_launch.start_ref.empty() && step == Step::Boot) {
-        const int n = asset_number(g_launch.start_ref);
+        int n = asset_number(g_launch.start_ref);
+        const size_t colon = g_launch.start_ref.find(':');
+        if (n < 0 && colon != std::string::npos && g_launch.start_ref.compare(colon + 1, 6, "level_") != 0) {
+            // The level's own name, as Studio shows it: its entry is "level_<name>"
+            const std::string named = g_launch.start_ref.substr(0, colon + 1) + "level_" +
+                                      g_launch.start_ref.substr(colon + 1);
+            n = asset_number(named);
+            if (n >= 0) log("launch: --start-level " + g_launch.start_ref + " taken as " + named);
+        }
         if (n < 0) {
             log("launch: --start-level " + g_launch.start_ref + ": no mod loaded this run appends a level by that name");
             step = Step::Done;
