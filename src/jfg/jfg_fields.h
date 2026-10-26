@@ -94,7 +94,7 @@ using Opacity    = Field<uint8_t, 0x39>;   // 0xFF = fully opaque
 using ModelIndex = Field<int8_t, 0x3A>;    // which of its model instances (Models) is drawn
 using Anim       = Field<int8_t, 0x3B>;    // current animation
 using Def        = Field<uint32_t, 0x40>;  // its definition (ObjDef)
-using Kind       = Field<int16_t, 0x48>;   // object type
+using Kind       = Field<int16_t, 0x48>;   // object type: its behaviour (ObjDef::Behaviour), which code runs it
 using Damage     = Field<uint32_t, 0x4C>;  // its damage data (Damage), 0 = none
 using Shadow     = Field<uint32_t, 0x50>;  // its shadow data, 0 = no shadow
 using Data       = Field<uint32_t, 0x68>;  // its kind's own data (PlayerData, SquadMemberData, SquadronData, BoltData, MineData, ...)
@@ -113,6 +113,7 @@ constexpr uint16_t Locked = 0x8;
 
 namespace ObjDef {
 using DrawRange   = Field<uint16_t, 0x16>; // drawn up to this distance, 0 = always (meaning partly a guess)
+using Behaviour   = Field<int16_t, 0x1C>;  // the code it runs (Obj::Kind once set up)
 using DrawType    = Field<uint8_t, 0x1E>;  // 0 3D model, 1 sprite, 4 custom
 using LodDistance = Field<float, 0xCC>;    // past this depth the next, simpler model is drawn; 0 = no LOD
 }

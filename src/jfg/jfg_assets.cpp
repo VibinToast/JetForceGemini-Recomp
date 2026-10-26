@@ -78,6 +78,7 @@ bool mod_region(int region, std::string* name, std::string* world);
 bool appended_entry(int data_asset, int entry, std::string* owner);
 void read_baddy_patches(const nlohmann::json& j, const std::string& id, size_t order); // jfg_baddies.cpp
 void activate_baddy_patches();
+void read_player_bodies(const nlohmann::json& j, const std::string& id); // jfg_cut_enemies.cpp
 int baddy_like(int object_id);
 std::string texture_owner(int tex_id);
 bool mod_textures();
@@ -705,6 +706,7 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
     };
     read_patches(j, id, order);
     jfg::read_baddy_patches(j, id, order);
+    jfg::read_player_bodies(j, id);
     for (const nlohmann::json& e : j.value("objtypes", nlohmann::json::array())) {
         ObjType t{ order, id, e.value("append", ""), e.value("def", ""), json_int(e, "like"), json_int(e, "expect") };
         if (t.append.empty() || t.def.empty()) {
