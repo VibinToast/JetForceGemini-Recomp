@@ -643,10 +643,6 @@ void read_patches(const nlohmann::json& j, const std::string& id, size_t order) 
             continue;
         }
         bool ok = true;
-        if (e.value("bakeJoints", false)) {
-            if (!r.packed) log("assets: " + id + ": \"bakeJoints\" works on a packed model - left as it is: " + e.dump());
-            else r.bake_joints = true;
-        }
         for (const nlohmann::json& s : e.value("set", nlohmann::json::array())) {
             std::vector<uint8_t> bytes;
             const int at = json_int(s, "at");
@@ -862,6 +858,10 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
             } else {
                 r.rotate_y = deg / 90;
             }
+        }
+        if (e.value("bakeJoints", false)) {
+            if (!r.packed) log("assets: " + id + ": \"bakeJoints\" works on a packed model - left as it is: " + e.dump());
+            else r.bake_joints = true;
         }
         for (const nlohmann::json& s : e.value("set", nlohmann::json::array())) {
             std::vector<uint8_t> bytes;

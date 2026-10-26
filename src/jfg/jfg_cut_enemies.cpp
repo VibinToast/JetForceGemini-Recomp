@@ -178,6 +178,9 @@ JFG_WRAP(func_800386B0_392B0) {
         func_800386B0_392B0_orig(rdram, ctx);
         return;
     }
+    static bool logged = false;
+    if (!logged) std::fprintf(stderr, "[jfg] cut objects: weapon 15 fires as a mine\n");
+    logged = true;
     const uint32_t player = (uint32_t)ctx->r5;
     const uint32_t game = rd32(ADDR_gameplay);
     const uint16_t mine_ammo = Character::Ammo::get(ch, TIMED_MINE);
