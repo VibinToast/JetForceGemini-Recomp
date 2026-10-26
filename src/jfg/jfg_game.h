@@ -39,6 +39,7 @@ void objGetPlayerlist(uint8_t* rdram, recomp_context* ctx);
 void objGetObjList(uint8_t* rdram, recomp_context* ctx);
 void controlSelectWeapon(uint8_t* rdram, recomp_context* ctx);
 void objMoveXYZ(uint8_t* rdram, recomp_context* ctx);
+void lightShowControl(uint8_t* rdram, recomp_context* ctx); // overlay 64: (obj, updateRate), the cut light show's update
 void trackNearestIntersection(uint8_t* rdram, recomp_context* ctx); // the level's first surface on a line (the crosshair's test)
 void n_alEvtqPostEvent(uint8_t* rdram, recomp_context* ctx);
 void func_8002CC70_2D870(uint8_t* rdram, recomp_context* ctx); // the follow camera's wall check, see camera_collide()
