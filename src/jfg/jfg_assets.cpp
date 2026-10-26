@@ -52,14 +52,19 @@
 // mods from the top of the mod list down, each mod's in file order.
 // "rotateY": 90 / 180 / 270 on a packed model entry (a "copyOf" one, say) turns the model about Y as it is made: a prop
 // whose list entry has no facing (the plain 10-byte entry) can face another way. rotate_model says what it turns.
+// "bakeJoints": true on a packed model entry makes a model with a skeleton but no animations a still one: each part is
+// moved to where its joint puts it and the skeleton is dropped (bake_joints). Without animations the game draws such a
+// model with no joint matrices, so its parts pile up at the origin (the cut piston's model 85, 8 joints).
 // "baddies" patches the squad code's animation table (overlay 3 data, not an asset) by field: jfg_baddies.cpp.
 //
 // At game start, before the game's first instruction, the port copies the whole asset area with the replacements in
 // it to the end of the ROM and points the table there. The game never sees the difference: it reads the table at
 // boot, sizes come from the table, and all data reads go through it. The original area stays where it is (unused).
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <map>
 #include <set>
 #include <span>
@@ -121,6 +126,7 @@ struct Replacement {
     bool packed = false; // fixups go into the unpacked bytes of a packed (model or track) entry
     int copy_of = -1;    // "copyOf": the entry of the same set the bytes are copied from (the player's own data)
     int rotate_y = 0;    // "rotateY" on a packed model: quarter turns about Y (1, 2, 3) given to the copy (rotate_model)
+    bool bake_joints = false; // "bakeJoints" on a packed model: its parts put in place, the skeleton dropped (bake_joints)
     std::vector<std::pair<int, std::vector<uint8_t>>> sets; // byte edits, before the fixups
 };
 
@@ -334,8 +340,89 @@ bool rotate_model(std::vector<uint8_t>& m, int quarters) {
     return true;
 }
 
+// A model (unpacked) with a skeleton made a still one: every vertex (s16 x y z, relative to its joint) gets its joint's
+// bind-pose position (the skeleton at +0x54: 16-byte entries, s8 parent, then f32 x y z from the parent), and the
+// model then has no joints (+0x4F 0), no joint points (+0x2D 0), every batch on joint 0 alone (as a model without
+// joints has them: j0 0, j1 j2 -1, both splits at the batch's vertex count) and every lighting group (+0x6C) on joint 0.
+// A batch's vertices follow j0 up to split0, j1 up to split1, then j2. False (unchanged) for a model this doesn't know.
+bool bake_joints(std::vector<uint8_t>& m) {
+    auto s16 = [&](size_t o) { return (int16_t)(m[o] << 8 | m[o + 1]); };
+    auto put16 = [&](size_t o, int v) { m[o] = (uint8_t)(v >> 8); m[o + 1] = (uint8_t)v; };
+    if (m.size() < 0x88) return false;
+    const int joints = (int8_t)m[0x4F];
+    if (joints <= 0) return joints == 0;
+    const size_t skeleton = be32(m, 0x54), verts = be32(m, 0x1C), batches = be32(m, 0x24);
+    const int vcount = s16(0x12), bcount = s16(0x16);
+    if (skeleton + 16 * (size_t)joints > m.size() || verts + 10 * (size_t)vcount > m.size() ||
+        batches + 16 * (size_t)(bcount + 1) > m.size()) return false;
+    std::vector<float> world(3 * (size_t)joints, 0.0f);
+    for (int j = 0; j < joints; j++) {
+        const size_t e = skeleton + 16 * (size_t)j;
+        const int parent = (int8_t)m[e];
+        if (parent >= j) return false;
+        for (int k = 0; k < 3; k++) {
+            const uint32_t bits = be32(m, e + 4 + 4 * k);
+            float f;
+            std::memcpy(&f, &bits, 4);
+            world[3 * j + k] = (parent >= 0 ? world[3 * parent + k] : 0.0f) + f;
+        }
+    }
+    std::vector<int> joint_of(vcount, 0);
+    for (int b = 0; b < bcount; b++) {
+        const size_t e = batches + 16 * (size_t)b;
+        const int first = s16(e + 6), end = s16(e + 16 + 6), count = end - first;
+        if (first < 0 || end > vcount || count < 0) return false;
+        const int js[3] = { (int8_t)m[e + 1], (int8_t)m[e + 2], (int8_t)m[e + 3] };
+        const int splits[3] = { m[e + 4], m[e + 5], count };
+        int start = 0;
+        for (int k = 0; k < 3 && start < count; k++) {
+            const int split = std::min(splits[k], count);
+            if (js[k] >= 0 && js[k] < joints) {
+                for (int v = first + start; v < first + split; v++) joint_of[v] = js[k];
+            }
+            start = std::max(start, split);
+        }
+        m[e + 1] = 0;
+        m[e + 2] = m[e + 3] = 0xFF;
+        m[e + 4] = m[e + 5] = (uint8_t)std::min(count, 255);
+    }
+    int lo[3] = { 32767, 32767, 32767 }, hi[3] = { -32768, -32768, -32768 };
+    for (int v = 0; v < vcount; v++) {
+        const size_t o = verts + 10 * (size_t)v;
+        for (int k = 0; k < 3; k++) {
+            const int c = std::clamp(s16(o + 2 * k) + (int)std::lround(world[3 * joint_of[v] + k]), -32768, 32767);
+            put16(o + 2 * k, c);
+            lo[k] = std::min(lo[k], c);
+            hi[k] = std::max(hi[k], c);
+        }
+    }
+    if (vcount > 0) {
+        for (int k = 0; k < 3; k++) {
+            put16(0x3C + 2 * k, lo[k]);
+            put16(0x42 + 2 * k, hi[k]);
+        }
+    }
+    // Lighting groups: u8 count (0 ends), u8 joint, then count entries of a u32 (extra count at bits 12-15) and
+    // 12 bits per extra vertex.
+    if (const size_t light = be32(m, 0x6C); light != 0 && light < m.size()) {
+        size_t pos = light;
+        while (pos + 1 < m.size() && m[pos] != 0) {
+            const int count = m[pos];
+            m[pos + 1] = 0;
+            pos += 2;
+            for (int i = 0; i < count && pos + 4 <= m.size(); i++) {
+                const int extra = (int)(be32(m, pos) >> 12 & 0xF);
+                pos += (32 + 12 * (size_t)extra + 7) / 8;
+            }
+        }
+    }
+    m[0x4F] = 0;
+    m[0x2D] = 0;
+    return true;
+}
+
 std::vector<uint8_t> linked(const Replacement& r) {
-    if (r.fixups.empty() && r.sets.empty() && r.rotate_y == 0) return r.data;
+    if (r.fixups.empty() && r.sets.empty() && r.rotate_y == 0 && !r.bake_joints) return r.data;
     const std::string what = r.file;
     if (!r.packed) {
         std::vector<uint8_t> out = r.data;
@@ -347,6 +434,9 @@ std::vector<uint8_t> linked(const Replacement& r) {
     if (!unpack_entry(r.data, plain)) {
         log("assets: " + r.mod_id + ": " + what + " says it is packed but doesn't unpack - its fixups are skipped");
         return r.data;
+    }
+    if (r.bake_joints && !bake_joints(plain)) {
+        log("assets: " + r.mod_id + ": " + what + " isn't a model whose joints can be baked - left as it is");
     }
     if (r.rotate_y != 0 && !rotate_model(plain, r.rotate_y)) {
         log("assets: " + r.mod_id + ": " + what + " can't be turned (posed points or joints) - left as it is");
@@ -553,6 +643,10 @@ void read_patches(const nlohmann::json& j, const std::string& id, size_t order) 
             continue;
         }
         bool ok = true;
+        if (e.value("bakeJoints", false)) {
+            if (!r.packed) log("assets: " + id + ": \"bakeJoints\" works on a packed model - left as it is: " + e.dump());
+            else r.bake_joints = true;
+        }
         for (const nlohmann::json& s : e.value("set", nlohmann::json::array())) {
             std::vector<uint8_t> bytes;
             const int at = json_int(s, "at");

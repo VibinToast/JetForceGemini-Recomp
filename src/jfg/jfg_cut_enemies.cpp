@@ -23,10 +23,12 @@
 // then everything is put back, the ammo used and the shot counted on weapon 15. The shot's rate, spread and power
 // are still weapon 15's (the caller passes its WeaponDef). The stock game never gives weapon 15.
 //
-// Light show (behaviour 0x7F): the object update's switch (func_8000FBF0_107F0, objControl) is shifted by one at the
-// end: 0x7F runs blastdoorControl (which writes through the light show's missing hit block and crashes), 0x80
-// cutcameraControl and 0x81 lightShowControl. The real blast doors and cut cameras run from their own tick and never
-// get there. Its wrapper hands a light show to the switch as 0x81 for the call, so its own control runs.
+// Light show (behaviour 0x7F): the object update's switch (func_8000FBF0_107F0, objControl) runs blastdoorControl for
+// it, which writes through the light show's missing hit block and crashes. The switch's calls into overlays are jal
+// instructions the overlays' relocations fill in as they load (TrapDanglingJump until then), so which case reaches
+// which function is read from the code itself: the wrapper finds the case whose call goes to lightShowControl and
+// hands the light show to the switch as that behaviour for the call. With none, it is handed over as 0x7E (a case
+// that runs nothing), so it draws but doesn't move, and the targets are logged.
 //
 // Player bodies (jfg_assets.json "playerBodies"): a mod can play a hero in another body in its own levels, the cut
 // Tribal man (0x4) and yellow ant (0x21) for example (multiplayer skins with the heroes' rigs):
@@ -67,7 +69,16 @@ constexpr int16_t FROG = 0x15;
 constexpr uint32_t FROG_DATA_TAKEN = 0x44;
 constexpr uint8_t PROXIMITY_MINE = 15, TIMED_MINE = 11;
 constexpr int16_t MINE_UNCHARGED = 0x20; // the timed mine's charge for mine type 0 ((charge - 0x20) >> 4 == 0)
-constexpr int16_t LIGHT_SHOW = 0x7F, LIGHT_SHOW_CASE = 0x81;
+constexpr int16_t LIGHT_SHOW = 0x7F, NO_CONTROL = 0x7E;
+constexpr uint32_t LIGHT_SHOW_CONTROL = 0x823E08E0; // overlay 64
+// The switch's call for each behaviour 0x7F..0x81 (a jal, 0x10 bytes apart; case = behaviour - 2).
+constexpr uint32_t CONTROL_CALLS = 0x80010370;
+constexpr int16_t CONTROL_CALLS_FIRST = 0x7F, CONTROL_CALLS_COUNT = 3;
+
+uint32_t jal_target(uint32_t at) {
+    const uint32_t w = rd32(at);
+    return (w >> 26) == 3 ? 0x80000000u | ((w & 0x3FFFFFFu) << 2) : 0;
+}
 constexpr uint32_t ADDR_PLAYER_BODIES = 0x800A08A0; // s16[8]: skin 0's object id per character & 7
 constexpr int VELA = 0, JUNO = 1, POWER_SUIT = 4;
 constexpr int16_t STOCK_BODIES[8] = { 0x0000, 0x007E, 0x0006, 0x0044, 0x001C, 0x001D, 0x0032, 0x0044 };
@@ -193,7 +204,17 @@ JFG_WRAP(func_8000FBF0_107F0) {
         func_8000FBF0_107F0_orig(rdram, ctx);
         return;
     }
-    Obj::Kind::set(obj, LIGHT_SHOW_CASE);
+    int16_t as = NO_CONTROL;
+    for (int16_t i = 0; i < CONTROL_CALLS_COUNT; i++) {
+        if (jal_target(CONTROL_CALLS + 0x10u * (uint32_t)i) == LIGHT_SHOW_CONTROL) as = (int16_t)(CONTROL_CALLS_FIRST + i);
+    }
+    static bool logged = false;
+    if (!logged) {
+        std::fprintf(stderr, "[jfg] cut objects: light show: the update's calls for 0x7F..0x81 go to %08X %08X %08X; run as 0x%X\n",
+                     jal_target(CONTROL_CALLS), jal_target(CONTROL_CALLS + 0x10), jal_target(CONTROL_CALLS + 0x20), (unsigned)as);
+        logged = true;
+    }
+    Obj::Kind::set(obj, as);
     func_8000FBF0_107F0_orig(rdram, ctx);
     Obj::Kind::set(obj, LIGHT_SHOW);
 }
