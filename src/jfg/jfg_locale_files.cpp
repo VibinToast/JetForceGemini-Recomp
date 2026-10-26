@@ -483,9 +483,24 @@ std::string migrate(std::string id) {
     return id == ENGLISH_ID ? "" : id;
 }
 
+void load_saved_choice();
+void list_names(); // below
+
+// Under g_mutex: whether `id` is English ("") or a locale file's name, as the Language list has them.
+bool known(const std::string& id) {
+    if (!g_listed) list_names();
+    return std::any_of(g_list.begin(), g_list.end(), [&](const auto& entry) { return entry.first == id; });
+}
+
+// Under g_mutex: the saved choice. One that names no file now (deleted, renamed) is English.
 void load_choice() {
     if (g_chosen_loaded) return;
     g_chosen_loaded = true;
+    load_saved_choice();
+    if (!known(g_chosen)) g_chosen = "";
+}
+
+void load_saved_choice() {
     std::ifstream f(CHOICE_FILE);
     std::string line;
     while (std::getline(f, line)) {
@@ -585,6 +600,10 @@ std::string chosen() {
 void choose(const std::string& id) {
     std::lock_guard<std::mutex> lock(g_mutex);
     load_choice();
+    if (!known(id)) {
+        std::fprintf(stderr, "[jfg] locale: no locales/%s.json; the language stays as it is\n", id.c_str());
+        return;
+    }
     if (id != g_chosen) g_ui_switch = true;
     g_chosen = id;
     if (FILE* f = std::fopen(CHOICE_FILE, "w")) {

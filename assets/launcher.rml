@@ -109,14 +109,14 @@
 			.rl-title { display: block; flex: 0 0 auto; text-transform: uppercase; font-size: 49dp; line-height: 56dp; color: #3CC8FF; }
 			/* The page title, and on the Play page the language drop-down at its far side. */
 			.rl-title-row { display: flex; flex: 0 0 auto; flex-direction: row; justify-content: space-between; align-items: center; }
-			.rl-lang { display: block; position: relative; flex: 0 0 auto; }
+			.rl-lang { display: block; position: relative; flex: 0 0 auto; width: 220dp; } /* the list is as wide, right under the button */
 			.rl-lang-button { display: block; padding: 8dp 14dp; border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF;
 				font-family: "JetBrains Mono"; font-weight: bold; font-size: 18dp; line-height: 24dp; white-space: nowrap; cursor: pointer;
 				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
 			.rl-lang-button:hover { border-color: #FFB21A; }
 			#window:not([mouse-active]) .rl-lang-button:focus { border-color: #FFB21A; color: #E8F3FF; }
 			.rl-lang-arrow { display: inline-block; margin-left: 12dp; transform: rotate(90deg); }
-			.rl-lang-list { display: block; position: absolute; top: 46dp; right: 0dp; z-index: 10; min-width: 100%; padding: 4dp 0dp;
+			.rl-lang-list { display: block; position: absolute; top: 46dp; left: 0dp; right: 0dp; z-index: 10; padding: 4dp 0dp;
 				border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; }
 			.rl-lang-item { display: block; padding: 6dp 14dp; border-width: 0dp; background-color: #050B1C; color: #E8F3FF; font-family: "JetBrains Mono"; font-weight: bold; font-size: 18dp;
 				line-height: 24dp; white-space: nowrap; text-align: left; cursor: pointer; focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; }
@@ -351,7 +351,7 @@
 								<div class="rl-title rl-pixel">{{page_title}}<span class="rl-cursor">_</span></div>
 								<!-- The language (English and locales/*.json), only when there are others. -->
 								<div class="rl-lang" data-if="page == 'play' &amp;&amp; rl_locales.size &gt; 1">
-									<button class="rl-lang-button" id="rl_lang" data-event-click="toggle_lang()">{{rl_locale_name}}<span class="rl-lang-arrow">&gt;</span></button>
+									<button class="rl-lang-button" id="rl_lang" data-event-click="toggle_lang()" style="nav-up: none; nav-down: #rl_browse; nav-left: #nav_play; nav-right: none;">{{rl_locale_name}}<span class="rl-lang-arrow">&gt;</span></button>
 									<div class="rl-lang-list" data-if="rl_lang_open">
 										<button class="rl-lang-item" data-for="l : rl_locales" data-attr-id="'rl_lang_' + it_index" data-class-rl-on="l.selected"
 											data-event-click="pick_locale(l.id)">{{l.name}}</button>
@@ -377,7 +377,7 @@
 												<div class="rl-text" data-if="rom_valid">Your Jet Force Gemini (US) ROM is installed.</div>
 												<div class="rl-text rl-muted">The ROM stays on your computer and is never bundled with the game.</div>
 												<div class="rl-action-shadow"><button id="rl_browse" class="rl-action" data-class-rl-action--outline="rom_valid"
-													data-event-click="browse_rom()" style="nav-left: #nav_play; nav-up: none;">{{browse_label}}</button></div>
+													data-event-click="browse_rom()" style="nav-left: #nav_play; nav-up: #rl_lang;">{{browse_label}}</button></div>
 											</div>
 										</div>
 									</div></div>
