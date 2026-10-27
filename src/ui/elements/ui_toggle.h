@@ -21,6 +21,8 @@ namespace recompui {
         Style floater_disabled_style;
         Style floater_disabled_checked_style;
         bool checked = false;
+        float width = 162.0f;  // JFG PORT
+        float height = 72.0f;
 
         void set_checked_internal(bool checked, bool animate, bool setup, bool trigger_callbacks);
         float floater_left_target() const;
@@ -30,6 +32,7 @@ namespace recompui {
         std::string_view get_type_name() override { return "Toggle"; }
     public:
         Toggle(Element *parent);
+        void set_size(float width, float height); // JFG PORT: smaller toggles (the mod menu's, in the launcher)
         void set_checked(bool checked);
         bool is_checked() const;
         void add_checked_callback(std::function<void(bool)> callback);

@@ -4,7 +4,7 @@
 // the game's own behaviour and then applies the profile's values. Built-in profiles: Default (the original game),
 // Modern, Modern and Balanced, Extreme. Player profiles are bin\profiles\<name>.txt (option lines, and weapon lines with "weapon." in front)
 // and follow changes made while they are active. The active profile's name is kept in jfg_profile.txt.
-// Not part of profiles: cheats, the texture pack choice and texture dumping.
+// Not part of profiles: cheats, the texture pack choice, texture dumping and the language.
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -237,6 +237,7 @@ ProfilePreview preview_profile(const std::string& name) {
     std::map<std::string, int> after = option_values(options_text(State{}));
     for (const auto& [k, v] : option_values(text)) if (after.count(k)) after[k] = v;
     if (g_profile_keep_controls) for (auto& [k, v] : after) if (is_control_key(k) && now.count(k)) v = now.at(k);
+    if (now.count("language")) after["language"] = now.at("language");
     for (const JfgOptionTitle& t : jfg_option_titles) { // in the menu's order
         const auto a = now.find(t.key);
         const auto b = after.find(t.key);
@@ -308,6 +309,7 @@ void apply_profile_text(const std::string& text) {
     if (weapons) reset_weapons();
     apply_lines(text, weapons);
     if (g_profile_keep_controls) for (const auto& [k, v] : before) if (is_control_key(k)) apply_option(k.c_str(), v);
+    if (const auto it = before.find("language"); it != before.end()) apply_option("language", it->second);
     push_render_options();
 }
 

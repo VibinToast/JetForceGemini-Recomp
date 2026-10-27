@@ -4,7 +4,7 @@
 
 namespace dino::debug_ui::backend {
 
-extern ImGuiContext *dino_imgui_ctx;
+extern ImGuiContext *jfg_imgui_ctx;
 bool is_open();
 bool in_ui_frame();
 void set_overlay(bool enabled);

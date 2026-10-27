@@ -169,7 +169,7 @@ static uint32_t be32(uint32_t a) {
     return ((uint32_t)rd8(a) << 24) | ((uint32_t)rd8(a + 1) << 16) | ((uint32_t)rd8(a + 2) << 8) | rd8(a + 3);
 }
 
-// Entry of lightObject(trans, modInst, lighting, mtx).
+// lightObject(trans, modInst, lighting, mtx), before the game's code (its wrapper, below).
 extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     LightingSettings& s = lighting_settings();
@@ -444,7 +444,8 @@ static void log_object_lights() {
     }
 }
 
-// Entry of rcpFast3d(dlStart, dlEnd, taskType, framebuffer): the frame's display list is about to be sent.
+// rcpFast3d(dlStart, dlEnd, taskType, framebuffer), from its wrapper (jfg_engine_wrappers.cpp): the frame's display
+// list is about to be sent.
 extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     if ((uint32_t)ctx->r6 != 0) return; // side tasks (clone, refraction, blur) are not frames
@@ -666,7 +667,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     g_object_lights.clear();
 }
 
-// Entries of lightSingleLight, lightTwoLights and lightMultiLight (called by lightObject): they write a model's vertex
+// lightSingleLight, lightTwoLights and lightMultiLight (called by lightObject; their wrappers, below): they write a model's vertex
 // colours from the lights near it. Returns non-zero to skip them; the model then keeps whatever its vertex colours
 // held before (lightEnviroMap, the shiny models' texture coordinates, still runs).
 extern "C" int jfg_object_light(void) {
@@ -674,7 +675,7 @@ extern "C" int jfg_object_light(void) {
     return (s.no_object_lighting.load() || (s.characters.load() && lighting_active())) ? 1 : 0;
 }
 
-// Entry of trackLightAsm(track, light, visible). Returns non-zero to skip it.
+// trackLightAsm(track, light, visible), from its wrapper (below). Returns non-zero to skip it.
 extern "C" int jfg_track_light(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const LightingSettings& s = lighting_settings();
@@ -683,3 +684,29 @@ extern "C" int jfg_track_light(uint8_t* rdram_, recomp_context* ctx) {
 }
 
 } // namespace jfg
+
+// --- wrappers (tools/wrapped_funcs.txt): the game's own lighting, left out while ours replaces it ---------------------
+JFG_WRAP(trackLightAsm) {
+    if (jfg::jfg_track_light(rdram, ctx)) return;
+    trackLightAsm_orig(rdram, ctx);
+}
+
+JFG_WRAP(lightObject) {
+    jfg::jfg_light_object(rdram, ctx);
+    lightObject_orig(rdram, ctx);
+}
+
+JFG_WRAP(lightSingleLight) {
+    if (jfg::jfg_object_light()) return;
+    lightSingleLight_orig(rdram, ctx);
+}
+
+JFG_WRAP(lightTwoLights) {
+    if (jfg::jfg_object_light()) return;
+    lightTwoLights_orig(rdram, ctx);
+}
+
+JFG_WRAP(lightMultiLight) {
+    if (jfg::jfg_object_light()) return;
+    lightMultiLight_orig(rdram, ctx);
+}

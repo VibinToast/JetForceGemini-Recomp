@@ -12,7 +12,6 @@
 namespace dino::input {
     // x-macros to build input enums and arrays.
     // First parameter is the enum name, second parameter is the bit field for the input (or 0 if there is no associated one), third is the readable name.
-    // TODO: rename for dino
     #define DEFINE_N64_BUTTON_INPUTS() \
         DEFINE_INPUT(A, 0x8000, "A Button") \
         DEFINE_INPUT(B, 0x4000, "B Button") \

@@ -3,7 +3,7 @@
 // Opened and closed with F9 or the ` (grave) key. Drawn through the base project's debug UI backend
 // (src/debug_ui), which already owns an ImGui context and renders it on top of the game.
 //
-// This file: the F9 window and its Cheats and Level warp tabs. The other tabs are in jfg_profiles.cpp, jfg_weapons.cpp
+// This file: the F9 window and its Cheats, Level warp and Mod API tabs. The other tabs are in jfg_profiles.cpp, jfg_weapons.cpp
 // and jfg_ui_items.cpp. F10's tools are RmlUi, in jfg_ui_tools.cpp.
 #include <algorithm>
 #include <cfloat>
@@ -14,7 +14,9 @@
 #include <vector>
 
 #include "imgui/imgui.h"
+#include "jfg_api.h"
 #include "jfg_game.h"
+#include "jfg_locale.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
@@ -108,6 +110,20 @@ void draw_options() {
             options_help("How strongly the screen turns red when the character is hit. 0: no red flash.");
             changed |= options_slider("Shadow opacity %", &g.shadow_opacity, 0, 200);
             options_help("How dark the shadows under characters and objects are drawn. 100: the original game; 0: none.");
+            {
+                const std::vector<std::pair<std::string, std::string>> locales = jfg::locale::list();
+                const std::string chosen = jfg::locale::chosen();
+                std::string current = locales.front().second;
+                for (const auto& [id, name] : locales) if (id == chosen) current = name;
+                if (ImGui::BeginCombo("Language", current.c_str())) {
+                    for (const auto& [id, name] : locales) {
+                        if (ImGui::Selectable(name.c_str(), id == chosen)) jfg::locale::choose(id);
+                    }
+                    ImGui::EndCombo();
+                }
+                options_help("The language of menus, subtitles and hints: English and every file in the game's locales "
+                             "folder (locales/<name>.json). Text a language lacks is shown in English.");
+            }
             changed |= ImGui::Checkbox("Hide Floyd", &g.hide_floyd);
             options_help("Floyd, his shadow and his sounds are gone while he follows the character; he still flies along "
                          "and shoots. Floyd missions and a second player flying him show him as usual.");
@@ -377,8 +393,10 @@ void draw_cheats() {
         wr32(ADDR_debugMenuEnable, game_debug ? 1 : 0);
     }
     ImGui::Checkbox("Skip the Tribal check (all Tribals count as rescued)", &g.skip_tribal_check);
+    ImGui::Checkbox("Enemies ignore you (watch squads patrol)", &g.squads_ignore);
     ImGui::TextDisabled("The first four switch the game's own retail cheat flags. The Tribal check makes the game's\n"
-                        "\"all Tribals rescued\" test pass (game flag 88) without changing your save.");
+                        "\"all Tribals rescued\" test pass (game flag 88) without changing your save. Enemies that\n"
+                        "ignore you don't see, hear or fight back; turn it on before they spot you.");
 }
 
 void draw_warp() {
@@ -408,6 +426,64 @@ void draw_warp() {
     }
     ImGui::TextDisabled("Names are the developers' internal ones (Forest = Goldwood, CargoShip = S.S. Anubis,\n"
                         "AlphaSewer = Sekhmet, ...). Entries ending in Seq are cutscenes. Use from inside a game.");
+}
+
+// The Mod API tab: how often each event fires, and how often anything listened (an active port option or a mod's
+// callback). Only events something listens to cost time; the rest return at once (jfg_api.cpp, fire).
+static void draw_mod_api() {
+    constexpr size_t count = (size_t)api::Event::Count;
+    struct Rate {
+        uint64_t fired = 0, ran = 0;
+    };
+    static Rate last[count];
+    static Rate rate[count];
+    static double last_time = -1.0;
+    const double now = ImGui::GetTime();
+    if (last_time < 0.0 || now - last_time >= 1.0) { // per-second rates, updated once a second
+        const double seconds = last_time < 0.0 ? 1.0 : now - last_time;
+        for (size_t i = 0; i < count; i++) {
+            const api::Stats s = api::stats((api::Event)i);
+            if (last_time >= 0.0) {
+                rate[i].fired = (uint64_t)((s.fired - last[i].fired) / seconds + 0.5);
+                rate[i].ran = (uint64_t)((s.ran - last[i].ran) / seconds + 0.5);
+            }
+            last[i] = {s.fired, s.ran};
+        }
+        last_time = now;
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("Per second. \"Listened\" = an active port option or a mod ran for it; the rest cost nothing.");
+    ImGui::PopStyleColor();
+    if (!ImGui::BeginTable("events", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) return;
+    ImGui::TableSetupColumn("Event");
+    ImGui::TableSetupColumn("Fired", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 5.0f);
+    ImGui::TableSetupColumn("Listened", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 5.0f);
+    ImGui::TableSetupColumn("Mods", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 3.5f);
+    ImGui::TableHeadersRow();
+    uint64_t total_fired = 0, total_ran = 0;
+    for (size_t i = 0; i < count; i++) {
+        const api::Event event = (api::Event)i;
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(api::event_name(event));
+        ImGui::TableNextColumn();
+        ImGui::Text("%llu", (unsigned long long)rate[i].fired);
+        ImGui::TableNextColumn();
+        ImGui::Text("%llu", (unsigned long long)rate[i].ran);
+        ImGui::TableNextColumn();
+        ImGui::Text("%zu", api::mod_callbacks(event));
+        total_fired += rate[i].fired;
+        total_ran += rate[i].ran;
+    }
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::TextDisabled("all events");
+    ImGui::TableNextColumn();
+    ImGui::Text("%llu", (unsigned long long)total_fired);
+    ImGui::TableNextColumn();
+    ImGui::Text("%llu", (unsigned long long)total_ran);
+    ImGui::EndTable();
 }
 
 // A slider straight on a live setting: stored on every change (options_slider reports only the release, and the value
@@ -443,6 +519,7 @@ void draw_debug_window(recomp_context* ctx) {
                 if (in_game) draw_inventory(ctx); else ImGui::TextDisabled("No game loaded.");
                 ImGui::EndTabItem();
             }
+            if (ImGui::BeginTabItem("Mod API")) { draw_mod_api(); ImGui::EndTabItem(); }
             ImGui::EndTabBar();
         }
     }

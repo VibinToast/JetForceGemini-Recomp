@@ -10,6 +10,10 @@
 #include <unordered_set>
 #include <vector>
 
+#include "librecomp/overlays.hpp"
+
+#include "jfg_api.h"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -160,11 +164,36 @@ void squad_cadence_next_tick(uint32_t frames) {
 extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
     g_rdram = rdram;
     if (member != 0) {
-        g_squad_members.push_back({ member, rd32(member + 0x40) });
+        g_squad_members.push_back({ member, Obj::Def::get(member) });
         g_squad_members_level = (int16_t)rd16(ADDR_currentLevel);
     }
     if (game_frame_rate() < 1 || g.skipping) return frames;
     return g_squad_runs ? (int)g_squad_frames : 0;
+}
+
+// The squad cadence without changing the three functions, so mods can hook or replace them (a mod hook regenerates a
+// function from the ROM, and enemies ran twice as fast at 60 fps when the cadence was a hook inside them). They are
+// wrapped (tools/wrapped_funcs.txt): every call runs these first, then the game's code (<name>_orig), or a mod's patch
+// or hook of it.
+JFG_WRAP(SquaddieControl) {
+    const int r = jfg_squad_frames(rdram, (uint32_t)ctx->r4, (int32_t)ctx->r5);
+    if (r == 0) return;
+    ctx->r5 = (gpr)r;
+    SquaddieControl_orig(rdram, ctx);
+}
+
+JFG_WRAP(SquadronControl) {
+    const int r = jfg_squad_frames(rdram, 0, (int32_t)ctx->r5);
+    if (r == 0) return;
+    ctx->r5 = (gpr)r;
+    SquadronControl_orig(rdram, ctx);
+}
+
+JFG_WRAP(squadsModuleTick) {
+    const int r = jfg_squad_frames(rdram, 0, (int32_t)ctx->r4);
+    if (r == 0) { ctx->r2 = 0; return; }
+    ctx->r4 = (gpr)r;
+    squadsModuleTick_orig(rdram, ctx);
 }
 
 // Steps outside the squad system that the game takes once per call whatever the frame count (found by the decomp,
@@ -174,7 +203,7 @@ extern "C" int jfg_cadence_skip(void) {
     return (game_frame_rate() >= 1 && !g.skipping && !g_squad_runs) ? 1 : 0;
 }
 
-// Hook at the entry of objDoFrees (every tick, before squad members being freed are taken out of their squadron's chain
+// objDoFrees' wrapper, before the game's code (every tick, before squad members being freed are taken out of their squadron's chain
 // by TidyLinkedList): in 60 fps mode, a squadron whose member count (data +0x00, u8) is below the length of its member
 // chain (data +0x58, then member data +0x28) gets the chain length as its count.
 // Found in the Lurg fight (level 195, 2026-10-22): when a bat squadron brought in the first bat of a wave, another
@@ -206,26 +235,28 @@ extern "C" void jfg_squad_count_repair(uint8_t* rdram) {
 }
 
 // --- 60 fps: angles that ease towards a target ---------------------------------------------------------------------
-// Replaces dAngle(angle, target, t) (charControl.c): angle + (shortest signed difference * t), the product truncated.
-// Callers ease an angle with t = 1 - damping^frames (Powerf), so with one frame per tick t is about half what it is at
-// 30 fps, and the step truncates to 0 while the angle is still a little short of the target: it never arrives. Mizar's
-// first phase waits for his rotation to reach 0x8000 exactly (mizarControl, the three dAngle calls at +0x301C..): at
-// 60 fps it stayed at 0x8020 and the fight did not go on until the frame rate was switched back (2026-10-18). Same
-// arithmetic as the game; in 60 fps mode only, a step that truncates to 0 with a difference left and t > 0 is 1 unit.
-extern "C" void jfg_dangle(uint8_t* rdram, recomp_context* ctx) {
-    g_rdram = rdram;
+// dAngle(angle, target, t) (charControl.c): angle + (shortest signed difference * t), the product truncated. Callers
+// ease an angle with t = 1 - damping^frames (Powerf), so with one frame per tick t is about half what it is at 30 fps,
+// and the step truncates to 0 while the angle is still a little short of the target: it never arrives. Mizar's first
+// phase waits for his rotation to reach 0x8000 exactly (mizarControl, the three dAngle calls at +0x301C..): at 60 fps
+// it stayed at 0x8020 and the fight did not go on until the frame rate was switched back (2026-10-18). The wrapper
+// runs the game's code; in 60 fps mode only, a result that didn't move with a difference left and t > 0 moves 1 unit.
+// It's also where the mouse steers Floyd in Floyd missions (jfg_controls.cpp, jfg_floyd_roll_before / _after).
+JFG_WRAP(dAngle) {
+    const int floyd_roll = jfg_floyd_roll_before(rdram, ctx);
     const int32_t angle = (int16_t)(uint32_t)ctx->r4;
     const int32_t target = (int32_t)ctx->r5;
     const uint32_t t_bits = (uint32_t)ctx->r6;
-    float t;
-    std::memcpy(&t, &t_bits, sizeof(t));
-    int32_t diff = (target - angle) & 0xFFFF;
-    const int32_t back = (angle - target) & 0xFFFF;
-    if (back < diff) diff = -back;
-    const float product = (float)diff * t;
-    int32_t step = (product > -2147483648.0f && product < 2147483648.0f) ? (int32_t)product : 0x7FFFFFFF; // cvt.w.s, toward 0
-    if (step == 0 && diff != 0 && t > 0.0f && game_frame_rate() >= 1 && !g.skipping) step = diff > 0 ? 1 : -1;
-    ctx->r2 = (gpr)(int32_t)(int16_t)(angle + step);
+    dAngle_orig(rdram, ctx);
+    if (game_frame_rate() >= 1 && !g.skipping && (int16_t)ctx->r2 == (int16_t)angle) {
+        float t;
+        std::memcpy(&t, &t_bits, sizeof(t));
+        int32_t diff = (target - angle) & 0xFFFF;
+        const int32_t back = (angle - target) & 0xFFFF;
+        if (back < diff) diff = -back;
+        if (diff != 0 && t > 0.0f) ctx->r2 = (gpr)(int32_t)(int16_t)(angle + (diff > 0 ? 1 : -1));
+    }
+    if (floyd_roll) jfg_floyd_roll_after(rdram, ctx);
 }
 
 // --- 60 fps: squad members drawn in between their updates ---------------------------------------------------------
@@ -298,11 +329,11 @@ void squad_unqueue_repeats() {
 
 SquadPose read_pose(uint32_t obj) {
     SquadPose p;
-    p.x = rdf(obj + 0x0C); p.y = rdf(obj + 0x10); p.z = rdf(obj + 0x14);
-    p.phase = rdf(obj + 0x28);
-    for (uint32_t i = 0; i < 3; i++) p.rot[i] = rd16(obj + 2 * i);
-    p.anim = (int8_t)rd8(obj + 0x3B);
-    p.def = rd32(obj + 0x40);
+    p.x = Obj::PosX::get(obj); p.y = Obj::PosY::get(obj); p.z = Obj::PosZ::get(obj);
+    p.phase = Obj::AnimPhase::get(obj);
+    for (uint32_t i = 0; i < 3; i++) p.rot[i] = Obj::Rotation::get(obj, i);
+    p.anim = Obj::Anim::get(obj);
+    p.def = Obj::Def::get(obj);
     return p;
 }
 
@@ -310,11 +341,11 @@ SquadPose read_pose(uint32_t obj) {
 void squad_draw_restore() {
     for (const SquadDrawn& d : g_squad_drawn) {
         const uint32_t o = d.obj;
-        if (rdf(o + 0x0C) == d.drawn.x) wrf(o + 0x0C, d.real.x);
-        if (rdf(o + 0x10) == d.drawn.y) wrf(o + 0x10, d.real.y);
-        if (rdf(o + 0x14) == d.drawn.z) wrf(o + 0x14, d.real.z);
-        if (rdf(o + 0x28) == d.drawn.phase) wrf(o + 0x28, d.real.phase);
-        for (uint32_t i = 0; i < 3; i++) if (rd16(o + 2 * i) == d.drawn.rot[i]) wr16(o + 2 * i, d.real.rot[i]);
+        if (Obj::PosX::get(o) == d.drawn.x) Obj::PosX::set(o, d.real.x);
+        if (Obj::PosY::get(o) == d.drawn.y) Obj::PosY::set(o, d.real.y);
+        if (Obj::PosZ::get(o) == d.drawn.z) Obj::PosZ::set(o, d.real.z);
+        if (Obj::AnimPhase::get(o) == d.drawn.phase) Obj::AnimPhase::set(o, d.real.phase);
+        for (uint32_t i = 0; i < 3; i++) if (Obj::Rotation::get(o, i) == d.drawn.rot[i]) Obj::Rotation::set(o, i, d.real.rot[i]);
         if (d.data != 0) {
             bool changed = false;
             uint32_t n = 0;
@@ -340,16 +371,16 @@ uint16_t half_angle(uint16_t from, uint16_t to) {
 // 1 sprite, 4 custom; func_8000DDAC), and only for a model is +0x6C a list of model instances. For a sprite it is
 // sprite data, and writing +0x0A there corrupted it (the level flickered and the game froze).
 uint32_t model_instance(uint32_t obj) {
-    const uint32_t def = rd32(obj + 0x40);
-    if (!valid_ptr(def) || rd8(def + 0x1E) != 0) return 0;
-    const uint32_t list = rd32(obj + 0x6C);
+    const uint32_t def = Obj::Def::get(obj);
+    if (!valid_ptr(def) || ObjDef::DrawType::get(def) != 0) return 0;
+    const uint32_t list = Obj::Models::get(obj);
     if (!valid_ptr(list)) return 0;
-    const int index = (int8_t)rd8(obj + 0x3A);
+    const int index = Obj::ModelIndex::get(obj);
     if (index < 0 || index > 7) return 0;
     const uint32_t inst = rd32(list + 4u * (uint32_t)index);
-    if (!valid_ptr(inst) || rd8(inst + 0x0B) > 1) return 0;
-    const uint32_t model = rd32(inst); // the model: +0x4E non-zero = animated (objPrintModelObject's test)
-    if (!valid_ptr(model) || rd8(model + 0x4E) == 0) return 0;
+    if (!valid_ptr(inst) || ModelInstance::Buffer::get(inst) > 1) return 0;
+    const uint32_t model = ModelInstance::Model::get(inst); // the model: +0x4E non-zero = animated (objPrintModelObject's test)
+    if (!valid_ptr(model) || Model::Animated::get(model) == 0) return 0;
     return inst;
 }
 
@@ -392,7 +423,7 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
         if (!live_object(it->first)) it = g_squad_tracks.erase(it); else ++it;
     }
     // Still in play and still the same object (the definition it had when it was noted).
-    auto same = [](const SquadMember& m) { return live_object(m.obj) && rd32(m.obj + 0x40) == m.def; };
+    auto same = [](const SquadMember& m) { return live_object(m.obj) && Obj::Def::get(m.obj) == m.def; };
     if (!g_squad_runs) {
         // The tick in between: drawn where they are. Note which models the game poses itself this tick: only those
         // are animating, and only those are posed again on the next update tick (see below).
@@ -400,7 +431,7 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
             if (!same(m)) continue;
             const uint32_t obj = m.obj;
             const uint32_t inst = model_instance(obj);
-            if (inst != 0 && rd8(inst + 0x0A) != 0) g_squad_tracks[obj].posed_tick = g_game_ticks;
+            if (inst != 0 && ModelInstance::PoseTicks::get(inst) != 0) g_squad_tracks[obj].posed_tick = g_game_ticks;
         }
         return;
     }
@@ -433,9 +464,9 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
             else if (p < 0.0f) p += 1.0f;
             mid.phase = p;
         }
-        wrf(obj + 0x0C, mid.x); wrf(obj + 0x10, mid.y); wrf(obj + 0x14, mid.z);
-        wrf(obj + 0x28, mid.phase);
-        for (uint32_t i = 0; i < 3; i++) wr16(obj + 2 * i, mid.rot[i]);
+        Obj::PosX::set(obj, mid.x); Obj::PosY::set(obj, mid.y); Obj::PosZ::set(obj, mid.z);
+        Obj::AnimPhase::set(obj, mid.phase);
+        for (uint32_t i = 0; i < 3; i++) Obj::Rotation::set(obj, i, mid.rot[i]);
         // Animated models are posed by the draw only when their model instance asks for it (+0x0A), and squad
         // members' instances ask on the tick after their update, not on the update tick itself. Without this the
         // skeleton (and with it the whole model) would keep the pose from the tick before and move 30 times a second.
@@ -446,7 +477,7 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
         // (objResetAnimModels writes the tick's frames there for every model); 1 is this tick's.
         const uint32_t inst = model_instance(obj);
         SquadDrawn d{ obj, now, read_pose(obj) };
-        if (inst != 0 && t.posed_tick == g_game_ticks - 1 && rd8(obj + 0x39) == 0xFF) {
+        if (inst != 0 && t.posed_tick == g_game_ticks - 1 && Obj::Opacity::get(obj) == 0xFF) {
             // The squad update has usually posed the model already this tick (a flip after the last draw), into the
             // buffer the last frame's display list does not use. A second flip here would pose into the one it does
             // use, and RT64 reads a frame's display list only after the next frame is drawn: the frame before then
@@ -455,12 +486,12 @@ extern "C" void jfg_squad_draw_begin(uint8_t* rdram) {
             // buffer of the last draw, and this pose replaces the update's in the buffer the update just wrote.
             // Both poses queue the buffer for camTick's float-to-fixed conversion (camConvertMatrixList); the second
             // entry is dropped after the draw (squad_unqueue_repeats), or the buffer is converted twice and garbled.
-            if (t.drawn_tick == g_game_ticks - 1 && rd8(inst + 0x0B) != t.drawn_buffer) {
-                wr8(inst + 0x0B, t.drawn_buffer);
+            if (t.drawn_tick == g_game_ticks - 1 && ModelInstance::Buffer::get(inst) != t.drawn_buffer) {
+                ModelInstance::Buffer::set(inst, t.drawn_buffer);
                 g_squad_reposed = true;
             }
-            wr8(inst + 0x0A, 1);
-            const uint32_t data = rd32(obj + 0x68);
+            ModelInstance::PoseTicks::set(inst, 1);
+            const uint32_t data = Obj::Data::get(obj);
             if (valid_ptr(data) && valid_ptr(data + 0xAC)) {
                 d.data = data;
                 uint32_t n = 0;
@@ -495,7 +526,7 @@ extern "C" void jfg_squad_draw_end(uint8_t* rdram) {
             if (it == g_squad_tracks.end() || !live_object(m.obj)) continue;
             if (const uint32_t inst = model_instance(m.obj)) {
                 it->second.drawn_tick = g_game_ticks;
-                it->second.drawn_buffer = rd8(inst + 0x0B);
+                it->second.drawn_buffer = ModelInstance::Buffer::get(inst);
             }
         }
     }
@@ -704,12 +735,13 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
             if (++n == (stats_every > 0 ? stats_every : 200)) {
                 const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
                 std::fprintf(stderr, "[jfg] ticks/s %.1f, mean frames per tick %.2f, level %d, skipping %d, tune %d state %d\n", n / secs, sum / double(n), (int)(int16_t)rd16(ADDR_currentLevel), int(g.skipping),
-                    (int)rd8(ADDR_tuneSeqNo), valid_ptr(rd32(ADDR_tuneSeqPlayer)) ? (int)rd32(rd32(ADDR_tuneSeqPlayer) + 0x2C) : -1);
-                if (g_cam.player != 0) std::fprintf(stderr, "[jfg] player at %.0f %.0f %.0f, speed factor %.2f\n", rdf(g_cam.player + 0x0C), rdf(g_cam.player + 0x10), rdf(g_cam.player + 0x14), g_cam.move_factor);
-                std::fprintf(stderr, "[jfg] robotMission %d, dual stick active %d, game mode %d, vi mode %d, next level %d\n", (int)rd8(ADDR_robotMission), jfg_dual_stick_active(), (int)rd32(ADDR_mainGameMode), (int)rd8(ADDR_sResolutionIndex), (int)(int16_t)rd16(ADDR_nextLevel));
+                    (int)rd8(ADDR_tuneSeqNo), valid_ptr(rd32(ADDR_tuneSeqPlayer)) ? (int)MusicPlayer::State::get(rd32(ADDR_tuneSeqPlayer)) : -1);
+                if (g_cam.player != 0) std::fprintf(stderr, "[jfg] player at %.0f %.0f %.0f, speed factor %.2f\n", Obj::PosX::get(g_cam.player), Obj::PosY::get(g_cam.player), Obj::PosZ::get(g_cam.player), g_cam.move_factor);
+                std::fprintf(stderr, "[jfg] robotMission %d, dual stick active %d, boss controls %d, game mode %d, vi mode %d, next level %d\n", (int)rd8(ADDR_robotMission), jfg_dual_stick_active(), int(boss_control_active()), (int)rd32(ADDR_mainGameMode), (int)rd8(ADDR_sResolutionIndex), (int)(int16_t)rd16(ADDR_nextLevel));
                 std::fprintf(stderr, "[jfg] squad: %d members this tick, %u drawn in between since the last line, %u extra poses put back\n", (int)g_squad_members.size(), g_squad_smoothed, g_squad_data_kept);
                 g_squad_smoothed = 0;
                 g_squad_data_kept = 0;
+                jfg::api::log_stats();
                 { load_level_names(); const int lv = (int16_t)rd16(ADDR_currentLevel); if (lv >= 0 && lv < (int)g_level_names.size()) std::fprintf(stderr, "[jfg] level name '%s'\n", g_level_names[lv].c_str()); }
                 n = 0; sum = 0; t0 = std::chrono::steady_clock::now();
             }
@@ -727,24 +759,25 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
             done_r = true;
             const uint32_t track = rd32(0x800A0D60);
             if (valid_ptr(track)) {
-                const int nseg = (int16_t)rd16(track + 0x1A);
-                const uint32_t segs = rd32(track + 4);
+                const int nseg = Track::SegmentCount::get(track);
+                const uint32_t segs = Track::Segments::get(track);
                 for (int i = 0; i < nseg; i++) {
-                    const uint32_t seg = segs + 0x48 * i;
-                    const uint32_t verts = rd32(seg), tris = rd32(seg + 4), batches = rd32(seg + 0xC);
-                    const int nb = (int16_t)rd16(seg + 0x28);
+                    const uint32_t seg = segs + TrackSegment::Size * i;
+                    const uint32_t verts = TrackSegment::Verts::get(seg), tris = TrackSegment::Faces::get(seg), batches = TrackSegment::Batches::get(seg);
+                    const int nb = TrackSegment::BatchCount::get(seg);
                     for (int b = 0; b < nb; b++) {
-                        const uint32_t bt = batches + 0x10 * b;
-                        const uint32_t flags = rd32(bt + 0xC);
+                        const uint32_t bt = batches + TrackBatch::Size * b;
+                        const uint32_t flags = TrackBatch::Flags::get(bt);
                         if (!(flags & 0x20000000)) continue;
-                        const int vo = (int16_t)rd16(bt + 6), fo = (int16_t)rd16(bt + 8), vn = (int16_t)rd16(bt + 0x16), fn = (int16_t)rd16(bt + 0x18);
+                        const int vo = TrackBatch::VertOffset::get(bt), fo = TrackBatch::FaceOffset::get(bt);
+                        const int vn = TrackBatch::VertOffset::get(bt + TrackBatch::Size), fn = TrackBatch::FaceOffset::get(bt + TrackBatch::Size); // the next batch's
                         int x0 = 99999, x1 = -99999, z0 = 99999, z1 = -99999, y = 0;
                         for (int f = fo; f < fn; f++) for (int k = 1; k <= 3; k++) {
-                            const uint32_t v = verts + 10 * (vo + rd8(tris + 16 * f + k));
-                            const int x = (int16_t)rd16(v), z = (int16_t)rd16(v + 4); y = (int16_t)rd16(v + 2);
+                            const uint32_t v = verts + TrackVertex::Size * (vo + TrackFace::Vertex::get(tris + TrackFace::Size * f, k - 1));
+                            const int x = TrackVertex::X::get(v), z = TrackVertex::Z::get(v); y = TrackVertex::Y::get(v);
                             x0 = std::min(x0, x); x1 = std::max(x1, x); z0 = std::min(z0, z); z1 = std::max(z1, z);
                         }
-                        std::fprintf(stderr, "[jfg] reflect seg %d batch %d flags %08X tex %d y %d x[%d,%d] z[%d,%d] faces %d..%d (next vo %d)\n", i, b, flags, (int)rd8(bt), y, x0, x1, z0, z1, fo, fn, vn);
+                        std::fprintf(stderr, "[jfg] reflect seg %d batch %d flags %08X tex %d y %d x[%d,%d] z[%d,%d] faces %d..%d (next vo %d)\n", i, b, flags, (int)TrackBatch::Texture::get(bt), y, x0, x1, z0, z1, fo, fn, vn);
                     }
                 }
             }
@@ -754,9 +787,9 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
             std::sscanf(tele, "%f,%f,%f,%f", &t, &x, &y, &z);
             if (secs >= t) {
                 done_t = true;
-                const uint32_t obj = g_cam.player, data = rd32(obj + 0x68);
-                wrf(obj + 0x0C, x); wrf(obj + 0x10, y); wrf(obj + 0x14, z);
-                if (valid_ptr(data)) { wrf(data + 0x3C, x); wrf(data + 0x40, y); wrf(data + 0x44, z); }
+                const uint32_t obj = g_cam.player, data = Obj::Data::get(obj);
+                Obj::PosX::set(obj, x); Obj::PosY::set(obj, y); Obj::PosZ::set(obj, z);
+                if (valid_ptr(data)) { PlayerData::SavedX::set(data, x); PlayerData::SavedY::set(data, y); PlayerData::SavedZ::set(data, z); }
             }
         }
     }
@@ -767,3 +800,49 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
 }
 
 } // namespace jfg
+
+// FlowerBoltControl(obj, frames): the slug boss's homing bolts (overlay 149) apply a turn limit, steering smoothing and
+// speed growth per call, so at 60 fps they homed and sped up about twice as hard. They run with the squad cadence.
+JFG_WRAP(objDoFrees) {
+    jfg::jfg_squad_count_repair(rdram);
+    objDoFrees_orig(rdram, ctx);
+}
+
+JFG_WRAP(FlowerBoltControl) {
+    const int r = jfg_squad_frames(rdram, (uint32_t)ctx->r4, (int32_t)ctx->r5);
+    if (r == 0) return;
+    ctx->r5 = (gpr)r;
+    FlowerBoltControl_orig(rdram, ctx);
+}
+
+// __scHandleRetrace(sc): the scheduler holds back each frame's "frame done" message until 2 retraces have passed since
+// the last one (sc->frameCount, OSSched +0x300; the decomp notes "if you want to make the game 60FPS, change this to
+// 2"), which caps the game at 30 fps whatever viFrameSync does. At 60 fps every retrace counts twice: the extra one
+// (jfg_sched_extra_frame) is added before the game counts its own. jfg_sched_retrace notes the retrace for
+// __scTaskReady's wrapper. One difference from adding it at the game's own increment: when the scheduler
+// recovers from a stalled RDP task it clears frameCount first, and then this retrace counts once.
+JFG_WRAP(__scHandleRetrace) {
+    jfg_sched_retrace();
+    const int extra = jfg_sched_extra_frame();
+    if (extra != 0) {
+        jfg::g_rdram = rdram;
+        const uint32_t sc = (uint32_t)ctx->r4;
+        jfg::Scheduler::FrameCount::set(sc, jfg::Scheduler::FrameCount::get(sc) + (uint32_t)extra);
+    }
+    __scHandleRetrace_orig(rdram, ctx);
+}
+
+// frontPlayerTarget(?, player, ...): the target lock counts down (player +0x541, high nibble) while the aim is off the
+// target. On the ticks jfg_cadence_skip leaves out, that count is put back, so it keeps its 30 fps pace. The on-target
+// path sets the count to 0xA, which never looks like a count of one less.
+JFG_WRAP(frontPlayerTarget) {
+    jfg::g_rdram = rdram;
+    const uint32_t player = (uint32_t)ctx->r5;
+    const bool ok = jfg::valid_ptr(player);
+    const uint8_t before = ok ? jfg::PlayerData::TargetLock::get(player) : 0;
+    frontPlayerTarget_orig(rdram, ctx);
+    if (!ok || (before >> 4) == 0 || !jfg_cadence_skip()) return;
+    jfg::g_rdram = rdram;
+    const uint8_t counted = (uint8_t)((((before >> 4) - 1) << 4) | (before & 0x0F));
+    if (jfg::PlayerData::TargetLock::get(player) == counted) jfg::PlayerData::TargetLock::set(player, before);
+}

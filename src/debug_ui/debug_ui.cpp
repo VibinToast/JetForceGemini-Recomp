@@ -8,7 +8,7 @@
 namespace dino::debug_ui {
 
 bool is_open() {
-    return backend::is_open() && backend::dino_imgui_ctx->Initialized;
+    return backend::is_open() && backend::jfg_imgui_ctx->Initialized;
 }
 
 bool game_has_input() {
@@ -18,16 +18,16 @@ bool game_has_input() {
 
 bool want_capture_keyboard() {
     // Go directly through our context pointer so we don't have to worry about it being current
-    if (backend::dino_imgui_ctx == nullptr) {
+    if (backend::jfg_imgui_ctx == nullptr) {
         return false;
     }
 
     // JFG PORT: the lighting tool (F12) takes the keyboard only while it has it (Alt) and a field is being typed in.
-    if (backend::lighting_tool_open() && !backend::lighting_tool_playing() && backend::dino_imgui_ctx->IO.WantTextInput) {
+    if (backend::lighting_tool_open() && !backend::lighting_tool_playing() && backend::jfg_imgui_ctx->IO.WantTextInput) {
         return true;
     }
 
-    return backend::is_open() && backend::dino_imgui_ctx->IO.WantCaptureKeyboard;
+    return backend::is_open() && backend::jfg_imgui_ctx->IO.WantCaptureKeyboard;
 }
 
 void ui_frame_begin() {
