@@ -136,6 +136,10 @@ void jfg_config_menu_refresh() {
             if (ultramodern::is_game_started()) quit_tab->RemoveProperty(Rml::PropertyId::Display);
             else quit_tab->SetProperty(Rml::PropertyId::Display, Rml::Style::Display::None);
         }
+        // The bindings have no tab of their own (Customize Buttons on the Controls tab opens them, jfg_config_show_bindings).
+        if (Rml::Element* bindings_tab = doc != nullptr ? doc->GetElementById("tab_controls") : nullptr) {
+            bindings_tab->SetProperty(Rml::PropertyId::Display, Rml::Style::Display::None);
+        }
     }
     jfg_profile_entries.clear();
     const std::string active = jfg::settings::active_profile();
@@ -298,6 +302,44 @@ void jfg_config_clear_option_focus() {
     focused_config_option_index = -1;
 }
 
+// JFG PORT: the top of the Controls page / tab (tools/gen_jfg_config_rml.py, CONTROLS_TOP): the Players row, Quick Setup
+// and the Mouse & Keyboard section's visibility. P1 is the first connected controller, or the keyboard (and mouse) when
+// none is connected or the keyboard / mouse was used last in the menus. Every controller plays P1 today (input.cpp).
+static std::vector<dino::input::ConnectedController> jfg_pads;
+static bool jfg_last_input_kb = false; // the last input in the menus was the keyboard or the mouse
+static bool jfg_mk_kept = false;       // Mouse & Keyboard stays shown until the page is left, so turning it off there
+                                       // does not hide the switch under the focus
+
+static bool jfg_p1_keyboard() { return jfg_pads.empty() || jfg_last_input_kb; }
+
+// Reads the connected controllers again; true when they changed.
+static bool jfg_update_pads() {
+    std::vector<dino::input::ConnectedController> pads = dino::input::get_connected_controllers();
+    bool same = pads.size() == jfg_pads.size();
+    for (size_t i = 0; same && i < pads.size(); i++) same = pads[i].name == jfg_pads[i].name && pads[i].kind == jfg_pads[i].kind;
+    jfg_pads = std::move(pads);
+    return !same;
+}
+
+static void jfg_dirty_players() {
+    if (!jfg_controls_model_handle) return;
+    for (const char* v : { "p1_device", "p1_name", "controller_count", "qs_recommend", "mk_hidden" }) jfg_controls_model_handle.DirtyVariable(v);
+}
+
+// ui_state.cpp: a controller (true) or the keyboard / mouse (false) was used in the menus.
+void jfg_config_note_input(bool controller) {
+    if (jfg_last_input_kb == !controller) return;
+    jfg_last_input_kb = !controller;
+    jfg_dirty_players();
+}
+
+// The Controls page / tab was opened: Mouse & Keyboard shows only if it is in use or on.
+void jfg_controls_page_entered() {
+    jfg_update_pads();
+    jfg_mk_kept = jfg::settings::get("mouse_keyboard") != 0 || jfg_p1_keyboard();
+    jfg_dirty_players();
+}
+
 static bool msaa2x_supported = false;
 static bool msaa4x_supported = false;
 static bool msaa8x_supported = false;
@@ -336,6 +378,12 @@ void dino::input::cancel_scanning_input() {
 }
 
 void dino::input::config_menu_set_cont_or_kb(bool cont_interacted) {
+    // JFG PORT: called each UI frame; twice a second the Players row looks for controllers connected or removed.
+    static int jfg_pad_poll = 0;
+    if (++jfg_pad_poll >= 30) {
+        jfg_pad_poll = 0;
+        if (jfg_update_pads()) jfg_dirty_players();
+    }
     if (cont_active != cont_interacted) {
         cont_active = cont_interacted;
 
@@ -723,11 +771,51 @@ class ConfigFocusScrollListener : public Rml::EventListener {
 };
 static ConfigFocusScrollListener config_focus_scroll_listener;
 
+// JFG PORT: the index of the config menu's tab with this id, or -1.
+static int jfg_tab_index(const char* id) {
+    Rml::Element* tabs = recompui::get_child_by_tag(recompui::get_config_tabset(), "tabs");
+    if (tabs == nullptr) return -1;
+    for (int i = 0; i < tabs->GetNumChildren(); i++) {
+        if (tabs->GetChild(i)->GetId() == id) return i;
+    }
+    return -1;
+}
+
+// JFG PORT: Customize Buttons (Controls tab) opens the bindings, which have no tab of their own; Back to Controls or B
+// goes back, onto Customize Buttons. In the launcher they are a page of their own (ui_launcher.cpp).
+void jfg_launcher_show_bindings(bool open); // ui_launcher.cpp
+static void jfg_config_show_bindings(bool open) {
+    Rml::ElementTabSet* tabset = recompui::get_config_tabset();
+    const int index = open ? recompui::config_tab_to_index(recompui::ConfigTab::Controls) : jfg_tab_index("tab_jfg_controls");
+    if (index < 0) return;
+    jfg_save_tab_place();
+    tabset->SetActiveTab(index);
+    Rml::ElementDocument* doc = recompui::get_config_context_id().get_document();
+    if (doc == nullptr) return;
+    doc->UpdateDocument();
+    if (Rml::Element* e = doc->GetElementById(open ? "input_row_button_0_0" : "jfg_customize_buttons")) e->Focus(true);
+}
+static void jfg_show_bindings(Rml::Event& event, bool open) {
+    Rml::Element* target = event.GetTargetElement();
+    Rml::ElementDocument* doc = target != nullptr ? target->GetOwnerDocument() : nullptr;
+    if (doc != nullptr && doc == recompui::get_launcher_context_id().get_document()) jfg_launcher_show_bindings(open);
+    else jfg_config_show_bindings(open);
+}
+
 class ConfigTabsetListener : public Rml::EventListener {
     void ProcessEvent(Rml::Event& event) override {
         if (event.GetId() == Rml::EventId::Tabchange) {
             int tab_index = event.GetParameter<int>("tab_index", 0);
             jfg_config_menu_refresh(); // JFG PORT
+            // JFG PORT: the bindings (no tab of their own) belong to Controls, whose tab stays lit while they are open.
+            if (Rml::Element* tabs = recompui::get_child_by_tag(recompui::get_config_tabset(), "tabs")) {
+                const int controls_index = jfg_tab_index("tab_jfg_controls");
+                const int bindings_index = recompui::config_tab_to_index(recompui::ConfigTab::Controls);
+                if (Rml::Element* controls_tab = tabs->GetChild(controls_index)) {
+                    controls_tab->SetPseudoClass("selected", tab_index == controls_index || tab_index == bindings_index);
+                }
+                if (tab_index == controls_index) jfg_controls_page_entered();
+            }
             bool in_mod_tab = (tab_index == recompui::config_tab_to_index(recompui::ConfigTab::Mods));
             if (in_mod_tab) {
                 recompui::set_config_tabset_mod_nav();
@@ -894,6 +982,12 @@ public:
                     auto key = event.GetParameter<Rml::Input::KeyIdentifier>("key_identifier", Rml::Input::KeyIdentifier::KI_UNKNOWN);
                     switch (key) {
                         case Rml::Input::KeyIdentifier::KI_ESCAPE:
+                            // JFG PORT: from the bindings, Esc / B goes back to the Controls tab.
+                            if (scanned_input_index < 0 &&
+                                recompui::get_config_tabset()->GetActiveTab() == recompui::config_tab_to_index(recompui::ConfigTab::Controls)) {
+                                jfg_config_show_bindings(false);
+                                break;
+                            }
                             close_config_menu();
                             break;
                         case Rml::Input::KeyIdentifier::KI_F:
@@ -1114,6 +1208,10 @@ public:
         constructor.BindEventCallback("jfg_use_my_bindings", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
             jfg::settings::set("dual_layout", 0);
             jfg_config_menu_refresh();
+        });
+        // JFG PORT: Back to Controls (the Controls page / tab's Customize Buttons opened this page).
+        constructor.BindEventCallback("jfg_bindings_back", [](Rml::DataModelHandle, Rml::Event& event, const Rml::VariantList&) {
+            jfg_show_bindings(event, false);
         });
 
         constructor.RegisterTransformFunc("get_input_name", [](const Rml::VariantList& inputs) {
@@ -1403,7 +1501,58 @@ public:
             jfg_general_model_handle = constructor.GetModelHandle();
         }
         jfg_gameplay_model_handle = make_jfg_options_model(context, "jfg_gameplay_model", jfg_gameplay_keys);
-        jfg_controls_model_handle = make_jfg_options_model(context, "jfg_controls_model", jfg_controls_keys);
+        {
+            Rml::DataModelConstructor constructor = context->CreateDataModel("jfg_controls_model");
+            if (!constructor) throw std::runtime_error("Failed to make RmlUi data model for the Controls tab");
+            bind_config_list_events(constructor);
+            bind_jfg_keys(constructor, jfg_controls_keys);
+            // The Players row, Quick Setup and Customize Buttons (see jfg_controls_page_entered).
+            jfg_update_pads();
+            constructor.BindFunc("p1_device", [](Rml::Variant& out) {
+                static const char* const kinds[] = { "Controller", "Xbox Controller", "PlayStation Controller", "Switch Controller" };
+                if (jfg_p1_keyboard()) out = jfg::locale::ui(jfg::settings::get("mouse_keyboard") != 0 ? "Mouse & Keyboard" : "Keyboard");
+                else out = jfg::locale::ui(kinds[std::clamp(jfg_pads[0].kind, 0, 3)]);
+            });
+            constructor.BindFunc("p1_name", [](Rml::Variant& out) { out = jfg_p1_keyboard() ? std::string() : jfg_pads[0].name; });
+            constructor.BindFunc("controller_count", [](Rml::Variant& out) { out = (int)jfg_pads.size(); });
+            // Modern for any controller, the keyboard and the mouse; Original N64 for an N64-style controller.
+            constructor.BindFunc("qs_recommend", [](Rml::Variant& out) {
+                out = Rml::String(!jfg_p1_keyboard() && jfg_pads[0].n64 ? "n64" : "modern");
+            });
+            // The Quick Setup choice the Layout switches match, or none.
+            constructor.BindFunc("qs_mode", [](Rml::Variant& out) {
+                const bool ds = jfg::settings::get("dual_stick") != 0, dl = jfg::settings::get("dual_layout") != 0;
+                const bool mk = jfg::settings::get("mouse_keyboard") != 0;
+                out = Rml::String(ds && dl && mk ? "modern" : !ds && !mk ? "n64" : ds && !dl ? "custom" : "");
+            });
+            constructor.BindFunc("mk_hidden", [](Rml::Variant& out) {
+                const bool shown = jfg::settings::get("mouse_keyboard") != 0 || jfg_p1_keyboard();
+                if (shown) jfg_mk_kept = true;
+                out = !shown && !jfg_mk_kept;
+            });
+            // The same switches as the Layout group's, through jfg::settings::set (applied and saved as each one is).
+            constructor.BindEventCallback("quick_setup", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+                const Rml::String mode = args.empty() ? Rml::String() : args[0].Get<Rml::String>();
+                if (mode == "modern") {
+                    jfg::settings::set("dual_stick", 1);
+                    jfg::settings::set("dual_layout", 1);
+                    jfg::settings::set("mouse_keyboard", 1);
+                }
+                else if (mode == "n64") {
+                    jfg::settings::set("dual_stick", 0);
+                    jfg::settings::set("mouse_keyboard", 0);
+                }
+                else if (mode == "custom") {
+                    jfg::settings::set("dual_stick", 1);
+                    jfg::settings::set("dual_layout", 0);
+                }
+                jfg_config_menu_refresh();
+            });
+            constructor.BindEventCallback("open_bindings", [](Rml::DataModelHandle, Rml::Event& event, const Rml::VariantList&) {
+                jfg_show_bindings(event, true);
+            });
+            jfg_controls_model_handle = constructor.GetModelHandle();
+        }
         jfg_graphics_model_handle = make_jfg_options_model(context, "jfg_graphics_model", jfg_graphics_keys);
         {
             Rml::DataModelConstructor constructor = context->CreateDataModel("jfg_textures_model");

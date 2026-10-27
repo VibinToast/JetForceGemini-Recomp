@@ -77,14 +77,16 @@ GAMEPLAY = [
      "While aiming the game walks forward fastest: backwards is about 25% slower and sideways about 40% slower. With this on the character walks as fast in every direction, diagonals included."),
 ]
 
-# The port's control options; the button bindings are the Bindings tab (controls.rml).
+# The port's control options, after the Players row and Quick Setup (CONTROLS_TOP). The button bindings are their own
+# page (controls.rml), opened with Customize Buttons. Layout holds the switches Quick Setup sets.
 CONTROLS = [
-    ("group", None, "Dual Stick", None, None),
+    ("group", None, "Layout", None, None),
     ("bool", "dual_stick", "Dual-Stick Controls", None,
      "Right stick: moves the camera around the character. Left stick: runs in the pushed direction as seen from the camera. While the aim button is held the right stick aims and the left stick moves, as in a first-person game. Menus, cutscenes, Floyd missions and the races keep the normal layout."),
     ("bool", "dual_layout", "Built-in Button Layout", None,
      "LT aim, RT fire. A jump, B or left-stick click crouch. RB / Y next weapon, LB / X previous weapon. D-pad: weapon select; up/down zoom while aiming. View / right-stick click: N64 L. Off: your own controller bindings."),
     ("bool", "swap_triggers", "Swap Triggers", None, "RT aims and LT fires."),
+    ("group", None, "Camera & Aim", None, None),
     ("bool", "invert_aim_y", "Invert Aim Up/Down", None, "Dual stick: right stick up aims down (the game's original flight-stick style)."),
     ("bool", "invert_camera_y", "Invert Camera Up/Down", None, "Dual stick: right stick up lowers the camera instead of raising the view."),
     ("bool", "aim_from_character", "Aim Where the Character Faces", None, "On aiming, the view turns to the character instead of the character to the view."),
@@ -92,13 +94,6 @@ CONTROLS = [
     ("range", "camera_speed_v", "Camera Up/Down", (10, 400, "%"), "Dual stick: how fast the right stick moves the camera up and down."),
     ("range", "camera_distance", "Camera Distance", (50, 250, "%"), "Dual stick: how far back the camera is from the character, as a share of the game's own distance. Lower is closer."),
     ("bool", "camera_collision", "Camera Collision", None, "Dual stick: the camera stays inside the level (the game's own wall check) instead of going through walls."),
-    ("group", None, "Mouse & Keyboard", None, None),
-    ("bool", "mouse_keyboard", "Mouse and Keyboard Controls", None,
-     "Plays like the dual-stick controls: WASD run, the mouse turns the camera, hold the right button to aim and click the left to fire, the wheel changes weapon. Space jumps, Left Ctrl or C crouches, Enter is START, Tab is N64 L, 1-4 are the D-pad. The cursor is captured during gameplay only."),
-    ("range", "mouse_camera_speed", "Mouse Camera Speed", (10, 400, "%"), "How fast the mouse turns the camera."),
-    ("range", "mouse_aim_speed", "Mouse Aim Speed", (10, 400, "%"), "How fast the mouse aims."),
-    ("bool", "invert_mouse_y", "Invert Mouse Up/Down", None, "Mouse forward looks down."),
-    ("group", None, "Aiming (any control layout)", None, None),
     ("bool", "aim_shoulder", "Over-the-Shoulder Aiming", None, "While aiming, the view is from over the character's right shoulder. With the dual stick this sets the aiming view's sliders below to a fixed shoulder view (greyed out); off, they are yours to set."),
     ("range", "aim_drag_margin", "Aim Drag Margin", (0, 50, "%"), "Dual stick, aiming: how far the character may step aside from the middle of the screen before the camera follows, as a share of half the screen's width. 0 keeps the camera on the character. Fixed while Over-the-Shoulder Aiming is on."),
     ("range", "aim_drag_return", "Aim Drag Return Speed", (0, 400, "%"), "Dual stick, aiming: how fast the camera keeps coming back onto the character, moving or not. 100% takes about a third of a second; 0 leaves it where it is. Fixed while Over-the-Shoulder Aiming is on."),
@@ -114,7 +109,7 @@ CONTROLS = [
      "The Sniper Rifle's scope stays at the zoom set below; the zoom buttons do nothing."),
     ("range", "sniper_zoom", "Sniper Zoom", (100, 500, "%"), "The fixed zoom of the Sniper Rifle: 100% is no zoom, 500% the game's closest."),
     ("bool", "invert_aim_normal", "Invert Aim (Original Controls)", None, "Original controls only: flip the stick's up/down while aiming (R held)."),
-    ("group", None, "Controller", None, None),
+    ("group", None, "Sticks & Rumble", None, None),
     ("range", "joystick_deadzone", "Joystick Deadzone", (0, 100, "%"),
      "Applies a deadzone to joystick inputs.<br/><br/><b>Note: the game may apply a small additional deadzone of its own.</b>"),
     ("range", "joystick_range", "Joystick Range", (0, 100, "%"),
@@ -123,7 +118,67 @@ CONTROLS = [
      "The strength of rumble on a controller that supports it. <b>Zero turns rumble off.</b> Jet Force Gemini supports the Rumble Pak."),
     ("bool", "background_input", "Background Input", None,
      "The game reads the controller while its window is not in focus. <b>Keyboard input is not affected.</b>"),
+    # Hidden while a controller plays and mouse and keyboard controls are off (GROUP_HIDDEN_BY, mk_hidden).
+    ("group", None, "Mouse & Keyboard", None, None),
+    ("bool", "mouse_keyboard", "Mouse and Keyboard Controls", None,
+     "Plays like the dual-stick controls: WASD run, the mouse turns the camera, hold the right button to aim and click the left to fire, the wheel changes weapon. Space jumps, Left Ctrl or C crouches, Enter is START, Tab is N64 L, 1-4 are the D-pad. The cursor is captured during gameplay only."),
+    ("range", "mouse_camera_speed", "Mouse Camera Speed", (10, 400, "%"), "How fast the mouse turns the camera."),
+    ("range", "mouse_aim_speed", "Mouse Aim Speed", (10, 400, "%"), "How fast the mouse aims."),
+    ("bool", "invert_mouse_y", "Invert Mouse Up/Down", None, "Mouse forward looks down."),
 ]
+
+# The top of the Controls tab: the Players row (P1 shows the device in use; P2-P4 are for later multiplayer: today every
+# controller plays P1, src/input/input.cpp), Quick Setup (three ways to set the Layout switches at once) and Customize
+# Buttons (the bindings page, controls.rml). Values come from jfg_controls_model (src/ui/ui_config.cpp). Words next to a
+# {{value}} are in their own span, so a language can swap them.
+QS_BUTTON = '''                            <button class="button" id="jfg_qs_{mode}" data-class-jfg-selected="qs_mode == '{mode}'" data-event-click="quick_setup('{mode}')" data-event-focus="set_cur_config_index({index})" data-event-blur="set_cur_config_index(-1)" data-event-mouseover="set_cur_config_index({index})" style="display: block; flex: 0 1 auto; white-space: nowrap; margin: 0dp 10dp 12dp 0dp; padding-left: 12dp; padding-right: 12dp; nav-up: #tab_jfg_controls; nav-down: #jfg_customize_buttons; nav-left: {left}; nav-right: {right};">{label}<span data-if="qs_recommend == '{mode}'"><span style="margin-left: 8dp; padding: 2dp 6dp; font-size: 13dp; line-height: 18dp; letter-spacing: 1dp; background-color: #ffb21a; color: #050b1c;">Recommended</span></span></button>'''
+QS_MODES = (("modern", "Modern"), ("n64", "Original N64"), ("custom", "Custom"))
+QS_INDEX = 1001 # cur_config_index of the first Quick Setup button's description (CONTROLS_DESC); Customize Buttons is 1004
+
+def player_slot(n):
+    return (f'                        <div style="display: block; flex: 1 1 0dp; margin: 0dp 12dp 0dp 0dp; padding: 12dp 14dp; border-width: 2dp; border-color: rgba(255,255,255,0.15); border-radius: 8dp; opacity: 0.45;">'
+            f'<div style="display: block; font-size: 22dp; line-height: 28dp; font-weight: bold;">P{n}</div>'
+            f'<div class="jfg-note" style="display: block; margin-top: 6dp; font-size: 16dp; line-height: 22dp;">Coming later</div></div>')
+
+CONTROLS_TOP = "\n".join([
+    '                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Players</label></div>',
+    '                    <div style="display: flex; flex-direction: row; margin: 8dp 12dp 0dp;">',
+    '                        <div style="display: block; flex: 2 1 0dp; margin: 0dp 12dp 0dp 0dp; padding: 12dp 14dp; border-width: 2dp; border-color: #ffb21a; border-radius: 8dp; background-color: rgba(255,178,26,0.08);">'
+    '<div style="display: block; font-size: 22dp; line-height: 28dp; font-weight: bold;">P1</div>'
+    '<div style="display: block; margin-top: 6dp; font-size: 20dp; line-height: 26dp;">{{p1_device}}</div>'
+    '<div data-if="p1_name != \'\'"><div class="jfg-note" style="display: block; margin-top: 4dp; font-size: 15dp; line-height: 20dp;">{{p1_name}}</div></div></div>',
+    *(player_slot(n) for n in (2, 3, 4)),
+    '                    </div>',
+    '                    <div class="jfg-note" style="display: block; margin: 10dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">'
+    '<span data-if="controller_count &gt; 1">{{controller_count}} <span>controllers connected: all control P1.</span> </span>'
+    '<span>Multiplayer: coming later.</span></div>',
+    '                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Quick Setup</label></div>',
+    '                    <div style="display: flex; flex-direction: row; margin: 10dp 12dp 0dp;">',
+    *(QS_BUTTON.format(mode=m, label=label, index=QS_INDEX + i,
+                       left="#tab_jfg_controls" if i == 0 else "#jfg_qs_" + QS_MODES[i - 1][0],
+                       right="#jfg_qs_" + QS_MODES[i + 1][0] if i + 1 < len(QS_MODES) else "none")
+      for i, (m, label) in enumerate(QS_MODES)),
+    '                    </div>',
+    '                    <div class="jfg-note" style="display: block; margin: 0dp 12dp 0dp; font-size: 18dp; line-height: 26dp;">Sets the Layout switches below in one go. Nothing changes until you pick one.</div>',
+    '                    <div style="display: block; margin: 20dp 12dp 0dp;">',
+    f'                        <button class="button" id="jfg_customize_buttons" data-event-click="open_bindings()" data-event-focus="set_cur_config_index({QS_INDEX + 3})" data-event-blur="set_cur_config_index(-1)" data-event-mouseover="set_cur_config_index({QS_INDEX + 3})" style="display: inline-block; margin: 0dp; nav-up: #jfg_qs_modern; nav-down: #jfg_dual_stick_on; nav-left: #tab_jfg_controls; nav-right: none;">Customize Buttons</button>',
+    '                    </div>',
+])
+
+# The descriptions of the Quick Setup buttons and Customize Buttons (on the right, as the options' are).
+QS_HELP = (
+    ("Modern", "Dual-stick controls with the built-in button layout, and mouse and keyboard controls: the right stick or the mouse turns the camera, LT or the right mouse button aims, RT or the left button fires.<br/><br/>Sets <b>Dual-Stick Controls</b>, <b>Built-in Button Layout</b> and <b>Mouse and Keyboard Controls</b> on."),
+    ("Original N64", "The original game's controls: the stick runs and turns the character as on the N64, with your button bindings.<br/><br/>Sets <b>Dual-Stick Controls</b> and <b>Mouse and Keyboard Controls</b> off."),
+    ("Custom", "Dual-stick controls with your own button bindings (Customize Buttons).<br/><br/>Sets <b>Dual-Stick Controls</b> on and <b>Built-in Button Layout</b> off."),
+    ("Customize Buttons", "Choose which button or key does what, for the controller and for the keyboard. While the Built-in Button Layout or mouse and keyboard controls are on, they use their own layout during play."),
+)
+CONTROLS_DESC = "\n".join(
+    f'                    <div data-if="cur_config_index == {QS_INDEX + i}"><div class="jfg-desc__card"><div class="jfg-desc__title">{t}</div><p>{h}</p></div></div>'
+    for i, (t, h) in enumerate(QS_HELP))
+
+# Groups shown only while a data expression is false, with their options (a wrapper with data-if; Up/Down go past them
+# while hidden, as past locked rows).
+GROUP_HIDDEN_BY = {"Mouse & Keyboard": "mk_hidden"}
 
 GRAPHICS = [
     ("group", None, "Window", None, None),
@@ -208,8 +263,13 @@ def option_markup(items, first_nav_up):
     # tab; None leaves it automatic), the last row's Down goes nowhere.
     # A locked row (LOCKED_BY) can't take the focus, so while its lock is on, Up/Down jump over the locked rows next to it
     # (a data-style-nav-* attribute, see nav_locked, in place of the fixed property).
+    # Rows of a hidden group (GROUP_HIDDEN_BY) are skipped like locked ones while hidden.
+    hidden_by, group_hide = {}, None
+    for kind, key, title, _, _ in items:
+        if kind == "group": group_hide = GROUP_HIDDEN_BY.get(title)
+        elif group_hide: hidden_by[key] = group_hide
     rows = [row_ids(kind, key, extra) for kind, key, _, extra, _ in items if kind != "group"]
-    locks = [LOCKED_BY.get(key) for kind, key, _, _, _ in items if kind != "group"]
+    locks = [LOCKED_BY.get(key) or hidden_by.get(key) for kind, key, _, _, _ in items if kind != "group"]
     def target(row, column):
         return "#" + row[min(column, len(row) - 1)]
     def neighbour(i, step, column):
@@ -238,8 +298,12 @@ def option_markup(items, first_nav_up):
     for kind, key, title, extra, help_text in items:
         t = html.escape(title)
         if kind == "group":
-            out.append(f'                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">{t}</label></div>')
+            hide = GROUP_HIDDEN_BY.get(title)
+            title_div = f'<div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">{t}</label></div>'
+            out.append('                    ' + (f'<div data-if="!{hide}">{title_div}</div>' if hide else title_div))
             continue
+        hide = hidden_by.get(key)
+        if hide: out.append(f'                    <div data-if="!{hide}">')
         ev = f'data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index({idx})"'
         ids = rows[idx]
         lock = LOCKED_BY.get(key)
@@ -272,6 +336,7 @@ def option_markup(items, first_nav_up):
             out.append(f'                            <input class="nav-vert" {ev} id="{ids[0]}" type="range" min="{lo}" max="{hi}" style="flex: 1; margin: 0dp; {nav_style(idx, 0)}"{nav_locked(idx, 0)} data-value="{key}"{locked_attr}/>')
             out.append('                        </div>')
         out.append('                    </div>')
+        if hide: out.append('                    </div>')
         # The focused option's description: its name as a heading, then the text (styled by .jfg-desc in config_menu.rml
         # and launcher.rml). data-if goes on a wrapper without its own display style (it hides with display: none).
         helps.append(f'                    <div data-if="cur_config_index == {idx}"><div class="jfg-desc__card">'
@@ -283,9 +348,10 @@ def first_id(items):
     kind, key, _, extra, _ = next(i for i in items if i[0] != "group")
     return row_ids(kind, key, extra)[0]
 
-def options_tab(name, items, tab_id, extra_markup="", before_markup="", desc_markup=""):
-    # With markup before the options, that markup's first element goes up to the tab instead.
-    body, helps, _ = option_markup(items, None if before_markup else "#" + tab_id)
+def options_tab(name, items, tab_id, extra_markup="", before_markup="", desc_markup="", first_nav_up=None):
+    # With markup before the options, that markup's first element goes up to the tab instead (or the first option goes
+    # up to first_nav_up).
+    body, helps, _ = option_markup(items, first_nav_up or (None if before_markup else "#" + tab_id))
     return "\n".join([
         f'<template name="config-menu__{name}">',
         '    <head>',
@@ -434,10 +500,15 @@ GENERAL_NOTE = '''                    <div class="jfg-keys-note"><div class="jfg
 OPTION_TABS = (
     ("jfg_general", GENERAL, LANGUAGE_LIST + "\n" + GENERAL_NOTE, ""),
     ("jfg_gameplay", GAMEPLAY, "", ""),
-    ("jfg_controls", CONTROLS, "", ""),
+    ("jfg_controls", CONTROLS, "", CONTROLS_TOP),
     ("jfg_graphics", GRAPHICS, "", ""),
     ("jfg_textures", TEXTURES, "", TEXTURE_PACKS),
 )
+# For a tab with markup before its options: the element Down on the tab goes to, the first option's Up, and its extra
+# descriptions.
+TAB_FIRST = {"jfg_textures": "jfg_pack_0", "jfg_controls": "jfg_qs_modern"}
+TAB_FIRST_NAV_UP = {"jfg_controls": "#jfg_customize_buttons"}
+TAB_DESC = {"jfg_textures": PACK_DETAILS, "jfg_controls": CONTROLS_DESC}
 
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -445,7 +516,7 @@ def main():
     for name, items, extra, before in OPTION_TABS:
         with open(os.path.join(cm, name + ".rml"), "w", newline="\n") as f:
             f.write(options_tab(name, items, "tab_" + name, extra_markup=extra, before_markup=before,
-                                desc_markup=PACK_DETAILS if name == "jfg_textures" else ""))
+                                desc_markup=TAB_DESC.get(name, ""), first_nav_up=TAB_FIRST_NAV_UP.get(name)))
     with open(os.path.join(cm, "jfg_profiles.rml"), "w", newline="\n") as f:
         f.write(PROFILES)
     with open(os.path.join(root, "src", "jfg", "jfg_config_keys.inc"), "w", newline="\n") as f:
@@ -459,7 +530,7 @@ def main():
         f.write("static const JfgTabFirst jfg_tab_first_ids[] = {\n")
         f.write('    { "tab_jfg_profiles", "jfg_profile_0" },\n')
         for name, items, _, before in OPTION_TABS:
-            f.write(f'    {{ "tab_{name}", "{"jfg_pack_0" if before else first_id(items)}" }},\n')
+            f.write(f'    {{ "tab_{name}", "{TAB_FIRST.get(name) or first_id(items)}" }},\n')
         f.write("};\n")
         # Each option's name and how its value reads, for the list of what choosing a profile changes
         # (jfg_profiles.cpp). kind: 'b' On/Off, 'r' a number with suffix, 'c' one of choices ("value:label|...").

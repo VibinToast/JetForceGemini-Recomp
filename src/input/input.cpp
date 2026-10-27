@@ -129,6 +129,44 @@ void dino::input::initialize_controllers() {
     }
 }
 
+// JFG PORT: see input.hpp. Instance ids grow as controllers are connected, so sorting by them puts the oldest first.
+std::vector<dino::input::ConnectedController> dino::input::get_connected_controllers() {
+    std::vector<std::pair<SDL_JoystickID, ConnectedController>> found;
+    {
+        std::lock_guard lock{ InputState.cur_controllers_mutex };
+        for (const auto& [id, state] : InputState.controller_states) {
+            if (state.controller == nullptr) continue;
+            const char* name = SDL_GameControllerName(state.controller);
+            ConnectedController c{ name != nullptr ? name : "", 0, false };
+            switch (SDL_GameControllerGetType(state.controller)) {
+            case SDL_CONTROLLER_TYPE_XBOX360:
+            case SDL_CONTROLLER_TYPE_XBOXONE:
+                c.kind = 1;
+                break;
+            case SDL_CONTROLLER_TYPE_PS3:
+            case SDL_CONTROLLER_TYPE_PS4:
+            case SDL_CONTROLLER_TYPE_PS5:
+                c.kind = 2;
+                break;
+            case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_PRO:
+            case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_LEFT:
+            case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
+            case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
+                c.kind = 3;
+                break;
+            default:
+                break;
+            }
+            c.n64 = c.name.find("N64") != std::string::npos || c.name.find("Nintendo 64") != std::string::npos;
+            found.emplace_back(id, std::move(c));
+        }
+    }
+    std::sort(found.begin(), found.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::vector<ConnectedController> out;
+    for (auto& [id, c] : found) out.push_back(std::move(c));
+    return out;
+}
+
 static std::atomic_bool cursor_enabled = true;
 
 void recompui::set_cursor_visible(bool visible) {

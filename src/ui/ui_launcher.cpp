@@ -17,6 +17,7 @@ static std::string version_string;
 #include "jfg/jfg_update_check.h"
 #include "jfg/jfg_pack_install.h"
 #include "jfg/jfg_locale.h" // JFG PORT: texts set from here in the chosen language (jfg::locale::ui)
+#include "input/input.hpp" // JFG PORT: get_scanned_input_index (Esc on the bindings page)
 // A newer release exists (src/jfg/jfg_update_check.cpp): a banner on the Play page and a warning triangle next to the
 // version open the dialog with what is new and a confirmation, and the update is then downloaded and installed. The dialog
 // does not open by itself. bin\jfg_launcher.txt can turn the check off (check_for_updates=0).
@@ -40,6 +41,7 @@ static constexpr int TOAST_FRAMES = 180, TOAST_FPS = 30;
 void jfg_launcher_commit_settings();  // ui_config.cpp: applies pending graphics changes and saves the settings
 void jfg_config_menu_refresh();       // ui_config.cpp: refreshes the port's tabs (profiles, texture packs)
 void jfg_config_clear_option_focus(); // ui_config.cpp: no option's description shown
+void jfg_controls_page_entered();     // ui_config.cpp: the Controls page's Players row and Mouse & Keyboard section
 void jfg_open_url_prompt(const std::string& url, const std::string& return_id); // ui_config.cpp: asks, then opens it
 
 struct LauncherPageInfo { const char* id; const char* title; const char* subtitle; const char* nav_id; };
@@ -48,8 +50,10 @@ static const LauncherPageInfo LAUNCHER_PAGES[] = {
     { "profiles", "Profiles", "Whole sets of settings: the original game, Modern, Modern and Balanced, Extreme or your own.", "tab_jfg_profiles" },
     { "general", "General", "Volume, the settings menu, what is shown on screen and the fly camera.", "tab_jfg_general" },
     { "gameplay", "Gameplay", "Saving, gore, player tweaks and movement.", "tab_jfg_gameplay" },
-    { "controls", "Controls", "Dual-stick, mouse and keyboard, aiming, and the controller's stick and rumble.", "tab_jfg_controls" },
-    { "bindings", "Bindings", "Button bindings for the controller and the keyboard.", "tab_controls" },
+    { "controls", "Controls", "Players, quick setup, camera and aiming, sticks and rumble, mouse and keyboard, and your buttons.", "tab_jfg_controls" },
+    // Not in the sidebar: Customize Buttons on the Controls page opens it (jfg_launcher_show_bindings), and its sidebar
+    // button is Controls'.
+    { "bindings", "Customize Buttons", "Button bindings for the controller and the keyboard.", "tab_jfg_controls" },
     { "graphics", "Graphics", "Window, resolution, frame rate, widescreen and effects.", "tab_jfg_graphics" },
     { "textures", "Texture Packs", "Pick a texture pack from the texture_packs folder, and dump the game's textures to make your own.", "tab_jfg_textures" },
     { "mods", "Mods", "Turn mods on and off, set their order and options, and install new ones.", "tab_mods" },
@@ -227,6 +231,7 @@ static void set_launcher_page(const std::string& page) {
     jfg_config_clear_option_focus();
     jfg_config_menu_refresh();
     if (launcher_page == "textures") refresh_official(true);
+    if (launcher_page == "controls") jfg_controls_page_entered();
     model_handle.DirtyVariable("page");
     model_handle.DirtyVariable("page_title");
     model_handle.DirtyVariable("page_subtitle");
@@ -242,8 +247,15 @@ void jfg_launcher_step_page(int dir) {
     constexpr int n = (int)(sizeof(LAUNCHER_PAGES) / sizeof(LAUNCHER_PAGES[0]));
     int cur = 0;
     for (int i = 0; i < n; i++) if (launcher_page == LAUNCHER_PAGES[i].id) cur = i;
-    const int next = ((cur + dir) % n + n) % n;
+    int next = ((cur + dir) % n + n) % n;
+    if (std::string(LAUNCHER_PAGES[next].id) == "bindings") next = ((next + dir) % n + n) % n; // not in the sidebar
     if (Rml::Element* button = doc->GetElementById(LAUNCHER_PAGES[next].nav_id)) button->Focus(true);
+}
+
+// Customize Buttons (Controls page) opens the bindings page; Back to Controls or Esc / B goes back onto that button.
+void jfg_launcher_show_bindings(bool open) {
+    set_launcher_page(open ? "bindings" : "controls");
+    focus_soon(open ? "input_row_button_0_0" : "jfg_customize_buttons");
 }
 
 // Start: the Play page, on its Start button (or Browse while no ROM is loaded).
@@ -527,6 +539,10 @@ public:
                 }
                 if (update_dialog) { // Esc / Back is "Later" (not while it is installing)
                     close_update_dialog();
+                    return;
+                }
+                if (launcher_page == "bindings" && dino::input::get_scanned_input_index() < 0) {
+                    jfg_launcher_show_bindings(false);
                     return;
                 }
                 Rml::Element* target = event.GetTargetElement();

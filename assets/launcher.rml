@@ -322,12 +322,10 @@
 								data-event-focus="set_page('general')" style="nav-up: #tab_jfg_profiles; nav-down: #tab_jfg_gameplay; nav-right: #jfg_main_volume_input;">General</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_gameplay" class="rl-btn" data-class-rl-active="page == 'gameplay'"
 								data-event-focus="set_page('gameplay')" style="nav-up: #tab_jfg_general; nav-down: #tab_jfg_controls; nav-right: #jfg_auto_save_on;">Gameplay</button></div>
-							<div class="rl-btn-shadow"><button id="tab_jfg_controls" class="rl-btn" data-class-rl-active="page == 'controls'"
-								data-event-focus="set_page('controls')" style="nav-up: #tab_jfg_gameplay; nav-down: #tab_controls; nav-right: #jfg_dual_stick_on;">Controls</button></div>
-							<div class="rl-btn-shadow"><button id="tab_controls" class="rl-btn" data-class-rl-active="page == 'bindings'"
-								data-event-focus="set_page('bindings')" style="nav-up: #tab_jfg_controls; nav-down: #tab_jfg_graphics; nav-right: #cont_kb_toggle;">Bindings</button></div>
+							<div class="rl-btn-shadow"><button id="tab_jfg_controls" class="rl-btn" data-class-rl-active="page == 'controls' || page == 'bindings'"
+								data-event-focus="set_page('controls')" style="nav-up: #tab_jfg_gameplay; nav-down: #tab_jfg_graphics; nav-right: #jfg_qs_modern;">Controls</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_graphics" class="rl-btn" data-class-rl-active="page == 'graphics'"
-								data-event-focus="set_page('graphics')" style="nav-up: #tab_controls; nav-down: #tab_jfg_textures; nav-right: #jfg_wm_option_0;">Graphics</button></div>
+								data-event-focus="set_page('graphics')" style="nav-up: #tab_jfg_controls; nav-down: #tab_jfg_textures; nav-right: #jfg_wm_option_0;">Graphics</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_textures" class="rl-btn" data-class-rl-active="page == 'textures'"
 								data-event-focus="set_page('textures')" style="nav-up: #tab_jfg_graphics; nav-down: #tab_mods;"
 								data-style-nav-right="!official_shown ? '#jfg_pack_0' : (official_busy ? '#rl_official_cancel' : '#rl_official_info')">Texture Packs</button></div>

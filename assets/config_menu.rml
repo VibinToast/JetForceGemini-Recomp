@@ -133,7 +133,9 @@
 						<panel class="config" data-model="jfg_controls_model">
 							<template src="config-menu__jfg_controls" />
 						</panel>
-						<tab class="tab" id="tab_controls">
+						<!-- The bindings have no tab of their own (hidden; the bumpers skip it): Customize Buttons on the Controls
+						     tab opens them, Back to Controls or B goes back (ui_config.cpp, open_bindings). -->
+						<tab class="tab" id="tab_controls" style="display: none;">
 							<div>Bindings</div>
 							<div class="tab__indicator"></div>
 						</tab>

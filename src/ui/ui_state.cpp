@@ -43,6 +43,7 @@ static std::string jfg_upper_latin(const std::string& text); // JFG PORT: below 
 #include "ui_renderer.h"
 void jfg_config_menu_refresh(); // JFG PORT: src/ui/ui_config.cpp
 void close_config_menu(); // src/ui/ui_config.cpp (JFG_DEBUG_CONFIG_CLOSE)
+void jfg_config_note_input(bool controller); // src/ui/ui_config.cpp: the last input in the menus (Players row)
 void jfg_config_step_tab(int dir); // JFG PORT: src/ui/ui_config.cpp
 void jfg_restore_menu_place(); // JFG PORT: src/ui/ui_config.cpp, the menu reopens where it was closed
 bool jfg_config_slider_step(int dir, float held_secs, bool bumper); // JFG PORT: src/ui/ui_config.cpp
@@ -1149,6 +1150,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
     if (cont_interacted || kb_interacted || mouse_clicked) {
         recompui::set_cont_active(cont_interacted);
+        ::jfg_config_note_input(cont_interacted); // JFG PORT: the Controls page's Players row
     }
     dino::input::config_menu_set_cont_or_kb(ui_state->cont_is_active);
 
