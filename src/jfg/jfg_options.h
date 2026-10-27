@@ -56,6 +56,7 @@ struct State {
     int  hit_flash = 100;          // red screen when the character is hit: strength, percent (jfg_hit_flash)
     int  shadow_opacity = 50;      // how dark character shadows are drawn, percent of the game's (jfg_shadow_alpha); 50 in every profile
     bool hide_floyd = false;       // Floyd is not drawn while he follows the character (jfg_hide_object)
+    int  language = 0;             // "Language": 0 English, 1 French, 2 German, 3 Spanish, 4 Japanese (jfg_locale.cpp); not part of profiles
     bool vignette = false;        // darker screen edges in RT64 (src/shaders/VignettePS.hlsl), see push_render_options()
     int  vignette_strength = 40;   // vignette: how dark the corners get, percent
     int  vignette_size = 45;       // vignette: how far from the centre the darkening starts, percent of the way to the corners
@@ -117,6 +118,7 @@ struct State {
     bool fly_freeze = true;        // fly camera: the game stands still while flying
     bool fly_hide_hud = true;      // fly camera: no HUD (the game's frontSetInstrumentsHide flag) while flying
     bool skip_tribal_check = false; // cheat (not saved): game flag 88 "all Tribals rescued" reads as set
+    bool squads_ignore = false;    // cheat (not saved): squads never see, hear or react to the heroes (jfg_squad_cheat.cpp)
     // cutscene fast-forward state
     bool skipping = false;
     int  skip_level = -1;

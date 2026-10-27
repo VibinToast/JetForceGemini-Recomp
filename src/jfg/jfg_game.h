@@ -56,6 +56,7 @@ namespace jfg {
 constexpr uint32_t ADDR_gameplay             = 0x800FD7D4; // Game*
 constexpr uint32_t ADDR_mainGameMode         = 0x800FD7C4; // s32
 constexpr uint32_t ADDR_currentLevel         = 0x800A323C; // s16, mainGetCurrentLevel()
+constexpr uint32_t ADDR_weaponTable          = 0x800A1490; // WeaponDef[16], the heroes' weapons (jfg_fields.h)
 constexpr uint32_t ADDR_currentCharacter     = 0x800A3240; // s16, mainGetPlayerCharacter() in single player
 constexpr uint32_t ADDR_currentEntrance      = 0x800A3244; // s16, the entrance the level was entered by (copied from 0x800A3258, mainChangeLevel's third argument, as the level loads)
 constexpr uint32_t ADDR_nextLevel            = 0x800A3250; // s16, mainGetNextLevel()
@@ -80,20 +81,11 @@ constexpr uint16_t START_BUTTON              = 0x1000;
 constexpr uint32_t ADDR_otherScreen          = 0x800FECB8; // s32*, the buffer viFrameSync hands to osViSwapBuffer
 constexpr uint32_t ADDR_currentScreen        = 0x800FECB0; // s32*, the buffer the next frame is drawn into
 
-constexpr uint32_t GAME_CHARACTERS_OFFSET = 0x15C;
-constexpr uint32_t GAME_CHARACTER_SIZE    = 0x76;
-constexpr uint32_t GAME_REGION_STATS_OFFSET = 0x334; // 8 bytes per region: u8 best rescued, u8 killed, u16, u32
 constexpr uint32_t ADDR_levelHeader       = 0x800FB118; // LevelHeader* (levelGetLevel); +0x102 region, +0x103 room
 constexpr uint32_t ADDR_levelCount        = 0x800FB124; // s32, levels in the level table
 constexpr uint32_t ADDR_levelTable        = 0x800FB12C; // 5-byte entries per level (levelGetScreenMode, levelGetBlurEffect)
 constexpr uint32_t ADDR_screenOption      = 0x800A51A8; // u8, the game's screen option: 0 Normal, 1 Widescreen, 2 Hi-res, 3 both
-constexpr uint32_t CHAR_HEALTH_OFFSET     = 0x00; // s16, 256 per health unit
-constexpr uint32_t CHAR_HEALTH_LEVEL_OFFSET = 0x02; // s16, 6..12
-constexpr uint32_t CHAR_WEAPONS_OFFSET    = 0x0A; // u16 bitmask
-constexpr uint32_t CHAR_AMMO_OFFSET       = 0x14; // u16[16]
-constexpr uint32_t CHAR_COLLECTED_OFFSET  = 0x66; // 9 bytes of bits (0x66..0x6E)
-constexpr uint32_t CHAR_WEAPON_COUNT_OFFSET = 0x6F; // u8 number of weapons owned; weapon switching needs >= 2
-constexpr uint32_t CHAR_WEAPON_OFFSET     = 0x70; // u8 current weapon
+// The fields of the game's data (characters, objects, cameras, ...): jfg_fields.h.
 constexpr int      COLLECTED_BITS         = 72;
 
 // ROM asset table (src/pi.c): count word at 0xB1750 followed by section offsets, data from 0xB1880.
@@ -111,7 +103,6 @@ constexpr uint32_t ADDR_sControllerCurrData = 0x800FB0C0; // OSContPad[4]: u16 b
 constexpr uint32_t ADDR_cameraActorArray = 0x800FA4D0;   // Camera[], 0x4C bytes each (src/camera.h)
 constexpr uint32_t ADDR_cameraNo = 0x800FA634;           // index of the active camera
 constexpr uint32_t ADDR_delayDat = 0x800A3374;           // video frames the current tick simulates
-constexpr uint32_t CAMERA_SIZE = 0x4C;
 
 const char* const character_names[] = { "Vela", "Juno", "Lupus" };
 

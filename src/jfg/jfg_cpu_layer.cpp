@@ -324,7 +324,7 @@ void match_groups(Layer& cur, const Layer* prev) {
 
 } // namespace
 
-// mainCPUeffects (jfg.us.toml): before rainDraw is called ...
+// Before rainDraw (its wrapper, below; called only from mainCPUeffects) ...
 extern "C" void jfg_cpu_rain_before(uint8_t* rdram, recomp_context* ctx) {
     capture_begin(rdram, ctx);
 }
@@ -335,19 +335,19 @@ extern "C" void jfg_cpu_rain_after(uint8_t* rdram, recomp_context* ctx) {
     capture_end(rdram, true);
 }
 
-// Entry of fxOutputLines.
+// Before fxOutputLines (its wrapper, below).
 extern "C" void jfg_cpu_lines_before(uint8_t* rdram, recomp_context* ctx) {
     capture_begin(rdram, ctx);
 }
 
-// mainCPUeffects, right after fxOutputLines returns: the frame's layer is complete.
+// After fxOutputLines (its wrapper; mainCPUeffects is its only caller): the frame's layer is complete.
 extern "C" void jfg_cpu_lines_after(uint8_t* rdram, recomp_context* ctx) {
     (void)ctx;
     capture_end(rdram, false);
     publish();
 }
 
-// mainCPUeffects, right after fxInitLines returns: during a fade (going through a loading zone, a warp) the game draws
+// mainCPUeffects, right after its fxInitLines returns (the wrappers below): during a fade (going through a loading zone, a warp) the game draws
 // no lines and only clears its list. The frame's buffer gets an empty layer, so the last reticle drawn into it is not
 // shown again on every frame presented for it until lines are drawn there again.
 extern "C" void jfg_cpu_lines_faded(uint8_t* rdram, recomp_context* ctx) {
@@ -419,3 +419,32 @@ bool cpu_layer_build(ImDrawList* list) {
 }
 
 } // namespace jfg
+
+// CPU-drawn rain and reticles with in-between frames (Smooth Motion): what rainDraw and fxOutputLines add to the finished
+// frame is taken out again and drawn on every presented frame by the render hook. rainDraw is reached only from
+// mainCPUeffects (through TrapDanglingJump); its paths without rain capture nothing.
+JFG_WRAP(rainDraw) {
+    jfg_cpu_rain_before(rdram, ctx);
+    rainDraw_orig(rdram, ctx);
+    jfg_cpu_rain_after(rdram, ctx);
+}
+
+JFG_WRAP(fxOutputLines) {
+    jfg_cpu_lines_before(rdram, ctx);
+    fxOutputLines_orig(rdram, ctx);
+    jfg_cpu_lines_after(rdram, ctx);
+}
+
+// During a fade mainCPUeffects calls fxInitLines instead of fxOutputLines; after its own call, the empty layer.
+static JfgCaller g_cpu_effects; // mainCPUeffects (frame 0x40)
+
+JFG_WRAP(mainCPUeffects) {
+    JfgCaller::Scope scope(g_cpu_effects, ctx, 0x40);
+    mainCPUeffects_orig(rdram, ctx);
+}
+
+JFG_WRAP(fxInitLines) {
+    const bool faded = g_cpu_effects.direct(ctx);
+    fxInitLines_orig(rdram, ctx);
+    if (faded) jfg_cpu_lines_faded(rdram, ctx);
+}

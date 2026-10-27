@@ -105,6 +105,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "hit_flash") == 0) g.hit_flash = std::clamp(value, 0, 100);
     else if (std::strcmp(key, "shadow_opacity") == 0) g.shadow_opacity = std::clamp(value, 0, 200);
     else if (std::strcmp(key, "hide_floyd") == 0) g.hide_floyd = value != 0;
+    else if (std::strcmp(key, "language") == 0) g.language = std::clamp(value, 0, 4);
     else if (std::strcmp(key, "vignette") == 0) g.vignette = value != 0;
     else if (std::strcmp(key, "vignette_strength") == 0) g.vignette_strength = std::clamp(value, 0, 100);
     else if (std::strcmp(key, "vignette_size") == 0) g.vignette_size = std::clamp(value, 0, 90);
@@ -189,7 +190,7 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "auto_save=%d\nauto_save_minutes=%d\nsave_notification=%d\nkeep_area_progress=%d\n", s.auto_save ? 1 : 0, s.auto_save_minutes, s.save_notification ? 1 : 0, s.keep_area_progress ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "show_fps=%d\nwidescreen=%d\nframe_rate=%d\nsmooth_motion=%d\n", s.show_fps ? 1 : 0, s.widescreen ? 1 : 0, s.frame_rate, s.smooth_motion); out += buf;
     std::snprintf(buf, sizeof(buf), "smooth_shadows=%d\nshadow_opacity=%d\nhud_corners=%d\nmodern_lighting=%d\n", s.smooth_shadows ? 1 : 0, s.shadow_opacity, s.hud_corners ? 1 : 0, s.modern_lighting ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "fov=%d\nhit_flash=%d\nhide_floyd=%d\n", s.fov, s.hit_flash, s.hide_floyd ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "fov=%d\nhit_flash=%d\nhide_floyd=%d\nlanguage=%d\n", s.fov, s.hit_flash, s.hide_floyd ? 1 : 0, s.language); out += buf;
     std::snprintf(buf, sizeof(buf), "vignette=%d\nvignette_strength=%d\nvignette_size=%d\n", s.vignette ? 1 : 0, s.vignette_strength, s.vignette_size); out += buf;
     std::snprintf(buf, sizeof(buf), "level_fog_distance=%d\nno_level_fog=%d\n", s.level_fog_distance, s.no_level_fog ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "depth_fog=%d\nfog_start=%d\nfog_end=%d\nfog_density=%d\nfog_color=%d\n", s.depth_fog ? 1 : 0, s.fog_start, s.fog_end, s.fog_density, s.fog_color); out += buf;

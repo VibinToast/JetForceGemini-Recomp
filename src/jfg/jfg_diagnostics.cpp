@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "ultramodern/error_handling.hpp"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -34,22 +35,20 @@ void jfg_log_line(const char* file, const char* text) {
 // big blocks (the track buffer is 0x9F000 bytes, see func_overlay_24_000001F8) while earlier frees may still wait in
 // the delayed free queue. When the heap has no room, release that queue and try once more; log either way to
 // bin/jfg_memory.log.
-extern "C" void jfg_mm_alloc_check(uint8_t* rdram_, recomp_context* ctx) {
+extern "C" void jfg_mm_alloc_check(uint8_t* rdram_, recomp_context* ctx, uint32_t size, uint32_t colour) {
     {
         // Tests: JFG_DEBUG_FAIL_ALLOC=<size hex> makes the first allocation of that size look failed (it leaks).
         static const char* const fail = std::getenv("JFG_DEBUG_FAIL_ALLOC");
         static bool failed_once = false;
         if (fail != nullptr && !failed_once && (uint32_t)ctx->r2 != 0) {
             g_rdram = rdram_;
-            if (rd32((uint32_t)ctx->r29 + 0x30) == (uint32_t)std::strtoul(fail, nullptr, 16)) { failed_once = true; ctx->r2 = 0; }
+            if (size == (uint32_t)std::strtoul(fail, nullptr, 16)) { failed_once = true; ctx->r2 = 0; }
         }
     }
     if ((uint32_t)ctx->r2 != 0) return;
     g_rdram = rdram_;
     static thread_local bool retrying = false;
     if (retrying) return;
-    const uint32_t sp = (uint32_t)ctx->r29;
-    const uint32_t size = rd32(sp + 0x30), colour = rd32(sp + 0x34);
     const int pending = (int)rd32(ADDR_gFreeQueueCount);
     uint32_t block = 0;
     if (pending > 0) {
@@ -75,13 +74,13 @@ static uint8_t g_squad_created = 0;
 static std::string g_last_obj_failure = "none seen"; // the latest failed objSetupObject (jfg_objsetup_exit), for the line below
 extern "C" void jfg_squad_spawn_before(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    g_squad_created = rd8((uint32_t)ctx->r16 + 0x63);
+    g_squad_created = SquadronData::Created::get((uint32_t)ctx->r16);
 }
 extern "C" void jfg_squad_spawn_after(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t squadron = (uint32_t)ctx->r16;
-    if (rd8(squadron + 0x63) != g_squad_created) return;
-    wr8(squadron + 0x63, (uint8_t)(g_squad_created + 1));
+    if (SquadronData::Created::get(squadron) != g_squad_created) return;
+    SquadronData::Created::set(squadron, (uint8_t)(g_squad_created + 1));
     static int logged = 0;
     if (logged++ >= 20) return;
     char line[600];
@@ -90,7 +89,10 @@ extern "C" void jfg_squad_spawn_after(uint8_t* rdram_, recomp_context* ctx) {
     jfg_log_line("jfg_memory.log", line);
 }
 
-// Entry of SquaddieInitFromRomdef(object, ...): 0 (skip it) when the object is NULL, see jfg.us.toml.
+// SquaddieInitFromRomdef(object, ...)'s wrapper: 0 (skip it) when the object is NULL. func_overlay_3_00014694 reuses a
+// deactivated member through func_80005F14, which can return NULL in a busy fight, and passes that straight on (first
+// read: object + 0x68; crash 2026-10-23 at Game 60). The member is left out (the caller returns the same NULL, which
+// the spawn loop counts as a failed add, see jfg_squad_spawn_after).
 extern "C" int jfg_squaddie_init_ok(uint8_t* rdram_, recomp_context* ctx) {
     if ((uint32_t)ctx->r4 != 0) return 1;
     g_rdram = rdram_;
@@ -107,16 +109,17 @@ extern "C" int jfg_squaddie_init_ok(uint8_t* rdram_, recomp_context* ctx) {
 
 // objSetupObject(entry, flags) returning NULL: which of its steps failed, logged to jfg_memory.log. A squadron member and
 // a gun turret's shot could not be created in level 248 with 200 KB of heap free (the shot's NULL then crashed
-// squadsFireWeapon), so the heap is not the only thing that runs out. Hooks: the entry, the return of each call that can
-// fail (step numbers below), and the shared exit at 0x80006E04 ($v0 = the object, the type at 0x7A($sp)). Calls nest
-// (an object's children), so the record is kept per depth.
+// squadsFireWeapon), so the heap is not the only thing that runs out. Its wrapper keeps a record per depth (calls nest:
+// an object's children); the wrappers of the calls that can fail (step numbers below) note their result when
+// objSetupObject made the call itself, not one of them. The type is objGetObjdef's argument.
 namespace {
 constexpr uint32_t ADDR_ObjListCount = 0x800F2CA8, ADDR_NoAddObjListCount = 0x800F2CB8;
 constexpr int OBJ_STEPS = 8, OBJ_DEPTH = 8;
 const char* const OBJ_STEP_NAMES[OBJ_STEPS] = { "objdef", "8000F978", "texture", "model", "model2", "sprite", "allocR", "alloc" };
-struct ObjSetupRecord { bool ran[OBJ_STEPS]; uint32_t result[OBJ_STEPS]; };
+struct ObjSetupRecord { bool ran[OBJ_STEPS]; uint32_t result[OBJ_STEPS]; int type; bool typed; };
 ObjSetupRecord g_obj_setup[OBJ_DEPTH];
 int g_obj_depth = 0;
+int g_obj_step_nest = 0; // step calls under way: only the outermost (made by objSetupObject) is noted
 }
 extern "C" void jfg_objsetup_enter(uint8_t* rdram_, recomp_context*) {
     g_rdram = rdram_;
@@ -127,15 +130,15 @@ extern "C" void jfg_objsetup_step(uint8_t* rdram_, recomp_context* ctx, int step
     g_rdram = rdram_;
     const int d = g_obj_depth - 1;
     if (d < 0 || d >= OBJ_DEPTH || step < 0 || step >= OBJ_STEPS) return;
+    if (step == 4 && !g_obj_setup[d].ran[3]) step = 3; // modLoadModel: the first call is step 3, the second step 4
     g_obj_setup[d].ran[step] = true;
     g_obj_setup[d].result[step] = (uint32_t)ctx->r2;
 }
-extern "C" void jfg_objsetup_exit(uint8_t* rdram_, recomp_context* ctx) {
+extern "C" void jfg_objsetup_exit(uint8_t* rdram_, recomp_context* ctx, int type) {
     g_rdram = rdram_;
     const int d = --g_obj_depth;
     if (g_obj_depth < 0) g_obj_depth = 0;
     if ((uint32_t)ctx->r2 != 0 || d < 0 || d >= OBJ_DEPTH) return;
-    const int type = (int16_t)rd16((uint32_t)ctx->r29 + 0x7A);
     std::string steps;
     uint32_t signature = (uint32_t)type << 16; // the type, which steps ran, which of them returned 0
     for (int i = 0; i < OBJ_STEPS; i++) {
@@ -183,16 +186,16 @@ extern "C" void jfg_squads_check_enemy(uint8_t* rdram_, recomp_context* ctx) {
     for (int i = count - 1; i >= 0; i--) {
         const uint32_t node = rd32(list + 4u * (uint32_t)i);
         if (!rdram_ptr(node)) { broken(i, -1, "bad squadron object", node); continue; }
-        const uint32_t data = rd32(node + 0x68);
+        const uint32_t data = Obj::Data::get(node);
         if (!rdram_ptr(data)) { broken(i, -1, "bad squadron data", data); continue; }
-        uint32_t member = rd32(data + 0x58);
+        uint32_t member = SquadronData::FirstMember::get(data);
         for (int link = 0; member != 0; link++) {
             if (link >= 256) { broken(i, link, "chain too long at member", member); break; }
             if (!rdram_ptr(member)) { broken(i, link, "bad member object", member); break; }
-            const uint32_t m = rd32(member + 0x68);
+            const uint32_t m = Obj::Data::get(member);
             if (!rdram_ptr(m)) { broken(i, link, "bad member data", m); break; }
-            if (rd32(m + 0x64) == freed) wr32(m + 0x64, 0);
-            member = rd32(m + 0x28);
+            if (SquadMemberData::Target::get(m) == freed) SquadMemberData::Target::set(m, 0);
+            member = SquadMemberData::NextMember::get(m);
         }
     }
 }
@@ -202,35 +205,36 @@ extern "C" void jfg_squads_check_enemy(uint8_t* rdram_, recomp_context* ctx) {
 // member count (+0x00, which it has just lowered). In the Lurg fight (level 195) a squadron's chain held one member more
 // than its count (count 2, chain 3), so a member at the end was never found, stayed linked after being freed, and the
 // next walk of the chain crashed in the reused memory (GalaxianBatsSoundsHandler, squadsCheckEnemyPointers; the level
-// 138 boss fight too). Here the whole chain is walked; if obj is still in it, it is taken out (the count is left as the
-// game set it) and logged. $a3 is obj on every way out of the function. Its member data: +0x24 the squadron.
-extern "C" void jfg_tidy_linked_list_after(uint8_t* rdram_, recomp_context* ctx) {
+// 138 boss fight too). After it (its wrapper) the whole chain is walked; if obj is still in it, it is taken out (the count
+// is left as the game set it) and logged. Its member data: +0x24 the squadron.
+extern "C" void jfg_tidy_linked_list_after(uint8_t* rdram_, uint32_t obj) {
     g_rdram = rdram_;
-    const uint32_t obj = (uint32_t)ctx->r7;
     if (!rdram_ptr(obj)) return;
-    const uint32_t sq = rd32(obj + 0x68);
+    const uint32_t sq = Obj::Data::get(obj);
     if (!rdram_ptr(sq)) return;
-    const uint32_t squadron = rd32(sq + 0x24);
+    const uint32_t squadron = SquadMemberData::Squadron::get(sq);
     if (!rdram_ptr(squadron)) return;
-    const uint32_t data = rd32(squadron + 0x68);
+    const uint32_t data = Obj::Data::get(squadron);
     if (!rdram_ptr(data)) return;
     int length = 0;
-    for (uint32_t c = rd32(data + 0x58); c != 0 && length < 256 && rdram_ptr(c) && rdram_ptr(rd32(c + 0x68)); length++) c = rd32(rd32(c + 0x68) + 0x28);
-    uint32_t prev = 0, member = rd32(data + 0x58);
+    for (uint32_t c = SquadronData::FirstMember::get(data); c != 0 && length < 256 && rdram_ptr(c) && rdram_ptr(Obj::Data::get(c)); length++) {
+        c = SquadMemberData::NextMember::get(Obj::Data::get(c));
+    }
+    uint32_t prev = 0, member = SquadronData::FirstMember::get(data);
     for (int link = 0; member != 0 && link < 256; link++) {
         if (!rdram_ptr(member)) return;
-        const uint32_t m = rd32(member + 0x68);
+        const uint32_t m = Obj::Data::get(member);
         if (!rdram_ptr(m)) return;
-        const uint32_t next = rd32(m + 0x28);
+        const uint32_t next = SquadMemberData::NextMember::get(m);
         if (member == obj) {
-            if (prev == 0) wr32(data + 0x58, next);
-            else wr32(prev + 0x28, next);
+            if (prev == 0) SquadronData::FirstMember::set(data, next);
+            else SquadMemberData::NextMember::set(prev, next);
             static int logged = 0;
             if (logged++ < 20) {
                 char line[320];
                 std::snprintf(line, sizeof(line),
                     "squad list: freed member 0x%08X was left in its squadron's chain (link %d of %d, squadron count now %d, level %d); taken out",
-                    obj, link, length, (int)rd8(data + 0x00), (int)(int16_t)rd16(ADDR_currentLevel));
+                    obj, link, length, (int)SquadronData::MemberCount::get(data), (int)(int16_t)rd16(ADDR_currentLevel));
                 jfg_log_line("jfg_memory.log", line);
             }
             return;
@@ -242,10 +246,10 @@ extern "C" void jfg_tidy_linked_list_after(uint8_t* rdram_, recomp_context* ctx)
 
 // GalaxianBatsSoundsHandler (overlay 143, the bats' squadron in the Lurg fight, level 195) walks its squadron's member
 // list to pick a bat to squeak - the same links as above, without checks. A member freed while still linked crashed it
-// there. Two hooks in its loop (jfg.us.toml) ask this before each link is followed; false ends the walk with no bat
-// picked (no squeak this time). which: 0 = a member object, 1 = a member's data. At most 20 lines are logged a run.
-extern "C" int jfg_bats_link_ok(uint8_t* rdram_, uint32_t ptr, int which, int link) {
-    g_rdram = rdram_;
+// there. Its wrapper asks this first, with the squadron data (its a0; first member +0x58): every link the walk would
+// follow is checked, and on a bad one the function is left out (no squeak this time; the game's own walk would have
+// ended with no bat picked, after two mathRnd calls). At most 20 lines are logged a run.
+static int bats_link_ok(uint32_t ptr, int which, int link) {
     if (rdram_ptr(ptr) && link < 256) return 1;
     static int logged = 0;
     if (logged++ < 20) {
@@ -256,6 +260,19 @@ extern "C" int jfg_bats_link_ok(uint8_t* rdram_, uint32_t ptr, int which, int li
         jfg_log_line("jfg_memory.log", line);
     }
     return 0;
+}
+
+extern "C" int jfg_bats_chain_ok(uint8_t* rdram_, uint32_t data) {
+    g_rdram = rdram_;
+    if (!rdram_ptr(data)) return 1; // not read by the walk unless the function gets that far; left to the game
+    uint32_t member = SquadronData::FirstMember::get(data);
+    for (int link = 0; member != 0; link++) {
+        if (!bats_link_ok(member, 0, link)) return 0;
+        const uint32_t m = Obj::Data::get(member);
+        if (!bats_link_ok(m, 1, link)) return 0;
+        member = SquadMemberData::NextMember::get(m);
+    }
+    return 1;
 }
 
 // mathBreakPoint: the game stopped itself on a failed check (on the N64 this is a debugger break). Leave a note and a
@@ -273,7 +290,8 @@ extern "C" void jfg_game_break(uint8_t* rdram_, recomp_context* ctx) {
     std::_Exit(1);
 }
 
-// Entry of mainChangeLevel (hook in jfg.us.toml): logs the arguments with JFG_DEBUG_STATS.
+// An internal handler of jfg_on_level_change (mainChangeLevel's wrapper, jfg_api.cpp): logs the arguments with
+// JFG_DEBUG_STATS.
 extern "C" void jfg_change_level_log(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     static const bool log = std::getenv("JFG_DEBUG_STATS") != nullptr;
@@ -298,3 +316,208 @@ extern "C" void jfg_sync_printf(uint8_t* rdram_, recomp_context* ctx) {
 }
 
 } // namespace jfg
+
+// mmAlloc(size, colour) and mmAlloc2 (the same function twice): jfg_mm_alloc_check on the result. mmAlloc's size may
+// be raised first for translated text (jfg_locale_alloc).
+extern "C" void mmAlloc_orig(uint8_t* rdram, recomp_context* ctx);
+
+static void mm_alloc_checked(uint8_t* rdram, recomp_context* ctx) {
+    const uint32_t size = (uint32_t)ctx->r4, colour = (uint32_t)ctx->r5;
+    mmAlloc_orig(rdram, ctx);
+    jfg_mm_alloc_check(rdram, ctx, size, colour);
+}
+
+static void objsetup_step_call(uint8_t* rdram, recomp_context* ctx, recomp_func_t* orig, int step);
+
+JFG_WRAP(SquaddieInitFromRomdef) {
+    if (jfg_squaddie_init_ok(rdram, ctx)) SquaddieInitFromRomdef_orig(rdram, ctx);
+}
+
+extern "C" void jfg_memory_alloc_size(recomp_context* ctx); // jfg_memory.cpp: the bigger track buffer
+
+JFG_WRAP(mmAlloc) {
+    jfg_memory_alloc_size(ctx);
+    jfg_locale_alloc(ctx);
+    objsetup_step_call(rdram, ctx, mm_alloc_checked, 7);
+}
+
+JFG_WRAP(mmAlloc2) {
+    jfg_memory_alloc_size(ctx);
+    const uint32_t size = (uint32_t)ctx->r4, colour = (uint32_t)ctx->r5;
+    mmAlloc2_orig(rdram, ctx);
+    jfg_mm_alloc_check(rdram, ctx, size, colour);
+}
+
+// The game's assertion ("break"): logged and reported before the process ends. Without this the runtime's exit()
+// could crash in its shutdown and leave nothing behind.
+JFG_WRAP(mathBreakPoint) {
+    jfg_game_break(rdram, ctx);
+    mathBreakPoint_orig(rdram, ctx);
+}
+
+// Replaced by the port's own code (they don't call the game's). squadsCheckEnemyPointers runs whenever an object is
+// freed; the port's copy checks each squad link before following it (in a boss fight the game's reached a squad
+// member freed while still linked and crashed).
+JFG_WRAP(squadsCheckEnemyPointers) {
+    jfg_squads_check_enemy(rdram, ctx);
+}
+
+// A squad member TidyLinkedList(obj) left in its squadron's chain is taken out (jfg_tidy_linked_list_after).
+JFG_WRAP(TidyLinkedList) {
+    const uint32_t obj = (uint32_t)ctx->r4;
+    TidyLinkedList_orig(rdram, ctx);
+    jfg_tidy_linked_list_after(rdram, obj);
+}
+
+// The bats' squeak (overlay 143) runs only when its squadron's chain is sound (jfg_bats_chain_ok).
+JFG_WRAP(GalaxianBatsSoundsHandler) {
+    if (!jfg_bats_chain_ok(rdram, (uint32_t)ctx->r4)) return;
+    GalaxianBatsSoundsHandler_orig(rdram, ctx);
+}
+
+// osSyncPrintf's output routine (0x8009A710) is reached through a function pointer the recompiler has no entry for,
+// which stopped the program the first time the game printed a warning ("out of sound states").
+JFG_WRAP(osSyncPrintf) {
+    jfg_sync_printf(rdram, ctx);
+}
+
+// squadsFireWeapon (overlay 3) makes a squad member's weapon object (member data +0xB4, while it has none) with one
+// objSetupObject call whose result it never checks (+0x8640, setup data at $sp + 0x174): on NULL the stores right after
+// it crashed the game (a gun turret in level 248, with 200 KB of heap free). Its other objSetupObject calls leave the
+// function on NULL, and this one now does too, as far as the game can tell: the NULL becomes a scratch block that takes
+// those stores, the function's next objSetupObject (the shot) gets NULL without anything being made, which takes the
+// function's own NULL exit, and afterwards the member's weapon slot is cleared so its next shot tries again. The member
+// data is still in $t4 at the call (from the +0xB4 check).
+namespace recomp { void* alloc(uint8_t* rdram, size_t size); }
+static JfgCaller g_fire;
+static uint32_t g_fire_scratch = 0; // the scratch block, in the runtime's heap (outside the game's memory)
+static uint32_t g_fire_member = 0;  // member data whose weapon object failed in this squadsFireWeapon; 0 = none
+constexpr uint32_t FIRE_SCRATCH_SIZE = 0x100;
+
+// The scratch block, zeroed, standing in for an object the game could not create; 0 if the runtime's heap has no room.
+static uint32_t scratch_object(uint8_t* rdram) {
+    if (g_fire_scratch == 0) {
+        void* block = recomp::alloc(rdram, FIRE_SCRATCH_SIZE);
+        if (block == nullptr) return 0;
+        g_fire_scratch = 0x80000000u + (uint32_t)((uint8_t*)block - rdram);
+    }
+    for (uint32_t i = 0; i < FIRE_SCRATCH_SIZE; i += 4) MEM_W(i, (gpr)(int32_t)g_fire_scratch) = 0;
+    return g_fire_scratch;
+}
+
+static bool fire_weapon_failed(uint8_t* rdram, recomp_context* ctx, uint32_t member) {
+    if (member < 0x80000000u || member >= 0x80800000u || jfg::SquadMemberData::Carried::get(rdram, member) != 0) return false;
+    const uint32_t scratch = scratch_object(rdram);
+    if (scratch == 0) return false;
+    ctx->r2 = (gpr)(int32_t)scratch;
+    g_fire_member = member;
+    static int logged = 0;
+    if (logged++ < 20) {
+        char line[200];
+        std::snprintf(line, sizeof(line), "squad member weapon object could not be created (member data 0x%08X, level %d); shot left out",
+            member, (int)(int16_t)MEM_H(0, (gpr)(int32_t)jfg::ADDR_currentLevel));
+        jfg::jfg_log_line("jfg_memory.log", line);
+    }
+    return true;
+}
+
+JFG_WRAP(squadsFireWeapon) {
+    const uint32_t prev = g_fire_member;
+    g_fire_member = 0;
+    {
+        JfgCaller::Scope scope(g_fire, ctx, 0x1F0);
+        squadsFireWeapon_orig(rdram, ctx);
+    }
+    if (g_fire_member != 0 && jfg::SquadMemberData::Carried::get(rdram, g_fire_member) == g_fire_scratch) {
+        jfg::SquadMemberData::Carried::set(rdram, g_fire_member, 0);
+    }
+    g_fire_member = prev;
+}
+
+// mantisControl (overlay 67, the alien boss in level 210): its five-rock throw makes the rocks in a loop (objSetupObject,
+// setup data at $sp + 0x68, loop counter $a2: 0 for the last rock) and then plays the throw's sound at the last rock
+// without checking it: reading NULL + 0xC crashed when that rock could not be created (object pool full). The NULL
+// becomes the scratch block (its position reads as 0, 0, 0), and the function's next amSndPlayXYZ (that sound) is left
+// out; then the attack ends as it always does (mantis->unk3 = 0, the shared exit).
+static JfgCaller g_mantis;
+static bool g_mantis_no_rock = false;
+
+JFG_WRAP(mantisControl) {
+    const bool prev = g_mantis_no_rock;
+    g_mantis_no_rock = false;
+    {
+        JfgCaller::Scope scope(g_mantis, ctx, 0xE8);
+        mantisControl_orig(rdram, ctx);
+    }
+    g_mantis_no_rock = prev;
+}
+
+JFG_WRAP(amSndPlayXYZ) {
+    if (g_mantis_no_rock && g_mantis.direct(ctx)) {
+        g_mantis_no_rock = false;
+        ctx->r2 = 0;
+        return;
+    }
+    amSndPlayXYZ_orig(rdram, ctx);
+}
+
+static void mantis_rock_failed(uint8_t* rdram, recomp_context* ctx) {
+    const uint32_t scratch = scratch_object(rdram);
+    if (scratch == 0) return;
+    ctx->r2 = (gpr)(int32_t)scratch;
+    g_mantis_no_rock = true;
+    static int logged = 0;
+    if (logged++ < 20) {
+        char line[160];
+        std::snprintf(line, sizeof(line), "alien boss rock could not be created (level %d); throw sound left out",
+            (int)(int16_t)MEM_H(0, (gpr)(int32_t)jfg::ADDR_currentLevel));
+        jfg::jfg_log_line("jfg_memory.log", line);
+    }
+}
+
+// objSetupObject and its steps (see jfg_objsetup_enter).
+JFG_WRAP(objSetupObject) {
+    const bool fire = g_fire.direct(ctx);
+    if (fire && g_fire_member != 0) { ctx->r2 = 0; return; } // squadsFireWeapon's shot after a failed weapon object
+    const bool weapon = fire && (uint32_t)ctx->r4 == (uint32_t)(g_fire.sp + 0x174);
+    const uint32_t member = (uint32_t)ctx->r12;
+    const bool last_rock = g_mantis.direct(ctx) && (uint32_t)ctx->r4 == (uint32_t)(g_mantis.sp + 0x68) && (uint32_t)ctx->r6 == 0;
+    const int nest = jfg::g_obj_step_nest;
+    jfg::g_obj_step_nest = 0;
+    jfg_objsetup_enter(rdram, ctx);
+    const int d = jfg::g_obj_depth - 1;
+    objSetupObject_orig(rdram, ctx);
+    const int type = (d >= 0 && d < jfg::OBJ_DEPTH && jfg::g_obj_setup[d].typed) ? jfg::g_obj_setup[d].type : -1;
+    jfg_objsetup_exit(rdram, ctx, type);
+    jfg::g_obj_step_nest = nest;
+    if (weapon && (uint32_t)ctx->r2 == 0) fire_weapon_failed(rdram, ctx, member);
+    if (last_rock && (uint32_t)ctx->r2 == 0) mantis_rock_failed(rdram, ctx);
+}
+
+// A step call: noted when objSetupObject is running and made it itself.
+static void objsetup_step_call(uint8_t* rdram, recomp_context* ctx, recomp_func_t* orig, int step) {
+    const bool outer = jfg::g_obj_depth > 0 && jfg::g_obj_step_nest == 0;
+    if (outer && step == 0) {
+        const int d = jfg::g_obj_depth - 1;
+        if (d < jfg::OBJ_DEPTH && !jfg::g_obj_setup[d].typed) {
+            jfg::g_obj_setup[d].type = (int16_t)(int32_t)ctx->r4;
+            jfg::g_obj_setup[d].typed = true;
+        }
+    }
+    jfg::g_obj_step_nest++;
+    orig(rdram, ctx);
+    jfg::g_obj_step_nest--;
+    if (outer) jfg_objsetup_step(rdram, ctx, step);
+}
+
+JFG_WRAP(objGetObjdef) { objsetup_step_call(rdram, ctx, objGetObjdef_orig, 0); }
+JFG_WRAP(func_8000F978_10578) { objsetup_step_call(rdram, ctx, func_8000F978_10578_orig, 1); }
+namespace jfg { void texture_loaded(int tex_id, uint32_t tex); } // jfg_texture_packs.cpp: mods' textures in a dump
+JFG_WRAP(texLoadTexture) {
+    const int tex_id = (int)ctx->r4;
+    objsetup_step_call(rdram, ctx, texLoadTexture_orig, 2);
+    jfg::texture_loaded(tex_id, (uint32_t)ctx->r2);
+}
+JFG_WRAP(modLoadModel) { objsetup_step_call(rdram, ctx, modLoadModel_orig, 4); }
+JFG_WRAP(texLoadSprite) { objsetup_step_call(rdram, ctx, texLoadSprite_orig, 5); }
+JFG_WRAP(mmAllocR) { objsetup_step_call(rdram, ctx, mmAllocR_orig, 6); }

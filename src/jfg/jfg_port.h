@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 
 namespace jfg {
@@ -19,6 +20,11 @@ namespace jfg {
 // --- jfg_tick.cpp ------------------------------------------------------------------------------------------------
 extern bool g_story_skip_pending; // START in the story intro: go to character select at the next tick
 extern bool g_reset_pending, g_reset_press_start; // F5, see jfg_debug_frame
+// A level change at the next tick, as the level warp does; front_mode -1 keeps the game's front-end mode.
+void request_warp(int level, int character, int entrance, int front_mode);
+
+// --- jfg_launch.cpp ----------------------------------------------------------------------------------------------
+void launch_tick(recomp_context* ctx); // every tick: --start-level, --mods-only report
 
 // --- jfg_texture_packs.cpp ---------------------------------------------------------------------------------------
 extern std::atomic<int> g_texture_pack_count; // textures listed in the pack's rt64.json, -1 = pack not in use
@@ -79,7 +85,7 @@ struct CameraControl {
     float shoulder_blend = 0;   // 0..1: how far the view has moved from the game's camera to the shoulder
     bool overridden = false;    // the camera in RDRAM currently holds our values; saved[] holds the game's
     uint32_t camera_addr = 0;
-    uint8_t saved[CAMERA_SIZE] = {};
+    uint8_t saved[Camera::Size] = {};
     float collide_scale = 1.0f; // how much of the way from the character to the wanted camera spot is free (eases back out)
     // Arriving somewhere new (another room through a door, a respawn, a teleport): the free camera starts again
     // behind the character, looking the way it faces, instead of keeping the heading from the place it came from.
@@ -141,8 +147,7 @@ void jfg_camera_controls(recomp_context* ctx); // game thread, right after joyRe
 // copy +0x106, and the object's yaw) and the view pitch (+0x1E2, limited to 60 degrees); the reticle's offset from
 // them (yaw +0x1CE, copies +0x1DC and +0x246; pitch +0x1E0); and their sums, the aim direction (yaw +0x1C6/+0x1CA;
 // pitch +0x1C8/+0x1CC/+0x1D0/+0x1DE). The byte at +0x568 is the character's state: 0x0B aiming, 3 jumping (and falling).
-constexpr uint32_t PD_BODY_YAW = 0x11C, PD_BODY_YAW_COPY = 0x106, PD_VIEW_PITCH = 0x1E2, PD_RETICLE_YAW = 0x1CE, PD_RETICLE_PITCH = 0x1E0, PD_STATE = 0x568;
-constexpr uint8_t PD_STATE_AIMING = 0x0B, PD_STATE_JUMP = 3;
+// The fields are PlayerData in jfg_fields.h.
 
 // --- jfg_camera.cpp ----------------------------------------------------------------------------------------------
 // Fly camera (F7 / F10 > Tools): a free camera for screenshots. While it is on, the sticks / WASD and the mouse fly
@@ -184,6 +189,21 @@ void tribal_saves_file_chosen();      // a file was chosen: what was saved for i
 void tribal_saves_on_save(int slot);  // a save to slot is carried out this tick
 void tribal_saves_forget(int slot);   // the game deletes a file (-1: all files)
 void tribal_saves_tick();             // start of the tick: notices rescues
+
+// Mods' planets and galaxies on the planet-select map (jfg_worldmap.cpp). Planets and galaxies by index; keys "mod:id".
+int world_find(const std::string& key);    // a planet's index, -1 = none
+int world_state(int planet);               // bits: 1 open, 2 entered, 4 completed; -1 = no such planet
+void world_unlock(int planet);             // opens it for the file in play
+void world_complete(int planet);           // marks it completed for the file in play (opens "completed" planets)
+int galaxy_find(const std::string& key);   // "main" = 0, -1 = none
+std::string galaxy_key(int galaxy);
+int galaxy_current();                      // the galaxy the map shows, -1 = the map is closed
+void galaxy_show(int galaxy);              // the map opens on it next
+void worldmap_tick();                      // each tick: entered planets
+void worldmap_file_chosen();               // the save file hooks, as tribal_saves_*
+void worldmap_on_save(int slot);
+void worldmap_forget(int slot);
+void register_world_api();                 // the helpers above for mods (register_api)
 void tribal_saves_region_reset();     // end of mainResetRegion: puts the region's rescues back
 
 // --- jfg_visuals.cpp ---------------------------------------------------------------------------------------------
@@ -303,6 +323,7 @@ void draw_lighting_tool(recomp_context* ctx);  // game thread, in a UI frame whi
 extern bool g_weapon_orig_read;            // the weapon table's original values have been read
 extern std::recursive_mutex g_weapon_mutex; // UI thread edits, game thread applies
 void apply_weapon_key(const char* key, int value); // "<slot>.<field>" as saved
+bool set_pack_weapon(int weapon, const char* field, double value); // a pack's value (jfg.weapon)
 void reset_weapons();                      // every weapon back to its original values, "Modify" off
 std::string weapons_text(const char* prefix);
 void save_weapons();
@@ -360,6 +381,18 @@ struct ToolField {
     std::function<void(recomp_context*, int)> set;
     std::function<std::string(recomp_context*)> text;
 };
+
+// --- jfg_assets.cpp ---------------------------------------------------------------------------------------------
+int asset_number(const std::string& ref); // "mod_id:name" of an appended entry -> its number this start, or -1
+int baddy_like(int object_id);             // a mod's object type -> the stock object id squads treat it as, or -1
+
+// --- jfg_music.cpp ----------------------------------------------------------------------------------------------
+void music_tick(recomp_context* ctx); // every tick: the level's mod music, the game's tune silenced meanwhile
+void music_force(const std::string& mod_id, const std::string& name); // a script's track for this level ("" = none)
+
+// --- jfg_lua.cpp ------------------------------------------------------------------------------------------------
+void lua_tick(recomp_context* ctx);                     // every tick: mods' scripts ("level", "tick" events)
+bool lua_overlay_text(std::string& text, float& alpha); // UI thread: a script's on-screen message, if one shows
 
 // --- jfg_ui_items.cpp --------------------------------------------------------------------------------------------
 void draw_inventory(recomp_context* ctx);  // the Items tab (F9)

@@ -11,6 +11,7 @@ bin/
 dist/
 bin*/
 *.log
+build_regen.out
 stitched/
 build_drive.tmp
 

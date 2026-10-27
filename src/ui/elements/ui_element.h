@@ -87,6 +87,7 @@ public:
     float get_client_top();
     float get_client_width();
     float get_client_height();
+    void scroll_into_view(); // JFG PORT: scrolls its scroll containers to show it, centred (the mod list's jump)
     void enable_focus();
     void focus();
     void blur();

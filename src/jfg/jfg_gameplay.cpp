@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -24,14 +26,14 @@ extern "C" int jfg_no_blood(void) {
 void apply_damage_taken(uint32_t obj) {
     static uint32_t last_obj = 0;
     static int last_health = -1;
-    const uint32_t hit = obj != 0 ? rd32(obj + 0x4C) : 0;
+    const uint32_t hit = obj != 0 ? Obj::Damage::get(obj) : 0;
     if (!valid_ptr(hit)) { last_obj = 0; last_health = -1; return; }
-    int health = (int16_t)rd16(hit + 6);
+    int health = Damage::Health::get(hit);
     if (obj == last_obj && last_health >= 0 && health < last_health && g.damage_taken != 100 && !g.invulnerable) {
         const int lost = last_health - health;
         const int scaled = (int)std::lround(lost * (double)g.damage_taken / 100.0);
         health = std::max(-0x7FFF, last_health - scaled);
-        wr16(hit + 6, (uint16_t)(int16_t)health);
+        Damage::Health::set(hit, (int16_t)health);
     }
     last_obj = obj;
     last_health = health;
@@ -74,3 +76,86 @@ extern "C" int jfg_flag_override(int flag) {
 }
 
 } // namespace jfg
+
+JFG_WRAP(mainGetGameFlag) {
+    if (jfg_flag_override((int)ctx->r4)) {
+        ctx->r2 = 1;
+        return;
+    }
+    mainGetGameFlag_orig(rdram, ctx);
+}
+
+// Refuel speed: refuelControl's fuel per tick is objTvTimes(updateRate * 6) (its only call of it); scaled here.
+static JfgCaller g_refuel;
+
+JFG_WRAP(refuelControl) {
+    JfgCaller::Scope scope(g_refuel, ctx, 0x80);
+    refuelControl_orig(rdram, ctx);
+}
+
+JFG_WRAP(objTvTimes) {
+    const bool refuel = g_refuel.direct(ctx);
+    objTvTimes_orig(rdram, ctx);
+    if (!refuel) return;
+    ctx->r2 = (gpr)(int32_t)jfg_refuel_amount((int32_t)ctx->r2);
+}
+
+// Sniper rifle walking. Each character's aim control (overlays 15-17) skips walking with the sniper (weapon 7, the
+// character's +0x70) because the zoom keys walk; with the fixed zoom it walks like any weapon. The weapon is read once,
+// right after frontGetTargetControl returns; until the aim control's next call (Powerf, or controlGetManualAim, or its
+// return) the weapon reads as none. The character is at 0x4C($sp) of the aim control (0x50 for Lupus, overlay 17).
+static JfgCaller g_aim;
+static uint32_t g_aim_char_slot = 0, g_walk_char = 0;
+
+static void sniper_walk_restore(uint8_t* rdram) {
+    if (g_walk_char == 0) return;
+    jfg::Character::CurrentWeapon::set(rdram, g_walk_char, 7);
+    g_walk_char = 0;
+}
+
+static void aim_control(uint8_t* rdram, recomp_context* ctx, recomp_func_t* orig, uint32_t frame, uint32_t slot) {
+    const uint32_t prev = g_aim_char_slot;
+    g_aim_char_slot = slot;
+    {
+        JfgCaller::Scope scope(g_aim, ctx, frame);
+        orig(rdram, ctx);
+    }
+    g_aim_char_slot = prev;
+    sniper_walk_restore(rdram);
+}
+
+JFG_WRAP(func_overlay_15_00004658_1F17FD8) { aim_control(rdram, ctx, func_overlay_15_00004658_1F17FD8_orig, 0x58, 0x4C); }
+JFG_WRAP(func_overlay_16_00004440_1F22458) { aim_control(rdram, ctx, func_overlay_16_00004440_1F22458_orig, 0x58, 0x4C); }
+JFG_WRAP(func_overlay_17_00004614_1F2C15C) { aim_control(rdram, ctx, func_overlay_17_00004614_1F2C15C_orig, 0x60, 0x50); }
+
+JFG_WRAP(frontGetTargetControl) {
+    const bool aim = g_aim.direct(ctx);
+    frontGetTargetControl_orig(rdram, ctx);
+    const uint32_t slot = g_aim_char_slot;
+    if (!aim || (uint32_t)ctx->r2 == 0) return;
+    const uint32_t ch = (uint32_t)MEM_W(slot, ctx->r29);
+    if (ch < 0x80000400u || ch >= 0x80800000u) return;
+    if (jfg::Character::CurrentWeapon::get(rdram, ch) == 7 && jfg_sniper_walk(7) != 7) {
+        jfg::Character::CurrentWeapon::set(rdram, ch, jfg::Character::NoWeapon);
+        g_walk_char = ch;
+    }
+}
+
+JFG_WRAP(Powerf) {
+    if (g_aim.direct(ctx)) sniper_walk_restore(rdram);
+    Powerf_orig(rdram, ctx);
+}
+
+// Sniper zoom: controlGetManualAim(?, data) stores the zoom (data +0x1EC, 1..5) and its rate (+0x1F0); a fixed zoom
+// replaces both (rate 0) after it. Nothing after that store in it reads them.
+JFG_WRAP(controlGetManualAim) {
+    if (g_aim.direct(ctx)) sniper_walk_restore(rdram);
+    const uint32_t data = (uint32_t)ctx->r5;
+    controlGetManualAim_orig(rdram, ctx);
+    if (data < 0x80000400u || data >= 0x80800000u) return;
+    const float zoom = jfg::PlayerData::AimZoom::get(rdram, data);
+    const float fixed = jfg_sniper_zoom(zoom);
+    if (fixed == zoom) return;
+    jfg::PlayerData::AimZoom::set(rdram, data, fixed);
+    jfg::PlayerData::AimZoomRate::set(rdram, data, 0.0f);
+}

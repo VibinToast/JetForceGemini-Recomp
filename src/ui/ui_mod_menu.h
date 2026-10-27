@@ -16,7 +16,8 @@ public:
     virtual ~ModEntryView();
     void set_mod_details(const recomp::mods::ModDetails &details);
     void set_mod_thumbnail(const std::string &thumbnail);
-    void set_mod_enabled(bool enabled);
+    void set_mod_status(modui::Status status); // JFG PORT: the ON / OFF / REQUIRED tag (was set_mod_enabled, a fade)
+    void set_scale(float scale, float radius); // JFG PORT
     void set_selected(bool selected);
     void set_focused(bool focused);
 protected:
@@ -26,7 +27,10 @@ private:
     Image *thumbnail_image = nullptr;
     Element *body_container = nullptr;
     Label *name_label = nullptr;
-    Label *description_label = nullptr;
+    Label *meta_label = nullptr; // JFG PORT: version and authors, as the texture packs' cards
+    Label *status_tag = nullptr; // JFG PORT
+    modui::Status status = modui::Status::Off;
+    float scale = 1.0f;
     Style checked_style;
     Style hover_style;
     Style checked_hover_style;
@@ -41,9 +45,11 @@ public:
     void set_mod_drag_callback(std::function<void(uint32_t, EventDrag)> callback);
     void set_mod_details(const recomp::mods::ModDetails &details);
     void set_mod_thumbnail(const std::string &thumbnail);
-    void set_mod_enabled(bool enabled);
+    void set_mod_status(modui::Status status);
+    void set_scale(float scale, float radius);
     void set_selected(bool selected);
     void set_focused(bool focused);
+    float get_card_height() { return view->get_client_height(); } // JFG PORT: without the gap below it
 protected:
     virtual void process_event(const Event &e) override;
     std::string_view get_type_name() override { return "ModEntryButton"; }
@@ -94,6 +100,8 @@ private:
     void mod_number_option_changed(const std::string &id, double value);
     void mod_hd_textures_enabled_changed(uint32_t value);
     void create_mod_list();
+    void refresh_mod_status(); // JFG PORT
+    void apply_scale();        // JFG PORT
     void process_event(const Event &e) override;
 
     Container *body_container = nullptr;
@@ -113,12 +121,20 @@ private:
     float mod_drag_start_coordinates[2] = {};
     float mod_drag_view_coordinates[2] = {};
     uint32_t mod_drag_target_index = 0;
+    float mod_drag_spacer_height = 0.0f; // JFG PORT: the dragged entry's height, in pixels
+    Label *ingame_note = nullptr;        // JFG PORT: in game, instead of Install Mods and Refresh
     std::vector<recomp::mods::ModDetails> mod_details{};
     std::unordered_set<std::string> loaded_thumbnails;
     std::string game_mod_id;
     bool mods_dirty = false;
     bool mod_scan_queued = false;
     ContextId owner_context;
+    // JFG PORT: 1 in the game's menu; smaller in the launcher (its text is smaller), with square corners. Known at the
+    // first update, once both menus' documents exist.
+    float scale = 1.0f;
+    float radius = 8.0f;
+    bool scale_known = false;
+    std::string pending_jump; // JFG PORT: a mod picked in the details' Requires / Required by lists, selected next update
 
     ConfigSubMenu *config_sub_menu;
 };

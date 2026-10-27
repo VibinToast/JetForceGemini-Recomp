@@ -8,7 +8,9 @@
 #include <string>
 #include <unordered_map>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
+#include "jfg_api.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
@@ -39,6 +41,29 @@ extern "C" int jfg_shadow_alpha(int alpha) {
     return std::min(255, (alpha * g.shadow_opacity + 50) / 100);
 }
 
+namespace {
+constexpr uint32_t ADDR_shadowGfx = 0x800F2F70; // D_800F2F70: Gfx*, the list func_8001B8E0 draws the shadows into
+}
+
+// func_8001B8E0's wrapper: after the game's code, each batch's gDPSetPrimColor(0, 0, 0, 0, 0, alpha) in what it wrote
+// gets jfg_shadow_alpha's alpha (the one after each batch, all 0xFF, puts the colour back and is left). At 0 the batch
+// is drawn fully transparent.
+JFG_WRAP(func_8001B8E0_1C4E0) {
+    using namespace jfg;
+    g_rdram = rdram;
+    const uint32_t start = rd32(ADDR_shadowGfx);
+    func_8001B8E0_1C4E0_orig(rdram, ctx);
+    g_rdram = rdram;
+    if (g.shadow_opacity == 100) return;
+    const uint32_t end = rd32(ADDR_shadowGfx);
+    if (!valid_ptr(start) || !valid_ptr(end) || end < start || end - start > 0x10000) return;
+    for (uint32_t cmd = start; cmd < end; cmd += 8) {
+        const uint32_t alpha = rd32(cmd + 4);
+        if (rd32(cmd) != 0xFA000000u || alpha == 0 || alpha > 0xFF) continue;
+        wr32(cmd + 4, (uint32_t)jfg_shadow_alpha((int)alpha));
+    }
+}
+
 // "Hit flash opacity": entry of frontFlashScreen. The characters' control code (overlays 15-17) calls it with red
 // (0xFF0000FF) for a few ticks after a hit; fxScreenEffect then draws the picture again multiplied by that colour
 // (combiner TEXEL0 * PRIMITIVE), which leaves only its red. Raising green and blue towards white weakens the tint
@@ -59,11 +84,12 @@ extern "C" uint32_t jfg_hit_flash(uint32_t color) {
 // paused and a reused object address hides nothing else. Not in a Floyd mission or a co-op game, where a player
 // flies him.
 static int g_floyd_kind = -1;
+static uint32_t g_floyd_obj = 0; // his object as last seen by sidekickControl
 static bool g_floyd_muted = false;
 constexpr uint32_t ADDR_cooperativeGame = 0x800A4FC8; // u8
 
 static bool floyd_hidden(uint32_t obj) {
-    if (!g.hide_floyd || g_floyd_kind < 0 || !valid_ptr(obj) || (int16_t)rd16(obj + 0x48) != g_floyd_kind) return false;
+    if (!g.hide_floyd || g_floyd_kind < 0 || !valid_ptr(obj) || Obj::Kind::get(obj) != g_floyd_kind) return false;
     return rd8(ADDR_robotMission) == 0 && rd8(ADDR_cooperativeGame) == 0;
 }
 
@@ -71,35 +97,30 @@ extern "C" void jfg_floyd_seen(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t obj = (uint32_t)ctx->r4;
     if (!valid_ptr(obj)) return;
-    const int kind = (int16_t)rd16(obj + 0x48);
+    const int kind = Obj::Kind::get(obj);
     if (kind != g_floyd_kind && std::getenv("JFG_DEBUG_FLOYD")) std::fprintf(stderr, "[jfg] Floyd: behaviorId %d\n", kind);
     g_floyd_kind = kind;
+    g_floyd_obj = obj;
     g_floyd_muted = floyd_hidden(obj);
 }
 
-// sidekickControl's return.
+// After sidekickControl (its wrapper, jfg_api.cpp).
 extern "C" void jfg_floyd_done(void) { g_floyd_muted = false; }
 
-// Entry of amSndPlay(id, handle): 1 = play nothing.
-extern "C" int jfg_floyd_mute(uint32_t id) {
-    if (!g_floyd_muted) return 0;
+// jfg_on_sound_play handler: nothing plays while sidekickControl runs for a hidden Floyd.
+extern "C" void jfg_floyd_mute(uint8_t* rdram_, recomp_context* ctx) {
+    if (!g_floyd_muted) return;
+    g_rdram = rdram_;
+    const uint32_t sound = (uint32_t)ctx->r4;
     static const bool log = std::getenv("JFG_DEBUG_FLOYD") != nullptr;
-    if (log) std::fprintf(stderr, "[jfg] Floyd: sound 0x%X muted\n", id & 0xFFFF);
-    return 1;
+    if (log) std::fprintf(stderr, "[jfg] Floyd: sound 0x%X muted\n", rd32(sound + api::value_cancel::VALUE) & 0xFFFF);
+    wr32(sound + api::value_cancel::CANCEL, 1);
 }
 
-extern "C" int jfg_hide_object(uint8_t* rdram_, recomp_context* ctx) {
+extern "C" void jfg_hide_object(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    return floyd_hidden((uint32_t)ctx->r7) ? 1 : 0;
-}
-
-// shadowGenerate, after the object ($s7) and its shadow data ($s6) are loaded: no shadow data, no shadow.
-extern "C" void jfg_hide_shadow(uint8_t* rdram_, recomp_context* ctx) {
-    g_rdram = rdram_;
-    if (!floyd_hidden((uint32_t)ctx->r23)) return;
-    static bool logged = false;
-    if (!logged && ctx->r22 != 0 && std::getenv("JFG_DEBUG_FLOYD")) { std::fprintf(stderr, "[jfg] Floyd: shadow skipped\n"); logged = true; }
-    ctx->r22 = 0;
+    const uint32_t draw = (uint32_t)ctx->r4;
+    if (floyd_hidden(rd32(draw + api::value_cancel::VALUE))) wr32(draw + api::value_cancel::CANCEL, 1);
 }
 
 // "Disable LOD". objPrintModelObject draws an object with its next, simpler model (model index + 1) when the object
@@ -112,7 +133,7 @@ void apply_no_lod(recomp_context* ctx) {
     //   + 0xCC float: LOD distance (objPrintModelObject); + 0x16 s16: draw distance (track.c func_80015ED8 skips the
     //   object beyond it, and fades it out just before; 0 = always drawn).
     struct Field { uint32_t offset; uint32_t size; const bool* option; std::unordered_map<uint32_t, uint32_t> saved; };
-    static Field fields[2] = { { 0xCC, 4, &g.no_lod, {} }, { 0x16, 2, &g.far_objects, {} } };
+    static Field fields[2] = { { ObjDef::LodDistance::offset, 4, &g.no_lod, {} }, { ObjDef::DrawRange::offset, 2, &g.far_objects, {} } };
     static int saved_level = -1;
     const int level = (int16_t)rd16(ADDR_currentLevel);
     if (level != saved_level) { for (Field& f : fields) f.saved.clear(); saved_level = level; }
@@ -128,7 +149,7 @@ void apply_no_lod(recomp_context* ctx) {
     for (int i = first; i < last; i++) {
         const uint32_t obj = rd32(list + 4 * i);
         if (!valid_ptr(obj)) continue;
-        const uint32_t def = rd32(obj + 0x40);
+        const uint32_t def = Obj::Def::get(obj);
         if (!valid_ptr(def)) continue;
         for (Field& f : fields) {
             const uint32_t value = f.size == 4 ? rd32(def + f.offset) : rd16(def + f.offset);
@@ -136,7 +157,7 @@ void apply_no_lod(recomp_context* ctx) {
             if (*f.option) {
                 if (value != 0 && f.saved.find(def) == f.saved.end()) {
                     f.saved[def] = value; put(0);
-                    if (log) std::fprintf(stderr, "[jfg] object %d (definition %08X): field +0x%X was %08X, now 0\n", (int)(int16_t)rd16(obj + 0x48), def, f.offset, value);
+                    if (log) std::fprintf(stderr, "[jfg] object %d (definition %08X): field +0x%X was %08X, now 0\n", (int)Obj::Kind::get(obj), def, f.offset, value);
                 }
             }
             else {
@@ -256,5 +277,59 @@ std::string depth_fog_status() {
 // Read by the renderer (src/renderer/renderer.cpp): the texture and output filtering options.
 extern "C" int jfg_texture_three_point(void) { return g.texture_filter == 0 ? 1 : 0; }
 extern "C" int jfg_output_filtering(void) { return g.output_filter; }
+
+// jfg_on_screen_flash handler: the hit flash's colour (jfg_hit_flash); 0 cancels it.
+extern "C" void jfg_hit_flash_event(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t flash = (uint32_t)ctx->r4;
+    const uint32_t color = jfg_hit_flash(rd32(flash + api::value_cancel::VALUE));
+    if (color == 0) wr32(flash + api::value_cancel::CANCEL, 1);
+    else wr32(flash + api::value_cancel::VALUE, color);
+}
+
+// Floyd's shadow: shadowGenerate makes shadows from each object's shadow data (+0x50) and skips an object without any.
+// For a hidden Floyd it's blanked while shadowGenerate runs.
+JFG_WRAP(shadowGenerate) {
+    g_rdram = rdram;
+    const uint32_t floyd = g_floyd_obj;
+    const uint32_t shadow = floyd_hidden(floyd) ? Obj::Shadow::get(floyd) : 0;
+    if (shadow != 0) {
+        static bool logged = false;
+        if (!logged && std::getenv("JFG_DEBUG_FLOYD")) { std::fprintf(stderr, "[jfg] Floyd: shadow skipped\n"); logged = true; }
+        Obj::Shadow::set(floyd, 0);
+    }
+    shadowGenerate_orig(rdram, ctx);
+    if (shadow != 0) {
+        g_rdram = rdram;
+        Obj::Shadow::set(floyd, shadow);
+    }
+}
+
+// camSetFOV(fov, force): the camera keeps the game's FOV (camera +0x2C); a zoomed scope divides it by its zoom. Unzoomed,
+// the FOV option scales what is applied (jfg_fov): the game's code runs with the scaled FOV and the camera's own value
+// is put back. Zoomed, nothing changes (jfg_fov only notes the FOV for the ambient occlusion pass).
+JFG_WRAP(camSetFOV) {
+    g_rdram = rdram;
+    // A mod's own camera with a field of view of its own (jfg_camera_set): that FOV, as it is (no FOV option).
+    if (const float mod_fov = jfg::api::mod_camera_fov(); mod_fov > 0.0f) {
+        ctx->f12.fl = mod_fov;
+        camSetFOV_orig(rdram, ctx);
+        return;
+    }
+    const float fov = ctx->f12.fl;
+    const uint32_t cam = rd32(ADDR_cameraNo) & 3;
+    const uint32_t zoomed = rd8(0x800A3174u + cam);
+    float applied = fov;
+    if (zoomed != 0) applied *= 1.0f / ((0.25f * (rdf(0x800A317Cu + cam * 4) - 1.0f)) + 1.0f);
+    const float wanted = jfg_fov(rdram, applied, zoomed);
+    if (zoomed != 0 || wanted == applied) {
+        camSetFOV_orig(rdram, ctx);
+        return;
+    }
+    ctx->f12.fl = wanted;
+    camSetFOV_orig(rdram, ctx);
+    g_rdram = rdram;
+    Camera::Fov::set(ADDR_cameraActorArray + cam * Camera::Size, fov);
+}
 
 } // namespace jfg

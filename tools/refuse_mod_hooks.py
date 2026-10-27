@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Before N64Recomp: list the functions mods can't hook safely, so they report "cannot be hooked".
+
+To hook a function the runtime recompiles it again at start-up from the ROM (src/jfg/jfg_mods.cpp gives it the
+pre-linked copy). The regenerated function has only what the ROM has, so it would lose:
+  1. The port's own changes: every function with a [[patches.hook]] or [[patches.instruction]] in jfg.us.toml, and
+     gen_anim_data (rewritten by tools/merge_gen_anim_data.py). A mod hook on one of them would silently turn that
+     port feature off for the whole run (it happened to the 60 fps squad cadence, now done outside those functions).
+  2. Live linker values: the offline build reads the instructions the game's linker patches while it runs from RDRAM
+     (tools/fix_dynamic_relocs.py, include/jfg_dynamic.h); a regenerated function bakes them. Calls (`jal`) are fine
+     baked, they go through TrapDanglingJump, the game's own lazy linker. Addresses of another overlay's data
+     (`lui`/`lo16`) are not.
+The list goes to <RecompiledFuncs dir>/unhookable_funcs.txt, which jfg.us.toml names (unhookable_funcs_list): N64Recomp
+gives each listed function rom_size 0 in recomp_overlays.inl, which the runtime (librecomp mods.cpp) refuses to hook
+with CannotBeHooked, naming the function's section and address. Replacing them (RECOMP_PATCH) is unaffected; a mod that
+replaces one of the port's functions takes over that function, port change and all.
+
+Usage: refuse_mod_hooks.py <RecompiledFuncs dir> <dynamic_relocs.json> <symbols.toml> <jfg.us.toml>
+"""
+import bisect, json, os, re, sys
+
+try:
+    import tomllib  # Python 3.11+
+except ImportError:  # Python 3.10 (Ubuntu 22.04, the Linux release build): read_patches' own reader
+    tomllib = None
+
+
+def functions_by_section(syms_path):
+    secs, cur = {}, None
+    for line in open(syms_path):
+        m = re.match(r'name = "\.(\w+)"', line)
+        if m:
+            cur = m.group(1)
+            secs[cur] = []
+        m = re.match(r'\s+\{ name = "([^"]+)", vram = (0x[0-9A-Fa-f]+), size = (0x[0-9A-Fa-f]+)', line)
+        if m:
+            secs[cur].append((int(m.group(2), 16), int(m.group(3), 16), m.group(1)))
+    return {k: sorted(v) for k, v in secs.items()}
+
+
+def owner(funcs, addr):
+    i = bisect.bisect_right([f[0] for f in funcs], addr) - 1
+    if i >= 0 and funcs[i][0] <= addr < funcs[i][0] + funcs[i][1]:
+        return funcs[i][2]
+    return None
+
+
+def data_site_functions(dyn_path, secs):
+    dyn = json.load(open(dyn_path))
+    out = set()
+    for s in dyn["main"]["sites"]:
+        if s["kind"] in ("hi", "lo"):
+            out.add(owner(secs["main"], dyn["main"]["vram"] + s["off"]))
+    for num, ov in dyn["overlays"].items():
+        for s in ov["sites"]:
+            if s["kind"] in ("hi", "lo"):
+                out.add(owner(secs["overlay_" + num], ov["link"] + s["off"]))
+    if None in out:
+        sys.exit("refuse_mod_hooks: a data site is outside every function")
+    return out
+
+
+def strip_comment(line):
+    quoted = False
+    for i, c in enumerate(line):
+        if c == '"':
+            quoted = not quoted
+        elif c == "#" and not quoted:
+            return line[:i]
+    return line
+
+
+def read_patches(config_path):
+    """jfg.us.toml's [patches]: with tomllib, or without it only what this script uses (the func of each
+    [[patches.hook]] and [[patches.instruction]], and the ignored and renamed arrays)."""
+    if tomllib is not None:
+        return tomllib.load(open(config_path, "rb")).get("patches", {})
+    patches = {"hook": [], "instruction": []}
+    table, array = None, None
+    for line in open(config_path, encoding="utf-8"):
+        line = strip_comment(line).strip()
+        if array is not None:
+            patches[array] += re.findall(r'"([^"]*)"', line)
+            if "]" in line:
+                array = None
+            continue
+        m = re.fullmatch(r"\[\[patches\.(hook|instruction)\]\]", line)
+        if m:
+            table = m.group(1)
+            patches[table].append({})
+            continue
+        if line.startswith("["):
+            table = "patches" if line == "[patches]" else None
+            continue
+        m = re.match(r'func\s*=\s*"([^"]*)"', line)
+        if m and table in ("hook", "instruction"):
+            patches[table][-1]["func"] = m.group(1)
+        m = re.match(r"(ignored|renamed)\s*=\s*\[(.*)", line)
+        if m and table == "patches":
+            patches[m.group(1)] = re.findall(r'"([^"]*)"', m.group(2))
+            if "]" not in m.group(2):
+                array = m.group(1)
+    if any("func" not in p for p in patches["hook"] + patches["instruction"]):
+        sys.exit("refuse_mod_hooks: a [[patches.hook]] or [[patches.instruction]] without func in " + config_path)
+    return patches
+
+
+def port_changed_functions(patches):
+    out = {h["func"] for h in patches.get("hook", [])} | {p["func"] for p in patches.get("instruction", [])}
+    out.add("gen_anim_data")
+    return out
+
+
+def main(out_dir, dyn_path, syms_path, config_path):
+    secs = functions_by_section(syms_path)
+    data_sites = data_site_functions(dyn_path, secs)
+    patches = read_patches(config_path)
+    port = port_changed_functions(patches)
+    # Not in the function table under their own name, nothing to do: N64Recomp skips ignored functions and adds
+    # _recomp to renamed ones.
+    skipped = set(patches.get("ignored", [])) | set(patches.get("renamed", []))
+    if data_sites & skipped:
+        sys.exit("refuse_mod_hooks: %s has live data addresses but is ignored or renamed"
+                 % ", ".join(sorted(data_sites & skipped)))
+    missing = sorted(port & skipped)
+    refused = sorted((data_sites | port) - skipped)
+    with open(os.path.join(out_dir, "unhookable_funcs.txt"), "w", newline="\n") as f:
+        f.write("# Generated by tools/refuse_mod_hooks.py: functions mods can't hook (jfg.us.toml, unhookable_funcs_list).\n")
+        f.write("".join(name + "\n" for name in refused))
+    print("refuse_mod_hooks: %d functions can't be hooked by mods (%d changed by the port, %d with live data addresses)"
+          % (len(refused), len(port) - len(missing), len(data_sites)))
+    if missing:
+        print("refuse_mod_hooks: not in the function table, nothing to do: " + ", ".join(missing))
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 5:
+        sys.exit(__doc__)
+    main(*sys.argv[1:])

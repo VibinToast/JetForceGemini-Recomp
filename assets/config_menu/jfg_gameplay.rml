@@ -20,7 +20,7 @@
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(1)">
                         <label class="config-option__title">Auto Save Interval</label>
                         <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{auto_save_minutes}} min</label>
+                            <label class="config-option__range-label">{{auto_save_minutes}}<span> min</span></label>
                             <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(1)" id="jfg_auto_save_minutes_input" type="range" min="0" max="30" style="flex: 1; margin: 0dp; nav-up: #jfg_auto_save_on; nav-down: #jfg_keep_area_progress_on;" data-value="auto_save_minutes"/>
                         </div>
                     </div>

@@ -16,7 +16,8 @@ static RspExitReason empty_rsp_task(uint8_t*, uint32_t) {
 RspUcodeFunc* get_rsp_microcode(const OSTask* task) {
     switch (task->t.type) {
     case M_AUDTASK:
-        // DKR occasionally submits an audio task with no commands so the
+        // Rare's audio code (found in Diddy Kong Racing, the base project) occasionally submits an audio task
+        // with no commands so the
         // scheduler can keep its normal completion flow. The retail RSP has
         // no work to perform; entering the generated ABI3 interpreter would
         // instead read a stale command and jump through an empty table slot.

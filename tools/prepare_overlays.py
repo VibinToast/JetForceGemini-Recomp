@@ -16,7 +16,8 @@ This tool reads the linker tables straight from the ROM and writes:
                  makes the generated C read those instructions' live values from emulated RDRAM.
 
 Usage: prepare_overlays.py <rom> <decomp jfg.us.elf | -> <out_rom> <out_syms.toml | -> <out_dyn.json>
-       With "-" for the ELF only the pre-linked ROM and the JSON are written (the checked-in symbols are reused).
+       With "-" for the ELF only the pre-linked ROM and the JSON are written (JFGRecompSyms' symbols are reused).
+       To regenerate the symbol files themselves, use tools/gen_reference_syms.py.
 """
 import json, struct, subprocess, sys, collections
 

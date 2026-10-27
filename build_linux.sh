@@ -48,8 +48,8 @@ cmake --build "$OUT/build-tools" --parallel --target N64RecompCLI RSPRecomp
 # The game code is generated again only when something it is made from changed (the hash below, saved with it), so
 # a rebuild after a change in src/ or lib/ compiles only that. JFG_REGENERATE=1 generates it again anyway.
 STAMP=RecompiledFuncs/.inputs_hash
-inputs_hash() { python3 tools/recomp_inputs_hash.py "$ROM" jfg.us.toml jfg.us.syms.toml rsp-aspMain.jfg.toml tools/*.py \
-  tools/jfg.us.dynamic_relocs.json "$OUT/build-tools/N64Recomp" "$OUT/build-tools/RSPRecomp"; }
+inputs_hash() { python3 tools/recomp_inputs_hash.py "$ROM" jfg.us.toml JFGRecompSyms/jfg.us.syms.toml rsp-aspMain.jfg.toml tools/*.py \
+  tools/jfg.us.dynamic_relocs.json tools/wrapped_funcs.txt "$OUT/build-tools/N64Recomp" "$OUT/build-tools/RSPRecomp"; }
 if [ -z "${JFG_REGENERATE:-}" ] && [ -f "$STAMP" ] && [ -f rsp/aspMain.cpp ] && [ "$(cat "$STAMP")" = "$(inputs_hash)" ]; then
   say "game code is up to date (ROM, recompiler configs and tools unchanged): not generated again"
 else
@@ -59,10 +59,11 @@ else
   # Recompiler input only: a copy of the ROM with the overlays pre-linked at private addresses. Never used at run time.
   python3 tools/prepare_overlays.py baserom.us.z64 - baserom.us.recomp.z64 - tools/jfg.us.dynamic_relocs.json
   rm -rf RecompiledFuncs && mkdir RecompiledFuncs
+  python3 tools/refuse_mod_hooks.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json JFGRecompSyms/jfg.us.syms.toml jfg.us.toml
   "$OUT/build-tools/N64Recomp" jfg.us.toml > recomp.log 2>&1 || { tail -20 recomp.log; die "N64Recomp failed (full output: $HERE/recomp.log)"; }
   "$OUT/build-tools/RSPRecomp" rsp-aspMain.jfg.toml       # audio microcode -> rsp/aspMain.cpp
   python3 tools/merge_gen_anim_data.py RecompiledFuncs
-  python3 tools/fix_dynamic_relocs.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json baserom.us.recomp.z64 jfg.us.syms.toml
+  python3 tools/fix_dynamic_relocs.py RecompiledFuncs tools/jfg.us.dynamic_relocs.json baserom.us.recomp.z64 JFGRecompSyms/jfg.us.syms.toml
   inputs_hash > "$STAMP"   # last, so a run that stopped half-way generates again next time
 fi
 
@@ -71,6 +72,12 @@ say "building (10-40 minutes the first time)"
 cmake -S . -B "$OUT/build-linux" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 cmake --build "$OUT/build-linux" --parallel
 [ -x "$OUT/build-linux/JetForceGeminiRecompiled" ] || die "build finished but the executable is missing"
+# The game's overlay pre-linker (for mods' hooks) must give the bytes prepare_overlays.py gave the recompiler.
+if [ -f baserom.us.recomp.z64 ]; then
+  "$OUT/build-linux/jfg_prelink_check" "$ROM" baserom.us.recomp.z64 || die "the two overlay pre-linkers differ - see above"
+else
+  say "prelink check skipped: no baserom.us.recomp.z64 (pre-generated game code)"
+fi
 
 # ---- 4. game folder --------------------------------------------------------
 # Everything the game needs to run, in one place. Saves and settings are written here as well.
