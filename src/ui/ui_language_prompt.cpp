@@ -5,7 +5,7 @@
 // Play page or in the settings. Its own texts are in the language the player points at (focus or mouse), from that
 // locale's "ui" (jfg::locale::ui_in), not the one saved, so a player who reads only that language understands it. With
 // English alone there is nothing to ask, so nothing is saved and the question waits
-// for a locale file. JFG_DEBUG_LANGUAGE_PROMPT=1 asks even when a language is saved (window captures); =<id> also starts in that
+// for a locale file. Closed without a pick (the game started, Esc), it saves English: it is asked only once. JFG_DEBUG_LANGUAGE_PROMPT=1 asks even when a language is saved (window captures); =<id> also starts in that
 // language.
 #include <algorithm>
 #include <cstdio>
@@ -32,6 +32,7 @@ constexpr char LEGEND[] = "Unofficial translations come from players or are mach
 
 struct {
     bool decided = false; // asked this run, or nothing to ask
+    bool answered = false; // a language was picked, or the question was closed and English saved
     ui::ContextId context = ui::ContextId::null();
     ui::Button* first = nullptr;
     ui::Label* title = nullptr;
@@ -90,6 +91,7 @@ void style_row_button(ui::Button* b) {
 }
 
 void pick(const std::string& id) {
+    g_prompt.answered = true;
     jfg::locale::choose(id);
     ui::hide_context(g_prompt.context);
 }
@@ -198,8 +200,15 @@ void build(const std::vector<std::pair<std::string, std::string>>& languages) {
 // Every UI frame (src/ui/ui_state.cpp): opens the question once, at the first frame it is needed.
 void jfg_language_prompt_frame() {
     if (g_prompt.decided) {
+        if (g_prompt.context == ui::ContextId::null()) return;
         // The launcher is shown after the first frames; keep the question over it while it is open.
-        if (g_prompt.context != ui::ContextId::null() && ui::is_context_shown(g_prompt.context)) g_prompt.context.get_document()->PullToFront();
+        if (ui::is_context_shown(g_prompt.context)) { g_prompt.context.get_document()->PullToFront(); return; }
+        // Closed without a pick (the game started, Esc): English is saved, so it is asked only once.
+        if (!g_prompt.answered) {
+            g_prompt.answered = true;
+            static const bool forced = std::getenv("JFG_DEBUG_LANGUAGE_PROMPT") != nullptr;
+            if (!forced) jfg::locale::choose("");
+        }
         return;
     }
     g_prompt.decided = true;
