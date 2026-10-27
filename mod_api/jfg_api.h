@@ -108,7 +108,8 @@ RECOMP_IMPORT("*", void jfg_level_floor(JfgFloor* q));
 // Takes damage (256 = one unit of health) from every object with health whose hit centre is in the sphere, except
 // source, and gives the same to the breakable solid objects it touches (crates, breakable props: a stock crate takes
 // about 3 units). targets: JFG_TARGET_HEALTH, JFG_TARGET_PROPS, or 0 for both. Returns how many objects with health it
-// hit, and writes how many breakables to props_hit. A big blow in one hit makes an enemy burst (overkill).
+// hit, and writes how many breakables to props_hit. Health stops at 0: an enemy dies the game's usual way. For an
+// overkill (the enemy bursts, as from a big blast), set its health to -0x8000 with jfg_object_set_health.
 #define JFG_TARGET_HEALTH 1
 #define JFG_TARGET_PROPS 2
 typedef struct {
@@ -150,6 +151,11 @@ RECOMP_IMPORT("*", void jfg_screen_flash(unsigned int rgba));
 // An object's health (256 per unit; the heroes' and enemies' alike), -1 if it has none; and setting it.
 RECOMP_IMPORT("*", int jfg_object_health(void* object));
 RECOMP_IMPORT("*", void jfg_object_set_health(void* object, int health));
+
+// An enemy's type, -1 if the object is not one: a squad member's object id, the same for its whole squadron (BlueAnt
+// 0x78, GreenAnt 0x8C, BigShieldAnt 0x9C, ...). A squad member's health below -(its full health / 8) (at least 2 units,
+// at most 10) makes it burst on its next update (the game's overkill).
+RECOMP_IMPORT("*", int jfg_enemy_type(void* object));
 
 // --- event data ---------------------------------------------------------------------------------------------------
 

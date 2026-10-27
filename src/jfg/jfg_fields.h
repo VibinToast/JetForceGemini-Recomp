@@ -204,6 +204,8 @@ namespace SquadronData {
 using MemberCount = Field<uint8_t, 0x00>;
 using FirstMember = Field<uint32_t, 0x58>; // its first member's object
 using Created     = Field<uint8_t, 0x63>;  // members brought into play (meaning partly a guess)
+using MemberHealth = Field<int16_t, 0x2A>; // each member's health (256 per unit)
+using BaddyType   = Field<uint16_t, 0x2C>; // its members' type: their object id (BlueAnt 0x78, ...)
 }
 
 // A squad member (Obj::Data of a squad member's object).

@@ -365,6 +365,28 @@ void object_set_health(uint8_t* rdram_, recomp_context* ctx) {
     const uint32_t dmg = valid_ptr(obj) ? Obj::Damage::get(obj) : 0;
     if (valid_ptr(dmg)) Damage::Health::set(dmg, (int16_t)std::clamp((int)ctx->r5, -0x8000, 0x7FFF));
 }
+
+// jfg_enemy_type(obj): a squad member's type (its squadron's baddy type, the member's object id), -1 for anything else.
+void enemy_type(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    ctx->r2 = (gpr)-1;
+    const uint32_t data = valid_ptr(obj) ? Obj::Data::get(obj) : 0;
+    const uint32_t squadron = valid_ptr(data) ? SquadMemberData::Squadron::get(data) : 0;
+    const uint32_t sdata = valid_ptr(squadron) ? Obj::Data::get(squadron) : 0;
+    if (!valid_ptr(sdata)) return;
+    // Only a member of the squadron's own list (other kinds keep something else at +0x24).
+    uint32_t member = SquadronData::FirstMember::get(sdata);
+    for (int n = 0; n < 256 && valid_ptr(member); n++) {
+        if (member == obj) {
+            ctx->r2 = (gpr)SquadronData::BaddyType::get(sdata);
+            return;
+        }
+        const uint32_t mdata = Obj::Data::get(member);
+        if (!valid_ptr(mdata)) return;
+        member = SquadMemberData::NextMember::get(mdata);
+    }
+}
 } // namespace
 
 // While a mod sets the camera (jfg_camera_set): the port's own camera features (the dual-stick and over-the-shoulder
@@ -394,6 +416,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_camera_set", camera_set);
     recomp::overlays::register_base_export("jfg_object_health", object_health);
     recomp::overlays::register_base_export("jfg_object_set_health", object_set_health);
+    recomp::overlays::register_base_export("jfg_enemy_type", enemy_type);
 }
 
 } // namespace jfg::api
