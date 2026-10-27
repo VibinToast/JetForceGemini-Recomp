@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "json/json.hpp"
+#include "../runtime/support.hpp"
 #include "librecomp/game.hpp"
 #include "jfg_assets.h"
 #include "jfg_locale.h"
@@ -520,17 +521,30 @@ void load_saved_choice() {
     }
 }
 
-// locales/*.json, by name.
+// The locale files, by name: the ones that ship with the port (assets/locales) and the player's own (locales/ in the
+// game's folder); a player's file replaces a shipped one of the same name.
 std::vector<std::filesystem::path> locale_files() {
-    std::vector<std::filesystem::path> files;
-    std::error_code ec;
-    for (const auto& e : std::filesystem::directory_iterator(FOLDER, ec)) {
-        std::string ext = e.path().extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-        if (e.is_regular_file(ec) && ext == ".json") files.push_back(e.path());
+    std::map<std::string, std::filesystem::path> by_name;
+    for (const std::filesystem::path& folder : { dino::runtime::get_asset_path("locales"), std::filesystem::path(FOLDER) }) {
+        std::error_code ec;
+        for (const auto& e : std::filesystem::directory_iterator(folder, ec)) {
+            std::string ext = e.path().extension().string(), name = e.path().stem().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            if (e.is_regular_file(ec) && ext == ".json") by_name[name] = e.path();
+        }
     }
-    std::sort(files.begin(), files.end());
+    std::vector<std::filesystem::path> files;
+    for (const auto& [name, path] : by_name) files.push_back(path);
     return files;
+}
+
+// Locale `id`'s file (locale_files' choice): the player's, else the shipped one.
+std::filesystem::path locale_path(const std::string& id) {
+    const std::filesystem::path own = std::filesystem::path(FOLDER) / (id + ".json");
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(own, ec)) return own;
+    return dino::runtime::get_asset_path("locales") / (id + ".json");
 }
 
 // Under g_mutex: the Language list from `locales` (only id, name and english_name are read). english.json names the
@@ -579,7 +593,7 @@ extern "C" void jfg_locale_build_registry(void) {
     set_list(g_locales);
     load_choice();
     char line[160];
-    std::snprintf(line, sizeof line, "locale: %zu locale files in %s/", g_locales.size(), FOLDER);
+    std::snprintf(line, sizeof line, "locale: %zu locale files (assets/locales and %s/)", g_locales.size(), FOLDER);
     log(line);
 }
 
@@ -706,7 +720,7 @@ void load_ui() {
     g_ui_loaded = true;
     std::string id = jfg::locale::chosen();
     if (id.empty()) id = ENGLISH_ID;
-    std::ifstream f(std::filesystem::path(FOLDER) / (id + ".json"), std::ios::binary);
+    std::ifstream f(locale_path(id), std::ios::binary);
     if (!f) return;
     const std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     const json j = json::parse(bytes, nullptr, false);
@@ -776,7 +790,7 @@ std::string ui_in(const std::string& id, const std::string& english) {
     auto it = g_ui_in.find(id);
     if (it == g_ui_in.end()) {
         std::map<std::string, std::string> ui;
-        std::ifstream f(std::filesystem::path(FOLDER) / ((id.empty() ? std::string(ENGLISH_ID) : id) + ".json"), std::ios::binary);
+        std::ifstream f(locale_path(id.empty() ? std::string(ENGLISH_ID) : id), std::ios::binary);
         const std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
         const json j = json::parse(bytes, nullptr, false);
         if (!j.is_discarded() && j.is_object() && j.contains("ui") && j["ui"].is_object())
