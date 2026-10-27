@@ -510,15 +510,8 @@ void load_saved_choice() {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.rfind("language=", 0) == 0) { g_chosen = migrate(line.substr(9)); return; }
     }
-    // Before locales, the Language option was a slot number (jfg_port_options.txt "language="), read here since the
-    // options aren't loaded yet at start-up.
-    std::ifstream options("jfg_port_options.txt");
-    while (std::getline(options, line)) {
-        if (line.rfind("language=", 0) == 0) {
-            const int slot = std::atoi(line.c_str() + 9);
-            if (slot > 0 && slot < 5) g_chosen = SLOT_IDS[slot];
-        }
-    }
+    // No saved choice: English until the player picks one (the first-start question asks; an old version's Language
+    // slot in jfg_port_options.txt no longer counts, so a skipped question leaves English).
 }
 
 // The locale files, by name: the ones that ship with the port (assets/locales) and the player's own (locales/ in the

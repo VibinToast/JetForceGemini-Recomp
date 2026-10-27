@@ -192,9 +192,10 @@ static void refresh_official(bool scan) {
     if (state.text != official_text) { official_text = state.text; model_handle.DirtyVariable("official_text"); }
     const Rml::String result = state.busy ? Rml::String() : state.text;
     if (result != official_result) { official_result = result; model_handle.DirtyVariable("official_result"); }
-    if (!scan) return;
-    // The Play page's bar: the first installed official pack with a newer version out.
-    const std::vector<JfgOfficialUpdate> updates = jfg_launcher_show_official_pack() ? jfg_official_updates() : std::vector<JfgOfficialUpdate>{};
+    // The Play page's bar: the first installed official pack with a newer version out (looked up when scanning, its
+    // text made on every refresh so it follows a change of language).
+    static std::vector<JfgOfficialUpdate> updates;
+    if (scan) updates = jfg_launcher_show_official_pack() ? jfg_official_updates() : std::vector<JfgOfficialUpdate>{};
     const bool update = !updates.empty();
     Rml::String title, text, variant;
     if (update) {
@@ -206,6 +207,7 @@ static void refresh_official(bool scan) {
     if (title != official_update_title) { official_update_title = title; model_handle.DirtyVariable("official_update_title"); }
     if (text != official_update_text) { official_update_text = text; model_handle.DirtyVariable("official_update_text"); }
     official_update_variant = variant;
+    if (!scan) return;
     if (jfg_launcher_show_official_pack() != official_shown) {
         official_shown = jfg_launcher_show_official_pack();
         model_handle.DirtyVariable("official_shown");
