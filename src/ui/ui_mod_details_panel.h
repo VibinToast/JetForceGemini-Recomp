@@ -54,6 +54,9 @@ class ModDetailsPanel : public Element {
 public:
     ModDetailsPanel(Element *parent);
     virtual ~ModDetailsPanel();
+protected:
+    void process_event(const Event &e) override;
+public:
     void set_mod_details(const recomp::mods::ModDetails& details, const std::string &thumbnail, bool toggle_checked, bool toggle_enabled, bool toggle_label_visible, bool configure_enabled);
     void set_mod_toggled_callback(std::function<void(bool)> callback);
     void set_mod_configure_pressed_callback(std::function<void()> callback);
@@ -103,6 +106,8 @@ private:
 
     void enable_toggle_checked(bool checked);
     void configure_button_pressed();
+    bool dependencies_pending = false; // JFG PORT: build_dependencies at the next update (see request_dependencies)
+    void request_dependencies();
     void build_dependencies();
     void apply_dependency_navigation();
     void add_section_title(const std::string &text);

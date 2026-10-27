@@ -331,7 +331,23 @@ void ModDetailsPanel::refresh_status() {
     enable_label->set_text(note);
     enable_label->set_display(note.empty() ? Display::None : Display::Block);
 
-    build_dependencies();
+    request_dependencies();
+}
+
+// JFG PORT: the dependency rows are made again at the next UI update, not now: selecting a mod often comes from an event
+// of one of those rows (a click on it, or the focus leaving it for the mod's card), and deleting the row while the event
+// is still being handled crashed the menu.
+void ModDetailsPanel::request_dependencies() {
+    if (get_current_context() == ContextId::null()) { build_dependencies(); return; } // no update to wait for
+    dependencies_pending = true;
+    queue_update();
+}
+
+void ModDetailsPanel::process_event(const Event &e) {
+    if (e.type == EventType::Update && dependencies_pending) {
+        dependencies_pending = false;
+        build_dependencies();
+    }
 }
 
 void ModDetailsPanel::add_section_title(const std::string &text) {
