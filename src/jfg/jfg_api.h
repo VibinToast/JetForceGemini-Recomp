@@ -77,7 +77,6 @@ constexpr uint32_t GFX = 0x00, WIDTH = 0x04, HEIGHT = 0x08, SIZE = 0x0C;
 
 // The hero API (jfg_hero_api.cpp): helpers, and whether a mod controls a hero (boyControl's wrapper asks).
 void register_hero_api();
-void register_api5(); // the official mods' helpers (jfg_mod_api5.cpp)
 bool hero_taken_over(int character);
 // Taken over and not handed back to the game's code (jfg_hero_game_control): the mod moves it this tick.
 bool hero_mod_controlled(int character);

@@ -10,6 +10,7 @@
 #include "librecomp/mods.hpp"
 #include "librecomp/overlays.hpp"
 #include "jfg_api.h"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -53,6 +54,10 @@ void get_tick_scale(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     ctx->f0.fl = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6) / 2.0f;
 }
+
+// jfg_aim_lock(int on): 0 = the reticle no longer jumps onto an enemy it passes over (hitPlayerAimCheck's wrapper).
+bool g_aim_lock = true;
+void aim_lock(uint8_t*, recomp_context* ctx) { g_aim_lock = ctx->r4 != 0; }
 
 void get_level(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
@@ -166,7 +171,7 @@ void register_api() {
     jfg::register_world_api(); // planets and galaxies (jfg_worldmap.cpp)
     jfg::register_blood_api(); // blood colours, rainbow, Blood stays, Body parts stay (jfg_gore.cpp)
     recomp::overlays::register_base_export("jfg_floyd_hide", jfg_api_floyd_hide); // Hide Floyd (jfg_visuals.cpp)
-    register_api5();           // the official mods' helpers (jfg_mod_api5.cpp)
+    recomp::overlays::register_base_export("jfg_aim_lock", aim_lock);
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }
 
@@ -411,4 +416,51 @@ JFG_WRAP(instQueueMsg) {
         ctx->r5 = a1;
     }
     instQueueMsg_orig(rdram, ctx);
+}
+
+// hitPlayerAimCheck(obj, dist, outDist): with the aim lock off (jfg_aim_lock), the game's check still runs (homing
+// weapons' targets, the box on an enemy), but the reticle stays where the aim ray meets the level (outDist keeps its
+// value) and shows no lock (the hero's data + 0x540, bit 0).
+JFG_WRAP(hitPlayerAimCheck) {
+    using namespace jfg;
+    if (api::g_aim_lock) { hitPlayerAimCheck_orig(rdram, ctx); return; }
+    g_rdram = rdram;
+    const uint32_t obj = (uint32_t)ctx->r4, out = (uint32_t)ctx->r6;
+    const uint32_t kept = out != 0 ? rd32(out) : 0;
+    hitPlayerAimCheck_orig(rdram, ctx);
+    g_rdram = rdram;
+    if (out != 0) wr32(out, kept);
+    const uint32_t data = valid_ptr(obj) && Obj::Kind::get(obj) == 1 ? Obj::Data::get(obj) : 0;
+    if (valid_ptr(data)) wr8(data + 0x540, (uint8_t)(rd8(data + 0x540) & ~1u));
+}
+
+// frontDrawTarget(player, x, y, trans, depth)'s wrapper (jfg_interpolation.cpp), before the game's code:
+// jfg_on_reticle_draw with where the reticle goes. Returns false when a callback cancelled the game's reticle.
+// JfgReticle: s32 x, y (screen pixels, as jfg_on_draw_hud's), f32 depth (0 near .. 1 at the aim's reach), f32 scale,
+// s32 locked, s32 player, s32 weapon, s32 cancel.
+bool jfg_reticle_event(uint8_t* rdram_, recomp_context* ctx) {
+    using namespace jfg;
+    if (!api::listened(api::Event::ReticleDraw)) return true;
+    g_rdram = rdram_;
+    const uint32_t player = (uint32_t)ctx->r4, trans = (uint32_t)ctx->r7;
+    const uint32_t depth_bits = rd32((uint32_t)ctx->r29 + 0x10);
+    int32_t cancel;
+    {
+        api::Payload p(ctx, 0x20);
+        wr32(p.addr + 0x00, (uint32_t)(int32_t)(int16_t)ctx->r5);
+        wr32(p.addr + 0x04, (uint32_t)(int32_t)(int16_t)ctx->r6);
+        wr32(p.addr + 0x08, depth_bits);
+        wr32(p.addr + 0x0C, valid_ptr(trans) ? rd32(trans + 0x08) : 0x3F800000u);
+        wr32(p.addr + 0x10, valid_ptr(player) ? (rd8(player + 0x540) & 1u) : 0u);
+        wr32(p.addr + 0x14, valid_ptr(player) ? rd8(player + 0x00) : 0u);
+        const int c = (int16_t)rd16(ADDR_currentCharacter);
+        const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
+        const int w = ch != 0 ? Character::CurrentWeapon::get(ch) : 0xFF;
+        wr32(p.addr + 0x18, (uint32_t)(w < 16 ? w : -1));
+        wr32(p.addr + 0x1C, 0);
+        api::fire(rdram_, ctx, api::Event::ReticleDraw, (int32_t)p.addr);
+        g_rdram = rdram_;
+        cancel = (int32_t)rd32(p.addr + 0x1C);
+    }
+    return cancel == 0;
 }

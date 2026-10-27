@@ -119,7 +119,7 @@ extern "C" void jfg_interp_pushed(uint8_t* rdram_, recomp_context* ctx) {
 
 } // namespace jfg
 
-bool jfg_reticle_event(uint8_t* rdram, recomp_context* ctx); // jfg_mod_api5.cpp
+bool jfg_reticle_event(uint8_t* rdram, recomp_context* ctx); // jfg_api.cpp
 
 JFG_WRAP(frontDrawTarget) {
     if (!jfg_reticle_event(rdram, ctx)) return; // a mod draws its own reticle

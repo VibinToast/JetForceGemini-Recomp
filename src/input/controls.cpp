@@ -14,7 +14,7 @@ extern "C" void jfg_dual_stick(uint16_t* buttons, float* x, float* y, float righ
 extern "C" int jfg_mouse_keyboard_active(void);
 extern "C" int jfg_floyd_mouse_active(void);
 extern "C" void jfg_dual_stick_release(void);
-extern "C" void jfg_input_toggles(uint16_t* buttons); // JFG PORT: src/jfg/jfg_mod_api5.cpp
+extern "C" void jfg_input_toggles(uint16_t* buttons); // JFG PORT: src/jfg/jfg_hero_api.cpp
 extern "C" int jfg_sprint_enabled(void);
 extern "C" int jfg_worldmap_switching(void);
 extern "C" void jfg_sprint_input(int held);
