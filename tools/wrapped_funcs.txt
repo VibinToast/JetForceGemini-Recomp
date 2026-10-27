@@ -8,6 +8,7 @@ squadsModuleTick
 
 # Mod API events (jfg_api.cpp)
 mainChangeLevel
+hitPlayerAimCheck
 girlBossControl
 boyBossControl
 dogBossControl

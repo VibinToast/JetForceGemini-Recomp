@@ -254,6 +254,74 @@ RECOMP_IMPORT("*", void jfg_limbs_keep(int on));
 // Hide Floyd: Floyd, his shadow and his sounds are gone while he follows the hero (not while a player flies him).
 RECOMP_IMPORT("*", void jfg_floyd_hide(int on));
 
+// The reticle: 0 = it no longer jumps onto an enemy the aim passes over (nor shows a lock); shots still go where it
+// points, and homing weapons still lock on. 1 = the game's own. Kept until set again. To draw a reticle of your own,
+// cancel the game's in jfg_on_reticle_draw and draw at its x, y in jfg_on_draw_hud.
+RECOMP_IMPORT("*", void jfg_aim_lock(int on));
+
+// Toggled buttons: while on, each press of those N64 buttons (libultra's, as in JfgInput) holds them down until the
+// next press, for the first player (on any controls: pad, dual stick, mouse and keyboard; after Swap Triggers).
+RECOMP_IMPORT("*", void jfg_input_toggle(unsigned int buttons, int on));
+// Lets go of those toggled buttons now (a death, a level change).
+RECOMP_IMPORT("*", void jfg_input_toggle_release(unsigned int buttons));
+// The toggled buttons held now.
+RECOMP_IMPORT("*", unsigned int jfg_input_toggled(void));
+
+// The first player's hero object while a level is played, else NULL.
+RECOMP_IMPORT("*", void* jfg_hero_get(void));
+// A hero's state, -1 if the object is not a hero.
+#define JFG_HERO_MOVING   0
+#define JFG_HERO_STANDING 1
+#define JFG_HERO_CROUCHED 2
+#define JFG_HERO_IN_AIR   3
+#define JFG_HERO_SWIMMING 4
+#define JFG_HERO_AIMING   5  // standing; 11 while moving
+#define JFG_HERO_AIMING_MOVING 11
+#define JFG_HERO_DEAD     10
+RECOMP_IMPORT("*", int jfg_hero_state(void* hero));
+// The weapon in the first player's hand (0 the pistol .. 15), -1 if none. The shocker is 4, the flamethrower 6.
+RECOMP_IMPORT("*", int jfg_hero_weapon(void));
+// Pushes the hero x, z level units per 1/60 s for ticks 1/60 s ticks (the game's knockback: walls stop it, and it
+// eases off after). The hero walks a little over 2 units per 1/60 s.
+RECOMP_IMPORT("*", void jfg_hero_push(void* hero, float x, float z, int ticks));
+// No damage reaches the hero for at least ticks 1/60 s ticks (8 at the least), and enemies don't aim at it.
+RECOMP_IMPORT("*", void jfg_hero_protect(void* hero, int ticks));
+
+// Floyd's object while he is with the first player's hero, else NULL; state (may be NULL): 0 the game's AI flies him
+// after the hero, 1 a player flies him, 2 a Floyd mission.
+RECOMP_IMPORT("*", void* jfg_floyd_get(int* state));
+// A laser bolt (Floyd's) from x, y, z towards tx, ty, tz. damage in units of health (1..127; an ant soldier has a few);
+// speed in level units per 1/30 s (Floyd's 35); life in 1/10 s (Floyd's 30); owner is never hit by it; sound -1 = none
+// (Floyd's 0xDA). Returns the bolt object, NULL if none was made.
+typedef struct {
+    float x, y, z;
+    float tx, ty, tz;
+    int damage;
+    float speed;
+    int life;
+    void* owner;
+    int sound;
+} JfgBolt;
+RECOMP_IMPORT("*", void* jfg_fire_bolt(const JfgBolt* bolt));
+// 1 when nothing (the level, or an object with a hit model other than from and to) stands between a and b (x, y, z).
+RECOMP_IMPORT("*", int jfg_line_of_sight(void* from, void* to, const float* a, const float* b));
+
+// Enemies (squad members; the others are left alone): shot by shooter (a hero) as by its weapons, its squad turns on
+// it; set alight as by the flamethrower (it screams, runs for water and burns down; Tribals too); electrocuted as by
+// the shocker on some foes (held in place and drained for about 2 s, with sparks; not again while it lasts). shooter
+// may be NULL.
+RECOMP_IMPORT("*", void jfg_enemy_alert(void* enemy, void* shooter));
+RECOMP_IMPORT("*", void jfg_enemy_ignite(void* enemy, void* shooter));
+RECOMP_IMPORT("*", void jfg_enemy_electrocute(void* enemy, void* shooter));
+
+// A fire on the ground (the one explosions leave: flames, smoke and light; it hurts nothing itself: use
+// jfg_damage_sphere) of scale 1..127 (about 32 a small one) for ticks 1/10 s. Returns its object, NULL if none.
+RECOMP_IMPORT("*", void* jfg_fx_fire(float x, float y, float z, int scale, int ticks));
+// 1 while the hero's shocker beam is on, with where it ends (what it touches, or its full reach) in out[3].
+RECOMP_IMPORT("*", int jfg_shocker_end(void* hero, float* out));
+// Where the hero's flamethrower flames are now (x, y, z each into out, at most max); returns how many (0: not firing).
+RECOMP_IMPORT("*", int jfg_flames_get(void* hero, float* out, int max));
+
 // --- event data ---------------------------------------------------------------------------------------------------
 
 // Who bleeds (JfgBloodSpurt.group, JfgBloodHit.group; since version 5).
@@ -329,6 +397,19 @@ typedef struct {
     int width, height;
 } JfgHudGfx;
 
+// jfg_on_reticle_draw: the aiming reticle is about to be drawn at x, y (screen pixels, as jfg_on_draw_hud's), depth
+// 0 near .. 1 at the aim's reach, scale its size, locked on an enemy or not, by player (0 the first), for weapon. Set
+// cancel to 1 to draw none (since version 5).
+typedef struct {
+    int x, y;
+    float depth;
+    float scale;
+    int locked;
+    int player;
+    int weapon;
+    int cancel;
+} JfgReticle;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
@@ -379,5 +460,10 @@ typedef struct {
 // jfg_on_hud_message(int msg, int character, int player)
 //     A message is queued for a player's HUD panel (text msg). Pick-ups: weapon w's ammo 0x48 + w (extra ammo, or a
 //     dropped ammo part), 0x57 + w (a clip), 0x66 + w (full ammo), 0x75 + w (more capacity); keys 0x170 + key.
+
+// --- events (since version 5) --------------------------------------------------------------------------------------
+
+// jfg_on_reticle_draw(JfgReticle* reticle)
+//     Each frame the aiming reticle is drawn, before the game draws it.
 
 #endif

@@ -34,6 +34,7 @@ enum class Event : uint32_t {
     ObjectDrawGfx,    // jfg_on_object_draw_gfx(JfgObjectGfx* draw), since version 4
     DrawHud,          // jfg_on_draw_hud(JfgHudGfx* hud), since version 4
     HudMessage,       // jfg_on_hud_message(int msg, int character, int player), since version 4
+    ReticleDraw,      // jfg_on_reticle_draw(JfgReticle* reticle), since version 5
     Count
 };
 
@@ -76,6 +77,7 @@ constexpr uint32_t GFX = 0x00, WIDTH = 0x04, HEIGHT = 0x08, SIZE = 0x0C;
 
 // The hero API (jfg_hero_api.cpp): helpers, and whether a mod controls a hero (boyControl's wrapper asks).
 void register_hero_api();
+void register_api5(); // the official mods' helpers (jfg_mod_api5.cpp)
 bool hero_taken_over(int character);
 // Taken over and not handed back to the game's code (jfg_hero_game_control): the mod moves it this tick.
 bool hero_mod_controlled(int character);

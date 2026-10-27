@@ -182,6 +182,7 @@ extern "C" void jfg_dual_stick(uint16_t* buttons, float* x, float* y, float righ
         const bool z = (b & BTN_Z) != 0, r = (b & BTN_R) != 0;
         b = (uint16_t)((b & ~(BTN_Z | BTN_R)) | (z ? BTN_R : 0) | (r ? BTN_Z : 0));
     }
+    jfg_input_toggles(&b); // a mod's toggled buttons (jfg_mod_api5.cpp)
     // Tests without a controller: JFG_DUAL_STICK_TEST names a text file holding "lx,ly,rx,ry", read on every poll.
     static const char* const test_file = std::getenv("JFG_DUAL_STICK_TEST");
     if (test_file != nullptr) {
