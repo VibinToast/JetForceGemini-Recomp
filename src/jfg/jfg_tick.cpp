@@ -54,6 +54,7 @@ void request_warp(int level, int character, int entrance, int front_mode) {
 extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     g_rdram = rdram;
     jfg::api::fire(rdram, ctx, jfg::api::Event::GameTick, (int32_t)rd32(ADDR_delayDat));
+    jfg::api::mod_camera_tick();
     jfg_camera_restore();
     load_options();
     update_dump_folder();

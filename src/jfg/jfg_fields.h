@@ -89,6 +89,9 @@ using Yaw        = Field<uint16_t, 0x00>;
 using PosX       = Field<float, 0x0C>;
 using PosY       = Field<float, 0x10>;
 using PosZ       = Field<float, 0x14>;
+using VelX       = Field<float, 0x1C>; // velocity, units a frame (a hero's: from how far it moved)
+using VelY       = Field<float, 0x20>;
+using VelZ       = Field<float, 0x24>;
 using AnimPhase  = Field<float, 0x28>;     // animation position, 0..1 in looping animations
 using Segment    = Field<int16_t, 0x2E>;   // the track segment it is in (objects are drawn in the segments seen from the camera's)
 using Opacity    = Field<uint8_t, 0x39>;   // 0xFF = fully opaque

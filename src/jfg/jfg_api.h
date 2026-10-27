@@ -87,6 +87,7 @@ bool hero_health_hidden(int character);
 // A mod sets the camera (jfg_camera_set) these ticks: the port's own camera features stand down; its FOV (0 = none).
 bool mod_camera_active();
 float mod_camera_fov();
+void mod_camera_tick(); // each game tick: a mod's camera lapses once it stops setting it, heroes or not
 
 // active: nullptr = always runs.
 void add_internal(Event event, Handler handler, Active active = nullptr);

@@ -233,7 +233,7 @@ static bool aim_state(uint32_t obj) {
 // D-pad give while aiming (walking forward, zoom) - jfg_dual_stick() records it; otherwise the N64 C-up itself.
 // Edits this tick's controller data and pressed-buttons word, after joyRead, like the mouse wheel does.
 
-static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
+static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed, bool off) {
     constexpr uint16_t BTN_R = 0x0010, C_UP = 0x0008;
     static int phase = 0, ticks = 0;
     static bool jump_was_held = false;
@@ -241,7 +241,7 @@ static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
     const bool jump_edge = jump_held && !jump_was_held;
     jump_was_held = jump_held;
     auto finish = [&]() { phase = 0; g_aim_jump_active.store(false, std::memory_order_relaxed); };
-    if (!g.aim_jump) { finish(); return; }
+    if (!g.aim_jump || off) { finish(); return; }
 
     const uint16_t cur = rd16(pad), down = rd16(pressed);
     if (phase == 0) {
@@ -695,9 +695,12 @@ void jfg_camera_controls(recomp_context* ctx) {
     }
     if (obj == 0) { g_cam.was_aiming = false; return; }
     const uint32_t pad = ADDR_sControllerCurrData + Pad::Size * (rd8(ADDR_sPlayerID) & 3u);
-    // A hero a mod moves (jfg_hero_takeover) reads the pad its own way: the aiming options keep out of it.
-    const bool mod_hero = api::hero_mod_controlled((int16_t)rd16(ADDR_currentCharacter));
-    if (!mod_hero) aim_jump(obj, pad, ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u));
+    // A hero a mod moves (jfg_hero_takeover) reads the pad its own way: the aiming options keep out of it. Jump While
+    // Aiming stays off for a taken-over hero even while the game's code runs it: letting go of R hands it back to the
+    // mod, whose own jump it is then (and the option would hold R let go for good).
+    const int character = (int16_t)rd16(ADDR_currentCharacter);
+    const bool mod_hero = api::hero_mod_controlled(character);
+    aim_jump(obj, pad, ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u), api::hero_taken_over(character));
     const bool aiming = (rd16(pad) & 0x0010) != 0;
 
     // The aiming options work with any control layout.

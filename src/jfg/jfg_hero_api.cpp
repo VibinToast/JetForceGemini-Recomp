@@ -529,6 +529,12 @@ float mod_camera_fov() {
     return g_camera_ticks > 0 ? g_camera_set.fov : 0.0f;
 }
 
+// The hero's camera step counts a mod's camera down, but on the title screen and in the front end no hero runs: a
+// custom hero's camera (its field of view) stayed on there. Each game tick counts it down too.
+void mod_camera_tick() {
+    if (g_camera_ticks > 0) g_camera_ticks--;
+}
+
 bool hero_taken_over(int character) {
     return character >= 0 && character < CHARACTERS && g_takeover[character];
 }
@@ -584,6 +590,23 @@ void register_hero_api() {
 // camera's bookkeeping (old position, body yaw, speed) is filled from what the mod did. A dead hero (health under
 // one unit) runs the game's code, so death and the restart are the game's own; so does a hero the mod hands back
 // (jfg_hero_game_control), from where the mod left it.
+// Where the game's own control code left the hero last (see the hand-over below).
+// (In this level, for this hero object: the game sets the points up afresh at a level's start.)
+static float g_game_left[3];
+static bool g_game_left_valid = false;
+static uint32_t g_game_left_obj = 0;
+static int g_game_left_level = -1;
+
+static void note_game_left(uint32_t obj) {
+    using namespace jfg;
+    g_game_left_obj = obj;
+    g_game_left_level = (int16_t)rd16(ADDR_currentLevel);
+    g_game_left[0] = Obj::PosX::get(obj);
+    g_game_left[1] = Obj::PosY::get(obj);
+    g_game_left[2] = Obj::PosZ::get(obj);
+    g_game_left_valid = true;
+}
+
 JFG_WRAP(boyControl) {
     using namespace jfg;
     constexpr int JUNO = 1;
@@ -594,9 +617,14 @@ JFG_WRAP(boyControl) {
     const bool dead = valid_ptr(dmg) && Damage::Health::get(dmg) < 0x100;
     if (!api::hero_taken_over(JUNO) || !valid_ptr(hero) || dead) {
         boyControl_orig(rdram, ctx);
+        g_rdram = rdram;
+        if (valid_ptr(obj)) note_game_left(obj);
         return;
     }
     const int frames = (int)ctx->r5;
+    if (!g_game_left_valid || g_game_left_obj != obj || g_game_left_level != (int16_t)rd16(ADDR_currentLevel)) {
+        note_game_left(obj); // new level: the game set its points up where it put the hero
+    }
     call_game(controlReadJoypad, ctx, { hero });
     const float x0 = Obj::PosX::get(obj), y0 = Obj::PosY::get(obj), z0 = Obj::PosZ::get(obj);
     // A weapon change shows the weapon list once: the game's control code clears its request bits (+0x540, 0x30) at
@@ -628,11 +656,48 @@ JFG_WRAP(boyControl) {
             H::OldX::set(hero, x0);
             H::OldY::set(hero, y0);
             H::OldZ::set(hero, z0);
+            // On its feet and at rest: the speeds the control code keeps (forward, sideways, vertical) and the
+            // object's velocity are whatever the mod or an earlier run of the code left, and a jump or a fall from then
+            // would carry on (an upward speed launched the hero into the air).
+            for (uint32_t k : { 0x1Cu, 0x20u, 0x24u }) wrf(obj + k, 0.0f);
+            for (uint32_t k : { 0x04u, 0x08u, 0x10u, 0x74u }) wrf(hero + k, 0.0f);
+            wr8(hero + 0x185, 0); // ticks without ground
+            // Lift: +0x594 scales gravity down ((1 - lift) x gravity), up to 1.5 from the water's buoyancy or the
+            // jetpack's hover (+0x14A), and is only cleared in some states: left over from the last swim or hover, the
+            // hero fell upwards, faster and faster. +0x57C: where a fall began (the fall damage measures from it).
+            wrf(hero + 0x594, 0.0f);
+            wr8(hero + 0x14A, 0);
+            wrf(hero + 0x57C, y0);
+            // The collision sweeps the hero's spheres from where they were at the end of its last tick under the
+            // game's code (+0x424, entries 8-15, world space) to where they are now (+0x364, 8-15): from where the
+            // game last left it, across whatever lies between, so it was pushed out of slopes (high into the air) or
+            // judged stuck and put back far away. Both move along with the hero to where the mod left it.
+            if (g_game_left_valid && g_game_left_obj == obj && g_game_left_level == (int16_t)rd16(ADDR_currentLevel)) {
+                const float d[3] = { x0 - g_game_left[0], y0 - g_game_left[1], z0 - g_game_left[2] };
+                for (uint32_t i = 8; i < 16; i++) {
+                    for (uint32_t base : { 0x364u, 0x424u }) {
+                        const uint32_t p = hero + base + 12u * i;
+                        for (uint32_t c = 0; c < 3; c++) wrf(p + 4 * c, rdf(p + 4 * c) + d[c]);
+                    }
+                }
+            }
+            const uint8_t state = PlayerData::State::get(hero);
+            if ((state & ~0x20u) == PlayerData::StateJumping || state == PlayerData::StateAiming) PlayerData::State::set(hero, 0);
         }
+        const bool first = !game_ran;
         game_ran = true;
         ctx->r4 = (gpr)(int32_t)obj;
         ctx->r5 = (gpr)frames;
         boyControl_orig(rdram, ctx);
+        g_rdram = rdram;
+        note_game_left(obj);
+        if (first && Obj::VelY::get(obj) > 0.0f) {
+            // The control code takes the hero's speed from how far it moved this tick. On uneven ground the hero the
+            // mod left stands a little into the slope for the game's own collision, which pushes it out (130 units
+            // up, seen on a forest slope): that push is not a jump, and as a speed it launched the hero high into the
+            // air (the same rule gives the game's jumps from a slope their extra height).
+            Obj::VelY::set(obj, 0.0f);
+        }
         return;
     }
     if (game_ran && PlayerData::State::get(hero) == PlayerData::StateAiming) {
@@ -696,7 +761,7 @@ JFG_WRAP(func_8002B418_2C018) {
         return;
     }
     s.pending = false;
-    api::g_camera_ticks = 2;
+    api::g_camera_ticks = 3; // (the game tick counts it down too: mod_camera_tick)
     g_rdram = rdram;
     const uint32_t cam = api::camera_ptr();
     const float dx = s.x - s.fx, dy = s.y - s.fy, dz = s.z - s.fz;
