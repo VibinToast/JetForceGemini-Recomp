@@ -12,7 +12,7 @@
 
 namespace jfg::api {
 
-constexpr int VERSION = 3;
+constexpr int VERSION = 4;
 
 // The events, in the order they are registered: a released event keeps its place, new ones go before Count.
 enum class Event : uint32_t {
@@ -30,6 +30,8 @@ enum class Event : uint32_t {
     MapOpen,          // jfg_on_map_open(int galaxy), since version 3
     GalaxyChange,     // jfg_on_galaxy_change(int galaxy), since version 3
     PlanetSelect,     // jfg_on_planet_select(int planet), since version 3
+    HeroControl,      // jfg_on_hero_control(Object* hero, int frames, int character), since version 4
+    ObjectDrawGfx,    // jfg_on_object_draw_gfx(JfgObjectGfx* draw), since version 4
     Count
 };
 
@@ -60,6 +62,14 @@ constexpr uint32_t X = 0x00, Y = 0x04, Z = 0x08, CANCEL = 0x0C, SIZE = 0x10;
 namespace value_cancel {
 constexpr uint32_t VALUE = 0x00, CANCEL = 0x04, SIZE = 0x08;
 }
+// JfgObjectGfx: the object, where its draw writes (the game's Gfx**, Mtx**, Vertex** cursors) and cancel.
+namespace object_gfx {
+constexpr uint32_t OBJECT = 0x00, GFX = 0x04, MTX = 0x08, VTX = 0x0C, CANCEL = 0x10, SIZE = 0x14;
+}
+
+// The hero API (jfg_hero_api.cpp): helpers, and whether a mod controls a hero (boyControl's wrapper asks).
+void register_hero_api();
+bool hero_taken_over(int character);
 
 // active: nullptr = always runs.
 void add_internal(Event event, Handler handler, Active active = nullptr);

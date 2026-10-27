@@ -9,7 +9,7 @@
 
 #include "modding.h"
 
-#define JFG_API_VERSION 3
+#define JFG_API_VERSION 4
 
 // --- helpers -------------------------------------------------------------------------------------------------------
 
@@ -43,6 +43,80 @@ RECOMP_IMPORT("*", int jfg_galaxy_find(const char* galaxy));
 RECOMP_IMPORT("*", int jfg_galaxy_current(void));
 // The next time the map opens, it opens on this galaxy (when one of its planets is open).
 RECOMP_IMPORT("*", void jfg_galaxy_show(int galaxy));
+
+// (Since version 4.) Heroes, the controller, the level's collision and damage: what a custom hero needs.
+
+// While on, the game's own control code for that hero (1 = Juno; the only one so far) doesn't run:
+// jfg_on_hero_control fires in its place each tick, and the mod moves the hero object itself (position at +0x0C,
+// velocity at +0x1C, yaw at +0x00). A dead hero (health under 256) runs the game's code, so death and the restart are
+// the game's own.
+RECOMP_IMPORT("*", void jfg_hero_takeover(int character, int on));
+
+// The first player's controller, as the hero's control reads it this tick. stick: after the game's own handling (and
+// the port's mouse and dual-stick options); raw: the pad's own -80..80. Buttons are libultra's (A 0x8000, B 0x4000,
+// Z 0x2000, START 0x1000, L 0x20, R 0x10, C 0x0F). camera_yaw: the camera the hero steers by.
+typedef struct {
+    int stick_x, stick_y;
+    int raw_x, raw_y;
+    unsigned int held;
+    unsigned int pressed;
+    unsigned int camera_yaw;
+} JfgInput;
+RECOMP_IMPORT("*", void jfg_input_get(JfgInput* out));
+
+// The camera the hero steers by: its position, yaw and pitch (the game's angles, 0x10000 a turn).
+typedef struct {
+    float x, y, z;
+    unsigned int yaw, pitch;
+} JfgCameraView;
+RECOMP_IMPORT("*", void jfg_camera_get(JfgCameraView* out));
+
+// One of the level's collision triangles: three corners in level units, the flags of its batch (0x2000 water,
+// 0x8000 hurts, 0x80000000 kills; others not named yet) and its texture.
+typedef struct {
+    short v[3][3];
+    short pad;
+    unsigned int flags;
+    unsigned int texture;
+} JfgTriangle;
+// Copies the triangles of batches with none of ignore_mask's flags, from index first, at most max; returns how many
+// there are in all (out = 0 only counts). The level's render triangles are its collision.
+RECOMP_IMPORT("*", int jfg_level_triangles(JfgTriangle* out, int first, int max, unsigned int ignore_mask));
+
+// The first triangle under (x, z) whose batch has one of mask's flags: its height (y) and its batch's flags (0 = none).
+typedef struct {
+    float x, z;
+    unsigned int mask;
+    float y;
+    unsigned int flags;
+} JfgFloor;
+RECOMP_IMPORT("*", void jfg_level_floor(JfgFloor* q));
+
+// Takes damage (256 = one unit of health) from every object with health whose hit centre is in the sphere, except
+// source; returns how many it hit.
+typedef struct {
+    float x, y, z, radius;
+    int damage;
+    void* source;
+} JfgDamageSphere;
+RECOMP_IMPORT("*", int jfg_damage_sphere(const JfgDamageSphere* sphere));
+
+// The objects with health (enemies, crates, heroes) whose hit centre is within a sphere, except source, nearest
+// first: up to max of them into out; returns how many there are.
+typedef struct {
+    float x, y, z, radius;
+    void* source;
+} JfgNear;
+typedef struct {
+    void* object;
+    float x, y, z; // its hit centre
+    int health;
+} JfgNearObject;
+RECOMP_IMPORT("*", int jfg_objects_near(const JfgNear* query, JfgNearObject* out, int max));
+
+// An object's health (256 per unit; the heroes' and enemies' alike), -1 if it has none; and setting it.
+RECOMP_IMPORT("*", int jfg_object_health(void* object));
+RECOMP_IMPORT("*", void jfg_object_set_health(void* object, int health));
 
 // --- event data ---------------------------------------------------------------------------------------------------
 
@@ -82,6 +156,18 @@ typedef struct {
     int cancel;
 } JfgScreenFlash;
 
+// jfg_on_object_draw_gfx: an object is about to be drawn, with where its drawing goes: gfx, mtx and vtx point at the
+// game's own cursors (Gfx**, Mtx**, Vertex**). A callback may write commands at *gfx (advancing it), and set cancel to
+// 1 to skip the game's own drawing of the object. The game's camPushModelMtx / camPopModelMtx and texDPTextureX can be
+// called with them.
+typedef struct {
+    void* object;
+    void** gfx;
+    void** mtx;
+    void** vtx;
+    int cancel;
+} JfgObjectGfx;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
@@ -119,5 +205,13 @@ typedef struct {
 //     The player switched galaxy on the map (L / R).
 // jfg_on_planet_select(int planet)
 //     The player chose a mod's planet; its level starts next.
+
+// --- events (since version 4) --------------------------------------------------------------------------------------
+
+// jfg_on_hero_control(void* hero, int frames, int character)
+//     Each tick a taken-over hero (jfg_hero_takeover) is controlled, in place of the game's code. frames: ticks of
+//     1/60 s the tick covers (2 at 30 fps). The controller has been read (jfg_input_get).
+// jfg_on_object_draw_gfx(JfgObjectGfx* draw)
+//     An object is about to be drawn (after jfg_on_object_draw): write your own commands, or cancel the game's.
 
 #endif

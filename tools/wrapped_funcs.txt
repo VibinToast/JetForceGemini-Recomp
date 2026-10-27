@@ -187,3 +187,6 @@ LaserBeamInit
 func_800386B0_392B0
 controlThrowWeapon
 objSetupPlayers
+
+# Mod API: a mod can take over a hero's control (jfg_hero_api.cpp)
+boyControl

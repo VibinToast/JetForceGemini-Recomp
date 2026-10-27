@@ -22,7 +22,8 @@ namespace {
 const char* const g_event_names[] = {
     "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", "jfg_on_blood_spurt", "jfg_on_blood_hit",
     "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
-    "jfg_on_language_change", "jfg_on_map_open", "jfg_on_galaxy_change", "jfg_on_planet_select", nullptr
+    "jfg_on_language_change", "jfg_on_map_open", "jfg_on_galaxy_change", "jfg_on_planet_select", "jfg_on_hero_control",
+    "jfg_on_object_draw_gfx", nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
@@ -163,6 +164,7 @@ void register_api() {
     recomp::overlays::register_base_export("jfg_get_level", get_level);
     recomp::overlays::register_base_export("jfg_get_language", get_language);
     jfg::register_world_api(); // planets and galaxies (jfg_worldmap.cpp)
+    register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }
 
 } // namespace jfg::api
@@ -286,7 +288,31 @@ JFG_WRAP(objPrintObject) {
     uint32_t object = (uint32_t)ctx->r7;
     if (!fire_value_cancel(rdram, ctx, jfg::api::Event::ObjectDraw, object)) return;
     ctx->r7 = (gpr)(int32_t)object;
+    // The interpolation's bookkeeping starts before jfg_on_object_draw_gfx, so the matrices a mod's own drawing pushes
+    // (camPushModelMtx) are tagged as the object's and RT64 interpolates them too.
     jfg_interp_object(rdram, ctx);
+    // jfg_on_object_draw_gfx: a callback may write its own commands at the game's cursors, and cancel the game's own.
+    if (jfg::api::listened(jfg::api::Event::ObjectDrawGfx)) {
+        using namespace jfg;
+        namespace o = jfg::api::object_gfx;
+        g_rdram = rdram;
+        int32_t cancel;
+        {
+            api::Payload p(ctx, o::SIZE);
+            wr32(p.addr + o::OBJECT, object);
+            wr32(p.addr + o::GFX, (uint32_t)ctx->r4);
+            wr32(p.addr + o::MTX, (uint32_t)ctx->r5);
+            wr32(p.addr + o::VTX, (uint32_t)ctx->r6);
+            wr32(p.addr + o::CANCEL, 0);
+            api::fire(rdram, ctx, api::Event::ObjectDrawGfx, (int32_t)p.addr);
+            g_rdram = rdram;
+            cancel = (int32_t)rd32(p.addr + o::CANCEL);
+        }
+        if (cancel) {
+            jfg_interp_object_done(rdram, ctx);
+            return;
+        }
+    }
     objPrintObject_orig(rdram, ctx);
     jfg_interp_object_done(rdram, ctx);
 }

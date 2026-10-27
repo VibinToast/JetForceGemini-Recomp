@@ -157,6 +157,7 @@ using Model     = Field<uint32_t, 0x00>; // the Model
 using PoseTicks = Field<uint8_t, 0x0A>;  // ticks to animate at the next draw; the draw poses the model when non-zero
 using Buffer    = Field<uint8_t, 0x0B>;  // which of its two buffers (bones, vertices) is current, 0 or 1
 using Bones     = ArrayField<uint32_t, 0x10>; // bone matrices, one per buffer
+using Positions = Field<uint32_t, 0x70>;      // f32[3] per hit sphere: world positions of its joints, set when posed
 }
 
 namespace Model {
