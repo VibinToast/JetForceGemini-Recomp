@@ -5,7 +5,8 @@
 // Play page or in the settings. Its own texts are in the language the player points at (focus or mouse), from that
 // locale's "ui" (jfg::locale::ui_in), not the one saved, so a player who reads only that language understands it. With
 // English alone there is nothing to ask, so nothing is saved and the question waits
-// for a locale file. JFG_DEBUG_LANGUAGE_PROMPT=1 asks even when a language is saved (window captures).
+// for a locale file. JFG_DEBUG_LANGUAGE_PROMPT=1 asks even when a language is saved (window captures); =<id> also starts in that
+// language.
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -112,7 +113,9 @@ void build(const std::vector<std::pair<std::string, std::string>>& languages) {
     panel->set_display(ui::Display::Flex);
     panel->set_flex_direction(ui::FlexDirection::Column);
     panel->set_width(760.0f);
-    panel->set_max_height(80.0f, ui::Unit::Percent); // clear of the game's "Settings: Select / Esc" line at the bottom
+    // A fixed size, and room for the longest wording of each text, so moving from one language to the next never moves
+    // the list. 80%: clear of the game's "Settings: Select / Esc" line at the bottom.
+    panel->set_height(80.0f, ui::Unit::Percent);
     panel->set_padding(32.0f);
     panel->set_gap(14.0f);
     panel->set_background_color(modui::navy);
@@ -121,10 +124,15 @@ void build(const std::vector<std::pair<std::string, std::string>>& languages) {
 
     ui::Label* title = context.create_element<ui::Label>(panel, TITLE, ui::LabelStyle::Large);
     g_prompt.title = title;
+    title->set_height(52.0f);
+    title->set_flex_shrink(0.0f);
+    title->set_overflow(ui::Overflow::Hidden);
     modui::set_text(title, 1.0f, 44.0f, 52.0f, 700, modui::cyan, 1.0f);
     title->set_font_family("JFG Black");
     ui::Label* note = context.create_element<ui::Label>(panel, NOTE, ui::LabelStyle::Small);
     g_prompt.note = note;
+    note->set_height(96.0f); // three lines
+    note->set_flex_shrink(0.0f);
     modui::set_text(note, 1.0f, 24.0f, 32.0f, 400, modui::dim);
     note->set_font_family("JetBrains Mono");
 
@@ -133,7 +141,7 @@ void build(const std::vector<std::pair<std::string, std::string>>& languages) {
     list->set_flex_direction(ui::FlexDirection::Column);
     list->set_gap(8.0f);
     list->set_overflow_y(ui::Overflow::Auto);
-    list->set_flex_shrink(1.0f);
+    list->set_flex(1.0f, 1.0f, 0.0f);
     list->set_padding_right(6.0f);
 
     bool any_unofficial = false;
@@ -144,6 +152,7 @@ void build(const std::vector<std::pair<std::string, std::string>>& languages) {
         row->set_flex_direction(ui::FlexDirection::Row);
         row->set_align_items(ui::AlignItems::Center);
         row->set_gap(16.0f);
+        row->set_flex_shrink(0.0f); // the list scrolls; its rows keep their size
         ui::Button* b = context.create_element<LanguageButton>(row, label, id);
         style_row_button(b);
         const std::string pick_id = id;
@@ -171,6 +180,8 @@ void build(const std::vector<std::pair<std::string, std::string>>& languages) {
     if (any_unofficial) {
         ui::Label* legend = context.create_element<ui::Label>(panel, LEGEND, ui::LabelStyle::Small);
         g_prompt.legend = legend;
+        legend->set_height(90.0f); // three lines
+        legend->set_flex_shrink(0.0f);
         modui::set_text(legend, 1.0f, 22.0f, 30.0f, 400, modui::dim);
         legend->set_font_family("JetBrains Mono");
     }
@@ -203,5 +214,7 @@ void jfg_language_prompt_frame() {
     ui::show_context(g_prompt.context, "");
     g_prompt.context.open();
     if (g_prompt.first != nullptr) g_prompt.first->focus();
+    // JFG_DEBUG_LANGUAGE_PROMPT=<id>: shown in that language to start with (captures of each language).
+    if (const char* id = std::getenv("JFG_DEBUG_LANGUAGE_PROMPT"); id != nullptr && std::string(id) != "1") show_in(id);
     g_prompt.context.close();
 }
