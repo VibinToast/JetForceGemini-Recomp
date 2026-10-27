@@ -157,6 +157,18 @@ RECOMP_IMPORT("*", void jfg_object_set_health(void* object, int health));
 // at most 10) makes it burst on its next update (the game's overkill).
 RECOMP_IMPORT("*", int jfg_enemy_type(void* object));
 
+// The enemies (squad members) whose hit sphere overlaps a sphere, except source, nearest first, with their hit
+// centre and radius, health and type (as jfg_enemy_type): up to max of them into out; returns how many there are.
+// Dying ones are listed too (health 0 or less, until the game removes them): a further big blow still bursts them.
+typedef struct {
+    void* object;
+    float x, y, z; // its hit centre
+    float radius;  // its hit radius
+    int health;
+    int type;
+} JfgEnemy;
+RECOMP_IMPORT("*", int jfg_enemies_near(const JfgNear* query, JfgEnemy* out, int max));
+
 // --- event data ---------------------------------------------------------------------------------------------------
 
 // jfg_on_blood_spurt: a spurt of blood drops. Change any field; set cancel to 1 to drop it; amount is the drops in

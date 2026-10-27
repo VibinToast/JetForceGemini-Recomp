@@ -367,26 +367,73 @@ void object_set_health(uint8_t* rdram_, recomp_context* ctx) {
     if (valid_ptr(dmg)) Damage::Health::set(dmg, (int16_t)std::clamp((int)ctx->r5, -0x8000, 0x7FFF));
 }
 
-// jfg_enemy_type(obj): a squad member's type (its squadron's baddy type, the member's object id), -1 for anything else.
-void enemy_type(uint8_t* rdram_, recomp_context* ctx) {
-    g_rdram = rdram_;
-    const uint32_t obj = (uint32_t)ctx->r4;
-    ctx->r2 = (gpr)-1;
+// A squad member's type (its squadron's baddy type, the member's object id), -1 for anything else.
+int squad_type(uint32_t obj) {
     const uint32_t data = valid_ptr(obj) ? Obj::Data::get(obj) : 0;
     const uint32_t squadron = valid_ptr(data) ? SquadMemberData::Squadron::get(data) : 0;
     const uint32_t sdata = valid_ptr(squadron) ? Obj::Data::get(squadron) : 0;
-    if (!valid_ptr(sdata)) return;
+    if (!valid_ptr(sdata)) return -1;
     // Only a member of the squadron's own list (other kinds keep something else at +0x24).
     uint32_t member = SquadronData::FirstMember::get(sdata);
     for (int n = 0; n < 256 && valid_ptr(member); n++) {
-        if (member == obj) {
-            ctx->r2 = (gpr)SquadronData::BaddyType::get(sdata);
-            return;
-        }
+        if (member == obj) return SquadronData::BaddyType::get(sdata);
         const uint32_t mdata = Obj::Data::get(member);
-        if (!valid_ptr(mdata)) return;
+        if (!valid_ptr(mdata)) return -1;
         member = SquadMemberData::NextMember::get(mdata);
     }
+    return -1;
+}
+
+// jfg_enemy_type(obj): squad_type.
+void enemy_type(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    ctx->r2 = (gpr)squad_type((uint32_t)ctx->r4);
+}
+
+// jfg_enemies_near(const JfgNear* q, JfgEnemy* out, int max): the squad members whose hit sphere (centre, radius)
+// overlaps q's sphere, except q's source, nearest first, dying ones too (health 0 or less: they stay until removed, and
+// a further blow still makes them burst); returns how many there are (at most max copied). JfgEnemy: object, f32 x,
+// y, z (hit centre), f32 radius (hit radius), s32 health, s32 type (0x1C bytes).
+void enemies_near(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t q = (uint32_t)ctx->r4, out = (uint32_t)ctx->r5;
+    const int max = (int)ctx->r6;
+    if (q == 0) { ctx->r2 = 0; return; }
+    const float x = rdf(q + 0x00), y = rdf(q + 0x04), z = rdf(q + 0x08), radius = rdf(q + 0x0C);
+    const uint32_t source = rd32(q + 0x10);
+    struct Found { float d2; uint32_t obj, dmg; int type; };
+    Found found[64];
+    int n = 0;
+    const uint32_t list = rd32(ADDR_ObjList);
+    const int count = (int)rd32(ADDR_ObjListCount);
+    if (valid_ptr(list) && count > 0 && count < 4096) {
+        for (int i = 0; i < count && n < 64; i++) {
+            const uint32_t obj = rd32(list + 4u * (uint32_t)i);
+            if (!valid_ptr(obj) || obj == source) continue;
+            const uint32_t dmg = Obj::Damage::get(obj);
+            if (!valid_ptr(dmg)) continue;
+            const float dx = Damage::CentreX::get(dmg) - x, dy = Damage::CentreY::get(dmg) - y,
+                        dz = Damage::CentreZ::get(dmg) - z;
+            const float d2 = dx * dx + dy * dy + dz * dz;
+            const float reach = radius + std::max(0.0f, Damage::Radius::get(dmg));
+            if (d2 > reach * reach) continue;
+            const int type = squad_type(obj);
+            if (type < 0) continue;
+            found[n++] = { d2, obj, dmg, type };
+        }
+    }
+    std::sort(found, found + n, [](const Found& a, const Found& b) { return a.d2 < b.d2; });
+    for (int i = 0; out != 0 && i < n && i < max; i++) {
+        const uint32_t o = out + 0x1Cu * (uint32_t)i;
+        wr32(o + 0x00, found[i].obj);
+        wrf(o + 0x04, Damage::CentreX::get(found[i].dmg));
+        wrf(o + 0x08, Damage::CentreY::get(found[i].dmg));
+        wrf(o + 0x0C, Damage::CentreZ::get(found[i].dmg));
+        wrf(o + 0x10, std::max(0.0f, Damage::Radius::get(found[i].dmg)));
+        wr32(o + 0x14, (uint32_t)(int32_t)Damage::Health::get(found[i].dmg));
+        wr32(o + 0x18, (uint32_t)found[i].type);
+    }
+    ctx->r2 = (gpr)n;
 }
 } // namespace
 
@@ -418,6 +465,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_object_health", object_health);
     recomp::overlays::register_base_export("jfg_object_set_health", object_set_health);
     recomp::overlays::register_base_export("jfg_enemy_type", enemy_type);
+    recomp::overlays::register_base_export("jfg_enemies_near", enemies_near);
 }
 
 } // namespace jfg::api
