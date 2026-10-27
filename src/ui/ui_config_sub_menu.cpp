@@ -4,6 +4,7 @@
 #include <string_view>
 
 #include "ui/recomp_ui.h"
+#include "ui_mod_details_panel.h" // JFG PORT: the mod menu's colours (modui)
 
 namespace recompui {
 
@@ -29,10 +30,16 @@ void ConfigOptionElement::process_event(const Event &e) {
 ConfigOptionElement::ConfigOptionElement(Element *parent) : Element(parent, Events(EventType::Hover)) {
     set_display(Display::Flex);
     set_flex_direction(FlexDirection::Column);
-    set_gap(16.0f);
-    set_height(100.0f);
+    set_gap(14.0f);
+    // JFG PORT: a card in the mod menu's look (was a bare row 100 high, over the game).
+    set_padding_top(16.0f); set_padding_bottom(18.0f); set_padding_left(22.0f); set_padding_right(22.0f);
+    set_margin_bottom(12.0f);
+    set_background_color(modui::panel);
+    set_border_width(1.0f);
+    set_border_color(modui::edge);
 
     name_label = get_current_context().create_element<Label>(this, LabelStyle::Normal);
+    modui::set_text(name_label, 1.0f, 24.0f, 30.0f, 700, modui::text, 1.0f);
 }
 
 ConfigOptionElement::~ConfigOptionElement() {
@@ -120,6 +127,14 @@ ConfigOptionRadio::ConfigOptionRadio(Element *parent, uint32_t value, const std:
     for (std::string_view option : options) {
         radio->add_option(option);
     }
+    // JFG PORT: wrap the choices onto more lines rather than squeezing each one, and show the unchosen ones brighter.
+    radio->set_flex_wrap(true);
+    radio->set_row_gap(14.0f);
+    for (size_t i = 0; i < radio->num_options(); i++) {
+        RadioOption* o = radio->get_option_element(i);
+        o->set_flex_shrink(0.0f);
+        o->set_color(Color{ 232, 243, 255, 180 });
+    }
 
     if (value < options.size()) {
         radio->set_index(value);
@@ -161,35 +176,51 @@ ConfigSubMenu::ConfigSubMenu(Element *parent) : Element(parent) {
     set_flex(1, 1, 100.0f, Unit::Percent);
     set_flex_direction(FlexDirection::Column);
     set_height(100.0f, Unit::Percent);
+    // JFG PORT: the settings menu's dark panel, not the game seen through (its grey text was hard to read over it).
+    set_background_color(Color{ modui::navy.r, modui::navy.g, modui::navy.b, 245 });
+    set_border_width(2.0f);
+    set_border_color(modui::edge);
 
     recompui::ContextId context = get_current_context();
     header_container = context.create_element<Container>(this, FlexDirection::Row, JustifyContent::FlexStart);
     header_container->set_flex_grow(0.0f);
     header_container->set_align_items(AlignItems::Center);
-    header_container->set_padding(12.0f);
-    header_container->set_gap(24.0f);
+    header_container->set_padding(20.0f);
+    header_container->set_padding_left(32.0f);
+    header_container->set_gap(28.0f);
+    header_container->set_border_bottom_width(1.0f);
+    header_container->set_border_color(modui::edge);
 
     {
         back_button = context.create_element<Button>(header_container, "Back", ButtonStyle::Secondary);
         back_button->add_pressed_callback([this](){ back_button_pressed(); });
+        modui::set_button(back_button, 1.0f, 0.0f);
         title_label = context.create_element<Label>(header_container, "Title", LabelStyle::Large);
+        modui::set_text(title_label, 1.0f, 40.0f, 48.0f, 700, modui::cyan, 2.0f);
+        title_label->set_font_family("JFG Black");
     }
 
     body_container = context.create_element<Container>(this, FlexDirection::Row, JustifyContent::SpaceEvenly);
     body_container->set_padding(32.0f);
+    body_container->set_gap(32.0f);
     {
         config_container = context.create_element<Container>(body_container, FlexDirection::Column, JustifyContent::Center);
         config_container->set_display(Display::Block);
-        config_container->set_flex_basis(100.0f);
+        config_container->set_flex(1.4f, 1.0f, 0.0f);
         config_container->set_align_items(AlignItems::Center);
         {
             config_scroll_container = context.create_element<ScrollContainer>(config_container, ScrollDirection::Vertical);
         }
 
+        // JFG PORT: the option's description in a panel of its own, in the menu's text colour.
         description_label = context.create_element<Label>(body_container, "", LabelStyle::Small);
-        description_label->set_min_width(800.0f);
-        description_label->set_padding_left(16.0f);
-        description_label->set_padding_right(16.0f);
+        description_label->set_flex(1.0f, 1.0f, 0.0f);
+        description_label->set_padding(24.0f);
+        description_label->set_background_color(modui::panel);
+        description_label->set_border_width(1.0f);
+        description_label->set_border_color(modui::edge);
+        description_label->set_align_self_start();
+        modui::set_text(description_label, 1.0f, 22.0f, 32.0f, 400, modui::text);
     }
 
     recompui::get_current_context().set_autofocus_element(back_button);
