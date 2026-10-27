@@ -32,6 +32,7 @@ enum class Event : uint32_t {
     PlanetSelect,     // jfg_on_planet_select(int planet), since version 3
     HeroControl,      // jfg_on_hero_control(Object* hero, int frames, int character), since version 4
     ObjectDrawGfx,    // jfg_on_object_draw_gfx(JfgObjectGfx* draw), since version 4
+    DrawHud,          // jfg_on_draw_hud(JfgHudGfx* hud), since version 4
     Count
 };
 
@@ -65,6 +66,10 @@ constexpr uint32_t VALUE = 0x00, CANCEL = 0x04, SIZE = 0x08;
 // JfgObjectGfx: the object, where its draw writes (the game's Gfx**, Mtx**, Vertex** cursors) and cancel.
 namespace object_gfx {
 constexpr uint32_t OBJECT = 0x00, GFX = 0x04, MTX = 0x08, VTX = 0x0C, CANCEL = 0x10, SIZE = 0x14;
+}
+// JfgHudGfx: where the frame's display list goes on (Gfx**), and the screen's size in pixels.
+namespace hud_gfx {
+constexpr uint32_t GFX = 0x00, WIDTH = 0x04, HEIGHT = 0x08, SIZE = 0x0C;
 }
 
 // The hero API (jfg_hero_api.cpp): helpers, and whether a mod controls a hero (boyControl's wrapper asks).

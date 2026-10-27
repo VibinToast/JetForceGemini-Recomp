@@ -195,6 +195,14 @@ typedef struct {
     int cancel;
 } JfgObjectGfx;
 
+// jfg_on_draw_hud: the frame's drawing is nearly done (the scene, the HUD and the hint text are in): a callback may
+// write 2D commands at *gfx (advancing it), such as texture rectangles over the HUD. width and height: the screen in
+// pixels (320 x 240, or 448 x 336 in the game's hi-res mode). Set the RDP's state you need yourself.
+typedef struct {
+    void** gfx;
+    int width, height;
+} JfgHudGfx;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
@@ -240,5 +248,7 @@ typedef struct {
 //     1/60 s the tick covers (2 at 30 fps). The controller has been read (jfg_input_get).
 // jfg_on_object_draw_gfx(JfgObjectGfx* draw)
 //     An object is about to be drawn (after jfg_on_object_draw): write your own commands, or cancel the game's.
+// jfg_on_draw_hud(JfgHudGfx* hud)
+//     Each frame, after the HUD: draw over it.
 
 #endif

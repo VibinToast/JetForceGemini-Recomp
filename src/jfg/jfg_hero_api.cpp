@@ -192,6 +192,31 @@ void damage_sphere(uint8_t* rdram_, recomp_context* ctx) {
             hit++;
         }
     }
+    // Solid objects (crates, breakable props: the game's hit models) keep their own damage count, which a blast adds to
+    // (explosionHitTick: HitModelData +0x12A = 1, +0x130 += damage) and their code reads (a crate breaks a stage when
+    // it passes the stage's strength). A quarter of the health damage is about what a blast gives them.
+    constexpr uint32_t ADDR_hitModelCount = 0x801047E0, ADDR_hitModels = 0x801047E4;
+    const int models = (int)rd32(ADDR_hitModelCount);
+    const uint32_t mlist = rd32(ADDR_hitModels);
+    if (valid_ptr(mlist) && models > 0 && models < 1024) {
+        for (int i = 0; i < models; i++) {
+            const uint32_t obj = rd32(mlist + 4u * (uint32_t)i);
+            if (!valid_ptr(obj) || obj == source) continue;
+            const uint32_t data = rd32(obj + 0x5C);
+            if (!valid_ptr(data)) continue;
+            float d2 = 0.0f;
+            const float p[3] = { x, y, z };
+            for (uint32_t k = 0; k < 3; k++) { // the sphere against the object's box
+                const float lo = rdf(data + 0x100 + 4 * k), hi = rdf(data + 0x10C + 4 * k);
+                const float c = std::clamp(p[k], lo, hi);
+                d2 += (p[k] - c) * (p[k] - c);
+            }
+            if (d2 > radius * radius) continue;
+            wr8(data + 0x12A, 1);
+            wr16(data + 0x130, (uint16_t)(int16_t)std::min(0x7FFF, (int)(int16_t)rd16(data + 0x130) + damage / 4));
+            hit++;
+        }
+    }
     ctx->r2 = (gpr)hit;
 }
 

@@ -23,7 +23,7 @@ const char* const g_event_names[] = {
     "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", "jfg_on_blood_spurt", "jfg_on_blood_hit",
     "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
     "jfg_on_language_change", "jfg_on_map_open", "jfg_on_galaxy_change", "jfg_on_planet_select", "jfg_on_hero_control",
-    "jfg_on_object_draw_gfx", nullptr
+    "jfg_on_object_draw_gfx", "jfg_on_draw_hud", nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
@@ -341,4 +341,24 @@ JFG_WRAP(sidekickControl) {
     sidekickControl_orig(rdram, ctx);
     jfg_sidekick_end();
     jfg_floyd_done();
+}
+
+// prnBorder(dList), the frame's last drawing (the screen border, after the scene, the HUD and the hint text):
+// jfg_on_draw_hud first, so a mod draws over the HUD (a custom hero's own icons and meters).
+JFG_WRAP(prnBorder) {
+    using namespace jfg;
+    if (api::listened(api::Event::DrawHud)) {
+        namespace h = jfg::api::hud_gfx;
+        g_rdram = rdram;
+        const uint32_t size = ((uint32_t)ctx->r29 - 0x40u) & ~0x7u; // inside the gap call_game leaves below $sp
+        call_game(viGetCurrentSize, ctx, { size, size + 4 });
+        g_rdram = rdram;
+        const uint32_t width = rd32(size), height = rd32(size + 4);
+        api::Payload p(ctx, h::SIZE);
+        wr32(p.addr + h::GFX, (uint32_t)ctx->r4);
+        wr32(p.addr + h::WIDTH, width);
+        wr32(p.addr + h::HEIGHT, height);
+        api::fire(rdram, ctx, api::Event::DrawHud, (int32_t)p.addr);
+    }
+    prnBorder_orig(rdram, ctx);
 }
