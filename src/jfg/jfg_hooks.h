@@ -49,6 +49,8 @@ uint32_t jfg_hit_flash(uint32_t color);                                // the hi
 int jfg_shadow_alpha(int alpha);                                       // func_8001B8E0's wrapper: a shadow batch's alpha
 void jfg_hit_flash_event(uint8_t* rdram, recomp_context* ctx);        // jfg_on_screen_flash handler
 void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // jfg_on_sidekick_tick handler
+bool jfg_floyd_hide_on(void);                                          // jfg_floyd_hide (a mod's Hide Floyd)
+void jfg_api_floyd_hide(uint8_t* rdram, recomp_context* ctx);          // jfg_floyd_hide(int on), for mods
 void jfg_floyd_fuel(uint8_t* rdram, recomp_context* ctx);              // jfg_on_sidekick_tick handler (Floyd's Fuel)
 void jfg_hide_object(uint8_t* rdram, recomp_context* ctx);             // jfg_on_object_draw handler
 void jfg_floyd_done(void);                                             // after sidekickControl
@@ -59,18 +61,21 @@ void jfg_interp_object_done(uint8_t* rdram, recomp_context* ctx);       // ... a
 void jfg_interp_push(uint8_t* rdram, recomp_context* ctx);              // the four matrix push functions' wrappers, before
 void jfg_interp_pushed(uint8_t* rdram, recomp_context* ctx);            // ... and after
 // jfg_gameplay.cpp
-int jfg_no_blood(void);                                                // the blood event handlers (jfg_gore.cpp)
 int jfg_refuel_amount(int amount);                                     // refuelControl
 float jfg_sniper_zoom(float zoom);                                     // controlGetManualAim
 int jfg_sniper_walk(int weapon);                                       // the characters' aim control (overlays 15-17)
 int jfg_flag_override(int flag);                                       // mainGetGameFlag's wrapper
 // jfg_gore.cpp
-void jfg_gore_on_blood_spurt(uint8_t* rdram, recomp_context* ctx);     // jfg_on_blood_spurt handler (jfg_api.cpp)
-void jfg_gore_on_blood_hit(uint8_t* rdram, recomp_context* ctx);       // jfg_on_blood_hit handler
-void jfg_gore_make_room(uint8_t* rdram, recomp_context* ctx);          // jfg_on_blood_spurt handler (Blood stays)
+void jfg_gore_make_room(uint8_t* rdram, int amount);                    // bloodSpurtAdd's wrapper (Blood stays)
 void jfg_gore_level_change(uint8_t* rdram, recomp_context* ctx);       // jfg_on_level_change handler (Blood stays)
 void jfg_gore_limb(uint8_t* rdram, recomp_context* ctx);               // jfg_on_severed_limb_tick handler
 void jfg_blood_extra_drops(uint8_t* rdram, recomp_context* ctx, int amount); // bloodSpurtAdd's wrapper
+bool jfg_gore_keep_blood(void);                                        // jfg_blood_keep (a mod's Blood stays)
+bool jfg_gore_keep_limbs(void);                                        // jfg_limbs_keep (a mod's Body parts stay)
+// bloodSpurtAdd / bloodHitSpriteAdd's wrappers: the object bleeding at x, y, z with the colour index (0 = none found),
+// its JFG_BLOOD_* group, and the mods' colours put into the tables.
+uint32_t jfg_blood_source(float x, float y, float z, int color, int* group);
+void jfg_blood_colors_apply(void);
 // jfg_area_progress.cpp
 void jfg_region_reset_begin(uint8_t* rdram, recomp_context* ctx);      // mainResetRegion's wrapper, before
 void jfg_region_reset_end(uint8_t* rdram, recomp_context* ctx);        // ... and after

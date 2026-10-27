@@ -9,7 +9,7 @@
 
 #include "modding.h"
 
-#define JFG_API_VERSION 4
+#define JFG_API_VERSION 5
 
 // --- helpers -------------------------------------------------------------------------------------------------------
 
@@ -236,24 +236,59 @@ RECOMP_IMPORT("*", void jfg_controls_get(JfgControls* out));
 // a hero of another size, say. 1 = as usual. Kept until set again.
 RECOMP_IMPORT("*", void jfg_camera_set_distance(float scale));
 
+// --- helpers (since version 5) -------------------------------------------------------------------------------------
+
+// Blood colours. Blood takes its colour from an index (0..7, JfgBloodSpurt.color, JfgBloodHit.color) into two tables,
+// one for drops and splats and one for hit sprites. The game uses 0 (red: heroes, Floyd, Tribals), 1 (green: ground
+// insects, most bosses), 2 (black: flyers, drones, turrets) and 4 (lime: the final boss); 3, 5, 6 and 7 are free for
+// a mod to fill and hand out. Sets index's colour, 0xRRGGBB each; the tables are drawn at different strengths (the
+// game's red is 0x500000 for drops, 0xA00000 for hits). 0xFFFFFFFF = the game's own colour. Kept until set again.
+RECOMP_IMPORT("*", void jfg_blood_set_color(int index, unsigned int drops, unsigned int hits));
+// The game's rainbow blood (a cheat): each drop takes a random colour index (hit sprites keep theirs).
+RECOMP_IMPORT("*", void jfg_blood_set_rainbow(int on));
+// Blood stays: splats no longer fade, up to that many (64..4096; once reached, the oldest make room); 0 = the game's
+// own. A level change clears them. Kept until set again.
+RECOMP_IMPORT("*", void jfg_blood_keep(int splats));
+// Body parts stay: the newest 24 severed limbs no longer fade (drone heads and other pickups are left alone).
+RECOMP_IMPORT("*", void jfg_limbs_keep(int on));
+// Hide Floyd: Floyd, his shadow and his sounds are gone while he follows the hero (not while a player flies him).
+RECOMP_IMPORT("*", void jfg_floyd_hide(int on));
+
 // --- event data ---------------------------------------------------------------------------------------------------
 
+// Who bleeds (JfgBloodSpurt.group, JfgBloodHit.group; since version 5).
+#define JFG_BLOOD_HERO   0 // a hero or Floyd
+#define JFG_BLOOD_TRIBAL 1
+#define JFG_BLOOD_GREEN  2 // creatures with the game's green blood (ground insects, most bosses)
+#define JFG_BLOOD_DARK   3 // with its black blood (flyers, drones, turrets)
+#define JFG_BLOOD_BOSS   4 // the final boss
+#define JFG_BLOOD_OTHER  5
+
 // jfg_on_blood_spurt: a spurt of blood drops. Change any field; set cancel to 1 to drop it; amount is the drops in
-// percent (100 = the game's own, 200 = twice as many; the extra ones spread a little).
+// percent (100 = the game's own, 200 = twice as many; the extra ones spread a little). brightness and color were
+// called alpha and count before version 5 (the names still work). Since version 5: source, the creature bleeding (the
+// nearest to the blood with that colour; NULL if none), and its group (JFG_BLOOD_*), both only to read.
 typedef struct {
     float x, y, z;
     float vx, vy, vz;
-    int alpha;
-    int count;
+    union { int brightness; int alpha; };  // 0..255
+    union { int color; int count; };       // colour index (jfg_blood_set_color)
     float scale;
     int amount;
     int cancel;
+    void* source;
+    int group;
 } JfgBloodSpurt;
 
-// jfg_on_blood_hit: a blood hit sprite. Set cancel to 1 to drop it.
+// jfg_on_blood_hit: a blood hit sprite. Set cancel to 1 to drop it. Since version 5: its brightness and colour index
+// (change them as in JfgBloodSpurt), source and group.
 typedef struct {
     float x, y, z;
     int cancel;
+    int brightness;
+    int color;
+    void* source;
+    int group;
 } JfgBloodHit;
 
 // jfg_on_object_draw: an object is about to be drawn. Set cancel to 1 to draw nothing for it.
@@ -304,13 +339,13 @@ typedef struct {
 //     Each tick the player is controlled in a boss fight, before the game's control code runs. player: the player's
 //     object; frames: video frames the tick covers; character: 0 Vela, 1 Juno, 2 Lupus.
 // jfg_on_blood_spurt(JfgBloodSpurt* blood)
-//     Blood drops are about to be added. The game's own options (No blood, Blood amount) have already applied.
+//     Blood drops are about to be added.
 // jfg_on_blood_hit(JfgBloodHit* hit)
 //     A blood hit sprite is about to be added.
 // jfg_on_severed_limb_tick(void* limb, int frames)
 //     Each tick a severed body part (an object) is updated, before the game's code for it.
 // jfg_on_object_draw(JfgObjectDraw* draw)
-//     An object is about to be drawn (after the game's own option, Hide Floyd, has applied).
+//     An object is about to be drawn (after Hide Floyd, jfg_floyd_hide, has applied).
 // jfg_on_sound_play(JfgSoundPlay* sound)
 //     A sound effect is about to start.
 // jfg_on_screen_flash(JfgScreenFlash* flash)

@@ -113,7 +113,7 @@ extern "C" int jfg_squaddie_init_ok(uint8_t* rdram_, recomp_context* ctx) {
 // an object's children); the wrappers of the calls that can fail (step numbers below) note their result when
 // objSetupObject made the call itself, not one of them. The type is objGetObjdef's argument.
 namespace {
-constexpr uint32_t ADDR_ObjListCount = 0x800F2CA8, ADDR_NoAddObjListCount = 0x800F2CB8;
+constexpr uint32_t ADDR_NoAddObjListCount = 0x800F2CB8;
 constexpr int OBJ_STEPS = 8, OBJ_DEPTH = 8;
 const char* const OBJ_STEP_NAMES[OBJ_STEPS] = { "objdef", "8000F978", "texture", "model", "model2", "sprite", "allocR", "alloc" };
 struct ObjSetupRecord { bool ran[OBJ_STEPS]; uint32_t result[OBJ_STEPS]; int type; bool typed; };

@@ -76,7 +76,8 @@ extern "C" uint32_t jfg_hit_flash(uint32_t color) {
     return 0xFF0000FFu | (gb << 16) | (gb << 8);
 }
 
-// "Hide Floyd". sidekickControl(obj, ...) updates Floyd; its entry notes his object kind (behaviorId, +0x48), and
+// Hide Floyd, for a mod (jfg_floyd_hide, API version 5; the Better Floyd mod's option since 2026-10-27, before that the
+// port's). sidekickControl(obj, ...) updates Floyd; its entry notes his object kind (behaviorId, +0x48), and
 // objPrintObject(dList, mtx, vtx, obj) draws nothing for an object of that kind while the option is on. His shadow is
 // made in shadowGenerate, from the object's shadow data (+0x50): the loop skips an object without any. His sounds
 // (among them a looping one, 0x138, whose volume the code works out each tick) are all started by sidekickControl
@@ -88,8 +89,14 @@ static uint32_t g_floyd_obj = 0; // his object as last seen by sidekickControl
 static bool g_floyd_muted = false;
 constexpr uint32_t ADDR_cooperativeGame = 0x800A4FC8; // u8
 
+static bool g_hide_floyd = false; // jfg_floyd_hide
+extern "C" bool jfg_floyd_hide_on(void) { return g_hide_floyd; }
+
+// jfg_floyd_hide(int on) (mod API).
+extern "C" void jfg_api_floyd_hide(uint8_t*, recomp_context* ctx) { g_hide_floyd = ctx->r4 != 0; }
+
 static bool floyd_hidden(uint32_t obj) {
-    if (!g.hide_floyd || g_floyd_kind < 0 || !valid_ptr(obj) || Obj::Kind::get(obj) != g_floyd_kind) return false;
+    if (!g_hide_floyd || g_floyd_kind < 0 || !valid_ptr(obj) || Obj::Kind::get(obj) != g_floyd_kind) return false;
     return rd8(ADDR_robotMission) == 0 && rd8(ADDR_cooperativeGame) == 0;
 }
 

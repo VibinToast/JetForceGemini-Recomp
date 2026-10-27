@@ -55,6 +55,8 @@ namespace jfg {
 constexpr uint32_t ADDR_gameplay             = 0x800FD7D4; // Game*
 constexpr uint32_t ADDR_mainGameMode         = 0x800FD7C4; // s32
 constexpr uint32_t ADDR_currentLevel         = 0x800A323C; // s16, mainGetCurrentLevel()
+constexpr uint32_t ADDR_ObjList             = 0x800F2CA4; // Object** (objGetObjList)
+constexpr uint32_t ADDR_ObjListCount        = 0x800F2CA8; // s32
 constexpr uint32_t ADDR_weaponTable          = 0x800A1490; // WeaponDef[16], the heroes' weapons (jfg_fields.h)
 constexpr uint32_t ADDR_currentCharacter     = 0x800A3240; // s16, mainGetPlayerCharacter() in single player
 constexpr uint32_t ADDR_currentEntrance      = 0x800A3244; // s16, the entrance the level was entered by (copied from 0x800A3258, mainChangeLevel's third argument, as the level loads)

@@ -62,12 +62,8 @@ bool aim_view_key(const char* key, int* preset_value) {
 }
 
 void apply_option(const char* key, int value) {
-    if (std::strcmp(key, "no_blood") == 0) g.no_blood = value != 0;
-    else if (std::strcmp(key, "gore_keep_blood") == 0) g.gore_keep_blood = value != 0;
-    else if (std::strcmp(key, "gore_keep_limbs") == 0) g.gore_keep_limbs = value != 0;
-    else if (std::strcmp(key, "blood_amount") == 0) g.blood_amount = std::clamp(value, 100, 800);
-    else if (std::strcmp(key, "blood_splats") == 0) g.blood_splats = std::clamp(value, 64, 4096);
-    else if (std::strcmp(key, "show_fps") == 0) g.show_fps = value != 0;
+    if (apply_mod_option(key, value)) return; // moved to the official mods
+    if (std::strcmp(key, "show_fps") == 0) g.show_fps = value != 0;
     else if (std::strcmp(key, "show_level") == 0) g.show_level = value != 0;
     else if (std::strcmp(key, "show_pack") == 0) g.show_pack = value != 0;
     else if (std::strcmp(key, "dump_by_level") == 0) g.dump_by_level = value != 0;
@@ -103,7 +99,6 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "fov") == 0) g.fov = std::clamp(value, 75, 140);
     else if (std::strcmp(key, "hit_flash") == 0) g.hit_flash = std::clamp(value, 0, 100);
     else if (std::strcmp(key, "shadow_opacity") == 0) g.shadow_opacity = std::clamp(value, 0, 200);
-    else if (std::strcmp(key, "hide_floyd") == 0) g.hide_floyd = value != 0;
     else if (std::strcmp(key, "language") == 0) g.language = std::clamp(value, 0, 4);
     else if (std::strcmp(key, "vignette") == 0) g.vignette = value != 0;
     else if (std::strcmp(key, "vignette_strength") == 0) g.vignette_strength = std::clamp(value, 0, 100);
@@ -187,11 +182,11 @@ void load_options() {
 std::string options_text(const State& s) {
     std::string out;
     char buf[512];
-    std::snprintf(buf, sizeof(buf), "no_blood=%d\nstart_skips_cutscenes=%d\n", s.no_blood ? 1 : 0, s.start_skips_cutscenes ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "start_skips_cutscenes=%d\n", s.start_skips_cutscenes ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "auto_save=%d\nauto_save_minutes=%d\nsave_notification=%d\nkeep_area_progress=%d\n", s.auto_save ? 1 : 0, s.auto_save_minutes, s.save_notification ? 1 : 0, s.keep_area_progress ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "show_fps=%d\nwidescreen=%d\nframe_rate=%d\nsmooth_motion=%d\n", s.show_fps ? 1 : 0, s.widescreen ? 1 : 0, s.frame_rate, s.smooth_motion); out += buf;
     std::snprintf(buf, sizeof(buf), "smooth_shadows=%d\nshadow_opacity=%d\nhud_corners=%d\n", s.smooth_shadows ? 1 : 0, s.shadow_opacity, s.hud_corners ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "fov=%d\nhit_flash=%d\nhide_floyd=%d\nlanguage=%d\n", s.fov, s.hit_flash, s.hide_floyd ? 1 : 0, s.language); out += buf;
+    std::snprintf(buf, sizeof(buf), "fov=%d\nhit_flash=%d\nlanguage=%d\n", s.fov, s.hit_flash, s.language); out += buf;
     std::snprintf(buf, sizeof(buf), "vignette=%d\nvignette_strength=%d\nvignette_size=%d\n", s.vignette ? 1 : 0, s.vignette_strength, s.vignette_size); out += buf;
     std::snprintf(buf, sizeof(buf), "level_fog_distance=%d\nno_level_fog=%d\n", s.level_fog_distance, s.no_level_fog ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "depth_fog=%d\nfog_start=%d\nfog_end=%d\nfog_density=%d\nfog_color=%d\n", s.depth_fog ? 1 : 0, s.fog_start, s.fog_end, s.fog_density, s.fog_color); out += buf;
@@ -216,7 +211,6 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "sprint=%d\nsprint_speed=%d\nsprint_aiming=%d\n", s.sprint ? 1 : 0, s.sprint_speed, s.sprint_aiming ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "sprint_swimming=%d\nsprint_swim_speed=%d\n", s.sprint_swimming ? 1 : 0, s.sprint_swim_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "pause_in_menu=%d\n", s.pause_in_menu ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "gore_keep_blood=%d\ngore_keep_limbs=%d\nblood_amount=%d\nblood_splats=%d\n", s.gore_keep_blood ? 1 : 0, s.gore_keep_limbs ? 1 : 0, s.blood_amount, s.blood_splats); out += buf;
     return out;
 }
 

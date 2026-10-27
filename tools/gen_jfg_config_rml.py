@@ -45,15 +45,6 @@ GAMEPLAY = [
      "Saving in the middle of an area (auto save or Z on the pause screen) also keeps what was done there: Tribals rescued or lost, cleared rooms, continues, and the room you were in. Loading the file puts it all back. Off: the game's own behaviour, where an area starts over from its entrance after loading."),
     ("bool", "permanent_tribals", "Permanent Tribal Saves", None,
      "A Tribal you rescued stays rescued: going back into its area, a game over or loading your file no longer brings it back to be rescued again, so the Tribals of an area can be rescued over several visits. Rescues are kept each time the game saves (including auto saves)."),
-    ("group", None, "Gore", None, None),
-    ("bool", "no_blood", "No Blood", None, "No blood, as in the Japanese version."),
-    ("bool", "gore_keep_blood", "Blood Stays", None,
-     "Blood splats stay on the ground and walls instead of fading away. Blood Splat Limit sets how many; once it is reached, the oldest makes room for new blood."),
-    ("range", "blood_splats", "Blood Splat Limit", (64, 4096, ""),
-     "How many blood splats stay on the screen with Blood Stays on. 64 is the original game; more are drawn from memory the game does not use. Leaving the level clears them."),
-    ("bool", "gore_keep_limbs", "Body Parts Stay", None,
-     "Severed limbs and heads stay where they fell instead of fading away. The newest 24 are kept, so the game does not run out of memory in big fights."),
-    ("range", "blood_amount", "Blood Amount", (100, 800, "%"), "How much blood a hit sprays. 100% is the original game."),
     ("group", None, "Player", None, None),
     ("range", "damage_taken", "Damage Taken", (0, 400, "%"),
      "How much damage the character takes from enemies, falls and explosions. 0% takes none; the Invulnerable cheat overrides it."),
@@ -213,8 +204,6 @@ GRAPHICS = [
     ("group", None, "Objects", None, None),
     ("bool", "no_lod", "Disable LOD", None, "Characters and objects keep their full-detail model at any distance."),
     ("bool", "far_objects", "Draw Distant Objects", None, "Objects no longer fade out and disappear beyond their draw distance. Level scenery itself is not affected."),
-    ("bool", "hide_floyd", "Hide Floyd", None,
-     "Floyd, his shadow and his sounds are gone while he follows your character; he still flies along and shoots. Floyd missions and a second player flying him show him as usual."),
     ("group", None, "Ambient Occlusion", None, None),
     ("bool", "ssao", "Ambient Occlusion (SSAO)", None, "Darkens creases, corners and the ground around objects, worked out from the depth of the 3D view. The HUD is not affected."),
     ("range", "ssao_strength", "SSAO Strength", (10, 300, "%"), "How dark the ambient occlusion gets."),
@@ -244,10 +233,8 @@ TEXTURES = [
 ]
 
 # Options shown greyed out and locked while a condition on another option holds (a data expression): the aiming view's sliders follow Over-the-Shoulder
-# Aiming's fixed view then (jfg_options.h, aim_view; jfg_settings_api.cpp shows its values and ignores changes), and the
-# gore options do nothing with No Blood on.
+# Aiming's fixed view then (jfg_options.h, aim_view; jfg_settings_api.cpp shows its values and ignores changes).
 LOCKED_BY = {k: "aim_shoulder == 1" for k in ("aim_drag_margin", "aim_drag_return", "aim_offset_x", "aim_offset_y", "aim_offset_z")}
-LOCKED_BY.update({k: "no_blood == 1" for k in ("gore_keep_blood", "blood_splats", "gore_keep_limbs", "blood_amount")})
 LOCKED_BY["hud_corners"] = "widescreen == 0" # it moves the widescreen HUD; without Widescreen there is nothing to move
 
 def row_ids(kind, key, extra):

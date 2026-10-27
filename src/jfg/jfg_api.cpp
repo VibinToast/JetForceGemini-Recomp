@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -148,16 +150,13 @@ void register_api() {
     // mod listening, the frequent events (object draw, sound) cost nothing.
     add_internal(Event::LevelChange, jfg_change_level_log); // JFG_DEBUG_STATS log (jfg_diagnostics.cpp)
     add_internal(Event::BossFightControl, jfg_boss_tick);   // boss-fight control layout (jfg_controls.cpp)
-    add_internal(Event::BloodSpurt, jfg_gore_on_blood_spurt, // No blood, Blood amount (jfg_gore.cpp)
-                 [] { return jfg_no_blood() != 0 || g.blood_amount != 100; });
-    add_internal(Event::BloodSpurt, jfg_gore_make_room, [] { return g.gore_keep_blood; });   // Blood stays: room for it
-    add_internal(Event::LevelChange, jfg_gore_level_change, [] { return g.gore_keep_blood; }); // Blood stays: kept splats go
-    add_internal(Event::BloodHit, jfg_gore_on_blood_hit, [] { return jfg_no_blood() != 0; }); // No blood
-    add_internal(Event::SeveredLimbTick, jfg_gore_limb, [] { return g.gore_keep_limbs; });     // Body parts stay
+    // Blood stays and Body parts stay, for a mod (jfg_blood_keep, jfg_limbs_keep; jfg_gore.cpp).
+    add_internal(Event::LevelChange, jfg_gore_level_change, [] { return jfg_gore_keep_blood(); }); // kept splats go
+    add_internal(Event::SeveredLimbTick, jfg_gore_limb, [] { return jfg_gore_keep_limbs(); });
     add_internal(Event::SidekickTick, jfg_floyd_seen);       // Hide Floyd: his object kind (jfg_visuals.cpp)
     add_internal(Event::SidekickTick, jfg_floyd_fuel, [] { return g.floyd_fuel != 100; }); // Floyd's Fuel (jfg_gameplay.cpp)
-    add_internal(Event::ObjectDraw, jfg_hide_object, [] { return g.hide_floyd; }); // Hide Floyd
-    add_internal(Event::SoundPlay, jfg_floyd_mute, [] { return g.hide_floyd; });   // Hide Floyd: his sounds
+    add_internal(Event::ObjectDraw, jfg_hide_object, [] { return jfg_floyd_hide_on(); }); // Hide Floyd, for a mod
+    add_internal(Event::SoundPlay, jfg_floyd_mute, [] { return jfg_floyd_hide_on(); });   // ... his sounds
     add_internal(Event::ScreenFlash, jfg_hit_flash_event, [] { return g.hit_flash < 100; }); // Hit flash opacity
     recomp::overlays::register_base_events(g_event_names);
     recomp::overlays::register_base_export("jfg_api_version", api_version);
@@ -165,6 +164,8 @@ void register_api() {
     recomp::overlays::register_base_export("jfg_get_level", get_level);
     recomp::overlays::register_base_export("jfg_get_language", get_language);
     jfg::register_world_api(); // planets and galaxies (jfg_worldmap.cpp)
+    jfg::register_blood_api(); // blood colours, rainbow, Blood stays, Body parts stay (jfg_gore.cpp)
+    recomp::overlays::register_base_export("jfg_floyd_hide", jfg_api_floyd_hide); // Hide Floyd (jfg_visuals.cpp)
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }
 
@@ -195,22 +196,32 @@ JFG_WRAP(dogBossControl) {
     dogBossControl_orig(rdram, ctx);
 }
 
-// bloodSpurtAdd(x, y, z, vx, vy, vz, alpha, count, scale): jfg_on_blood_spurt with the arguments in a JfgBloodSpurt.
-// x and y are in $f12/$f14, z and vx in $a2/$a3, the rest in the caller's argument slots ($sp + 0x10..). Callbacks may
-// change them, cancel the spurt, or set amount: drops in percent, the extra ones spread a little (jfg_gore.cpp).
+static float as_float(uint32_t bits) { float f; std::memcpy(&f, &bits, 4); return f; }
+
+// bloodSpurtAdd(x, y, z, vx, vy, vz, brightness, color, scale): jfg_on_blood_spurt with the arguments in a
+// JfgBloodSpurt, and the creature bleeding (jfg_blood_source). x and y are in $f12/$f14, z and vx in $a2/$a3, the rest in
+// the caller's argument slots ($sp + 0x10..). Callbacks may change them, cancel the spurt, or set amount: drops in
+// percent, the extra ones spread a little (jfg_gore.cpp).
 JFG_WRAP(bloodSpurtAdd) {
     using namespace jfg;
     namespace b = jfg::api::blood_spurt;
+    g_rdram = rdram;
+    jfg_blood_colors_apply();
     if (!api::listened(api::Event::BloodSpurt)) { // no payload to build; fire only counts it
         api::fire(rdram, ctx, api::Event::BloodSpurt);
+        jfg_gore_make_room(rdram, 100);
         bloodSpurtAdd_orig(rdram, ctx);
         return;
     }
-    g_rdram = rdram;
     const uint32_t sp = (uint32_t)ctx->r29;
     int32_t amount, cancel;
+    int group = 0;
+    const int game_color = (int)rd32(sp + 0x1C);
+    const uint32_t source = jfg_blood_source(ctx->f12.fl, ctx->f14.fl, as_float((uint32_t)ctx->r6), game_color, &group);
     {
         api::Payload p(ctx, b::SIZE);
+        wr32(p.addr + b::SOURCE, source);
+        wr32(p.addr + b::GROUP, (uint32_t)group);
         wr32(p.addr + b::X, ctx->f12.u32l);
         wr32(p.addr + b::Y, ctx->f14.u32l);
         wr32(p.addr + b::Z, (uint32_t)ctx->r6);
@@ -228,31 +239,51 @@ JFG_WRAP(bloodSpurtAdd) {
         amount = (int32_t)rd32(p.addr + b::AMOUNT);
         cancel = (int32_t)rd32(p.addr + b::CANCEL);
     }
+    static const bool log = std::getenv("JFG_DEBUG_BLOOD") != nullptr; // the first 40 spurts, for tests
+    static int logged = 0;
+    if (log && logged < 40) {
+        logged++;
+        std::fprintf(stderr, "[jfg] blood spurt from %08X (kind %d), group %d: colour %d -> %d, amount %d%s\n", source,
+                     source != 0 ? (int)Obj::Kind::get(source) : -1, group, game_color, (int)rd32(sp + 0x1C), amount,
+                     cancel ? ", cancelled" : "");
+    }
     if (cancel) return;
+    jfg_gore_make_room(rdram, amount);
     jfg_blood_extra_drops(rdram, ctx, amount);
     bloodSpurtAdd_orig(rdram, ctx);
 }
 
-// bloodHitSpriteAdd(x, y, z, ...): jfg_on_blood_hit; callbacks may cancel it.
+// bloodHitSpriteAdd(x, y, z, brightness, color): jfg_on_blood_hit, with the creature bleeding (jfg_blood_source);
+// callbacks may change brightness and color ($a3 and the caller's $sp + 0x10), or cancel it.
 JFG_WRAP(bloodHitSpriteAdd) {
     using namespace jfg;
     namespace b = jfg::api::blood_hit;
+    g_rdram = rdram;
+    jfg_blood_colors_apply();
     if (!api::listened(api::Event::BloodHit)) { // no payload to build; fire only counts it
         api::fire(rdram, ctx, api::Event::BloodHit);
         bloodHitSpriteAdd_orig(rdram, ctx);
         return;
     }
-    g_rdram = rdram;
+    const uint32_t sp = (uint32_t)ctx->r29;
     int32_t cancel;
     {
+        int group = 0;
+        const uint32_t source = jfg_blood_source(ctx->f12.fl, ctx->f14.fl, as_float((uint32_t)ctx->r6), (int)rd32(sp + 0x10), &group);
         api::Payload p(ctx, b::SIZE);
         wr32(p.addr + b::X, ctx->f12.u32l);
         wr32(p.addr + b::Y, ctx->f14.u32l);
         wr32(p.addr + b::Z, (uint32_t)ctx->r6);
         wr32(p.addr + b::CANCEL, 0);
+        wr32(p.addr + b::BRIGHTNESS, (uint32_t)ctx->r7);
+        wr32(p.addr + b::COLOR, rd32(sp + 0x10));
+        wr32(p.addr + b::SOURCE, source);
+        wr32(p.addr + b::GROUP, (uint32_t)group);
         api::fire(rdram, ctx, api::Event::BloodHit, (int32_t)p.addr);
         g_rdram = rdram;
         cancel = (int32_t)rd32(p.addr + b::CANCEL);
+        ctx->r7 = (gpr)(int32_t)rd32(p.addr + b::BRIGHTNESS);
+        wr32(sp + 0x10, rd32(p.addr + b::COLOR));
     }
     if (cancel) return;
     bloodHitSpriteAdd_orig(rdram, ctx);

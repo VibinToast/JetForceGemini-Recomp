@@ -55,6 +55,7 @@ void jfg_launcher_scroll(float pixels); // JFG PORT: src/ui/ui_launcher.cpp (con
 extern "C" void jfg_settings_menu_open(int open); // JFG PORT: src/jfg/jfg_camera.cpp (pauses the game)
 extern "C" void jfg_tools_ui_frame(void); // JFG PORT: src/jfg/jfg_ui_tools.cpp
 void jfg_language_prompt_frame(); // JFG PORT: src/ui/ui_language_prompt.cpp
+namespace jfg { void mod_options_frame(); } // JFG PORT: settings moved to the official mods (src/jfg/jfg_mod_options.cpp)
 extern "C" int jfg_tools_controller_button(int button, int down, int bound); // JFG PORT: src/jfg/jfg_ui_tools.cpp (controller)
 
 static std::vector<char> read_file(const std::filesystem::path& filepath) {
@@ -720,6 +721,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
     jfg_settings_menu_open(config_was_open ? 1 : 0); // JFG PORT
     jfg_tools_ui_frame(); // JFG PORT: F10's tools (src/jfg/jfg_ui_tools.cpp)
     jfg_language_prompt_frame(); // JFG PORT: the first-run language question (src/ui/ui_language_prompt.cpp)
+    jfg::mod_options_frame(); // JFG PORT: old blood / Hide Floyd settings and profiles' mod keys, once mods are scanned
 
     using clock = std::chrono::system_clock;
 

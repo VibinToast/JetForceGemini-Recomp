@@ -12,7 +12,7 @@
 
 namespace jfg::api {
 
-constexpr int VERSION = 4;
+constexpr int VERSION = 5;
 
 // The events, in the order they are registered: a released event keeps its place, new ones go before Count.
 enum class Event : uint32_t {
@@ -54,11 +54,12 @@ struct Payload {
 
 // JfgBloodSpurt and JfgBloodHit (mod_api/jfg_api.h).
 namespace blood_spurt {
-constexpr uint32_t X = 0x00, Y = 0x04, Z = 0x08, VX = 0x0C, VY = 0x10, VZ = 0x14, ALPHA = 0x18, COUNT = 0x1C, SCALE = 0x20,
-                   AMOUNT = 0x24, CANCEL = 0x28, SIZE = 0x2C;
+constexpr uint32_t X = 0x00, Y = 0x04, Z = 0x08, VX = 0x0C, VY = 0x10, VZ = 0x14, BRIGHTNESS = 0x18, COLOR = 0x1C, SCALE = 0x20,
+                   AMOUNT = 0x24, CANCEL = 0x28, SOURCE = 0x2C, GROUP = 0x30, SIZE = 0x34; // SOURCE, GROUP since version 5
 }
 namespace blood_hit {
-constexpr uint32_t X = 0x00, Y = 0x04, Z = 0x08, CANCEL = 0x0C, SIZE = 0x10;
+constexpr uint32_t X = 0x00, Y = 0x04, Z = 0x08, CANCEL = 0x0C, BRIGHTNESS = 0x10, COLOR = 0x14, SOURCE = 0x18, GROUP = 0x1C,
+                   SIZE = 0x20; // BRIGHTNESS.. since version 5
 }
 // JfgObjectDraw, JfgSoundPlay, JfgScreenFlash: one value and cancel.
 namespace value_cancel {

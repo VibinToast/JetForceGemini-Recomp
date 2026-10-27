@@ -391,7 +391,7 @@ uint32_t model_instance(uint32_t obj) {
 // (2026-10-17). Only members found here are touched.
 std::unordered_set<uint32_t> g_live_objects;
 void read_live_objects() {
-    constexpr uint32_t ADDR_ObjList = 0x800F2CA4, ADDR_ObjListCount = 0x800F2CA8, ADDR_NoAddObjList = 0x800F2CB4, ADDR_NoAddObjListCount = 0x800F2CB8;
+    constexpr uint32_t ADDR_NoAddObjList = 0x800F2CB4, ADDR_NoAddObjListCount = 0x800F2CB8;
     g_live_objects.clear();
     const uint32_t lists[2][2] = { { ADDR_ObjList, ADDR_ObjListCount }, { ADDR_NoAddObjList, ADDR_NoAddObjListCount } };
     for (const auto& l : lists) {

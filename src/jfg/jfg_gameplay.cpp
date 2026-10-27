@@ -13,12 +13,6 @@
 
 namespace jfg {
 
-// bloodSpurtAdd / bloodHitSpriteAdd (overlay 8) return immediately when this is non-zero.
-extern "C" int jfg_no_blood(void) {
-    static const bool env = std::getenv("JFG_NO_BLOOD") != nullptr;
-    return (g.no_blood || env) ? 1 : 0;
-}
-
 // --- damage taken ----------------------------------------------------------------------------------------------------
 // The character on screen keeps its health in its object's damage data (object + 0x4C, +6; 256 per unit). Whatever
 // lowered it since the last tick (enemy fire, falls, explosions) is scaled here, before the game's own death check in

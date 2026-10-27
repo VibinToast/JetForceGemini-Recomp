@@ -32,7 +32,6 @@ namespace {
 constexpr uint32_t ADDR_track = 0x800A0D60;      // Track*, the level's track (track.c)
 constexpr uint32_t ADDR_controlcam = 0x800F6DC0; // Camera*, the camera the hero's control steers by
 constexpr uint32_t ADDR_controlXjoy = 0x800F6DAC, ADDR_controlYjoy = 0x800F6DB0; // s32, filled by controlReadJoypad
-constexpr uint32_t ADDR_ObjList = 0x800F2CA4, ADDR_ObjListCount = 0x800F2CA8;
 constexpr int CHARACTERS = 3; // Vela, Juno, Lupus
 
 // The hero's per-tick data (Obj::Data of a hero, ControlPlayer in the decomp's charControl.h).

@@ -24,11 +24,6 @@ struct State {
     int  raw_flag = 0;
     bool pending_warp = false;
     // options
-    bool no_blood = false;
-    bool gore_keep_blood = false;  // blood splats stay on the ground and walls (jfg_gore.cpp)
-    bool gore_keep_limbs = false;  // severed body parts stay (jfg_gore.cpp)
-    int  blood_amount = 100;       // blood drops per spurt, percent (jfg_blood_more)
-    int  blood_splats = 64;        // splats that stay with gore_keep_blood (64 = the game's pool; jfg_gore.cpp)
     bool show_fps = false;         // frame rate in the top right corner
     bool show_level = false;       // level number and name in the top right corner
     bool show_pack = false;        // texture pack in use in the top right corner
@@ -54,7 +49,6 @@ struct State {
     int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
     int  hit_flash = 100;          // red screen when the character is hit: strength, percent (jfg_hit_flash)
     int  shadow_opacity = 50;      // how dark character shadows are drawn, percent of the game's (jfg_shadow_alpha); 50 in every profile
-    bool hide_floyd = false;       // Floyd is not drawn while he follows the character (jfg_hide_object)
     int  language = 0;             // "Language": 0 English, 1 French, 2 German, 3 Spanish, 4 Japanese (jfg_locale.cpp); not part of profiles
     bool vignette = false;        // darker screen edges in RT64 (src/shaders/VignettePS.hlsl), see push_render_options()
     int  vignette_strength = 40;   // vignette: how dark the corners get, percent
@@ -136,6 +130,10 @@ extern State g;
 
 // jfg_options.cpp
 void apply_option(const char* key, int value); // sets one option from its saved form (the options file, profiles)
+// The old blood and Hide Floyd keys and "mod:<id>:<option>" keys: a mod's options (jfg_mod_options.cpp). False for
+// any other key.
+bool apply_mod_option(const char* key, int value);
+void mod_options_frame(); // every UI frame
 void load_options();                           // once, at the first tick (or when the Select menu is built)
 std::string options_text(const State& s);      // every option in its saved form, one "key=value" line each
 void save_options();                           // also into the active player profile

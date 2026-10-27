@@ -204,6 +204,7 @@ void worldmap_file_chosen();               // the save file hooks, as tribal_sav
 void worldmap_on_save(int slot);
 void worldmap_forget(int slot);
 void register_world_api();                 // the helpers above for mods (register_api)
+void register_blood_api();                 // blood colours, rainbow, keeping splats and parts (jfg_gore.cpp)
 void tribal_saves_region_reset();     // end of mainResetRegion: puts the region's rescues back
 
 // --- jfg_visuals.cpp ---------------------------------------------------------------------------------------------

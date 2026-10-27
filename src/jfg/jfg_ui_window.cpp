@@ -66,13 +66,6 @@ void draw_options() {
     if (ImGui::BeginTabBar("options_tabs", ImGuiTabBarFlags_FittingPolicyResizeDown)) {
         if (ImGui::BeginTabItem("General")) {
             options_section("General");
-            changed |= ImGui::Checkbox("No blood (as in the Japanese version)", &g.no_blood);
-            ImGui::BeginDisabled(g.no_blood);
-            changed |= ImGui::Checkbox("Blood stays (splats on the ground and walls)", &g.gore_keep_blood);
-            changed |= ImGui::Checkbox("Body parts stay", &g.gore_keep_limbs);
-            changed |= options_slider("Blood splats", &g.blood_splats, 64, 4096);
-            changed |= options_slider("Blood amount %", &g.blood_amount, 100, 800);
-            ImGui::EndDisabled();
             changed |= ImGui::Checkbox("START skips cutscenes", &g.start_skips_cutscenes);
             options_help("Also skips the logo screens at start-up and the story intro after creating a file. A skipped cutscene "
                          "still runs to its end at full machine speed, so everything it does (flags, items, the next level) still "
@@ -124,9 +117,6 @@ void draw_options() {
                 options_help("The language of menus, subtitles and hints: English and every file in the game's locales "
                              "folder (locales/<name>.json). Text a language lacks is shown in English.");
             }
-            changed |= ImGui::Checkbox("Hide Floyd", &g.hide_floyd);
-            options_help("Floyd, his shadow and his sounds are gone while he follows the character; he still flies along "
-                         "and shoots. Floyd missions and a second player flying him show him as usual.");
             changed |= ImGui::Checkbox("Disable LOD (full-detail models at any distance)", &g.no_lod);
             options_help("Characters and objects normally switch to a simpler model once they are a little way off.");
             changed |= ImGui::Checkbox("Draw distant objects (no object draw distance)", &g.far_objects);
