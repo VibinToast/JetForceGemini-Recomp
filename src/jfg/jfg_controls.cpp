@@ -34,6 +34,7 @@
 
 #include "debug_ui/debug_ui.hpp"
 #include "input/input.hpp"
+#include "jfg_api.h"
 #include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
@@ -720,6 +721,24 @@ void jfg_camera_controls(recomp_context* ctx) {
         arrive_ticks++;
     }
     if (!jfg_dual_stick_active()) { g_cam.was_aiming = false; return; }
+    if (jfg::api::mod_camera_active()) {
+        // A mod drives the camera (jfg_camera_set: a custom hero's, a boss fight's): the left stick goes to the game as
+        // the pad gives it (rotated here it would be turned twice), and the right stick, which turns the dual-stick
+        // camera, gives the C buttons instead, as an N64 pad's, for the mod's camera to read.
+        constexpr uint16_t C_UP = 0x0008, C_DOWN = 0x0004, C_LEFT = 0x0002, C_RIGHT = 0x0001;
+        constexpr float DIGITAL = 0.5f;
+        static uint16_t c_before = 0;
+        const float rx = g_stick_rx, ry = g_stick_ry;
+        const uint16_t c = (uint16_t)((rx > DIGITAL ? C_RIGHT : 0) | (rx < -DIGITAL ? C_LEFT : 0) |
+                                      (ry > DIGITAL ? C_UP : 0) | (ry < -DIGITAL ? C_DOWN : 0));
+        const uint32_t i = rd8(ADDR_sPlayerID) & 3u;
+        wr16(pad, (uint16_t)(rd16(pad) | c));
+        wr16(ADDR_buttonsPressed + 2u * i, (uint16_t)(rd16(ADDR_buttonsPressed + 2u * i) | (c & ~c_before)));
+        c_before = c;
+        g_cam.active = false;
+        g_cam.was_aiming = false;
+        return;
+    }
     if (boss_control_active()) { boss_controls(obj, pad, aiming); g_cam.was_aiming = false; return; }
     const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
     const float game_heading = -angle_from_s16(Camera::Yaw::get(cam)); // where the game's own camera looks
