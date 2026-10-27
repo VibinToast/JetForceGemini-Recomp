@@ -249,7 +249,12 @@ void ConfigSubMenu::add_option(ConfigOptionElement *option, std::string_view id,
     option->set_name(name);
     option->set_description(description);
     option->set_hover_callback([this](ConfigOptionElement *option, bool active){ set_description_option_element(option, active); });
-    option->set_focus_callback([this, option](const std::string &id, bool active) { set_description_option_element(option, active); });
+    option->set_focus_callback([this, option](const std::string &id, bool active) {
+        set_description_option_element(option, active);
+        // JFG PORT: the whole card in view, centred: the first one scrolls the list to its top (its title showed cut
+        // off), the last to its bottom.
+        if (active) option->scroll_into_view();
+    });
     if (config_option_elements.empty()) {
         back_button->set_nav(NavDirection::Down, option->get_focus_element());
         option->set_nav(NavDirection::Up, back_button);
