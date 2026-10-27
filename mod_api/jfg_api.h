@@ -114,6 +114,20 @@ typedef struct {
 } JfgNearObject;
 RECOMP_IMPORT("*", int jfg_objects_near(const JfgNear* query, JfgNearObject* out, int max));
 
+// The collision triangles of the solid objects (crates, doors, lifts, props: the game's hit models) whose box overlaps
+// the sphere, except source, in world space: up to max of them into out; returns how many there are. flags are their
+// batch's (the same bits as JfgTriangle's). Call it each tick for moving ones.
+typedef struct {
+    float v[3][3];
+    unsigned int flags;
+    void* object;
+} JfgObjectTriangle;
+RECOMP_IMPORT("*", int jfg_object_triangles(const JfgNear* query, JfgObjectTriangle* out, int max));
+
+// The first player's screen flashes this colour (RGBA) this tick: call it each tick of the flash. 0xFF0000FF is the
+// heroes' red hit flash (they flash for 8 ticks); the player's Hit flash opacity option applies.
+RECOMP_IMPORT("*", void jfg_screen_flash(unsigned int rgba));
+
 // An object's health (256 per unit; the heroes' and enemies' alike), -1 if it has none; and setting it.
 RECOMP_IMPORT("*", int jfg_object_health(void* object));
 RECOMP_IMPORT("*", void jfg_object_set_health(void* object, int health));

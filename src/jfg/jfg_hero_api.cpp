@@ -13,6 +13,7 @@
 
 extern "C" void controlReadJoypad(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackPolyHeight(uint8_t* rdram, recomp_context* ctx);
+extern "C" void frontFlashScreen(uint8_t* rdram, recomp_context* ctx);
 
 namespace jfg::api {
 namespace {
@@ -225,6 +226,78 @@ void objects_near(uint8_t* rdram_, recomp_context* ctx) {
     ctx->r2 = (gpr)n;
 }
 
+// jfg_object_triangles(const JfgNear* q, JfgObjectTriangle* out, int max): the collision triangles of the solid
+// objects (the game's hit models: crates, doors, lifts, props) whose box overlaps q's sphere, in world space, with
+// their batch's flags and their object; returns how many there are (at most max copied). JfgObjectTriangle: f32 v[3][3],
+// u32 flags, object (0x2C bytes). The game's own sweep (hitMakePolylist) reads the same models and matrices.
+void object_triangles(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    constexpr uint32_t ADDR_hitModelCount = 0x801047E0, ADDR_hitModels = 0x801047E4;
+    const uint32_t q = (uint32_t)ctx->r4, out = (uint32_t)ctx->r5;
+    const int max = (int)ctx->r6;
+    if (q == 0) { ctx->r2 = 0; return; }
+    const float qx = rdf(q + 0x00), qy = rdf(q + 0x04), qz = rdf(q + 0x08), r = rdf(q + 0x0C);
+    const uint32_t source = rd32(q + 0x10);
+    const int count = (int)rd32(ADDR_hitModelCount);
+    const uint32_t list = rd32(ADDR_hitModels);
+    int n = 0;
+    if (!valid_ptr(list) || count <= 0 || count > 1024) { ctx->r2 = 0; return; }
+    for (int i = 0; i < count; i++) {
+        const uint32_t obj = rd32(list + 4u * (uint32_t)i);
+        if (!valid_ptr(obj) || obj == source) continue;
+        const uint32_t hit = Obj::Damage::get(obj);
+        if (!valid_ptr(hit) || !(rd16(hit + 0x0A) & 1)) continue; // not solid now (as hitMakePolylist)
+        const uint32_t data = rd32(obj + 0x5C);                   // HitModelData
+        const uint32_t models = Obj::Models::get(obj);
+        if (!valid_ptr(data) || !valid_ptr(models)) continue;
+        // Its box (world space) against the sphere's.
+        const float mn[3] = { rdf(data + 0x100), rdf(data + 0x104), rdf(data + 0x108) };
+        const float mx[3] = { rdf(data + 0x10C), rdf(data + 0x110), rdf(data + 0x114) };
+        if (mn[0] > qx + r || mx[0] < qx - r || mn[1] > qy + r || mx[1] < qy - r || mn[2] > qz + r || mx[2] < qz - r)
+            continue;
+        const uint32_t model = rd32(models + 4u * rd8(data + 0x133));
+        if (!valid_ptr(model)) continue;
+        const uint32_t header = rd32(model + 0x00), verts = rd32(model + 0x04);
+        if (!valid_ptr(header) || !valid_ptr(verts)) continue;
+        const int batches = (int16_t)rd16(header + 0x16);
+        const uint32_t tris = rd32(header + 0x20), batch0 = rd32(header + 0x24);
+        if (!valid_ptr(tris) || !valid_ptr(batch0) || batches <= 0 || batches > 256) continue;
+        // Model to world: the second of its matrix pairs (the first takes world points into the model).
+        const uint32_t m = data + 0x80 + 0x40u * (rd8(data + 0x12B) & 1);
+        float M[16];
+        for (uint32_t k = 0; k < 16; k++) M[k] = rdf(m + 4 * k);
+        for (int b = 0; b < batches; b++) {
+            const uint32_t batch = batch0 + 0x10u * (uint32_t)b;
+            const int vert0 = (int16_t)rd16(batch + 0x06);
+            const int t0 = (int16_t)rd16(batch + 0x08), t1 = (int16_t)rd16(batch + 0x18);
+            const uint32_t flags = rd32(batch + 0x0C);
+            if (t1 < t0 || t1 - t0 > 4096) continue;
+            for (int t = t0; t < t1; t++, n++) {
+                if (out == 0 || n >= max) continue;
+                const uint32_t tri = tris + 0x10u * (uint32_t)t;
+                const uint32_t o = out + 0x2Cu * (uint32_t)n;
+                for (uint32_t k = 0; k < 3; k++) {
+                    const uint32_t v = verts + 10u * (uint32_t)(vert0 + rd8(tri + 1 + k));
+                    const float x = (int16_t)rd16(v), y = (int16_t)rd16(v + 2), z = (int16_t)rd16(v + 4);
+                    for (uint32_t c = 0; c < 3; c++) {
+                        wrf(o + k * 12 + c * 4, x * M[c] + y * M[4 + c] + z * M[8 + c] + M[12 + c]);
+                    }
+                }
+                wr32(o + 0x24, flags);
+                wr32(o + 0x28, obj);
+            }
+        }
+    }
+    ctx->r2 = (gpr)n;
+}
+
+// jfg_screen_flash(rgba): the first player's screen flashes that colour this tick, as the heroes' own code does each
+// tick they are hurt (0xFF0000FF, the red hit flash; the Hit flash opacity option applies).
+void screen_flash(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    call_game(frontFlashScreen, ctx, { 0u, 0u, (uint32_t)ctx->r4 });
+}
+
 // jfg_object_health(obj): its health (256 per unit), -1 without damage data. jfg_object_set_health(obj, health).
 void object_health(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
@@ -253,6 +326,8 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_level_floor", level_floor);
     recomp::overlays::register_base_export("jfg_damage_sphere", damage_sphere);
     recomp::overlays::register_base_export("jfg_objects_near", objects_near);
+    recomp::overlays::register_base_export("jfg_object_triangles", object_triangles);
+    recomp::overlays::register_base_export("jfg_screen_flash", screen_flash);
     recomp::overlays::register_base_export("jfg_object_health", object_health);
     recomp::overlays::register_base_export("jfg_object_set_health", object_set_health);
 }
