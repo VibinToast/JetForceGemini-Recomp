@@ -17,6 +17,7 @@ extern "C" void jfg_dual_stick_release(void);
 extern "C" int jfg_sprint_enabled(void);
 extern "C" int jfg_worldmap_switching(void);
 extern "C" void jfg_sprint_input(int held);
+extern "C" void jfg_pad_state(uint32_t buttons, float left_trigger, float right_trigger);
 
 namespace dino::input {
 
@@ -241,6 +242,46 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
             joystick_y = std::clamp(joystick_y + ky, -1.0f, 1.0f);
         }
 
+        // The physical controls as a modern pad, for mods (jfg_controls_get): the controller's buttons and triggers,
+        // and while mouse and keyboard play the keys and mouse buttons that stand for them (Space A, Left Ctrl / C B,
+        // F X, R Y, Q LB, E RB, right mouse button LT, left RT, Left Shift L3, Tab Back, Enter Start, 1-4 the D-pad as
+        // in the layout above).
+        {
+            constexpr uint32_t keyboard = 1, controller_digital = 3, controller_analog = 4; // InputType (input.cpp)
+            const bool keys = mouse_keyboard && !floyd;
+            auto key = [&](SDL_Scancode code) { return keys && get_input_digital(InputField{ keyboard, (int32_t)code }); };
+            auto pad = [](int32_t button) { return get_input_digital(InputField{ controller_digital, button }); };
+            const uint32_t mouse = keys ? game_mouse_buttons() : 0;
+            const float lt = std::max(get_input_analog(InputField{ controller_analog, SDL_CONTROLLER_AXIS_TRIGGERLEFT + 1 }),
+                                      (mouse & SDL_BUTTON(SDL_BUTTON_RIGHT)) ? 1.0f : 0.0f);
+            const float rt = std::max(get_input_analog(InputField{ controller_analog, SDL_CONTROLLER_AXIS_TRIGGERRIGHT + 1 }),
+                                      (mouse & SDL_BUTTON(SDL_BUTTON_LEFT)) ? 1.0f : 0.0f);
+            struct PadEntry { int32_t button; SDL_Scancode key, key2; uint32_t bit; };
+            static const PadEntry entries[] = {
+                { SDL_CONTROLLER_BUTTON_A,             SDL_SCANCODE_SPACE,  SDL_SCANCODE_UNKNOWN, 0x0001 },
+                { SDL_CONTROLLER_BUTTON_B,             SDL_SCANCODE_LCTRL,  SDL_SCANCODE_C,       0x0002 },
+                { SDL_CONTROLLER_BUTTON_X,             SDL_SCANCODE_F,      SDL_SCANCODE_UNKNOWN, 0x0004 },
+                { SDL_CONTROLLER_BUTTON_Y,             SDL_SCANCODE_R,      SDL_SCANCODE_UNKNOWN, 0x0008 },
+                { SDL_CONTROLLER_BUTTON_LEFTSHOULDER,  SDL_SCANCODE_Q,      SDL_SCANCODE_UNKNOWN, 0x0010 },
+                { SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, SDL_SCANCODE_E,      SDL_SCANCODE_UNKNOWN, 0x0020 },
+                { SDL_CONTROLLER_BUTTON_LEFTSTICK,     SDL_SCANCODE_LSHIFT, SDL_SCANCODE_UNKNOWN, 0x0100 },
+                { SDL_CONTROLLER_BUTTON_RIGHTSTICK,    SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_UNKNOWN, 0x0200 },
+                { SDL_CONTROLLER_BUTTON_BACK,          SDL_SCANCODE_TAB,    SDL_SCANCODE_UNKNOWN, 0x0400 },
+                { SDL_CONTROLLER_BUTTON_START,         SDL_SCANCODE_RETURN, SDL_SCANCODE_UNKNOWN, 0x0800 },
+                { SDL_CONTROLLER_BUTTON_DPAD_UP,       SDL_SCANCODE_1,      SDL_SCANCODE_UNKNOWN, 0x1000 },
+                { SDL_CONTROLLER_BUTTON_DPAD_DOWN,     SDL_SCANCODE_3,      SDL_SCANCODE_UNKNOWN, 0x2000 },
+                { SDL_CONTROLLER_BUTTON_DPAD_LEFT,     SDL_SCANCODE_4,      SDL_SCANCODE_UNKNOWN, 0x4000 },
+                { SDL_CONTROLLER_BUTTON_DPAD_RIGHT,    SDL_SCANCODE_2,      SDL_SCANCODE_UNKNOWN, 0x8000 },
+            };
+            uint32_t bits = (lt > 0.5f ? 0x0040u : 0u) | (rt > 0.5f ? 0x0080u : 0u);
+            for (const PadEntry& e : entries) {
+                if (pad(e.button) || (e.key != SDL_SCANCODE_UNKNOWN && key(e.key)) || (e.key2 != SDL_SCANCODE_UNKNOWN && key(e.key2))) {
+                    bits |= e.bit;
+                }
+            }
+            jfg_pad_state(bits, lt, rt);
+        }
+
         // Sprint (JFG option): left-stick click on a controller, Left Shift with mouse and keyboard (not in a Floyd
         // mission, where it brakes).
         {
@@ -285,6 +326,7 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
 
     else {
         jfg_dual_stick_release(); // a menu has the input: let go of the sticks the game logic remembers
+        jfg_pad_state(0, 0.0f, 0.0f);
         mouse_wait_for_release = SDL_BUTTON(SDL_BUTTON_LEFT) | SDL_BUTTON(SDL_BUTTON_RIGHT); // fire, aim
         jfg_sprint_input(0);
     }

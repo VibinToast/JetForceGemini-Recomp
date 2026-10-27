@@ -76,6 +76,12 @@ constexpr uint32_t GFX = 0x00, WIDTH = 0x04, HEIGHT = 0x08, SIZE = 0x0C;
 // The hero API (jfg_hero_api.cpp): helpers, and whether a mod controls a hero (boyControl's wrapper asks).
 void register_hero_api();
 bool hero_taken_over(int character);
+// Taken over and not handed back to the game's code (jfg_hero_game_control): the mod moves it this tick.
+bool hero_mod_controlled(int character);
+extern float g_camera_distance; // jfg_camera_set_distance: the dual-stick camera's distance, times the option
+void queue_weapon_step(int direction); // the mouse wheel, for a hero a mod moves: done in its next control tick
+// jfg_controls_get (jfg_controls.cpp): the player's controls, for a mod hero.
+void controls_get(uint8_t* rdram, recomp_context* ctx);
 // A mod shows its own health for this hero (jfg_hud_hide_health): instDrawHealth's wrapper leaves the meter out.
 bool hero_health_hidden(int character);
 // A mod sets the camera (jfg_camera_set) these ticks: the port's own camera features stand down; its FOV (0 = none).

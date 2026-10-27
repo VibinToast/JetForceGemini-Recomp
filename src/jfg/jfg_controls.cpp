@@ -127,6 +127,28 @@ extern "C" void jfg_mouse_wheel(int notches) {
     if (jfg_mouse_keyboard_active() && !dino::input::game_input_disabled()) g_mouse_wheel.fetch_add(notches, std::memory_order_relaxed);
 }
 
+// The physical controls as a modern pad (src/input/controls.cpp, input thread), for mods: JFG_PAD_* bits, triggers.
+std::atomic<uint32_t> g_pad_buttons{ 0 };
+std::atomic<float> g_pad_lt{ 0 }, g_pad_rt{ 0 };
+extern "C" void jfg_pad_state(uint32_t buttons, float left_trigger, float right_trigger) {
+    g_pad_buttons.store(buttons, std::memory_order_relaxed);
+    g_pad_lt.store(left_trigger, std::memory_order_relaxed);
+    g_pad_rt.store(right_trigger, std::memory_order_relaxed);
+}
+
+// jfg_controls_get(JfgControls* out): whether the dual-stick controls (the Dual Stick or Mouse and Keyboard option)
+// are in charge now and whether the mouse and keyboard play, and the physical controls held.
+void api::controls_get(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t out = (uint32_t)ctx->r4;
+    if (out == 0) return;
+    wr32(out + 0x00, jfg_dual_stick_active() ? 1u : 0u);
+    wr32(out + 0x04, jfg_mouse_keyboard_active() ? 1u : 0u);
+    wr32(out + 0x08, g_pad_buttons.load(std::memory_order_relaxed));
+    wrf(out + 0x0C, g_pad_lt.load(std::memory_order_relaxed));
+    wrf(out + 0x10, g_pad_rt.load(std::memory_order_relaxed));
+}
+
 extern "C" void jfg_mouse_motion(int dx, int dy) {
     {
         // JFG_DEBUG_MOUSE=1: every mouse report, with the time since the one before (does the mouse arrive in bursts?).
@@ -655,19 +677,27 @@ void jfg_camera_controls(recomp_context* ctx) {
         if (wheel_pending != 0) {
             const uint16_t button = wheel_pending < 0 ? 0x8000 : 0x4000; // wheel down: A (next), up: B (previous)
             wheel_pending += wheel_pending < 0 ? 1 : -1;
-            const uint32_t i = rd8(ADDR_sPlayerID) & 3u;
-            const uint32_t pad = ADDR_sControllerCurrData + Pad::Size * i;
-            wr16(pad, (uint16_t)(rd16(pad) | button));
-            wr16(ADDR_buttonsPressed + 2u * i, (uint16_t)(rd16(ADDR_buttonsPressed + 2u * i) | button));
-            static const bool log = std::getenv("JFG_DEBUG_WHEEL") != nullptr;
             const int c = (int16_t)rd16(ADDR_currentCharacter);
+            if (api::hero_mod_controlled(c)) {
+                // A mod moves the hero (its buttons are its own): the weapon changes as the buttons would change it.
+                api::queue_weapon_step(button == 0x8000 ? 1 : -1);
+            }
+            else {
+                const uint32_t i = rd8(ADDR_sPlayerID) & 3u;
+                const uint32_t pad = ADDR_sControllerCurrData + Pad::Size * i;
+                wr16(pad, (uint16_t)(rd16(pad) | button));
+                wr16(ADDR_buttonsPressed + 2u * i, (uint16_t)(rd16(ADDR_buttonsPressed + 2u * i) | button));
+            }
+            static const bool log = std::getenv("JFG_DEBUG_WHEEL") != nullptr;
             const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
             if (log) std::fprintf(stderr, "[jfg] wheel: press %s (weapon %d, %d more)\n", button == 0x8000 ? "A" : "B", ch ? Character::CurrentWeapon::get(ch) : -1, wheel_pending);
         }
     }
     if (obj == 0) { g_cam.was_aiming = false; return; }
     const uint32_t pad = ADDR_sControllerCurrData + Pad::Size * (rd8(ADDR_sPlayerID) & 3u);
-    aim_jump(obj, pad, ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u));
+    // A hero a mod moves (jfg_hero_takeover) reads the pad its own way: the aiming options keep out of it.
+    const bool mod_hero = api::hero_mod_controlled((int16_t)rd16(ADDR_currentCharacter));
+    if (!mod_hero) aim_jump(obj, pad, ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u));
     const bool aiming = (rd16(pad) & 0x0010) != 0;
 
     // The aiming options work with any control layout.
@@ -691,7 +721,7 @@ void jfg_camera_controls(recomp_context* ctx) {
         g_cam.glide = (g_cam.free_aim && g.aim_shoulder) ? std::min(1.0f, g_cam.glide + glide_step) : std::max(0.0f, g_cam.glide - glide_step);
 #endif
     }
-    if (aim_state(obj) && !g_cam.free_aim) {
+    if (aim_state(obj) && !g_cam.free_aim && !mod_hero) {
         g_cam.shoulder = g.aim_shoulder;
         g_cam.shoulder_blend = g_cam.shoulder ? std::min(1.0f, g_cam.shoulder_blend + tick_frames / 6.0f) : 0.0f;
         aim_controls(obj, pad, tick_frames);

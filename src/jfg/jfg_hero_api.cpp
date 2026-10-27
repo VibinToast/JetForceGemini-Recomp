@@ -18,6 +18,8 @@ extern "C" void mainGetGameCharacter(uint8_t* rdram, recomp_context* ctx);
 extern "C" void squadsIsTribal(uint8_t* rdram, recomp_context* ctx);
 extern "C" void frontFlashScreen(uint8_t* rdram, recomp_context* ctx);
 extern "C" void camSetFOV(uint8_t* rdram, recomp_context* ctx);
+extern "C" void controlSelectNextWeapon(uint8_t* rdram, recomp_context* ctx);
+extern "C" void controlSelectPreviousWeapon(uint8_t* rdram, recomp_context* ctx);
 
 namespace jfg::api {
 // A camera a mod set this tick (jfg_camera_set), applied by the camera step's wrapper.
@@ -43,6 +45,7 @@ using BodyYaw  = Field<uint16_t, 0x11C>;
 }
 
 bool g_takeover[CHARACTERS] = {};
+bool g_game_control[CHARACTERS] = {}; // a taken-over hero runs the game's control code (jfg_hero_game_control)
 bool g_hide_health[CHARACTERS] = {};
 
 // Blast damage taken (func_8002AA7C_2B67C's wrapper), by damage data, until a mod reads it: the latest 16.
@@ -75,6 +78,28 @@ namespace {
 void hero_takeover(uint8_t*, recomp_context* ctx) {
     const int character = (int)ctx->r4;
     if (character >= 0 && character < CHARACTERS) g_takeover[character] = ctx->r5 != 0;
+}
+
+// jfg_hero_game_control(int character, int on): while on, a taken-over hero runs the game's own control code again
+// (after jfg_on_hero_control, which still fires each tick, so the mod decides tick by tick): its aiming and weapons,
+// its camera and its moves, from where the mod left the hero.
+void hero_game_control(uint8_t*, recomp_context* ctx) {
+    const int character = (int)ctx->r4;
+    if (character >= 0 && character < CHARACTERS) g_game_control[character] = ctx->r5 != 0;
+}
+
+// jfg_hero_select_weapon(void* hero, int direction): the hero takes its next weapon (direction 1) or the one before
+// (-1), as the game's weapon buttons do (controlSelectNextWeapon / controlSelectPreviousWeapon: the weapon list
+// shows it).
+void hero_select_weapon(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const int direction = (int)ctx->r5;
+    const uint32_t data = valid_ptr(obj) ? Obj::Data::get(obj) : 0;
+    if (!valid_ptr(data) || direction == 0) return;
+    const recomp_context saved = *ctx;
+    call_game(direction > 0 ? controlSelectNextWeapon : controlSelectPreviousWeapon, ctx, { obj, data });
+    *ctx = saved;
 }
 
 // jfg_input_get(JfgInput* out): the first player's controller as the hero's control reads it this tick.
@@ -508,6 +533,22 @@ bool hero_taken_over(int character) {
     return character >= 0 && character < CHARACTERS && g_takeover[character];
 }
 
+// Weapon steps from the mouse wheel for a hero a mod moves (jfg_controls.cpp), made in its control tick.
+int g_weapon_steps = 0;
+void queue_weapon_step(int direction) { g_weapon_steps += direction; }
+
+// jfg_camera_set_distance(float scale): the port's dual-stick camera stands scale times as far out (on top of the
+// player's Camera Distance option); 1 = as usual. Kept until set again.
+float g_camera_distance = 1.0f;
+void camera_set_distance(uint8_t*, recomp_context* ctx) {
+    const float scale = ctx->f12.fl;
+    g_camera_distance = (scale > 0.1f && scale < 10.0f) ? scale : 1.0f;
+}
+
+bool hero_mod_controlled(int character) {
+    return hero_taken_over(character) && !g_game_control[character];
+}
+
 bool hero_health_hidden(int character) {
     return character >= 0 && character < CHARACTERS && g_hide_health[character];
 }
@@ -530,6 +571,10 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_object_blast_damage", object_blast_damage);
     recomp::overlays::register_base_export("jfg_hud_hide_health", hud_hide_health);
     recomp::overlays::register_base_export("jfg_hero_heads", hero_heads);
+    recomp::overlays::register_base_export("jfg_hero_game_control", hero_game_control);
+    recomp::overlays::register_base_export("jfg_hero_select_weapon", hero_select_weapon);
+    recomp::overlays::register_base_export("jfg_controls_get", controls_get);
+    recomp::overlays::register_base_export("jfg_camera_set_distance", camera_set_distance);
 }
 
 } // namespace jfg::api
@@ -537,7 +582,8 @@ void register_hero_api() {
 // boyControl(obj, updateRate), Juno's control (overlay 16): while a mod has taken him over (jfg_hero_takeover), the
 // controller is read as the game does, then jfg_on_hero_control runs in place of the game's code, and the follow
 // camera's bookkeeping (old position, body yaw, speed) is filled from what the mod did. A dead hero (health under
-// one unit) runs the game's code, so death and the restart are the game's own.
+// one unit) runs the game's code, so death and the restart are the game's own; so does a hero the mod hands back
+// (jfg_hero_game_control), from where the mod left it.
 JFG_WRAP(boyControl) {
     using namespace jfg;
     constexpr int JUNO = 1;
@@ -553,9 +599,48 @@ JFG_WRAP(boyControl) {
     const int frames = (int)ctx->r5;
     call_game(controlReadJoypad, ctx, { hero });
     const float x0 = Obj::PosX::get(obj), y0 = Obj::PosY::get(obj), z0 = Obj::PosZ::get(obj);
+    // A weapon change shows the weapon list once: the game's control code clears its request bits (+0x540, 0x30) at
+    // the start of each tick, before its weapon buttons may set them again; the HUD scrolls (and ticks) while they are
+    // set. Here likewise, then the wheel's and the mod's changes.
+    if (!api::g_game_control[JUNO]) {
+        wr8(hero + 0x540, (uint8_t)(rd8(hero + 0x540) & ~0x30));
+        for (; api::g_weapon_steps != 0; api::g_weapon_steps += api::g_weapon_steps > 0 ? -1 : 1) {
+            call_game(api::g_weapon_steps > 0 ? controlSelectNextWeapon : controlSelectPreviousWeapon, ctx, { obj, hero });
+        }
+    }
+    api::g_weapon_steps = 0;
     api::fire(rdram, ctx, api::Event::HeroControl, (int32_t)obj, frames, JUNO);
     g_rdram = rdram;
     namespace H = api::Hero;
+    if (!api::g_game_control[JUNO]) {
+        // The weapon the control code holds the hero to (+0x585: it changes back to it when it next runs) is the one in
+        // hand, so a weapon changed meanwhile stays.
+        const uint32_t ch = character_ptr(JUNO);
+        if (ch != 0) wr8(hero + 0x585, (uint8_t)Character::CurrentWeapon::get(ch));
+    }
+    static bool game_ran = false; // the game's code ran the hero last tick
+    if (api::g_game_control[JUNO]) {
+        if (!game_ran) {
+            // Handed back: the copies of the facing the control code keeps (and writes back each tick) take the
+            // object's, which the mod has been turning.
+            const uint16_t yaw = Obj::Yaw::get(obj);
+            for (uint32_t k : { 0x106u, 0x11Cu, 0x122u, 0x1C6u, 0x1CAu }) wr16(hero + k, yaw);
+            H::OldX::set(hero, x0);
+            H::OldY::set(hero, y0);
+            H::OldZ::set(hero, z0);
+        }
+        game_ran = true;
+        ctx->r4 = (gpr)(int32_t)obj;
+        ctx->r5 = (gpr)frames;
+        boyControl_orig(rdram, ctx);
+        return;
+    }
+    if (game_ran && PlayerData::State::get(hero) == PlayerData::StateAiming) {
+        // Taken back while the game's code had it aiming: it is out of its aim (the next hand-over starts one
+        // afresh), so the port's aiming options leave the stick alone.
+        PlayerData::State::set(hero, 0);
+    }
+    game_ran = false;
     // The hero's hit spheres sit on its posed joints (ModelInstance::Positions, written when the game's code poses the
     // model), so they would stay where the hero last stood: move them with the hero. If they are not near it (never
     // posed), stand them in a column from its feet up.

@@ -192,6 +192,50 @@ RECOMP_IMPORT("*", int jfg_sound_loop(const char* name, float volume, float pan,
 RECOMP_IMPORT("*", int jfg_sound_set(int voice, float volume, float pan, float pitch));
 RECOMP_IMPORT("*", void jfg_sound_stop(int voice));
 
+// While on, a taken-over hero (jfg_hero_takeover) runs the game's own control code again: its aiming and weapons, its
+// camera and its moves carry on from where the mod left the hero object. jfg_on_hero_control still fires first each
+// tick, so a mod can hand the hero over tick by tick (while the player aims, say).
+RECOMP_IMPORT("*", void jfg_hero_game_control(int character, int on));
+
+// The hero (its object) takes its next weapon (direction 1) or the one before (-1), as the game's weapon buttons do.
+// While a mod moves a hero the mouse wheel changes its weapon this way (the buttons are the mod's then).
+RECOMP_IMPORT("*", void jfg_hero_select_weapon(void* hero, int direction));
+
+// The player's controls. modern: the port's dual-stick controls are in charge now (its Dual Stick or Mouse and
+// Keyboard option, during gameplay): the right stick and the mouse turn the port's own camera, and the stick
+// jfg_input_get gives is already turned to it (camera-relative to the camera the hero steers by). mouse: the mouse
+// and keyboard play (the mouse is captured). buttons: the physical controls held, as a modern pad (JFG_PAD_*): a
+// controller's, and while the mouse plays the keys and mouse buttons that stand for them (Space A, Left Ctrl or C B,
+// F X, R Y, Q LB, E RB, right mouse button LT, left RT, Left Shift L3, Tab Back, Enter Start, 1-4 the D-pad: up,
+// right, down, left). Triggers 0..1.
+#define JFG_PAD_A      0x0001
+#define JFG_PAD_B      0x0002
+#define JFG_PAD_X      0x0004
+#define JFG_PAD_Y      0x0008
+#define JFG_PAD_LB     0x0010
+#define JFG_PAD_RB     0x0020
+#define JFG_PAD_LT     0x0040 // pulled over half way
+#define JFG_PAD_RT     0x0080
+#define JFG_PAD_L3     0x0100
+#define JFG_PAD_R3     0x0200
+#define JFG_PAD_BACK   0x0400
+#define JFG_PAD_START  0x0800
+#define JFG_PAD_UP     0x1000
+#define JFG_PAD_DOWN   0x2000
+#define JFG_PAD_LEFT   0x4000
+#define JFG_PAD_RIGHT  0x8000
+typedef struct {
+    int modern;
+    int mouse;
+    unsigned int buttons;
+    float left_trigger, right_trigger;
+} JfgControls;
+RECOMP_IMPORT("*", void jfg_controls_get(JfgControls* out));
+
+// The port's dual-stick camera stands scale times as far out as usual (on top of the player's Camera Distance option):
+// a hero of another size, say. 1 = as usual. Kept until set again.
+RECOMP_IMPORT("*", void jfg_camera_set_distance(float scale));
+
 // --- event data ---------------------------------------------------------------------------------------------------
 
 // jfg_on_blood_spurt: a spurt of blood drops. Change any field; set cancel to 1 to drop it; amount is the drops in
