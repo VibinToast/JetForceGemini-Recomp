@@ -763,7 +763,33 @@ bool take_ui_switch(std::map<std::string, std::string>& old_ui, std::map<std::st
     return true;
 }
 
+namespace {
+std::atomic<bool> g_hold{ false };
+std::mutex g_ui_in_mutex;
+std::map<std::string, std::map<std::string, std::string>> g_ui_in; // id -> its file's "ui"
+} // namespace
+
+void hold_translation(bool hold) { g_hold = hold; }
+
+std::string ui_in(const std::string& id, const std::string& english) {
+    std::lock_guard<std::mutex> lock(g_ui_in_mutex);
+    auto it = g_ui_in.find(id);
+    if (it == g_ui_in.end()) {
+        std::map<std::string, std::string> ui;
+        std::ifstream f(std::filesystem::path(FOLDER) / ((id.empty() ? std::string(ENGLISH_ID) : id) + ".json"), std::ios::binary);
+        const std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        const json j = json::parse(bytes, nullptr, false);
+        if (!j.is_discarded() && j.is_object() && j.contains("ui") && j["ui"].is_object())
+            for (const auto& [k, v] : j["ui"].items())
+                if (v.is_string()) ui[ui_key(k)] = v.get<std::string>();
+        it = g_ui_in.emplace(id, std::move(ui)).first;
+    }
+    auto t = it->second.find(ui_key(english));
+    return t != it->second.end() ? ui_breaks(t->second) : english;
+}
+
 bool translate_ui(std::string& out, const std::string& in) {
+    if (g_hold) { out = in; return false; }
     const std::string key = ui_key(in);
     std::lock_guard<std::mutex> lock(g_ui_mutex);
     const std::string* t = key.empty() ? nullptr : lookup(key);

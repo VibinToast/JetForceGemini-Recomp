@@ -2,7 +2,9 @@
 // an update from a version without the question) the launcher, or the game when the launcher is skipped, opens on a
 // list of the languages there are: English and every locales/<id>.json, each tagged official or unofficial
 // (jfg::locale::official). Picking one saves it as the Language list does; it can be changed later on the launcher's
-// Play page or in the settings. With English alone there is nothing to ask, so nothing is saved and the question waits
+// Play page or in the settings. Its own texts are in the language the player points at (focus or mouse), from that
+// locale's "ui" (jfg::locale::ui_in), not the one saved, so a player who reads only that language understands it. With
+// English alone there is nothing to ask, so nothing is saved and the question waits
 // for a locale file. JFG_DEBUG_LANGUAGE_PROMPT=1 asks even when a language is saved (window captures).
 #include <algorithm>
 #include <cstdio>
@@ -23,11 +25,48 @@ namespace {
 namespace ui = recompui;
 namespace modui = recompui::modui;
 
+constexpr char TITLE[] = "Choose Your Language";
+constexpr char NOTE[] = "You can change it later on the launcher's Play page or in the settings.";
+constexpr char LEGEND[] = "Unofficial translations come from players or are machine-assisted, and may have mistakes.";
+
 struct {
     bool decided = false; // asked this run, or nothing to ask
     ui::ContextId context = ui::ContextId::null();
     ui::Button* first = nullptr;
+    ui::Label* title = nullptr;
+    ui::Label* note = nullptr;
+    ui::Label* legend = nullptr;
+    std::vector<std::pair<ui::Label*, bool>> tags; // each row's tag, official or not
+    std::string shown;                             // the language the texts are in
 } g_prompt;
+
+// The question's texts in locale `id`, kept from the menus' own translation.
+void show_in(const std::string& id) {
+    if (id == g_prompt.shown || g_prompt.title == nullptr) return;
+    g_prompt.shown = id;
+    jfg::locale::hold_translation(true);
+    g_prompt.title->set_text(jfg::locale::ui_in(id, TITLE));
+    g_prompt.note->set_text(jfg::locale::ui_in(id, NOTE));
+    if (g_prompt.legend != nullptr) g_prompt.legend->set_text(jfg::locale::ui_in(id, LEGEND));
+    const std::string official = jfg::locale::ui_in(id, "OFFICIAL"), unofficial = jfg::locale::ui_in(id, "UNOFFICIAL");
+    for (auto& [tag, is_official] : g_prompt.tags) tag->set_text(is_official ? official : unofficial);
+    jfg::locale::hold_translation(false);
+}
+
+// A language's row: focusing or pointing at it shows the question in that language.
+class LanguageButton : public ui::Button {
+public:
+    LanguageButton(ui::Element* parent, const std::string& label, std::string id)
+        : ui::Button(parent, label, ui::ButtonStyle::Secondary), id(std::move(id)) {}
+protected:
+    void process_event(const ui::Event& e) override {
+        ui::Button::process_event(e);
+        if ((e.type == ui::EventType::Focus && std::get<ui::EventFocus>(e.variant).active) ||
+            (e.type == ui::EventType::Hover && std::get<ui::EventHover>(e.variant).active)) show_in(id);
+    }
+private:
+    std::string id;
+};
 
 void style_row_button(ui::Button* b) {
     b->set_flex_grow(1.0f);
@@ -58,6 +97,7 @@ void build(const std::vector<std::pair<std::string, std::string>>& languages) {
     g_prompt.context = ui::create_context();
     ui::ContextId& context = g_prompt.context;
     context.open();
+    jfg::locale::hold_translation(true); // English to start with (the first row), whatever is saved
     ui::Element* root = context.get_root_element();
 
     ui::Element* shade = context.create_element<ui::Element>(root);
@@ -79,11 +119,12 @@ void build(const std::vector<std::pair<std::string, std::string>>& languages) {
     panel->set_border_width(2.0f);
     panel->set_border_color(modui::edge);
 
-    ui::Label* title = context.create_element<ui::Label>(panel, "Choose Your Language", ui::LabelStyle::Large);
+    ui::Label* title = context.create_element<ui::Label>(panel, TITLE, ui::LabelStyle::Large);
+    g_prompt.title = title;
     modui::set_text(title, 1.0f, 44.0f, 52.0f, 700, modui::cyan, 1.0f);
     title->set_font_family("JFG Black");
-    ui::Label* note = context.create_element<ui::Label>(panel,
-        "You can change it later on the launcher's Play page or in the settings.", ui::LabelStyle::Small);
+    ui::Label* note = context.create_element<ui::Label>(panel, NOTE, ui::LabelStyle::Small);
+    g_prompt.note = note;
     modui::set_text(note, 1.0f, 24.0f, 32.0f, 400, modui::dim);
     note->set_font_family("JetBrains Mono");
 
@@ -103,13 +144,14 @@ void build(const std::vector<std::pair<std::string, std::string>>& languages) {
         row->set_flex_direction(ui::FlexDirection::Row);
         row->set_align_items(ui::AlignItems::Center);
         row->set_gap(16.0f);
-        ui::Button* b = context.create_element<ui::Button>(row, label, ui::ButtonStyle::Secondary);
+        ui::Button* b = context.create_element<LanguageButton>(row, label, id);
         style_row_button(b);
         const std::string pick_id = id;
         b->add_pressed_callback([pick_id]() { pick(pick_id); });
         const bool official = jfg::locale::official(id);
         any_unofficial |= !official;
         ui::Label* tag = context.create_element<ui::Label>(row, official ? "OFFICIAL" : "UNOFFICIAL", ui::LabelStyle::Small);
+        g_prompt.tags.emplace_back(tag, official);
         modui::set_text(tag, 1.0f, 20.0f, 26.0f, 700, official ? modui::cyan : modui::gold, 1.5f);
         tag->set_font_family("JetBrains Mono");
         tag->set_width(170.0f);
@@ -127,12 +169,14 @@ void build(const std::vector<std::pair<std::string, std::string>>& languages) {
     }
     if (prev != nullptr) prev->set_nav_none(ui::NavDirection::Down);
     if (any_unofficial) {
-        ui::Label* legend = context.create_element<ui::Label>(panel,
-            "Unofficial translations come from players or are machine-assisted, and may have mistakes.", ui::LabelStyle::Small);
+        ui::Label* legend = context.create_element<ui::Label>(panel, LEGEND, ui::LabelStyle::Small);
+        g_prompt.legend = legend;
         modui::set_text(legend, 1.0f, 22.0f, 30.0f, 400, modui::dim);
         legend->set_font_family("JetBrains Mono");
     }
 
+    jfg::locale::hold_translation(false);
+    g_prompt.shown = "";
     context.set_captures_input(true);
     context.set_captures_mouse(true);
     context.close();
