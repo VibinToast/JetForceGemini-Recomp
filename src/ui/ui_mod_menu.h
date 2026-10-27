@@ -1,6 +1,7 @@
 #ifndef RECOMPUI_ELEMENT_MOD_MENU_H
 #define RECOMPUI_ELEMENT_MOD_MENU_H
 
+#include <chrono>
 #include "librecomp/mods.hpp"
 #include "elements/ui_scroll_container.h"
 #include "ui_config_sub_menu.h"
@@ -42,6 +43,7 @@ public:
     ModEntryButton(Element *parent, uint32_t mod_index);
     virtual ~ModEntryButton();
     void set_mod_selected_callback(std::function<void(uint32_t)> callback);
+    void set_mod_activated_callback(std::function<void(uint32_t)> callback); // JFG PORT: confirm on the card
     void set_mod_drag_callback(std::function<void(uint32_t, EventDrag)> callback);
     void set_mod_details(const recomp::mods::ModDetails &details);
     void set_mod_thumbnail(const std::string &thumbnail);
@@ -57,6 +59,8 @@ private:
     uint32_t mod_index = 0;
     ModEntryView *view = nullptr;
     std::function<void(uint32_t)> selected_callback = nullptr;
+    std::function<void(uint32_t)> activated_callback = nullptr;
+    std::chrono::steady_clock::time_point focused_at{};
     std::function<void(uint32_t, EventDrag)> drag_callback = nullptr;
 };
 

@@ -215,6 +215,11 @@ ModDetailsPanel::ModDetailsPanel(Element *parent) : Element(parent) {
     buttons_container->set_border_top_color(modui::edge);
     buttons_container->set_background_color(modui::panel);
     {
+        // JFG PORT: Configure first, so it is one step right of the mod's card; the On/Off toggle after it.
+        configure_button = context.create_element<Button>(buttons_container, "Configure", recompui::ButtonStyle::Secondary);
+        configure_button->add_pressed_callback([this](){ configure_button_pressed(); });
+        configure_button->set_nav_manual(NavDirection::Up, mod_tab_id);
+
         enable_container = context.create_element<Container>(buttons_container, FlexDirection::Row, JustifyContent::FlexStart);
         enable_container->set_align_items(AlignItems::Center);
         enable_container->set_flex(1.0f, 1.0f);
@@ -233,10 +238,6 @@ ModDetailsPanel::ModDetailsPanel(Element *parent) : Element(parent) {
                 enable_label = context.create_element<Label>(enable_text, LabelStyle::Small);
             }
         }
-
-        configure_button = context.create_element<Button>(buttons_container, "Configure", recompui::ButtonStyle::Secondary);
-        configure_button->add_pressed_callback([this](){ configure_button_pressed(); });
-        configure_button->set_nav_manual(NavDirection::Up, mod_tab_id);
     }
     set_scale(1.0f, 8.0f);
     clear_mod_navigation();
@@ -313,11 +314,13 @@ void ModDetailsPanel::set_mod_details(const recomp::mods::ModDetails& details, c
     (void)toggle_label_visible; // the note under On/Off says why, see refresh_status
     toggle_locked_by_game = !modui::can_toggle(cur_details);
 
-    if (configure_enabled) {
-        enable_toggle->set_nav(NavDirection::Right, configure_button);
+    // JFG PORT: Configure, then the toggle, left to right.
+    enable_toggle->set_nav_none(NavDirection::Right);
+    if (toggle_enabled) {
+        configure_button->set_nav(NavDirection::Right, enable_toggle);
     }
     else {
-        enable_toggle->set_nav_none(NavDirection::Right);
+        configure_button->set_nav_none(NavDirection::Right);
     }
 
     refresh_status();
@@ -434,7 +437,7 @@ void ModDetailsPanel::build_dependencies() {
 // JFG PORT: the dependency rows sit between the description and the toggle: up from the toggle (or Configure) reaches
 // the last, down from the last returns, and left goes back to the selected mod's card.
 void ModDetailsPanel::apply_dependency_navigation() {
-    Element* below = enable_toggle->is_enabled() ? static_cast<Element*>(enable_toggle) : static_cast<Element*>(configure_button);
+    Element* below = configure_button->is_enabled() ? static_cast<Element*>(configure_button) : static_cast<Element*>(enable_toggle);
     for (size_t i = 0; i < dependency_rows.size(); i++) {
         ModDependencyRow* row = dependency_rows[i];
         if (i > 0) row->set_nav(NavDirection::Up, dependency_rows[i - 1]);
@@ -465,13 +468,13 @@ void ModDetailsPanel::set_mod_configure_pressed_callback(std::function<void()> c
 void ModDetailsPanel::setup_mod_navigation(Element* nav_target) {
     list_nav_target = nav_target;
     apply_dependency_navigation();
-    enable_toggle->set_nav(NavDirection::Left, nav_target);
+    configure_button->set_nav(NavDirection::Left, nav_target);
 
-    if (enable_toggle->is_enabled()) {
-        configure_button->set_nav(NavDirection::Left, enable_toggle);
+    if (configure_button->is_enabled()) {
+        enable_toggle->set_nav(NavDirection::Left, configure_button);
     }
     else {
-        configure_button->set_nav(NavDirection::Left, nav_target);
+        enable_toggle->set_nav(NavDirection::Left, nav_target);
     }
 }
 

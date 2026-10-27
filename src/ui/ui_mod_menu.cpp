@@ -164,6 +164,10 @@ void ModEntryButton::set_mod_selected_callback(std::function<void(uint32_t)> cal
     selected_callback = callback;
 }
 
+void ModEntryButton::set_mod_activated_callback(std::function<void(uint32_t)> callback) {
+    activated_callback = callback;
+}
+
 void ModEntryButton::set_mod_drag_callback(std::function<void(uint32_t, EventDrag)> callback) {
     drag_callback = callback;
 }
@@ -199,6 +203,13 @@ void ModEntryButton::process_event(const Event& e) {
     case EventType::Focus:
         selected_callback(mod_index);
         set_focused(std::get<EventFocus>(e.variant).active);
+        if (std::get<EventFocus>(e.variant).active) focused_at = std::chrono::steady_clock::now();
+        break;
+    case EventType::Click:
+        // JFG PORT: confirm on the selected mod's card opens its settings, as its Configure button does; not the click
+        // that focused it (a mouse click focuses and clicks at once: the first selects).
+        if (activated_callback != nullptr && std::chrono::steady_clock::now() - focused_at > std::chrono::milliseconds(250))
+            activated_callback(mod_index);
         break;
     case EventType::Hover:
         view->set_style_enabled(hover_state, std::get<EventHover>(e.variant).active);
@@ -396,11 +407,11 @@ void ModMenu::mod_selected(uint32_t mod_index) {
         }
 
         // Navigation from the mod list.
-        if (toggle_enabled) {
-            mod_entry_buttons[active_mod_index]->set_nav(NavDirection::Right, enable_toggle);
-        }
-        else if (configure_enabled) {
+        if (configure_enabled) { // JFG PORT: Configure comes first now
             mod_entry_buttons[active_mod_index]->set_nav(NavDirection::Right, configure_button);
+        }
+        else if (toggle_enabled) {
+            mod_entry_buttons[active_mod_index]->set_nav(NavDirection::Right, enable_toggle);
         }
         else if (Element* row = mod_details_panel->get_first_dependency_row()) { // JFG PORT
             mod_entry_buttons[active_mod_index]->set_nav(NavDirection::Right, row);
@@ -677,6 +688,10 @@ void ModMenu::create_mod_list() {
 
         ModEntryButton *mod_entry = context.create_element<ModEntryButton>(list_scroll_container, mod_index);
         mod_entry->set_mod_selected_callback([this](uint32_t mod_index){ mod_selected(mod_index); });
+        mod_entry->set_mod_activated_callback([this](uint32_t mod_index) {
+            // JFG PORT: only the mod already selected (a first click selects it), and only if it has settings.
+            if ((int32_t)mod_index == active_mod_index && mod_details_panel->get_configure_button()->is_enabled()) mod_configure_requested();
+        });
         mod_entry->set_mod_drag_callback([this](uint32_t mod_index, recompui::EventDrag drag){ mod_dragged(mod_index, drag); });
         mod_entry->set_scale(scale, radius);
         mod_entry->set_mod_details(mod_details[mod_index]);
