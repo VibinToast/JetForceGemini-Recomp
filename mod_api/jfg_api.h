@@ -106,13 +106,19 @@ typedef struct {
 RECOMP_IMPORT("*", void jfg_level_floor(JfgFloor* q));
 
 // Takes damage (256 = one unit of health) from every object with health whose hit centre is in the sphere, except
-// source; returns how many it hit.
+// source, and gives the same to the breakable solid objects it touches (crates, breakable props: a stock crate takes
+// about 3 units). targets: JFG_TARGET_HEALTH, JFG_TARGET_PROPS, or 0 for both. Returns how many objects with health it
+// hit, and writes how many breakables to props_hit. A big blow in one hit makes an enemy burst (overkill).
+#define JFG_TARGET_HEALTH 1
+#define JFG_TARGET_PROPS 2
 typedef struct {
     float x, y, z, radius;
     int damage;
     void* source;
+    int targets;
+    int props_hit; // out
 } JfgDamageSphere;
-RECOMP_IMPORT("*", int jfg_damage_sphere(const JfgDamageSphere* sphere));
+RECOMP_IMPORT("*", int jfg_damage_sphere(JfgDamageSphere* sphere));
 
 // The objects with health (enemies, crates, heroes) whose hit centre is within a sphere, except source, nearest
 // first: up to max of them into out; returns how many there are.

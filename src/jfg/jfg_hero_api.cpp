@@ -49,7 +49,9 @@ constexpr uint32_t TRI_VERTS = 0x00, TRI_FLAGS = 0x14, TRI_TEXTURE = 0x18, TRI_S
 // JfgFloor
 constexpr uint32_t FL_X = 0x00, FL_Z = 0x04, FL_MASK = 0x08, FL_Y = 0x0C, FL_FLAGS = 0x10;
 // JfgDamageSphere
-constexpr uint32_t DS_X = 0x00, DS_Y = 0x04, DS_Z = 0x08, DS_RADIUS = 0x0C, DS_DAMAGE = 0x10, DS_SOURCE = 0x14;
+constexpr uint32_t DS_X = 0x00, DS_Y = 0x04, DS_Z = 0x08, DS_RADIUS = 0x0C, DS_DAMAGE = 0x10, DS_SOURCE = 0x14,
+                   DS_TARGETS = 0x18, DS_PROPS_HIT = 0x1C;
+constexpr uint32_t TARGET_HEALTH = 1, TARGET_PROPS = 2; // JfgDamageSphere targets (0 = both)
 
 } // namespace
 uint32_t camera_ptr() {
@@ -164,8 +166,10 @@ void level_floor(uint8_t* rdram_, recomp_context* ctx) {
     wr32(q + FL_FLAGS, flags);
 }
 
-// jfg_damage_sphere(const JfgDamageSphere* d): takes damage (256 = one unit of health) from every object with health
-// whose hit centre is within the sphere (plus its own hit radius), except source; returns how many were hit.
+// jfg_damage_sphere(JfgDamageSphere* d): takes damage (256 = one unit of health) from every object with health whose
+// hit centre is within the sphere (plus its own hit radius), except source (targets 1), and gives it to the breakable
+// solid objects the sphere touches (targets 2; 0 = both); returns how many objects with health were hit and writes
+// the breakables hit to props_hit.
 void damage_sphere(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t d = (uint32_t)ctx->r4;
@@ -173,10 +177,12 @@ void damage_sphere(uint8_t* rdram_, recomp_context* ctx) {
     const float x = rdf(d + DS_X), y = rdf(d + DS_Y), z = rdf(d + DS_Z), radius = rdf(d + DS_RADIUS);
     const int damage = (int)rd32(d + DS_DAMAGE);
     const uint32_t source = rd32(d + DS_SOURCE);
+    uint32_t targets = rd32(d + DS_TARGETS);
+    if (targets == 0) targets = TARGET_HEALTH | TARGET_PROPS;
     const uint32_t list = rd32(ADDR_ObjList);
     const int count = (int)rd32(ADDR_ObjListCount);
-    int hit = 0;
-    if (valid_ptr(list) && count > 0 && count < 4096) {
+    int hit = 0, props = 0;
+    if ((targets & TARGET_HEALTH) && valid_ptr(list) && count > 0 && count < 4096) {
         for (int i = 0; i < count; i++) {
             const uint32_t obj = rd32(list + 4u * (uint32_t)i);
             if (!valid_ptr(obj) || obj == source) continue;
@@ -194,11 +200,11 @@ void damage_sphere(uint8_t* rdram_, recomp_context* ctx) {
     }
     // Solid objects (crates, breakable props: the game's hit models) keep their own damage count, which a blast adds to
     // (explosionHitTick: HitModelData +0x12A = 1, +0x130 += damage) and their code reads (a crate breaks a stage when
-    // it passes the stage's strength). A quarter of the health damage is about what a blast gives them.
+    // it passes the stage's strength): they get the same damage. (A stock crate: about 3 units of health.)
     constexpr uint32_t ADDR_hitModelCount = 0x801047E0, ADDR_hitModels = 0x801047E4;
     const int models = (int)rd32(ADDR_hitModelCount);
     const uint32_t mlist = rd32(ADDR_hitModels);
-    if (valid_ptr(mlist) && models > 0 && models < 1024) {
+    if ((targets & TARGET_PROPS) && valid_ptr(mlist) && models > 0 && models < 1024) {
         for (int i = 0; i < models; i++) {
             const uint32_t obj = rd32(mlist + 4u * (uint32_t)i);
             if (!valid_ptr(obj) || obj == source) continue;
@@ -213,10 +219,11 @@ void damage_sphere(uint8_t* rdram_, recomp_context* ctx) {
             }
             if (d2 > radius * radius) continue;
             wr8(data + 0x12A, 1);
-            wr16(data + 0x130, (uint16_t)(int16_t)std::min(0x7FFF, (int)(int16_t)rd16(data + 0x130) + damage / 4));
-            hit++;
+            wr16(data + 0x130, (uint16_t)(int16_t)std::min(0x7FFF, (int)(int16_t)rd16(data + 0x130) + damage));
+            props++;
         }
     }
+    wr32(d + DS_PROPS_HIT, (uint32_t)props);
     ctx->r2 = (gpr)hit;
 }
 
