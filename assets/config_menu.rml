@@ -35,7 +35,10 @@
 	<style>
 		/* JFG PORT: the game around the menu is darkened (the recomp's backdrop lightened it a little). */
 		#window .centered-page { background-color: rgba(0, 0, 0, 0.6); }
-		.jfg-selected { border-color: #ffb21a; background-color: rgba(60, 200, 255, 0.3); color: #e8f3ff; } /* the chosen profile / pack: a gold outline on the hover background */
+		/* The chosen profile, pack or Quick Setup: gold outline and text on a faint gold, unlike the cyan of where the
+		   controller / mouse is; both: the cyan with the gold outline. */
+		.button.jfg-selected { border-color: #ffb21a; border-width: 2dp; background-color: rgba(255, 178, 26, 0.15); color: #ffb21a; }
+		.button.jfg-selected:focus, .button.jfg-selected:hover { border-color: #ffb21a; background-color: rgba(60, 200, 255, 0.3); color: #e8f3ff; }
 		.jfg-note { color: #3cc8ff; }
 		/* JFG PORT: group headings in the emblem gold, as in the launcher (the options and selections are "Gemini" cyan). */
 		.config-group__title { color: #ffb21a; }

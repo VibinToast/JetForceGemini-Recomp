@@ -261,9 +261,12 @@
 			.rl-page .config__wrapper_scroll p b, .rl-page .config__wrapper_scroll p i { color: #3CC8FF; }
 			.rl-page .button { border-radius: 0dp; border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF;
 				font-family: "JetBrains Mono"; font-weight: bold; font-size: 19dp; letter-spacing: 1dp; padding: 16dp 20dp; }
-			.rl-page .button:hover, .rl-page .button:focus { background-color: #0A2660; border-color: #FFB21A; color: #E8F3FF; }
-			.rl-page .button.jfg-selected { background-color: #0A2660; border-color: #FFB21A; color: #E8F3FF; } /* the chosen profile / pack: a gold outline on the hover background */
-			.rl-page .jfg-pack.jfg-selected .jfg-pack__meta { color: #E8F3FF; }
+			/* Where the controller / mouse is: a solid cyan fill, as the sidebar's open page. The chosen profile, pack or Quick
+			   Setup (jfg-selected): gold outline and text on a faint gold. Both: the fill keeps the gold outline. */
+			.rl-page .button:hover, .rl-page .button:focus { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; }
+			.rl-page .button.jfg-selected { background-color: rgba(255, 178, 26, 0.12); border-color: #FFB21A; color: #FFB21A; }
+			.rl-page .button.jfg-selected:hover, .rl-page .button.jfg-selected:focus { background-color: #3CC8FF; border-color: #FFB21A; color: #050B1C; }
+			.rl-page .jfg-pack:hover .jfg-pack__meta, .rl-page .jfg-pack:focus .jfg-pack__meta { color: #0A2660; }
 			/* The Textures page's pack cards (as in config_menu.rml, at the launcher's size) and the focused pack's details. */
 			.rl-page .jfg-pack-list { display: block; width: 100%; margin-top: 12dp; }
 			.rl-page .jfg-pack-join { display: block; margin: 10dp 10dp 0dp; font-size: 16dp; line-height: 24dp; color: #FFB21A; }
