@@ -73,6 +73,12 @@ const Locale* find(const std::string& id); // "" = english.json, if any
 // The chosen locale's id ("" = English), saved in jfg_language.txt. Any thread.
 std::string chosen();
 void choose(const std::string& id);
+// Whether a language was ever picked (jfg_language.txt names one). Until then, and after updating from a version
+// without the question, the launcher or the game asks first (src/ui/ui_language_prompt.cpp).
+bool choice_saved();
+// English and the translations the project made and checked; any other locale file (Pirate, the community's, the
+// newer machine-assisted ones) is listed as unofficial.
+bool official(const std::string& id);
 
 // For menus (any thread): (id, label) of English and every locale, in list order. Before the game starts (the
 // launcher) it comes from the files' names alone. The label is the locale's name,

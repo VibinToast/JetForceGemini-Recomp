@@ -53,6 +53,7 @@ void jfg_launcher_start_pressed(); // JFG PORT: src/ui/ui_launcher.cpp (controll
 void jfg_launcher_scroll(float pixels); // JFG PORT: src/ui/ui_launcher.cpp (controller: right stick)
 extern "C" void jfg_settings_menu_open(int open); // JFG PORT: src/jfg/jfg_camera.cpp (pauses the game)
 extern "C" void jfg_tools_ui_frame(void); // JFG PORT: src/jfg/jfg_ui_tools.cpp
+void jfg_language_prompt_frame(); // JFG PORT: src/ui/ui_language_prompt.cpp
 extern "C" int jfg_tools_controller_button(int button, int down, int bound); // JFG PORT: src/jfg/jfg_ui_tools.cpp (controller)
 
 static std::vector<char> read_file(const std::filesystem::path& filepath) {
@@ -717,6 +718,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
     bool config_was_open = recompui::is_context_shown(recompui::get_config_context_id()) || recompui::is_context_shown(recompui::get_config_sub_menu_context_id());
     jfg_settings_menu_open(config_was_open ? 1 : 0); // JFG PORT
     jfg_tools_ui_frame(); // JFG PORT: F10's tools (src/jfg/jfg_ui_tools.cpp)
+    jfg_language_prompt_frame(); // JFG PORT: the first-run language question (src/ui/ui_language_prompt.cpp)
 
     using clock = std::chrono::system_clock;
 

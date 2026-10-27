@@ -42,6 +42,8 @@ constexpr uint32_t ROM_ASCII_GLYPHS = 0xA7B04; // fontConvertString's table (D_8
 constexpr size_t SUBTITLE_ENTRY_MAX = 960;     // gGameTextTableEntries' buffer (subtitlesInit)
 // The names the old Language option and locale mods saved, for jfg_language.txt from before locale files.
 const char* const SLOT_IDS[5] = { "", "french", "german", "spanish", "japanese" };
+// The official translations (jfg::locale::official); English is official too.
+const char* const OFFICIAL_IDS[] = { "french", "german", "spanish", "japanese" };
 
 void log(const std::string& text) { jfg::jfg_log_line("jfg_mods.log", text.c_str()); }
 
@@ -610,6 +612,19 @@ void choose(const std::string& id) {
         std::fprintf(f, "# The game's language: a locale file's name (locales/<name>.json); empty = English.\nlanguage=%s\n", id.c_str());
         std::fclose(f);
     }
+}
+
+bool choice_saved() {
+    std::ifstream f(CHOICE_FILE);
+    std::string line;
+    while (std::getline(f, line))
+        if (line.rfind("language=", 0) == 0) return true;
+    return false;
+}
+
+bool official(const std::string& id) {
+    if (id.empty() || id == ENGLISH_ID) return true;
+    return std::any_of(std::begin(OFFICIAL_IDS), std::end(OFFICIAL_IDS), [&](const char* o) { return id == o; });
 }
 
 // Test: JFG_DEBUG_LANGUAGE="secs,id" picks locale `id` ("" = English) that many seconds after the first call, as the
