@@ -155,6 +155,7 @@ void register_api() {
     add_internal(Event::BloodHit, jfg_gore_on_blood_hit, [] { return jfg_no_blood() != 0; }); // No blood
     add_internal(Event::SeveredLimbTick, jfg_gore_limb, [] { return g.gore_keep_limbs; });     // Body parts stay
     add_internal(Event::SidekickTick, jfg_floyd_seen);       // Hide Floyd: his object kind (jfg_visuals.cpp)
+    add_internal(Event::SidekickTick, jfg_floyd_fuel, [] { return g.floyd_fuel != 100; }); // Floyd's Fuel (jfg_gameplay.cpp)
     add_internal(Event::ObjectDraw, jfg_hide_object, [] { return g.hide_floyd; }); // Hide Floyd
     add_internal(Event::SoundPlay, jfg_floyd_mute, [] { return g.hide_floyd; });   // Hide Floyd: his sounds
     add_internal(Event::ScreenFlash, jfg_hit_flash_event, [] { return g.hit_flash < 100; }); // Hit flash opacity

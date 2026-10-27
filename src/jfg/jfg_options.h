@@ -108,6 +108,7 @@ struct State {
     int  mouse_aim_speed = 100;    // mouse: aim turn per mouse movement, percent
     bool invert_mouse_y = false;   // mouse: moving the mouse forward looks/aims down
     int  refuel_speed = 100;       // jetpack fuel pads: fuel added per tick, percent (jfg_refuel_amount)
+    int  floyd_fuel = 100;         // Floyd missions: how long Floyd's fuel lasts, percent (jfg_floyd_fuel); 100 in every profile
     bool sniper_fixed_zoom = false; // sniper rifle: the zoom stays at sniper_zoom, the zoom buttons do nothing
     int  sniper_zoom = 250;        // sniper rifle: fixed zoom, percent of the unzoomed view (100..500, the game's range)
     int  damage_taken = 100;       // damage the player takes, percent (apply_damage_taken)

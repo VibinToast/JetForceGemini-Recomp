@@ -55,6 +55,27 @@ extern "C" int jfg_refuel_amount(int amount) {
     return std::max(1, (int)std::lround(amount * (double)g.refuel_speed / 100.0));
 }
 
+// --- Floyd's fuel ----------------------------------------------------------------------------------------------------
+// jfg_on_sidekick_tick handler, before sidekickControl. In a Floyd mission Floyd's data (object + 0x68) holds his fuel
+// at +0x1C and at +0x1E the frames left before he loses a unit of it: sidekickControl counts that down by one each
+// frame of the tick and, at 0, takes a unit and starts again from 6. Giving back part of the frames makes the fuel last
+// floyd_fuel percent as long; the gauge, the low-fuel beeps and the pickups that refill it are the game's.
+extern "C" void jfg_floyd_fuel(uint8_t* rdram_, recomp_context* ctx) {
+    static double owed = 0.0; // frames given back, below a whole one
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const int frames = (int)ctx->r5;
+    const uint32_t data = valid_ptr(obj) ? rd32(obj + 0x68) : 0;
+    if (rd8(ADDR_robotMission) == 0 || !valid_ptr(data) || (int16_t)rd16(data + 0x1C) <= 0 || frames <= 0) {
+        owed = 0.0;
+        return;
+    }
+    owed += frames * (1.0 - 100.0 / g.floyd_fuel);
+    const int back = (int)owed;
+    owed -= back;
+    if (back > 0) wr16(data + 0x1E, (uint16_t)((int16_t)rd16(data + 0x1E) + back));
+}
+
 // --- sniper zoom -----------------------------------------------------------------------------------------------------
 // Hook in controlGetManualAim where it stores the zoom (1 = none .. 5): with the option the zoom is fixed.
 extern "C" float jfg_sniper_zoom(float zoom) {

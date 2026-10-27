@@ -49,6 +49,7 @@ uint32_t jfg_hit_flash(uint32_t color);                                // the hi
 int jfg_shadow_alpha(int alpha);                                       // func_8001B8E0's wrapper: a shadow batch's alpha
 void jfg_hit_flash_event(uint8_t* rdram, recomp_context* ctx);        // jfg_on_screen_flash handler
 void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // jfg_on_sidekick_tick handler
+void jfg_floyd_fuel(uint8_t* rdram, recomp_context* ctx);              // jfg_on_sidekick_tick handler (Floyd's Fuel)
 void jfg_hide_object(uint8_t* rdram, recomp_context* ctx);             // jfg_on_object_draw handler
 void jfg_floyd_done(void);                                             // after sidekickControl
 void jfg_floyd_mute(uint8_t* rdram, recomp_context* ctx);             // jfg_on_sound_play handler

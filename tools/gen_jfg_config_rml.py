@@ -58,6 +58,8 @@ GAMEPLAY = [
     ("bool", "unlimited_continues", "Unlimited Continues", None,
      "Dying never uses up your continues, so you always come back where you died instead of the game over that restarts the area from its entrance."),
     ("range", "refuel_speed", "Jetpack Refuel Speed", (25, 1000, "%"), "How fast a fuel pad fills the jetpack."),
+    ("range", "floyd_fuel", "Floyd's Fuel", (100, 300, "%"),
+     "How long Floyd's fuel lasts in his missions. 100% is the original game; 300% lasts three times as long."),
     ("range", "dive_speed", "Vela's Dive Speed", (50, 400, "%"), "How fast Vela swims underwater, in every direction."),
     ("group", None, "Movement (any control layout)", None, None),
     ("range", "move_speed", "Movement Speed", (25, 400, "%"), "How fast the character moves over the ground. The extra distance is collision-checked like normal movement."),
