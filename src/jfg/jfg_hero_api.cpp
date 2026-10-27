@@ -14,8 +14,15 @@
 extern "C" void controlReadJoypad(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackPolyHeight(uint8_t* rdram, recomp_context* ctx);
 extern "C" void frontFlashScreen(uint8_t* rdram, recomp_context* ctx);
+extern "C" void camSetFOV(uint8_t* rdram, recomp_context* ctx);
 
 namespace jfg::api {
+// A camera a mod set this tick (jfg_camera_set), applied by the camera step's wrapper.
+struct CameraSet { float x, y, z, fx, fy, fz; int16_t roll; float fov; bool pending; };
+CameraSet g_camera_set;
+int g_camera_ticks = 0; // camera steps left in which a mod's camera counts as active (set again each tick)
+uint32_t camera_ptr();
+
 namespace {
 constexpr uint32_t ADDR_track = 0x800A0D60;      // Track*, the level's track (track.c)
 constexpr uint32_t ADDR_controlcam = 0x800F6DC0; // Camera*, the camera the hero's control steers by
@@ -44,12 +51,14 @@ constexpr uint32_t FL_X = 0x00, FL_Z = 0x04, FL_MASK = 0x08, FL_Y = 0x0C, FL_FLA
 // JfgDamageSphere
 constexpr uint32_t DS_X = 0x00, DS_Y = 0x04, DS_Z = 0x08, DS_RADIUS = 0x0C, DS_DAMAGE = 0x10, DS_SOURCE = 0x14;
 
+} // namespace
 uint32_t camera_ptr() {
     const uint32_t cam = rd32(ADDR_controlcam);
     if (valid_ptr(cam)) return cam;
     return ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
 }
 
+namespace {
 // jfg_hero_takeover(int character, int on): while on, the game's control code for that hero doesn't run;
 // jfg_on_hero_control fires in its place. Only Juno (1) so far.
 void hero_takeover(uint8_t*, recomp_context* ctx) {
@@ -298,6 +307,18 @@ void screen_flash(uint8_t* rdram_, recomp_context* ctx) {
     call_game(frontFlashScreen, ctx, { 0u, 0u, (uint32_t)ctx->r4 });
 }
 
+// jfg_camera_set(const JfgCameraSet* s): this tick the camera the hero steers by stands at s's position, looking at
+// its focus, rolled by roll (0x10000 a turn); applied after the game's own camera code (the wrapper below), so a mod
+// sets it each tick it wants it.
+
+void camera_set(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t s = (uint32_t)ctx->r4;
+    if (s == 0) return;
+    g_camera_set = { rdf(s + 0x00), rdf(s + 0x04), rdf(s + 0x08), rdf(s + 0x0C), rdf(s + 0x10), rdf(s + 0x14),
+                     (int16_t)rd32(s + 0x18), rdf(s + 0x1C), true };
+}
+
 // jfg_object_health(obj): its health (256 per unit), -1 without damage data. jfg_object_set_health(obj, health).
 void object_health(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
@@ -314,6 +335,16 @@ void object_set_health(uint8_t* rdram_, recomp_context* ctx) {
 }
 } // namespace
 
+// While a mod sets the camera (jfg_camera_set): the port's own camera features (the dual-stick and over-the-shoulder
+// views, the FOV option) leave it alone; mod_camera_fov is its field of view, 0 = the game's.
+bool mod_camera_active() {
+    return g_camera_ticks > 0;
+}
+
+float mod_camera_fov() {
+    return g_camera_ticks > 0 ? g_camera_set.fov : 0.0f;
+}
+
 bool hero_taken_over(int character) {
     return character >= 0 && character < CHARACTERS && g_takeover[character];
 }
@@ -328,6 +359,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_objects_near", objects_near);
     recomp::overlays::register_base_export("jfg_object_triangles", object_triangles);
     recomp::overlays::register_base_export("jfg_screen_flash", screen_flash);
+    recomp::overlays::register_base_export("jfg_camera_set", camera_set);
     recomp::overlays::register_base_export("jfg_object_health", object_health);
     recomp::overlays::register_base_export("jfg_object_set_health", object_set_health);
 }
@@ -386,4 +418,36 @@ JFG_WRAP(boyControl) {
     H::BodyYaw::set(hero, Obj::Yaw::get(obj));
     const float dx = Obj::PosX::get(obj) - x0, dz = Obj::PosZ::get(obj) - z0;
     H::Speed::set(hero, std::sqrt(dx * dx + dz * dz) / (float)std::max(1, frames));
+}
+
+// The hero's camera step (controlPlayer, after the hero's control: func_8002B418_2C018(obj, player, rate)): the game's
+// own camera code, then a camera a mod set this tick (jfg_camera_set), in the game's angles: with d = position - focus,
+// yaw 0x8000 - atan2(dx, dz) and pitch atan2(dy, |dxz|), as the game's follow camera aims (charControl.c).
+JFG_WRAP(func_8002B418_2C018) {
+    using namespace jfg;
+    func_8002B418_2C018_orig(rdram, ctx);
+    api::CameraSet& s = api::g_camera_set;
+    if (!s.pending) {
+        if (api::g_camera_ticks > 0) api::g_camera_ticks--;
+        return;
+    }
+    s.pending = false;
+    api::g_camera_ticks = 2;
+    g_rdram = rdram;
+    const uint32_t cam = api::camera_ptr();
+    const float dx = s.x - s.fx, dy = s.y - s.fy, dz = s.z - s.fz;
+    constexpr float TO_ANGLE = 32768.0f / PI_F;
+    Camera::PosX::set(cam, s.x);
+    Camera::PosY::set(cam, s.y);
+    Camera::PosZ::set(cam, s.z);
+    Camera::Yaw::set(cam, (uint16_t)(int32_t)(0x8000 - (int32_t)std::lround(std::atan2(dx, dz) * TO_ANGLE)));
+    Camera::Pitch::set(cam, (uint16_t)(int32_t)std::lround(std::atan2(dy, std::sqrt(dx * dx + dz * dz)) * TO_ANGLE));
+    Camera::Roll::set(cam, (uint16_t)s.roll);
+    if (s.fov > 0.0f) {
+        Camera::Fov::set(cam, s.fov);
+        const recomp_context saved = *ctx;
+        ctx->f12.fl = s.fov;
+        call_game(camSetFOV, ctx, { 0u, 1u }); // camSetFOV(fov in $f12, force): the wrapper passes it unscaled
+        *ctx = saved;
+    }
 }

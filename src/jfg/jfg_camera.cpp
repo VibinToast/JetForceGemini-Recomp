@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "jfg_api.h"
 #include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
@@ -144,6 +145,8 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         wr16(cam + 4, 0);
         return;
     }
+    // A mod's own camera (jfg_camera_set: a custom hero's, a boss fight's) wins over the dual-stick and aiming views.
+    if (jfg::api::mod_camera_active()) return;
     if ((!g_cam.active && !g_cam.shoulder) || g_cam.overridden) return;
     const uint32_t cam_now = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
     if (menu_paused() && g_cam.drawn_valid) {

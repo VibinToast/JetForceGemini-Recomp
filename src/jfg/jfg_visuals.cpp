@@ -310,6 +310,12 @@ JFG_WRAP(shadowGenerate) {
 // is put back. Zoomed, nothing changes (jfg_fov only notes the FOV for the ambient occlusion pass).
 JFG_WRAP(camSetFOV) {
     g_rdram = rdram;
+    // A mod's own camera with a field of view of its own (jfg_camera_set): that FOV, as it is (no FOV option).
+    if (const float mod_fov = jfg::api::mod_camera_fov(); mod_fov > 0.0f) {
+        ctx->f12.fl = mod_fov;
+        camSetFOV_orig(rdram, ctx);
+        return;
+    }
     const float fov = ctx->f12.fl;
     const uint32_t cam = rd32(ADDR_cameraNo) & 3;
     const uint32_t zoomed = rd8(0x800A3174u + cam);

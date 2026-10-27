@@ -190,3 +190,6 @@ objSetupPlayers
 
 # Mod API: a mod can take over a hero's control (jfg_hero_api.cpp)
 boyControl
+
+# Mod API: a camera a mod sets after the game's own (jfg_hero_api.cpp)
+func_8002B418_2C018

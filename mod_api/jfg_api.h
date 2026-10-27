@@ -71,6 +71,19 @@ typedef struct {
 } JfgCameraView;
 RECOMP_IMPORT("*", void jfg_camera_get(JfgCameraView* out));
 
+// This tick the camera the hero steers by stands at (x, y, z) looking at (fx, fy, fz), rolled by roll (0x10000 a
+// turn), with field of view fov (degrees; 0 = the game's). It is applied after the game's own camera code each tick it
+// is set, so a mod with a camera of its own (a custom hero's, a boss fight's) sets it every tick; the tick it stops,
+// the game's camera carries on from there. While it is set, the port's own camera options (the dual-stick and aiming
+// views, the FOV option) leave the camera alone.
+typedef struct {
+    float x, y, z;
+    float fx, fy, fz;
+    int roll;
+    float fov;
+} JfgCameraSet;
+RECOMP_IMPORT("*", void jfg_camera_set(const JfgCameraSet* camera));
+
 // One of the level's collision triangles: three corners in level units, the flags of its batch (0x2000 water,
 // 0x8000 hurts, 0x80000000 kills; others not named yet) and its texture.
 typedef struct {

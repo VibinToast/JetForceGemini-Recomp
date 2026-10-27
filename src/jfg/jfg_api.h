@@ -70,6 +70,9 @@ constexpr uint32_t OBJECT = 0x00, GFX = 0x04, MTX = 0x08, VTX = 0x0C, CANCEL = 0
 // The hero API (jfg_hero_api.cpp): helpers, and whether a mod controls a hero (boyControl's wrapper asks).
 void register_hero_api();
 bool hero_taken_over(int character);
+// A mod sets the camera (jfg_camera_set) these ticks: the port's own camera features stand down; its FOV (0 = none).
+bool mod_camera_active();
+float mod_camera_fov();
 
 // active: nullptr = always runs.
 void add_internal(Event event, Handler handler, Active active = nullptr);
