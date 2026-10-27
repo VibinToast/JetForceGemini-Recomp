@@ -131,7 +131,7 @@ CONTROLS = [
 # controller plays P1, src/input/input.cpp), Quick Setup (three ways to set the Layout switches at once) and Customize
 # Buttons (the bindings page, controls.rml). Values come from jfg_controls_model (src/ui/ui_config.cpp). Words next to a
 # {{value}} are in their own span, so a language can swap them.
-QS_BUTTON = '''                            <button class="button" id="jfg_qs_{mode}" data-class-jfg-selected="qs_mode == '{mode}'" data-event-click="quick_setup('{mode}')" data-event-focus="set_cur_config_index({index})" data-event-blur="set_cur_config_index(-1)" data-event-mouseover="set_cur_config_index({index})" style="display: block; flex: 0 1 auto; white-space: nowrap; margin: 0dp 10dp 12dp 0dp; padding-left: 12dp; padding-right: 12dp; nav-up: #tab_jfg_controls; nav-down: #jfg_customize_buttons; nav-left: {left}; nav-right: {right};">{label}<span data-if="qs_recommend == '{mode}'"><span style="margin-left: 8dp; padding: 2dp 6dp; font-size: 13dp; line-height: 18dp; letter-spacing: 1dp; background-color: #ffb21a; color: #050b1c;">Recommended</span></span></button>'''
+QS_BUTTON = '''                            <button class="button" id="jfg_qs_{mode}" data-class-jfg-selected="qs_mode == '{mode}'" data-event-click="quick_setup('{mode}')" data-event-focus="set_cur_config_index({index})" data-event-blur="set_cur_config_index(-1)" data-event-mouseover="set_cur_config_index({index})" style="display: block; flex: 0 0 auto; white-space: nowrap; margin: 0dp 10dp 12dp 0dp; padding-left: 12dp; padding-right: 12dp; nav-up: #tab_jfg_controls; nav-down: #jfg_customize_buttons; nav-left: {left}; nav-right: {right};">{label}<span data-if="qs_recommend == '{mode}'"><span style="margin-left: 8dp; padding: 2dp 6dp; font-size: 13dp; line-height: 18dp; letter-spacing: 1dp; background-color: #ffb21a; color: #050b1c;">Recommended</span></span></button>'''
 QS_MODES = (("modern", "Modern"), ("n64", "Original N64"), ("custom", "Custom"))
 QS_INDEX = 1001 # cur_config_index of the first Quick Setup button's description (CONTROLS_DESC); Customize Buttons is 1004
 
@@ -153,7 +153,7 @@ CONTROLS_TOP = "\n".join([
     '<span data-if="controller_count &gt; 1">{{controller_count}} <span>controllers connected: all control P1.</span> </span>'
     '<span>Multiplayer: coming later.</span></div>',
     '                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Quick Setup</label></div>',
-    '                    <div style="display: flex; flex-direction: row; margin: 10dp 12dp 0dp;">',
+    '                    <div style="display: flex; flex-direction: row; flex-wrap: wrap; margin: 10dp 12dp 0dp;">', # longer translations wrap
     *(QS_BUTTON.format(mode=m, label=label, index=QS_INDEX + i,
                        left="#tab_jfg_controls" if i == 0 else "#jfg_qs_" + QS_MODES[i - 1][0],
                        right="#jfg_qs_" + QS_MODES[i + 1][0] if i + 1 < len(QS_MODES) else "none")
