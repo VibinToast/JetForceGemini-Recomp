@@ -30,6 +30,7 @@
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
@@ -1414,11 +1415,11 @@ namespace {
 // it at result + 0x20. The vectors live in the gap below $sp that call_game leaves.
 void update_aim(recomp_context* ctx) {
     constexpr float REACH = AIM_REACH;
-    const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
+    const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
     const bool fly = g_fly.active && g_fly.started; // the fly camera's view: it is put in the game's camera only to draw
-    const float heading = fly ? g_fly.heading : -angle_from_s16(rd16(cam)), pitch = fly ? g_fly.pitch : angle_from_s16(rd16(cam + 2));
+    const float heading = fly ? g_fly.heading : -angle_from_s16(Camera::Yaw::get(cam)), pitch = fly ? g_fly.pitch : angle_from_s16(Camera::Pitch::get(cam));
     const float dir[3] = { std::sin(heading) * std::cos(pitch), -std::sin(pitch), std::cos(heading) * std::cos(pitch) };
-    const float from[3] = { fly ? g_fly.x : rdf(cam + 0x0C), fly ? g_fly.y : rdf(cam + 0x10), fly ? g_fly.z : rdf(cam + 0x14) };
+    const float from[3] = { fly ? g_fly.x : Camera::PosX::get(cam), fly ? g_fly.y : Camera::PosY::get(cam), fly ? g_fly.z : Camera::PosZ::get(cam) };
     const uint32_t base = ((uint32_t)ctx->r29 - 0xA0u) & ~0xFu;
     const uint32_t start = base, end = base + 0x10, result = base + 0x20;
     for (uint32_t c = 0; c < 3; c++) {

@@ -30,6 +30,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_port.h"
@@ -475,8 +476,8 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     static std::vector<Light> found, removers;
     found.clear();
     removers.clear();
-    const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
-    const float cx = rdf(cam + 0x0C), cy = rdf(cam + 0x10), cz = rdf(cam + 0x14);
+    const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
+    const float cx = Camera::PosX::get(cam), cy = Camera::PosY::get(cam), cz = Camera::PosZ::get(cam);
     auto add = [&](uint32_t id, float x, float y, float z, float radius, float inner, const float* colour, bool level,
                    bool shadows = true) {
         Light light;
@@ -623,7 +624,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
 
     // The camera (for the shine), placed on in-between frames as the lights are, and the settings the shaders take.
     // [1]: where the camera looks, a little ahead (the directional light's shadows are made around it).
-    const float heading = -angle_from_s16(rd16(cam)), pitch_cam = angle_from_s16(rd16(cam + 2));
+    const float heading = -angle_from_s16(Camera::Yaw::get(cam)), pitch_cam = angle_from_s16(Camera::Pitch::get(cam));
     const float ahead = s.sun_shadow_area.load() * 0.6f;
     float points[10] = { cx, cy, cz, 0.0f, 0.0f,
                          cx + std::sin(heading) * std::cos(pitch_cam) * ahead, cy - std::sin(pitch_cam) * ahead,
