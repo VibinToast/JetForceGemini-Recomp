@@ -12,8 +12,31 @@ extern const std::string mod_tab_id;
 
 // JFG PORT: the mod menu's look, shared with ui_mod_menu.cpp.
 namespace modui {
+    bool is_switch_option(const recomp::mods::ConfigOption& option) {
+        if (option.id != "enabled" || option.type != recomp::mods::ConfigOptionType::Enum) return false;
+        const auto& e = std::get<recomp::mods::ConfigOptionEnum>(option.variant);
+        return e.options.size() == 2;
+    }
+
+    bool has_switch(const std::string& mod_id) {
+        const recomp::mods::ConfigSchema& schema = recomp::mods::get_mod_config_schema(mod_id);
+        const auto it = schema.options_by_id.find("enabled");
+        return it != schema.options_by_id.end() && is_switch_option(schema.options[it->second]);
+    }
+
+    static bool switched_off(const std::string& mod_id) {
+        if (!has_switch(mod_id)) return false;
+        const recomp::mods::ConfigValueVariant v = recomp::mods::get_mod_config_value(mod_id, "enabled");
+        return std::holds_alternative<uint32_t>(v) && std::get<uint32_t>(v) == 0;
+    }
+
+    bool can_toggle(const recomp::mods::ModDetails& details) {
+        if (details.runtime_toggleable || !ultramodern::is_game_started()) return true;
+        return has_switch(details.mod_id) && recomp::mods::is_mod_enabled(details.mod_id); // loaded, with a switch
+    }
+
     Status status_of(const std::string& mod_id) {
-        if (recomp::mods::is_mod_enabled(mod_id)) return Status::On;
+        if (recomp::mods::is_mod_enabled(mod_id)) return switched_off(mod_id) ? Status::Off : Status::On;
         if (recomp::mods::is_mod_auto_enabled(mod_id)) return Status::Required;
         return Status::Off;
     }
@@ -288,7 +311,7 @@ void ModDetailsPanel::set_mod_details(const recomp::mods::ModDetails& details, c
     enable_toggle->set_enabled(toggle_enabled);
     configure_button->set_enabled(configure_enabled);
     (void)toggle_label_visible; // the note under On/Off says why, see refresh_status
-    toggle_locked_by_game = !cur_details.runtime_toggleable && ultramodern::is_game_started();
+    toggle_locked_by_game = !modui::can_toggle(cur_details);
 
     if (configure_enabled) {
         enable_toggle->set_nav(NavDirection::Right, configure_button);

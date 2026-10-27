@@ -28,6 +28,14 @@ namespace modui {
 
     // A mod's state now: on, off, or on because a mod that is on needs it.
     Status status_of(const std::string& mod_id);
+    // A mod with an option "enabled" (Off / On, in that order) has a switch of its own: the On/Off toggle sets it, and
+    // so works while the game runs (the mod stays loaded and does nothing while it is Off). The option is not listed
+    // on the mod's settings page.
+    bool has_switch(const std::string& mod_id);
+    bool is_switch_option(const recomp::mods::ConfigOption& option);
+    // Whether the toggle can be changed now: the game not started yet, a mod that turns on and off as it runs, or a
+    // loaded mod with a switch.
+    bool can_toggle(const recomp::mods::ModDetails& details);
     // Font size, line height and weight, times the menu's scale (1 in the game's menu, smaller in the launcher).
     void set_text(Element* e, float scale, float size, float line, uint32_t weight, Color color, float spacing = 0.0f);
     // The small tag beside a mod: ON, OFF, REQUIRED (on because a mod that is on needs it), MISSING or OLD VERSION.

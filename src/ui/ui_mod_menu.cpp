@@ -314,7 +314,16 @@ void ModMenu::open_install_dialog() {
 
 void ModMenu::mod_toggled(bool enabled) {
     if (active_mod_index >= 0) {
-        recomp::mods::enable_mod(mod_details[active_mod_index].mod_id, enabled);
+        // JFG PORT: a mod with a switch (modui::has_switch) is turned on and off by it, and stays in the Mods list: so
+        // it can change while the game runs. Turning it on before the game starts also puts it in the list.
+        const std::string& id = mod_details[active_mod_index].mod_id;
+        if (modui::has_switch(id)) {
+            recomp::mods::set_mod_config_value(id, "enabled", (uint32_t)(enabled ? 1 : 0));
+            if (enabled && !ultramodern::is_game_started()) recomp::mods::enable_mod(id, true);
+        }
+        else {
+            recomp::mods::enable_mod(id, enabled);
+        }
         
         // Refresh enabled status for all mods in case one of them got auto-enabled due to being a dependency.
         refresh_mod_status();
@@ -362,8 +371,9 @@ void ModMenu::mod_selected(uint32_t mod_index) {
         const recomp::mods::ConfigSchema &config_schema = recomp::mods::get_mod_config_schema(mod_details[active_mod_index].mod_id);
         bool toggle_checked = modui::status_of(mod_details[mod_index].mod_id) != modui::Status::Off;
         bool auto_enabled = recomp::mods::is_mod_auto_enabled(mod_details[mod_index].mod_id);
-        bool toggle_enabled = !auto_enabled && (mod_details[mod_index].runtime_toggleable || !ultramodern::is_game_started());
-        bool configure_enabled = !config_schema.options.empty();
+        bool toggle_enabled = !auto_enabled && modui::can_toggle(mod_details[mod_index]);
+        // JFG PORT: a switch alone (modui::has_switch) gives the settings page nothing to show.
+        bool configure_enabled = config_schema.options.size() > (modui::has_switch(mod_details[mod_index].mod_id) ? 1u : 0u);
         mod_details_panel->set_mod_details(mod_details[mod_index], thumbnail_src, toggle_checked, toggle_enabled, auto_enabled, configure_enabled);
         mod_entry_buttons[active_mod_index]->set_selected(true);
 
@@ -575,6 +585,7 @@ void ModMenu::mod_configure_requested() {
             if (handle_special_config_options(option, config_value)) {
                 continue;
             }
+            if (modui::is_switch_option(option)) continue; // JFG PORT: the On/Off toggle is this option
 
             switch (option.type) {
             case recomp::mods::ConfigOptionType::Enum: {
@@ -756,7 +767,7 @@ void ModMenu::process_event(const Event &e) {
         }
         if (active_mod_index != -1) {        
             bool auto_enabled = recomp::mods::is_mod_auto_enabled(mod_details[active_mod_index].mod_id);
-            bool toggle_enabled = !auto_enabled && (mod_details[active_mod_index].runtime_toggleable || !ultramodern::is_game_started());
+            bool toggle_enabled = !auto_enabled && modui::can_toggle(mod_details[active_mod_index]);
             if (!toggle_enabled) {
                 mod_details_panel->disable_toggle();
             }
