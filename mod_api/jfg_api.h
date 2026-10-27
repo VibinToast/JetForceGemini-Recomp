@@ -177,6 +177,9 @@ RECOMP_IMPORT("*", int jfg_object_blast_damage(void* object));
 // own health for a hero draws its own (jfg_on_draw_hud).
 RECOMP_IMPORT("*", void jfg_hud_hide_health(int character, int hide));
 
+// The heads the first player has collected as a hero (0 Vela, 1 Juno, 2 Lupus): tribal 1 the tribals', 0 the others'.
+RECOMP_IMPORT("*", int jfg_hero_heads(int character, int tribal));
+
 // --- event data ---------------------------------------------------------------------------------------------------
 
 // jfg_on_blood_spurt: a spurt of blood drops. Change any field; set cancel to 1 to drop it; amount is the drops in
@@ -282,5 +285,8 @@ typedef struct {
 //     An object is about to be drawn (after jfg_on_object_draw): write your own commands, or cancel the game's.
 // jfg_on_draw_hud(JfgHudGfx* hud)
 //     Each frame, after the HUD: draw over it.
+// jfg_on_hud_message(int msg, int character, int player)
+//     A message is queued for a player's HUD panel (text msg). Pick-ups: weapon w's ammo 0x48 + w (extra ammo, or a
+//     dropped ammo part), 0x57 + w (a clip), 0x66 + w (full ammo), 0x75 + w (more capacity); keys 0x170 + key.
 
 #endif

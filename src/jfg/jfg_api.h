@@ -33,6 +33,7 @@ enum class Event : uint32_t {
     HeroControl,      // jfg_on_hero_control(Object* hero, int frames, int character), since version 4
     ObjectDrawGfx,    // jfg_on_object_draw_gfx(JfgObjectGfx* draw), since version 4
     DrawHud,          // jfg_on_draw_hud(JfgHudGfx* hud), since version 4
+    HudMessage,       // jfg_on_hud_message(int msg, int character, int player), since version 4
     Count
 };
 

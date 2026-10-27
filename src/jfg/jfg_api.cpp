@@ -23,7 +23,7 @@ const char* const g_event_names[] = {
     "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", "jfg_on_blood_spurt", "jfg_on_blood_hit",
     "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
     "jfg_on_language_change", "jfg_on_map_open", "jfg_on_galaxy_change", "jfg_on_planet_select", "jfg_on_hero_control",
-    "jfg_on_object_draw_gfx", "jfg_on_draw_hud", nullptr
+    "jfg_on_object_draw_gfx", "jfg_on_draw_hud", "jfg_on_hud_message", nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
@@ -361,4 +361,21 @@ JFG_WRAP(prnBorder) {
         api::fire(rdram, ctx, api::Event::DrawHud, (int32_t)p.addr);
     }
     prnBorder_orig(rdram, ctx);
+}
+
+// instQueueMsg(player, msg): a message for a player's HUD panel (a pick-up's name, a hit): jfg_on_hud_message first.
+// player is the hero's data (+0x00 the player, +0x01 the character).
+JFG_WRAP(instQueueMsg) {
+    using namespace jfg;
+    if (api::listened(api::Event::HudMessage)) {
+        g_rdram = rdram;
+        const gpr a0 = ctx->r4, a1 = ctx->r5;
+        const uint32_t pl = (uint32_t)a0;
+        const int player = valid_ptr(pl) ? (int8_t)rd8(pl) : -1;
+        const int character = valid_ptr(pl) ? rd8(pl + 1) & 3 : -1;
+        api::fire(rdram, ctx, api::Event::HudMessage, (int32_t)a1, character, player);
+        ctx->r4 = a0;
+        ctx->r5 = a1;
+    }
+    instQueueMsg_orig(rdram, ctx);
 }

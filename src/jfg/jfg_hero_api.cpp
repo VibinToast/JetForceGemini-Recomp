@@ -14,6 +14,7 @@
 extern "C" void controlReadJoypad(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackPolyHeight(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackGetBlock(uint8_t* rdram, recomp_context* ctx);
+extern "C" void mainGetGameCharacter(uint8_t* rdram, recomp_context* ctx);
 extern "C" void frontFlashScreen(uint8_t* rdram, recomp_context* ctx);
 extern "C" void camSetFOV(uint8_t* rdram, recomp_context* ctx);
 
@@ -457,6 +458,18 @@ void object_blast_damage(uint8_t* rdram_, recomp_context* ctx) {
     ctx->r2 = (gpr)total;
 }
 
+// jfg_hero_heads(int character, int tribal): the heads the first player has collected as that hero (the game
+// character's +0x06 tribals', +0x08 the others'; mainGetGameCharacter(player, character)).
+void hero_heads(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const int character = (int)ctx->r4;
+    const bool tribal = ctx->r5 != 0;
+    const recomp_context saved = *ctx;
+    const uint32_t c = call_game(mainGetGameCharacter, ctx, { 0u, (uint32_t)character });
+    *ctx = saved;
+    ctx->r2 = valid_ptr(c) ? (gpr)rd16(c + (tribal ? 0x06 : 0x08)) : 0;
+}
+
 // jfg_hud_hide_health(int character, int hide): while hidden, the game's health meter is not drawn for that hero (a
 // mod draws its own).
 void hud_hide_health(uint8_t*, recomp_context* ctx) {
@@ -511,6 +524,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_enemies_near", enemies_near);
     recomp::overlays::register_base_export("jfg_object_blast_damage", object_blast_damage);
     recomp::overlays::register_base_export("jfg_hud_hide_health", hud_hide_health);
+    recomp::overlays::register_base_export("jfg_hero_heads", hero_heads);
 }
 
 } // namespace jfg::api
