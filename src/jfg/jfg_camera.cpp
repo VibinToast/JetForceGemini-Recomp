@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "jfg_api.h"
 #include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
@@ -144,6 +145,8 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         wr16(cam + 4, 0);
         return;
     }
+    // A mod's own camera (jfg_camera_set: a custom hero's, a boss fight's) wins over the dual-stick and aiming views.
+    if (jfg::api::mod_camera_active()) return;
     if ((!g_cam.active && !g_cam.shoulder) || g_cam.overridden) return;
     const uint32_t cam_now = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
     if (menu_paused() && g_cam.drawn_valid) {
@@ -257,7 +260,8 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     // also comes back towards it, moving or not. Turning the view while aiming leads the point the same way, sideways,
     // and tilting it up or down leads it up or down. Forwards and back it follows at once. After aiming it eases back.
     float qx = px, qz = pz;
-    const float distance = (float)g.camera_distance / 100.0f; // "Camera Distance": the game's distance, scaled
+    // "Camera Distance": the game's distance, scaled; and by a mod's (jfg_camera_set_distance)
+    const float distance = (float)g.camera_distance / 100.0f * jfg::api::g_camera_distance;
     // Stick up lowers the camera round the character until it looks up from below; the floor, when in the way, pulls
     // it in along the same line (camera_collide).
     const float pitch = std::clamp(game_elevation + g_cam.elevation, ORBIT_PITCH_MIN, ORBIT_PITCH_MAX);

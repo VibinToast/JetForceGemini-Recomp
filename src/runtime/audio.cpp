@@ -33,6 +33,7 @@ static uint32_t discarded_output_frames;
 constexpr uint32_t bytes_per_frame = input_channels * sizeof(float);
     
 extern "C" void jfg_music_mix(float* samples, size_t frames, uint32_t rate, float gain); // jfg_music.cpp
+extern "C" void jfg_sounds_mix(float* samples, size_t frames, uint32_t rate, float gain); // jfg_music.cpp
 
 void queue_samples(int16_t* audio_data, size_t sample_count) {
     // Buffer for holding the output of swapping the audio channels. This is reused across
@@ -63,6 +64,9 @@ void queue_samples(int16_t* audio_data, size_t sample_count) {
     // JFG PORT: mods' streamed music (jfg_music.cpp) joins the game's samples here, at the game's rate.
     jfg_music_mix(swap_buffer.data() + duplicated_input_frames * input_channels, sample_count / input_channels,
                   sample_rate, cur_main_volume);
+    // JFG PORT: and mods' sound effects (jfg_sounds.json).
+    jfg_sounds_mix(swap_buffer.data() + duplicated_input_frames * input_channels, sample_count / input_channels,
+                   sample_rate, cur_main_volume);
 
     // TODO handle cases where a chunk is smaller than the duplicated frame count.
     assert(sample_count > duplicated_input_frames * input_channels);

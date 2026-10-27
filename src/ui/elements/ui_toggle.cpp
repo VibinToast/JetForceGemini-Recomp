@@ -9,25 +9,23 @@ namespace recompui {
     Toggle::Toggle(Element *parent) : Element(parent, Events(EventType::Click, EventType::Focus, EventType::Hover, EventType::Enable), "button") {
         enable_focus();
 
-        set_width(162.0f);
-        set_height(72.0f);
-        set_border_radius(36.0f);
+        // JFG PORT: the launcher's colours, off in its muted blue and on in "Gemini" cyan (was orange and green).
         set_opacity(0.9f);
         set_cursor(Cursor::Pointer);
         set_border_width(2.0f);
-        set_border_color(Color{ 177, 76, 34, 255 });
+        set_border_color(Color{ 129, 153, 191, 255 });
         set_background_color(Color{ 0, 0, 0, 0 });
-        checked_style.set_border_color(Color{ 34, 177, 76, 255 });
-        hover_style.set_border_color(Color{ 177, 76, 34, 255 });
-        hover_style.set_background_color(Color{ 206, 120, 68, 76 });
-        focus_style.set_border_color(Color{ 177, 76, 34, 255 });
-        focus_style.set_background_color(Color{ 206, 120, 68, 76 });
-        checked_hover_style.set_border_color(Color{ 34, 177, 76, 255 });
-        checked_hover_style.set_background_color(Color{ 68, 206, 120, 76 });
-        checked_focus_style.set_border_color(Color{ 34, 177, 76, 255 });
-        checked_focus_style.set_background_color(Color{ 68, 206, 120, 76 });
-        disabled_style.set_border_color(Color{ 177, 76, 34, 128 });
-        checked_disabled_style.set_border_color(Color{ 34, 177, 76, 128 });
+        checked_style.set_border_color(Color{ 60, 200, 255, 255 });
+        hover_style.set_border_color(Color{ 232, 243, 255, 255 });
+        hover_style.set_background_color(Color{ 60, 200, 255, 51 });
+        focus_style.set_border_color(Color{ 255, 178, 26, 255 });
+        focus_style.set_background_color(Color{ 60, 200, 255, 51 });
+        checked_hover_style.set_border_color(Color{ 232, 243, 255, 255 });
+        checked_hover_style.set_background_color(Color{ 60, 200, 255, 76 });
+        checked_focus_style.set_border_color(Color{ 255, 178, 26, 255 });
+        checked_focus_style.set_background_color(Color{ 60, 200, 255, 76 });
+        disabled_style.set_border_color(Color{ 129, 153, 191, 96 });
+        checked_disabled_style.set_border_color(Color{ 60, 200, 255, 128 });
         add_style(&checked_style, checked_state);
         add_style(&hover_style, hover_state);
         add_style(&focus_style, focus_state);
@@ -40,19 +38,30 @@ namespace recompui {
 
         floater = context.create_element<Element>(this);
         floater->set_position(Position::Relative);
-        floater->set_top(2.0f);
-        floater->set_width(80.0f);
-        floater->set_height(64.0f);
-        floater->set_border_radius(32.0f);
-        floater->set_background_color(Color{ 177, 76, 34, 255 });
-        floater_checked_style.set_background_color(Color{ 34, 177, 76, 255 });
-        floater_disabled_style.set_background_color(Color{ 177, 76, 34, 128 });
-        floater_disabled_checked_style.set_background_color(Color{ 34, 177, 76, 128 });
+        floater->set_background_color(Color{ 129, 153, 191, 255 });
+        floater_checked_style.set_background_color(Color{ 60, 200, 255, 255 });
+        floater_disabled_style.set_background_color(Color{ 129, 153, 191, 96 });
+        floater_disabled_checked_style.set_background_color(Color{ 60, 200, 255, 128 });
         floater->add_style(&floater_checked_style, checked_state);
         floater->add_style(&floater_disabled_style, disabled_state);
         floater->add_style(&floater_disabled_checked_style, { checked_state, disabled_state });
 
+        set_size(width, height);
         set_checked_internal(false, false, true, false);
+    }
+
+    void Toggle::set_size(float width, float height) {
+        this->width = width;
+        this->height = height;
+        set_width(width);
+        set_height(height);
+        set_border_radius(height / 2.0f);
+        floater->set_top(height / 36.0f);
+        floater->set_width(width * 80.0f / 162.0f);
+        floater->set_height(height * 64.0f / 72.0f);
+        floater->set_border_radius(height * 32.0f / 72.0f);
+        floater_left = floater_left_target();
+        floater->set_left(floater_left, Unit::Dp);
     }
 
     void Toggle::set_checked_internal(bool checked, bool animate, bool setup, bool trigger_callbacks) {
@@ -81,7 +90,7 @@ namespace recompui {
     }
 
     float Toggle::floater_left_target() const {
-        return checked ? 78.0f : 4.0f;
+        return (checked ? 78.0f : 4.0f) * width / 162.0f;
     }
 
     void Toggle::process_event(const Event &e) {

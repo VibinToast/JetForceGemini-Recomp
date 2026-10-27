@@ -34,6 +34,7 @@
 
 #include "debug_ui/debug_ui.hpp"
 #include "input/input.hpp"
+#include "jfg_api.h"
 #include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
@@ -126,6 +127,28 @@ extern "C" void jfg_mouse_wheel(int notches) {
     if (jfg_mouse_keyboard_active() && !dino::input::game_input_disabled()) g_mouse_wheel.fetch_add(notches, std::memory_order_relaxed);
 }
 
+// The physical controls as a modern pad (src/input/controls.cpp, input thread), for mods: JFG_PAD_* bits, triggers.
+std::atomic<uint32_t> g_pad_buttons{ 0 };
+std::atomic<float> g_pad_lt{ 0 }, g_pad_rt{ 0 };
+extern "C" void jfg_pad_state(uint32_t buttons, float left_trigger, float right_trigger) {
+    g_pad_buttons.store(buttons, std::memory_order_relaxed);
+    g_pad_lt.store(left_trigger, std::memory_order_relaxed);
+    g_pad_rt.store(right_trigger, std::memory_order_relaxed);
+}
+
+// jfg_controls_get(JfgControls* out): whether the dual-stick controls (the Dual Stick or Mouse and Keyboard option)
+// are in charge now and whether the mouse and keyboard play, and the physical controls held.
+void api::controls_get(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t out = (uint32_t)ctx->r4;
+    if (out == 0) return;
+    wr32(out + 0x00, jfg_dual_stick_active() ? 1u : 0u);
+    wr32(out + 0x04, jfg_mouse_keyboard_active() ? 1u : 0u);
+    wr32(out + 0x08, g_pad_buttons.load(std::memory_order_relaxed));
+    wrf(out + 0x0C, g_pad_lt.load(std::memory_order_relaxed));
+    wrf(out + 0x10, g_pad_rt.load(std::memory_order_relaxed));
+}
+
 extern "C" void jfg_mouse_motion(int dx, int dy) {
     {
         // JFG_DEBUG_MOUSE=1: every mouse report, with the time since the one before (does the mouse arrive in bursts?).
@@ -210,7 +233,7 @@ static bool aim_state(uint32_t obj) {
 // D-pad give while aiming (walking forward, zoom) - jfg_dual_stick() records it; otherwise the N64 C-up itself.
 // Edits this tick's controller data and pressed-buttons word, after joyRead, like the mouse wheel does.
 
-static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
+static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed, bool off) {
     constexpr uint16_t BTN_R = 0x0010, C_UP = 0x0008;
     static int phase = 0, ticks = 0;
     static bool jump_was_held = false;
@@ -218,7 +241,7 @@ static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
     const bool jump_edge = jump_held && !jump_was_held;
     jump_was_held = jump_held;
     auto finish = [&]() { phase = 0; g_aim_jump_active.store(false, std::memory_order_relaxed); };
-    if (!g.aim_jump) { finish(); return; }
+    if (!g.aim_jump || off) { finish(); return; }
 
     const uint16_t cur = rd16(pad), down = rd16(pressed);
     if (phase == 0) {
@@ -654,19 +677,30 @@ void jfg_camera_controls(recomp_context* ctx) {
         if (wheel_pending != 0) {
             const uint16_t button = wheel_pending < 0 ? 0x8000 : 0x4000; // wheel down: A (next), up: B (previous)
             wheel_pending += wheel_pending < 0 ? 1 : -1;
-            const uint32_t i = rd8(ADDR_sPlayerID) & 3u;
-            const uint32_t pad = ADDR_sControllerCurrData + Pad::Size * i;
-            wr16(pad, (uint16_t)(rd16(pad) | button));
-            wr16(ADDR_buttonsPressed + 2u * i, (uint16_t)(rd16(ADDR_buttonsPressed + 2u * i) | button));
-            static const bool log = std::getenv("JFG_DEBUG_WHEEL") != nullptr;
             const int c = (int16_t)rd16(ADDR_currentCharacter);
+            if (api::hero_mod_controlled(c)) {
+                // A mod moves the hero (its buttons are its own): the weapon changes as the buttons would change it.
+                api::queue_weapon_step(button == 0x8000 ? 1 : -1);
+            }
+            else {
+                const uint32_t i = rd8(ADDR_sPlayerID) & 3u;
+                const uint32_t pad = ADDR_sControllerCurrData + Pad::Size * i;
+                wr16(pad, (uint16_t)(rd16(pad) | button));
+                wr16(ADDR_buttonsPressed + 2u * i, (uint16_t)(rd16(ADDR_buttonsPressed + 2u * i) | button));
+            }
+            static const bool log = std::getenv("JFG_DEBUG_WHEEL") != nullptr;
             const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
             if (log) std::fprintf(stderr, "[jfg] wheel: press %s (weapon %d, %d more)\n", button == 0x8000 ? "A" : "B", ch ? Character::CurrentWeapon::get(ch) : -1, wheel_pending);
         }
     }
     if (obj == 0) { g_cam.was_aiming = false; return; }
     const uint32_t pad = ADDR_sControllerCurrData + Pad::Size * (rd8(ADDR_sPlayerID) & 3u);
-    aim_jump(obj, pad, ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u));
+    // A hero a mod moves (jfg_hero_takeover) reads the pad its own way: the aiming options keep out of it. Jump While
+    // Aiming stays off for a taken-over hero even while the game's code runs it: letting go of R hands it back to the
+    // mod, whose own jump it is then (and the option would hold R let go for good).
+    const int character = (int16_t)rd16(ADDR_currentCharacter);
+    const bool mod_hero = api::hero_mod_controlled(character);
+    aim_jump(obj, pad, ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u), api::hero_taken_over(character));
     const bool aiming = (rd16(pad) & 0x0010) != 0;
 
     // The aiming options work with any control layout.
@@ -690,7 +724,7 @@ void jfg_camera_controls(recomp_context* ctx) {
         g_cam.glide = (g_cam.free_aim && g.aim_shoulder) ? std::min(1.0f, g_cam.glide + glide_step) : std::max(0.0f, g_cam.glide - glide_step);
 #endif
     }
-    if (aim_state(obj) && !g_cam.free_aim) {
+    if (aim_state(obj) && !g_cam.free_aim && !mod_hero) {
         g_cam.shoulder = g.aim_shoulder;
         g_cam.shoulder_blend = g_cam.shoulder ? std::min(1.0f, g_cam.shoulder_blend + tick_frames / 6.0f) : 0.0f;
         aim_controls(obj, pad, tick_frames);
@@ -720,6 +754,24 @@ void jfg_camera_controls(recomp_context* ctx) {
         arrive_ticks++;
     }
     if (!jfg_dual_stick_active()) { g_cam.was_aiming = false; return; }
+    if (jfg::api::mod_camera_active()) {
+        // A mod drives the camera (jfg_camera_set: a custom hero's, a boss fight's): the left stick goes to the game as
+        // the pad gives it (rotated here it would be turned twice), and the right stick, which turns the dual-stick
+        // camera, gives the C buttons instead, as an N64 pad's, for the mod's camera to read.
+        constexpr uint16_t C_UP = 0x0008, C_DOWN = 0x0004, C_LEFT = 0x0002, C_RIGHT = 0x0001;
+        constexpr float DIGITAL = 0.5f;
+        static uint16_t c_before = 0;
+        const float rx = g_stick_rx, ry = g_stick_ry;
+        const uint16_t c = (uint16_t)((rx > DIGITAL ? C_RIGHT : 0) | (rx < -DIGITAL ? C_LEFT : 0) |
+                                      (ry > DIGITAL ? C_UP : 0) | (ry < -DIGITAL ? C_DOWN : 0));
+        const uint32_t i = rd8(ADDR_sPlayerID) & 3u;
+        wr16(pad, (uint16_t)(rd16(pad) | c));
+        wr16(ADDR_buttonsPressed + 2u * i, (uint16_t)(rd16(ADDR_buttonsPressed + 2u * i) | (c & ~c_before)));
+        c_before = c;
+        g_cam.active = false;
+        g_cam.was_aiming = false;
+        return;
+    }
     if (boss_control_active()) { boss_controls(obj, pad, aiming); g_cam.was_aiming = false; return; }
     const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
     const float game_heading = -angle_from_s16(Camera::Yaw::get(cam)); // where the game's own camera looks

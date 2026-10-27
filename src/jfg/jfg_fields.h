@@ -89,12 +89,16 @@ using Yaw        = Field<uint16_t, 0x00>;
 using PosX       = Field<float, 0x0C>;
 using PosY       = Field<float, 0x10>;
 using PosZ       = Field<float, 0x14>;
+using VelX       = Field<float, 0x1C>; // velocity, units a frame (a hero's: from how far it moved)
+using VelY       = Field<float, 0x20>;
+using VelZ       = Field<float, 0x24>;
 using AnimPhase  = Field<float, 0x28>;     // animation position, 0..1 in looping animations
+using Segment    = Field<int16_t, 0x2E>;   // the track segment it is in (objects are drawn in the segments seen from the camera's)
 using Opacity    = Field<uint8_t, 0x39>;   // 0xFF = fully opaque
 using ModelIndex = Field<int8_t, 0x3A>;    // which of its model instances (Models) is drawn
 using Anim       = Field<int8_t, 0x3B>;    // current animation
 using Def        = Field<uint32_t, 0x40>;  // its definition (ObjDef)
-using Kind       = Field<int16_t, 0x48>;   // object type
+using Kind       = Field<int16_t, 0x48>;   // object type: its behaviour (ObjDef::Behaviour), which code runs it
 using Damage     = Field<uint32_t, 0x4C>;  // its damage data (Damage), 0 = none
 using Shadow     = Field<uint32_t, 0x50>;  // its shadow data, 0 = no shadow
 using Data       = Field<uint32_t, 0x68>;  // its kind's own data (PlayerData, SquadMemberData, SquadronData, BoltData, MineData, ...)
@@ -113,13 +117,42 @@ constexpr uint16_t Locked = 0x8;
 
 namespace ObjDef {
 using DrawRange   = Field<uint16_t, 0x16>; // drawn up to this distance, 0 = always (meaning partly a guess)
+using Behaviour   = Field<int16_t, 0x1C>;  // the code it runs (Obj::Kind once set up)
 using DrawType    = Field<uint8_t, 0x1E>;  // 0 3D model, 1 sprite, 4 custom
 using LodDistance = Field<float, 0xCC>;    // past this depth the next, simpler model is drawn; 0 = no LOD
 }
 
 // Damage data (Obj::Damage).
 namespace Damage {
-using Health = Field<int16_t, 0x06>; // 256 per unit
+using Health      = Field<int16_t, 0x06>;  // 256 per unit
+using CentreX     = Field<float, 0x18>;    // where it is hit (its hit centre)
+using CentreY     = Field<float, 0x1C>;
+using CentreZ     = Field<float, 0x20>;
+using Radius      = Field<float, 0x24>;
+using Radius2     = Field<float, 0x28>;    // set with Radius
+using SphereCount = Field<int16_t, 0x32>;  // its hit spheres (HitSphere)
+using Spheres     = Field<uint32_t, 0x40>; // the first HitSphere
+}
+
+// A hit sphere (Damage::Spheres, SphereCount of them in a row).
+namespace HitSphere {
+using Joint         = Field<int8_t, 0x08>;  // the model joint it follows, -1 = placed by the object's own code
+using Index         = Field<uint8_t, 0x09>;
+using DamagePercent = Field<uint8_t, 0x2F>; // a hit's damage x this / 100; 0xFF takes all the health, 0 none
+constexpr uint32_t Size = 0x34;
+}
+
+// The squad code's animation table (overlay 3 data): one set per baddy type, a run of entries in the table.
+namespace BaddyAnimSet {
+using First = Field<uint16_t, 0x00>; // its first BaddyAnim
+using Count = Field<uint16_t, 0x02>;
+constexpr uint32_t Size = 0x4;
+}
+
+namespace BaddyAnim {
+using Action    = Field<uint8_t, 0x02>; // the action it plays for (1 idle, 5 attack, 0x35 dying, ...)
+using AltAction = Field<uint8_t, 0x03>; // a second action it also answers
+constexpr uint32_t Size = 0x8;
 }
 
 // A 3D model instance (Obj::Models[Obj::ModelIndex]).
@@ -128,6 +161,7 @@ using Model     = Field<uint32_t, 0x00>; // the Model
 using PoseTicks = Field<uint8_t, 0x0A>;  // ticks to animate at the next draw; the draw poses the model when non-zero
 using Buffer    = Field<uint8_t, 0x0B>;  // which of its two buffers (bones, vertices) is current, 0 or 1
 using Bones     = ArrayField<uint32_t, 0x10>; // bone matrices, one per buffer
+using Positions = Field<uint32_t, 0x70>;      // f32[3] per hit sphere: world positions of its joints, set when posed
 }
 
 namespace Model {
@@ -136,6 +170,7 @@ using Animated = Field<uint8_t, 0x4E>; // non-zero: an animated model
 
 // A character's own data while in play (Obj::Data of the player's object).
 namespace PlayerData {
+using Character    = Field<uint8_t, 0x01>;   // bits 0-1: the hero (0 Vela, 1 Juno, 2 Lupus, 3 the racing ship)
 using SavedX       = Field<float, 0x3C>;    // position kept for working out its velocity
 using SavedY       = Field<float, 0x40>;
 using SavedZ       = Field<float, 0x44>;
@@ -174,6 +209,8 @@ namespace SquadronData {
 using MemberCount = Field<uint8_t, 0x00>;
 using FirstMember = Field<uint32_t, 0x58>; // its first member's object
 using Created     = Field<uint8_t, 0x63>;  // members brought into play (meaning partly a guess)
+using MemberHealth = Field<int16_t, 0x2A>; // each member's health (256 per unit)
+using BaddyType   = Field<uint16_t, 0x2C>; // its members' type: their object id (BlueAnt 0x78, ...)
 }
 
 // A squad member (Obj::Data of a squad member's object).

@@ -9,7 +9,7 @@
 
 #include "modding.h"
 
-#define JFG_API_VERSION 3
+#define JFG_API_VERSION 4
 
 // --- helpers -------------------------------------------------------------------------------------------------------
 
@@ -43,6 +43,198 @@ RECOMP_IMPORT("*", int jfg_galaxy_find(const char* galaxy));
 RECOMP_IMPORT("*", int jfg_galaxy_current(void));
 // The next time the map opens, it opens on this galaxy (when one of its planets is open).
 RECOMP_IMPORT("*", void jfg_galaxy_show(int galaxy));
+
+// (Since version 4.) Heroes, the controller, the level's collision and damage: what a custom hero needs.
+
+// While on, the game's own control code for that hero (1 = Juno; the only one so far) doesn't run:
+// jfg_on_hero_control fires in its place each tick, and the mod moves the hero object itself (position at +0x0C,
+// velocity at +0x1C, yaw at +0x00). A dead hero (health under 256) runs the game's code, so death and the restart are
+// the game's own.
+RECOMP_IMPORT("*", void jfg_hero_takeover(int character, int on));
+
+// The first player's controller, as the hero's control reads it this tick. stick: after the game's own handling (and
+// the port's mouse and dual-stick options); raw: the pad's own -80..80. Buttons are libultra's (A 0x8000, B 0x4000,
+// Z 0x2000, START 0x1000, L 0x20, R 0x10, C 0x0F). camera_yaw: the camera the hero steers by.
+typedef struct {
+    int stick_x, stick_y;
+    int raw_x, raw_y;
+    unsigned int held;
+    unsigned int pressed;
+    unsigned int camera_yaw;
+} JfgInput;
+RECOMP_IMPORT("*", void jfg_input_get(JfgInput* out));
+
+// The camera the hero steers by: its position, yaw and pitch (the game's angles, 0x10000 a turn).
+typedef struct {
+    float x, y, z;
+    unsigned int yaw, pitch;
+} JfgCameraView;
+RECOMP_IMPORT("*", void jfg_camera_get(JfgCameraView* out));
+
+// This tick the camera the hero steers by stands at (x, y, z) looking at (fx, fy, fz), rolled by roll (0x10000 a
+// turn), with field of view fov (degrees; 0 = the game's). It is applied after the game's own camera code each tick it
+// is set, so a mod with a camera of its own (a custom hero's, a boss fight's) sets it every tick; the tick it stops,
+// the game's camera carries on from there. While it is set, the port's own camera options (the dual-stick and aiming
+// views, the FOV option) leave the camera alone.
+typedef struct {
+    float x, y, z;
+    float fx, fy, fz;
+    int roll;
+    float fov;
+} JfgCameraSet;
+RECOMP_IMPORT("*", void jfg_camera_set(const JfgCameraSet* camera));
+
+// One of the level's collision triangles: three corners in level units, the flags of its batch (0x2000 water,
+// 0x8000 hurts, 0x80000000 kills; others not named yet) and its texture.
+typedef struct {
+    short v[3][3];
+    short pad;
+    unsigned int flags;
+    unsigned int texture;
+} JfgTriangle;
+// Copies the triangles of batches with none of ignore_mask's flags, from index first, at most max; returns how many
+// there are in all (out = 0 only counts). The level's render triangles are its collision.
+RECOMP_IMPORT("*", int jfg_level_triangles(JfgTriangle* out, int first, int max, unsigned int ignore_mask));
+
+// The first triangle under (x, z) whose batch has one of mask's flags: its height (y) and its batch's flags (0 = none).
+typedef struct {
+    float x, z;
+    unsigned int mask;
+    float y;
+    unsigned int flags;
+} JfgFloor;
+RECOMP_IMPORT("*", void jfg_level_floor(JfgFloor* q));
+
+// Takes damage (256 = one unit of health) from every object with health whose hit centre is in the sphere, except
+// source, and gives the same to the breakable solid objects it touches (crates, breakable props: a stock crate takes
+// about 3 units). targets: JFG_TARGET_HEALTH, JFG_TARGET_PROPS, or 0 for both. Returns how many objects with health it
+// hit, and writes how many breakables to props_hit. Health stops at 0: an enemy dies the game's usual way. For an
+// overkill (the enemy bursts, as from a big blast), set its health to -0x8000 with jfg_object_set_health.
+#define JFG_TARGET_HEALTH 1
+#define JFG_TARGET_PROPS 2
+typedef struct {
+    float x, y, z, radius;
+    int damage;
+    void* source;
+    int targets;
+    int props_hit; // out
+} JfgDamageSphere;
+RECOMP_IMPORT("*", int jfg_damage_sphere(JfgDamageSphere* sphere));
+
+// The objects with health (enemies, crates, heroes) whose hit centre is within a sphere, except source, nearest
+// first: up to max of them into out; returns how many there are.
+typedef struct {
+    float x, y, z, radius;
+    void* source;
+} JfgNear;
+typedef struct {
+    void* object;
+    float x, y, z; // its hit centre
+    int health;
+} JfgNearObject;
+RECOMP_IMPORT("*", int jfg_objects_near(const JfgNear* query, JfgNearObject* out, int max));
+
+// The collision triangles of the solid objects (crates, doors, lifts, props: the game's hit models) whose box overlaps
+// the sphere, except source, in world space: up to max of them into out; returns how many there are. flags are their
+// batch's (the same bits as JfgTriangle's). Call it each tick for moving ones.
+typedef struct {
+    float v[3][3];
+    unsigned int flags;
+    void* object;
+} JfgObjectTriangle;
+RECOMP_IMPORT("*", int jfg_object_triangles(const JfgNear* query, JfgObjectTriangle* out, int max));
+
+// The first player's screen flashes this colour (RGBA) this tick: call it each tick of the flash. 0xFF0000FF is the
+// heroes' red hit flash (they flash for 8 ticks); the player's Hit flash opacity option applies.
+RECOMP_IMPORT("*", void jfg_screen_flash(unsigned int rgba));
+
+// An object's health (256 per unit; the heroes' and enemies' alike), -1 if it has none; and setting it.
+RECOMP_IMPORT("*", int jfg_object_health(void* object));
+RECOMP_IMPORT("*", void jfg_object_set_health(void* object, int health));
+
+// An enemy's type, -1 if the object is not one: a squad member's object id, the same for its whole squadron (BlueAnt
+// 0x78, GreenAnt 0x8C, BigShieldAnt 0x9C, ...). A squad member's health below -(its full health / 8) (at least 2 units,
+// at most 10) makes it burst on its next update (the game's overkill).
+RECOMP_IMPORT("*", int jfg_enemy_type(void* object));
+
+// The squad members (enemies, and the tribals: tribal is 1) whose hit sphere overlaps a sphere, except source,
+// nearest first, with their hit centre and radius, health and type (as jfg_enemy_type): up to max of them into out;
+// returns how many there are.
+// Dying ones are listed too (health 0 or less, until the game removes them): a further big blow still bursts them.
+typedef struct {
+    void* object;
+    float x, y, z; // its hit centre
+    float radius;  // its hit radius
+    int health;
+    int type;
+    int tribal;    // a tribal (squad members the heroes rescue), not an enemy
+} JfgEnemy;
+RECOMP_IMPORT("*", int jfg_enemies_near(const JfgNear* query, JfgEnemy* out, int max));
+
+// The blast damage (grenades, rockets, mines, exploding barrels) an object took since the last call, 0 if none
+// (256 = one unit of health); reading it clears it. The port keeps it for the 16 latest objects hit.
+RECOMP_IMPORT("*", int jfg_object_blast_damage(void* object));
+
+// While hidden, the game's health meter is not drawn for that hero (0 Vela, 1 Juno, 2 Lupus): a mod that keeps its
+// own health for a hero draws its own (jfg_on_draw_hud).
+RECOMP_IMPORT("*", void jfg_hud_hide_health(int character, int hide));
+
+// The heads the first player has collected as a hero (0 Vela, 1 Juno, 2 Lupus): tribal 1 the tribals', 0 the others'.
+RECOMP_IMPORT("*", int jfg_hero_heads(int character, int tribal));
+
+// Sound effects: the mod's own OGG or 16-bit PCM WAV files, named in its jfg_sounds.json
+// ({ "sounds": { "<name>": "<file>.ogg" } }, the files among the mod's additional files). volume 1 = as recorded, pan
+// -1 left to 1 right, pitch 1 = as recorded (2 an octave up); mixed at the game's sound effects volume. Play returns a
+// voice (0: no such sound); a loop plays until stopped. jfg_sound_set changes a playing voice and returns 1 while it
+// plays, 0 once it has ended.
+RECOMP_IMPORT("*", int jfg_sound_play(const char* name, float volume, float pan, float pitch));
+RECOMP_IMPORT("*", int jfg_sound_loop(const char* name, float volume, float pan, float pitch));
+RECOMP_IMPORT("*", int jfg_sound_set(int voice, float volume, float pan, float pitch));
+RECOMP_IMPORT("*", void jfg_sound_stop(int voice));
+
+// While on, a taken-over hero (jfg_hero_takeover) runs the game's own control code again: its aiming and weapons, its
+// camera and its moves carry on from where the mod left the hero object. jfg_on_hero_control still fires first each
+// tick, so a mod can hand the hero over tick by tick (while the player aims, say).
+RECOMP_IMPORT("*", void jfg_hero_game_control(int character, int on));
+
+// The hero (its object) takes its next weapon (direction 1) or the one before (-1), as the game's weapon buttons do.
+// While a mod moves a hero the mouse wheel changes its weapon this way (the buttons are the mod's then).
+RECOMP_IMPORT("*", void jfg_hero_select_weapon(void* hero, int direction));
+
+// The player's controls. modern: the port's dual-stick controls are in charge now (its Dual Stick or Mouse and
+// Keyboard option, during gameplay): the right stick and the mouse turn the port's own camera, and the stick
+// jfg_input_get gives is already turned to it (camera-relative to the camera the hero steers by). mouse: the mouse
+// and keyboard play (the mouse is captured). buttons: the physical controls held, as a modern pad (JFG_PAD_*): a
+// controller's, and while the mouse plays the keys and mouse buttons that stand for them (Space A, Left Ctrl or C B,
+// F X, R Y, Q LB, E RB, right mouse button LT, left RT, Left Shift L3, Tab Back, Enter Start, 1-4 the D-pad: up,
+// right, down, left). Triggers 0..1.
+#define JFG_PAD_A      0x0001
+#define JFG_PAD_B      0x0002
+#define JFG_PAD_X      0x0004
+#define JFG_PAD_Y      0x0008
+#define JFG_PAD_LB     0x0010
+#define JFG_PAD_RB     0x0020
+#define JFG_PAD_LT     0x0040 // pulled over half way
+#define JFG_PAD_RT     0x0080
+#define JFG_PAD_L3     0x0100
+#define JFG_PAD_R3     0x0200
+#define JFG_PAD_BACK   0x0400
+#define JFG_PAD_START  0x0800
+#define JFG_PAD_UP     0x1000
+#define JFG_PAD_DOWN   0x2000
+#define JFG_PAD_LEFT   0x4000
+#define JFG_PAD_RIGHT  0x8000
+typedef struct {
+    int modern;
+    int mouse;
+    unsigned int buttons;
+    float left_trigger, right_trigger;
+} JfgControls;
+RECOMP_IMPORT("*", void jfg_controls_get(JfgControls* out));
+
+// The port's dual-stick camera stands scale times as far out as usual (on top of the player's Camera Distance option):
+// a hero of another size, say. 1 = as usual. Kept until set again.
+RECOMP_IMPORT("*", void jfg_camera_set_distance(float scale));
 
 // --- event data ---------------------------------------------------------------------------------------------------
 
@@ -82,6 +274,26 @@ typedef struct {
     int cancel;
 } JfgScreenFlash;
 
+// jfg_on_object_draw_gfx: an object is about to be drawn, with where its drawing goes: gfx, mtx and vtx point at the
+// game's own cursors (Gfx**, Mtx**, Vertex**). A callback may write commands at *gfx (advancing it), and set cancel to
+// 1 to skip the game's own drawing of the object. The game's camPushModelMtx / camPopModelMtx and texDPTextureX can be
+// called with them.
+typedef struct {
+    void* object;
+    void** gfx;
+    void** mtx;
+    void** vtx;
+    int cancel;
+} JfgObjectGfx;
+
+// jfg_on_draw_hud: the frame's drawing is nearly done (the scene, the HUD and the hint text are in): a callback may
+// write 2D commands at *gfx (advancing it), such as texture rectangles over the HUD. width and height: the screen in
+// pixels (320 x 240, or 448 x 336 in the game's hi-res mode). Set the RDP's state you need yourself.
+typedef struct {
+    void** gfx;
+    int width, height;
+} JfgHudGfx;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
@@ -119,5 +331,18 @@ typedef struct {
 //     The player switched galaxy on the map (L / R).
 // jfg_on_planet_select(int planet)
 //     The player chose a mod's planet; its level starts next.
+
+// --- events (since version 4) --------------------------------------------------------------------------------------
+
+// jfg_on_hero_control(void* hero, int frames, int character)
+//     Each tick a taken-over hero (jfg_hero_takeover) is controlled, in place of the game's code. frames: ticks of
+//     1/60 s the tick covers (2 at 30 fps). The controller has been read (jfg_input_get).
+// jfg_on_object_draw_gfx(JfgObjectGfx* draw)
+//     An object is about to be drawn (after jfg_on_object_draw): write your own commands, or cancel the game's.
+// jfg_on_draw_hud(JfgHudGfx* hud)
+//     Each frame, after the HUD: draw over it.
+// jfg_on_hud_message(int msg, int character, int player)
+//     A message is queued for a player's HUD panel (text msg). Pick-ups: weapon w's ammo 0x48 + w (extra ammo, or a
+//     dropped ammo part), 0x57 + w (a clip), 0x66 + w (full ammo), 0x75 + w (more capacity); keys 0x170 + key.
 
 #endif

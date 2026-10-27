@@ -449,6 +449,9 @@ public:
         queue_launcher_image("jfg_scanlines", "jfg_launcher/scanlines.png");
         logo_available = queue_launcher_image("jfg_logo", "jfg_launcher/logo.png");
 		launcher_context = recompui::create_context(dino::runtime::get_asset_path("launcher.rml"));
+        // JFG_DEBUG_LAUNCHER_PAGE=<page> (Recomp-Docs/REFERENCE.md): opens on that page (play, profiles, ..., mods,
+        // about), for window captures without key presses.
+        if (const char* page = std::getenv("JFG_DEBUG_LAUNCHER_PAGE")) launcher_page = page;
         // JFG PORT: with a ROM loaded, the launcher opens on its Start button (autofocus in launcher.rml follows rom_valid).
         if (rom_valid) focus_soon("rl_start");
     }

@@ -176,3 +176,29 @@ func_overlay_9_000039F0_1F047C8
 frontDisplayRegion
 tribalScreen
 frontGetWorldName
+
+# Cut enemies and objects: the animation picker's list of 16, the orb creature's hit spheres, the frog's data block,
+# the proximity mine's shot and throw, the brute's beam, mods' player bodies (jfg_cut_enemies.cpp)
+func_overlay_3_00004614_1ED9AF4
+func_80007528_8128
+func_8000E680_F280
+BTSBSpannerHand
+LaserBeamInit
+func_800386B0_392B0
+controlThrowWeapon
+objSetupPlayers
+
+# Mod API: a mod can take over a hero's control (jfg_hero_api.cpp)
+boyControl
+
+# Mod API: a camera a mod sets after the game's own (jfg_hero_api.cpp)
+func_8002B418_2C018
+
+# Mod API: mods draw over the HUD (jfg_api.cpp)
+prnBorder
+
+# Mod API: messages for the HUD's panel (jfg_on_hud_message, jfg_api.cpp)
+instQueueMsg
+
+# Mod API: the blast damage each object takes (jfg_object_blast_damage, jfg_hero_api.cpp)
+func_8002AA7C_2B67C

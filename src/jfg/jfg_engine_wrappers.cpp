@@ -9,6 +9,7 @@
 #include "jfg_hooks.h"
 
 extern "C" int jfg_overlay_is_loaded(uint32_t ram); // jfg_glue.cpp
+namespace jfg { void apply_baddy_patches(uint32_t rom, uint32_t ram); } // jfg_baddies.cpp
 
 // --- RSP tasks, audio, scheduler: the port can leave a call out --------------------------------------------------------
 // Cutscene skip (jfg_cutscene_skip.cpp, jfg_frame_rate.cpp): while a cutscene is skipped no graphics task is sent
@@ -122,12 +123,16 @@ JFG_WRAP(runlinkResumeCode) {
 
 JFG_WRAP(romCopy) {
     const gpr fp = ctx->r30;
-    if ((g_runlink == 1 || g_runlink == 2) && !g_runlink_loaded && (uint32_t)ctx->r4 == (uint32_t)MEM_W(4, fp) &&
-        (uint32_t)ctx->r5 == (uint32_t)MEM_W(0, fp)) {
+    const uint32_t rom = (uint32_t)ctx->r4, ram = (uint32_t)ctx->r5;
+    bool overlay = false;
+    if ((g_runlink == 1 || g_runlink == 2) && !g_runlink_loaded && rom == (uint32_t)MEM_W(4, fp) &&
+        ram == (uint32_t)MEM_W(0, fp)) {
         g_runlink_loaded = true;
+        overlay = true;
         jfg_overlay_loaded(rdram, ctx);
     }
     romCopy_orig(rdram, ctx);
+    if (overlay) jfg::apply_baddy_patches(rom, ram); // mods' patches of its data (jfg_baddies.cpp)
 }
 
 JFG_WRAP(runlinkFreeCode) {

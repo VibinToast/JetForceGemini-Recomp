@@ -457,6 +457,10 @@ float Element::get_client_height() {
     return base->GetClientHeight();
 }
 
+void Element::scroll_into_view() {
+    base->ScrollIntoView(Rml::ScrollIntoViewOptions(Rml::ScrollAlignment::Center, Rml::ScrollAlignment::Nearest));
+}
+
 uint32_t Element::get_input_value_u32() {
     ElementValue value = get_element_value();
     
