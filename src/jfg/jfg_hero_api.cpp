@@ -597,6 +597,14 @@ void hero_weapon(uint8_t* rdram_, recomp_context* ctx) {
     ctx->r2 = (gpr)(w < 16 ? w : -1);
 }
 
+// jfg_game_paused(void): 1 while the world stands still: the pause menu, or the settings menu with Pause in the Settings
+// Menu on (jfg_freeze_world: the game's own tick still runs then, drawing objects without moving them), or the fly camera
+// frozen.
+void game_paused(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    ctx->r2 = (jfg_freeze_world() != 0 || (int8_t)rd8(ADDR_pauseMode) != 0) ? 1 : 0;
+}
+
 // The first player's character (its saved state: health, weapons, ammo), 0 outside a level.
 uint32_t player_character() {
     const int c = (int16_t)rd16(ADDR_currentCharacter);
@@ -906,6 +914,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_hero_state", hero_state);
     recomp::overlays::register_base_export("jfg_hero_weapon", hero_weapon);
     recomp::overlays::register_base_export("jfg_hero_ammo", hero_ammo);
+    recomp::overlays::register_base_export("jfg_game_paused", game_paused);
     recomp::overlays::register_base_export("jfg_hero_set_ammo", hero_set_ammo);
     recomp::overlays::register_base_export("jfg_enemy_dying", enemy_dying);
     recomp::overlays::register_base_export("jfg_hero_push", hero_push);

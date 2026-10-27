@@ -267,6 +267,9 @@ RECOMP_IMPORT("*", void jfg_input_toggle_release(unsigned int buttons));
 // The toggled buttons held now.
 RECOMP_IMPORT("*", unsigned int jfg_input_toggled(void));
 
+// 1 while the world stands still (the pause menu, the settings menu, the fly camera's freeze): jfg_on_game_tick still
+// fires then, so a mod that acts in it should wait.
+RECOMP_IMPORT("*", int jfg_game_paused(void));
 // The first player's hero object while a level is played, else NULL.
 RECOMP_IMPORT("*", void* jfg_hero_get(void));
 // A hero's state, -1 if the object is not a hero.
