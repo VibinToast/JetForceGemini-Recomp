@@ -1,4 +1,13 @@
-// Jet Force Gemini port: custom music from mods (JFG-Studio packs, MODDING_API_PLAN §2.2 "Music and sounds").
+// Jet Force Gemini port: custom music and sound effects from mods (JFG-Studio packs, MODDING_API_PLAN §2.2 "Music and
+// sounds").
+//
+// Sounds: a mod ships OGG Vorbis or 16-bit PCM WAV files and names them in jfg_sounds.json:
+//   { "sounds": { "<name>": "sounds/<file>.ogg" (or .wav), ... } }
+// and plays them by name with jfg_sound_play / jfg_sound_loop (mod_api/jfg_api.h), at a volume, a pan and a pitch it
+// can change while they play (jfg_sound_set). They are decoded when the mod is enabled and mixed with the game's
+// samples at the game's sound effects volume (the options menu), on top of the port's main volume.
+//
+// Music:
 //
 // A mod ships OGG Vorbis files and says which levels play them, in jfg_music.json:
 //   { "tracks": { "<name>": "music/<file>.ogg", ... },
@@ -24,7 +33,9 @@
 #include <vector>
 
 #include "json/json.hpp"
+#include "librecomp/helpers.hpp"
 #include "librecomp/mods.hpp"
+#include "librecomp/overlays.hpp"
 #include "jfg_game.h"
 #include "jfg_port.h"
 
@@ -36,6 +47,7 @@ namespace jfg {
 void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
 }
 extern "C" void amTuneSetGlobalVolume(uint8_t* rdram, recomp_context* ctx); // the game's tune volume (RecompiledFuncs)
+extern "C" void frontGetSfxVolume(uint8_t* rdram, recomp_context* ctx);     // the options menu's sound effects volume
 
 namespace {
 
@@ -221,6 +233,180 @@ const MusicTrack* track_for(int level) {
     return found;
 }
 
+
+// --- sound effects ------------------------------------------------------------------------------------------------
+
+constexpr const char* SOUNDS_FILE = "jfg_sounds.json";
+
+struct ModSound {
+    std::string key;        // "<mod id>:<name>"
+    std::vector<float> pcm; // interleaved, channels per frame
+    int channels = 1;
+    uint32_t rate = 32000;
+    size_t frames = 0;
+};
+std::vector<std::unique_ptr<ModSound>> g_sounds; // filled as mods are enabled, read-only while the game runs
+
+// A playing sound. id 0 = a free slot.
+struct Voice {
+    const ModSound* sound = nullptr;
+    double position = 0.0; // in the sound's frames
+    float volume = 1.0f, pan = 0.0f, pitch = 1.0f;
+    bool loop = false;
+    uint32_t id = 0;
+};
+constexpr int VOICES = 32;
+std::mutex g_voice_mutex;
+Voice g_voices[VOICES];
+uint32_t g_next_voice = 1;
+float g_sfx_volume = 1.0f; // the game's sound effects volume, 0-1 (game thread writes, audio thread reads)
+
+// A 16-bit PCM WAV file, as stb_vorbis_decode_memory gives an OGG: frames, and malloc'd interleaved samples.
+int decode_wav(const std::vector<char>& b, int* channels, int* rate, short** out) {
+    auto u16 = [&](size_t at) { return (uint32_t)(uint8_t)b[at] | (uint32_t)(uint8_t)b[at + 1] << 8; };
+    auto u32 = [&](size_t at) { return u16(at) | u16(at + 2) << 16; };
+    if (b.size() < 12 || std::memcmp(b.data() + 8, "WAVE", 4) != 0) return -1;
+    int ch = 0, bits = 0, format = 0;
+    for (size_t at = 12; at + 8 <= b.size();) {
+        const uint32_t size = u32(at + 4);
+        const size_t body = at + 8;
+        if (body + size > b.size()) return -1;
+        if (std::memcmp(b.data() + at, "fmt ", 4) == 0 && size >= 16) {
+            format = (int)u16(body);
+            ch = (int)u16(body + 2);
+            *rate = (int)u32(body + 4);
+            bits = (int)u16(body + 14);
+        } else if (std::memcmp(b.data() + at, "data", 4) == 0) {
+            if (format != 1 || bits != 16 || ch <= 0) return -1;
+            const int frames = (int)(size / (2u * (uint32_t)ch));
+            short* s = (short*)malloc((size_t)frames * ch * sizeof(short));
+            if (!s) return -1;
+            for (int i = 0; i < frames * ch; i++) s[i] = (short)u16(body + 2 * (size_t)i);
+            *channels = ch;
+            *out = s;
+            return frames;
+        }
+        at = body + size + (size & 1);
+    }
+    return -1;
+}
+
+void on_sound_mod_enabled(recomp::mods::ModContext&, const recomp::mods::ModHandle& mod) {
+    bool exists = false;
+    const std::vector<char> text = mod.manifest.file_handle->read_file(SOUNDS_FILE, exists);
+    if (!exists) return;
+    const nlohmann::json j = nlohmann::json::parse(text.begin(), text.end(), nullptr, false);
+    const std::string id = mod.manifest.mod_id;
+    if (!j.is_object() || !j.contains("sounds") || !j["sounds"].is_object()) {
+        log("sounds: " + id + ": " + SOUNDS_FILE + " has no \"sounds\" object - its sounds are off");
+        return;
+    }
+    int count = 0;
+    for (auto& [name, file] : j["sounds"].items()) {
+        if (!file.is_string()) continue;
+        bool ok = false;
+        const std::string path = file.get<std::string>();
+        std::vector<char> bytes = mod.manifest.file_handle->read_file(path, ok);
+        if (!ok && path.find_last_of("/\\") != std::string::npos) {
+            // RecompModTool packs a code mod's additional files without their folders
+            bytes = mod.manifest.file_handle->read_file(path.substr(path.find_last_of("/\\") + 1), ok);
+        }
+        if (!ok) {
+            log("sounds: " + id + ": " + name + ": " + path + " is not in the mod");
+            continue;
+        }
+        int channels = 0, rate = 0;
+        short* samples = nullptr;
+        const int frames = bytes.size() > 12 && std::memcmp(bytes.data(), "RIFF", 4) == 0
+            ? decode_wav(bytes, &channels, &rate, &samples)
+            : stb_vorbis_decode_memory((const unsigned char*)bytes.data(), (int)bytes.size(), &channels, &rate, &samples);
+        if (frames <= 0 || channels <= 0 || !samples) {
+            log("sounds: " + id + ": " + name + " is neither an OGG Vorbis file nor a 16-bit PCM WAV file");
+            continue;
+        }
+        auto snd = std::make_unique<ModSound>();
+        snd->key = id + ":" + name;
+        snd->channels = std::min(channels, 2);
+        snd->rate = (uint32_t)rate;
+        snd->frames = (size_t)frames;
+        snd->pcm.resize((size_t)frames * snd->channels);
+        for (size_t f = 0; f < (size_t)frames; f++) {
+            for (int c = 0; c < snd->channels; c++) snd->pcm[f * snd->channels + c] = samples[f * channels + c] / 32768.0f;
+        }
+        free(samples);
+        g_sounds.push_back(std::move(snd));
+        count++;
+    }
+    log("sounds: " + id + ": " + std::to_string(count) + " sounds");
+}
+
+const ModSound* find_sound(size_t mod_index, const std::string& name) {
+    const std::string key = recomp::mods::get_mod_id(mod_index) + ":" + name;
+    for (const auto& s : g_sounds) {
+        if (s->key == key) return s.get();
+    }
+    return nullptr;
+}
+
+// A float the MIPS ABI passes in a1-a3 (it follows an int or a pointer, so it goes in the integer registers).
+float float_arg(recomp_context* ctx, int index) {
+    const uint32_t bits = (uint32_t)(&ctx->r4)[index];
+    float f;
+    std::memcpy(&f, &bits, sizeof f);
+    return f;
+}
+
+// jfg_sound_play / jfg_sound_loop(const char* name, float volume, float pan, float pitch): a voice id, 0 when the mod
+// has no such sound. The oldest voice makes room when all are in use.
+void start_sound(uint8_t* rdram, recomp_context* ctx, size_t mod_index, bool loop) {
+    const std::string name = _arg_string<0>(rdram, ctx);
+    const ModSound* snd = find_sound(mod_index, name);
+    if (!snd) {
+        static std::map<std::string, bool> reported;
+        if (!reported[name]) {
+            reported[name] = true;
+            log("sounds: " + recomp::mods::get_mod_id(mod_index) + " played " + name + ", which it does not have");
+        }
+        ctx->r2 = 0;
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_voice_mutex);
+    Voice* slot = nullptr;
+    for (Voice& v : g_voices) {
+        if (v.id == 0) { slot = &v; break; }
+        if (!slot || v.id < slot->id) slot = &v;
+    }
+    *slot = Voice{ snd, 0.0, std::max(0.0f, float_arg(ctx, 1)), std::clamp(float_arg(ctx, 2), -1.0f, 1.0f),
+                   std::max(0.01f, float_arg(ctx, 3)), loop, g_next_voice++ };
+    ctx->r2 = (gpr)slot->id;
+}
+
+void sound_play(uint8_t* rdram, recomp_context* ctx, size_t mod_index) { start_sound(rdram, ctx, mod_index, false); }
+void sound_loop(uint8_t* rdram, recomp_context* ctx, size_t mod_index) { start_sound(rdram, ctx, mod_index, true); }
+
+// jfg_sound_set(int voice, float volume, float pan, float pitch): 1 while it plays, else 0.
+void sound_set(uint8_t*, recomp_context* ctx) {
+    const uint32_t id = (uint32_t)ctx->r4;
+    std::lock_guard<std::mutex> lock(g_voice_mutex);
+    for (Voice& v : g_voices) {
+        if (id == 0 || v.id != id) continue;
+        v.volume = std::max(0.0f, float_arg(ctx, 1));
+        v.pan = std::clamp(float_arg(ctx, 2), -1.0f, 1.0f);
+        v.pitch = std::max(0.01f, float_arg(ctx, 3));
+        ctx->r2 = 1;
+        return;
+    }
+    ctx->r2 = 0;
+}
+
+// jfg_sound_stop(int voice)
+void sound_stop(uint8_t*, recomp_context* ctx) {
+    const uint32_t id = (uint32_t)ctx->r4;
+    std::lock_guard<std::mutex> lock(g_voice_mutex);
+    for (Voice& v : g_voices) {
+        if (id != 0 && v.id == id) v = Voice{};
+    }
+}
 } // namespace
 
 extern "C" void jfg_register_music_mods(void) {
@@ -232,6 +418,52 @@ extern "C" void jfg_register_music_mods(void) {
         .on_reordered = nullptr,
     };
     recomp::mods::register_mod_content_type(type);
+    recomp::mods::ModContentType sounds{
+        .content_filename = SOUNDS_FILE,
+        .allow_runtime_toggle = false,
+        .on_enabled = on_sound_mod_enabled,
+        .on_disabled = nullptr,
+        .on_reordered = nullptr,
+    };
+    recomp::mods::register_mod_content_type(sounds);
+    recomp::overlays::register_ext_base_export("jfg_sound_play", sound_play);
+    recomp::overlays::register_ext_base_export("jfg_sound_loop", sound_loop);
+    recomp::overlays::register_base_export("jfg_sound_set", sound_set);
+    recomp::overlays::register_base_export("jfg_sound_stop", sound_stop);
+}
+
+// Mixes the mods' playing sounds into the game's audio (as jfg_music_mix): linear resampling to the game's rate times
+// the pitch, an equal-power pan. Audio thread.
+extern "C" void jfg_sounds_mix(float* samples, size_t frames, uint32_t rate, float gain) {
+    if (rate == 0) return;
+    std::lock_guard<std::mutex> lock(g_voice_mutex);
+    const float sfx = g_sfx_volume * gain * 0.5f; // 0.5: the headroom the game's own samples get
+    for (Voice& v : g_voices) {
+        if (v.id == 0 || !v.sound) continue;
+        const ModSound& s = *v.sound;
+        const double step = (double)s.rate * v.pitch / (double)rate;
+        const float angle = (v.pan + 1.0f) * 0.25f * 3.14159265f;
+        const float gl = std::cos(angle) * 1.41421356f * v.volume * sfx;
+        const float gr = std::sin(angle) * 1.41421356f * v.volume * sfx;
+        for (size_t i = 0; i < frames; i++) {
+            if (v.position >= (double)(s.frames - 1)) {
+                if (!v.loop || s.frames < 2) { v = Voice{}; break; }
+                v.position -= (double)(s.frames - 1);
+            }
+            const size_t f = (size_t)v.position;
+            const float t = (float)(v.position - (double)f);
+            float l, r;
+            if (s.channels == 2) {
+                l = s.pcm[f * 2] + (s.pcm[f * 2 + 2] - s.pcm[f * 2]) * t;
+                r = s.pcm[f * 2 + 1] + (s.pcm[f * 2 + 3] - s.pcm[f * 2 + 1]) * t;
+            } else {
+                l = r = s.pcm[f] + (s.pcm[f + 1] - s.pcm[f]) * t;
+            }
+            samples[i * 2] += l * gl;
+            samples[i * 2 + 1] += r * gr;
+            v.position += step;
+        }
+    }
 }
 
 // Mixes the stream into the game's audio (interleaved stereo floats at the game's rate, before the device conversion;
@@ -274,6 +506,12 @@ void music_force(const std::string& mod_id, const std::string& name) {
 // Every game tick: starts or stops the level's track and keeps the game's tune silent while one plays.
 void music_tick(recomp_context* ctx) {
     static uint32_t saved_global = 0x100;
+    if (!g_sounds.empty()) {
+        const recomp_context saved = *ctx;
+        const uint32_t sfx = call_game(frontGetSfxVolume, ctx, {});
+        *ctx = saved;
+        g_sfx_volume = std::min(1.0f, (float)(sfx & 0xFFFF) / 256.0f); // mods' sounds follow it (jfg_sounds_mix)
+    }
     if (g_assignments.empty() && g_forced_name.empty()) return;
     const int level = (int)(int16_t)rd16(ADDR_currentLevel);
     const MusicTrack* want = track_for(level);

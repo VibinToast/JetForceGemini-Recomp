@@ -180,6 +180,16 @@ RECOMP_IMPORT("*", void jfg_hud_hide_health(int character, int hide));
 // The heads the first player has collected as a hero (0 Vela, 1 Juno, 2 Lupus): tribal 1 the tribals', 0 the others'.
 RECOMP_IMPORT("*", int jfg_hero_heads(int character, int tribal));
 
+// Sound effects: the mod's own OGG or 16-bit PCM WAV files, named in its jfg_sounds.json
+// ({ "sounds": { "<name>": "<file>.ogg" } }, the files among the mod's additional files). volume 1 = as recorded, pan
+// -1 left to 1 right, pitch 1 = as recorded (2 an octave up); mixed at the game's sound effects volume. Play returns a
+// voice (0: no such sound); a loop plays until stopped. jfg_sound_set changes a playing voice and returns 1 while it
+// plays, 0 once it has ended.
+RECOMP_IMPORT("*", int jfg_sound_play(const char* name, float volume, float pan, float pitch));
+RECOMP_IMPORT("*", int jfg_sound_loop(const char* name, float volume, float pan, float pitch));
+RECOMP_IMPORT("*", int jfg_sound_set(int voice, float volume, float pan, float pitch));
+RECOMP_IMPORT("*", void jfg_sound_stop(int voice));
+
 // --- event data ---------------------------------------------------------------------------------------------------
 
 // jfg_on_blood_spurt: a spurt of blood drops. Change any field; set cancel to 1 to drop it; amount is the drops in
