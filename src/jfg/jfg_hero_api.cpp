@@ -13,6 +13,7 @@
 
 extern "C" void controlReadJoypad(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackPolyHeight(uint8_t* rdram, recomp_context* ctx);
+extern "C" void trackGetBlock(uint8_t* rdram, recomp_context* ctx);
 extern "C" void frontFlashScreen(uint8_t* rdram, recomp_context* ctx);
 extern "C" void camSetFOV(uint8_t* rdram, recomp_context* ctx);
 
@@ -473,6 +474,17 @@ JFG_WRAP(boyControl) {
     H::BodyYaw::set(hero, Obj::Yaw::get(obj));
     const float dx = Obj::PosX::get(obj) - x0, dz = Obj::PosZ::get(obj) - z0;
     H::Speed::set(hero, std::sqrt(dx * dx + dz * dz) / (float)std::max(1, frames));
+    // The hero's track segment: the game's move code keeps it (objMoveObject: trackGetBlock when the object leaves its
+    // segment's box), and objects are drawn only in the segments seen from the camera's, so a hero the mod moved into
+    // another segment would vanish. trackGetBlock(x $f12, y $f14, z a2): the box holding x/z with the nearest y centre.
+    {
+        const recomp_context saved = *ctx;
+        ctx->f12.u32l = rd32(obj + 0x0C);
+        ctx->f14.u32l = rd32(obj + 0x10);
+        const int32_t block = (int32_t)call_game(trackGetBlock, ctx, { 0u, 0u, rd32(obj + 0x14) });
+        *ctx = saved;
+        if (block >= 0) Obj::Segment::set(obj, (int16_t)block);
+    }
 }
 
 // The hero's camera step (controlPlayer, after the hero's control: func_8002B418_2C018(obj, player, rate)): the game's

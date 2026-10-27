@@ -90,6 +90,7 @@ using PosX       = Field<float, 0x0C>;
 using PosY       = Field<float, 0x10>;
 using PosZ       = Field<float, 0x14>;
 using AnimPhase  = Field<float, 0x28>;     // animation position, 0..1 in looping animations
+using Segment    = Field<int16_t, 0x2E>;   // the track segment it is in (objects are drawn in the segments seen from the camera's)
 using Opacity    = Field<uint8_t, 0x39>;   // 0xFF = fully opaque
 using ModelIndex = Field<int8_t, 0x3A>;    // which of its model instances (Models) is drawn
 using Anim       = Field<int8_t, 0x3B>;    // current animation
