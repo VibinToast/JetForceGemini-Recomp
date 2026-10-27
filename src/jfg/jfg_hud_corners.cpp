@@ -19,6 +19,7 @@
 #include <cstring>
 #include <vector>
 
+#include "jfg_api.h"
 #include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
@@ -376,8 +377,19 @@ JFG_HUD_PIECE(frontDrawObj, jfg::jfg_hud_object)
 JFG_HUD_PIECE(frontPrintNum, jfg::jfg_hud_number)
 JFG_HUD_PIECE(fontPrintXY, jfg::jfg_hud_text)
 JFG_HUD_PIECE(frontDrawRectangles, jfg::jfg_hud_rectangles)
-JFG_HUD_PIECE(instDrawHealth, jfg::jfg_hud_health)
 JFG_HUD_PIECE(func_overlay_14_0000292C_1F10284, jfg::jfg_hud_weapon_panel) // the weapon panel
 JFG_HUD_PIECE(func_overlay_14_00000220_1F0DB78, jfg::jfg_hud_middle)       // the target's panel
 JFG_HUD_PIECE(func_overlay_14_00000074_1F0D9CC, jfg::jfg_hud_middle)       // the arrows at the screen's sides
 #undef JFG_HUD_PIECE
+
+// instDrawHealth(player, health, max, updateRate), the health meter: left out for a hero whose health a mod shows
+// itself (jfg_hud_hide_health), else a HUD piece as above.
+JFG_WRAP(instDrawHealth) {
+    jfg::g_rdram = rdram;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const uint32_t data = jfg::valid_ptr(obj) ? jfg::Obj::Data::get(obj) : 0;
+    if (jfg::valid_ptr(data) && jfg::api::hero_health_hidden(jfg::PlayerData::Character::get(data) & 3)) return;
+    jfg::jfg_hud_health(rdram, ctx);
+    instDrawHealth_orig(rdram, ctx);
+    jfg::jfg_hud_pop(rdram, ctx);
+}

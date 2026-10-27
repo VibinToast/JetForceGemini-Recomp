@@ -196,3 +196,6 @@ func_8002B418_2C018
 
 # Mod API: mods draw over the HUD (jfg_api.cpp)
 prnBorder
+
+# Mod API: the blast damage each object takes (jfg_object_blast_damage, jfg_hero_api.cpp)
+func_8002AA7C_2B67C

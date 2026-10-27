@@ -167,6 +167,7 @@ using Animated = Field<uint8_t, 0x4E>; // non-zero: an animated model
 
 // A character's own data while in play (Obj::Data of the player's object).
 namespace PlayerData {
+using Character    = Field<uint8_t, 0x01>;   // bits 0-1: the hero (0 Vela, 1 Juno, 2 Lupus, 3 the racing ship)
 using SavedX       = Field<float, 0x3C>;    // position kept for working out its velocity
 using SavedY       = Field<float, 0x40>;
 using SavedZ       = Field<float, 0x44>;

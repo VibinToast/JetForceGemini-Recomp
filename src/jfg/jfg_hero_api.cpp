@@ -41,6 +41,12 @@ using BodyYaw  = Field<uint16_t, 0x11C>;
 }
 
 bool g_takeover[CHARACTERS] = {};
+bool g_hide_health[CHARACTERS] = {};
+
+// Blast damage taken (func_8002AA7C_2B67C's wrapper), by damage data, until a mod reads it: the latest 16.
+struct BlastTaken { uint32_t dmg; int damage; };
+BlastTaken g_blasts[16];
+int g_blast_count = 0;
 
 // JfgInput
 constexpr uint32_t IN_STICK_X = 0x00, IN_STICK_Y = 0x04, IN_RAW_X = 0x08, IN_RAW_Y = 0x0C, IN_HELD = 0x10,
@@ -435,7 +441,40 @@ void enemies_near(uint8_t* rdram_, recomp_context* ctx) {
     }
     ctx->r2 = (gpr)n;
 }
+
+// jfg_object_blast_damage(obj): the blast damage (grenades, rockets, mines, exploding barrels) it took since the last
+// call, 0 if none; reading it clears it.
+void object_blast_damage(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const uint32_t dmg = valid_ptr(obj) ? Obj::Damage::get(obj) : 0;
+    int total = 0, kept = 0;
+    for (int i = 0; i < g_blast_count; i++) {
+        if (dmg != 0 && g_blasts[i].dmg == dmg) total += g_blasts[i].damage;
+        else g_blasts[kept++] = g_blasts[i];
+    }
+    g_blast_count = kept;
+    ctx->r2 = (gpr)total;
+}
+
+// jfg_hud_hide_health(int character, int hide): while hidden, the game's health meter is not drawn for that hero (a
+// mod draws its own).
+void hud_hide_health(uint8_t*, recomp_context* ctx) {
+    const int character = (int)ctx->r4;
+    if (character >= 0 && character < CHARACTERS) g_hide_health[character] = ctx->r5 != 0;
+}
 } // namespace
+
+void note_blast_damage(uint32_t dmg, int damage) {
+    for (int i = 0; i < g_blast_count; i++) {
+        if (g_blasts[i].dmg == dmg) { g_blasts[i].damage += damage; return; }
+    }
+    if (g_blast_count == 16) { // the oldest goes
+        for (int i = 1; i < 16; i++) g_blasts[i - 1] = g_blasts[i];
+        g_blast_count--;
+    }
+    g_blasts[g_blast_count++] = { dmg, damage };
+}
 
 // While a mod sets the camera (jfg_camera_set): the port's own camera features (the dual-stick and over-the-shoulder
 // views, the FOV option) leave it alone; mod_camera_fov is its field of view, 0 = the game's.
@@ -449,6 +488,10 @@ float mod_camera_fov() {
 
 bool hero_taken_over(int character) {
     return character >= 0 && character < CHARACTERS && g_takeover[character];
+}
+
+bool hero_health_hidden(int character) {
+    return character >= 0 && character < CHARACTERS && g_hide_health[character];
 }
 
 void register_hero_api() {
@@ -466,6 +509,8 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_object_set_health", object_set_health);
     recomp::overlays::register_base_export("jfg_enemy_type", enemy_type);
     recomp::overlays::register_base_export("jfg_enemies_near", enemies_near);
+    recomp::overlays::register_base_export("jfg_object_blast_damage", object_blast_damage);
+    recomp::overlays::register_base_export("jfg_hud_hide_health", hud_hide_health);
 }
 
 } // namespace jfg::api
@@ -565,4 +610,15 @@ JFG_WRAP(func_8002B418_2C018) {
         call_game(camSetFOV, ctx, { 0u, 1u }); // camSetFOV(fov in $f12, force): the wrapper passes it unscaled
         *ctx = saved;
     }
+}
+
+// func_8002AA7C_2B67C(damage data, damage): a blast's damage to one object (the blast rule: spread over its hit
+// spheres); returns what it dealt. Noted for jfg_object_blast_damage.
+JFG_WRAP(func_8002AA7C_2B67C) {
+    using namespace jfg;
+    const uint32_t dmg = (uint32_t)ctx->r4;
+    func_8002AA7C_2B67C_orig(rdram, ctx);
+    g_rdram = rdram;
+    const int dealt = (int)(int32_t)ctx->r2;
+    if (dealt > 0 && valid_ptr(dmg)) api::note_blast_damage(dmg, dealt);
 }

@@ -75,6 +75,8 @@ constexpr uint32_t GFX = 0x00, WIDTH = 0x04, HEIGHT = 0x08, SIZE = 0x0C;
 // The hero API (jfg_hero_api.cpp): helpers, and whether a mod controls a hero (boyControl's wrapper asks).
 void register_hero_api();
 bool hero_taken_over(int character);
+// A mod shows its own health for this hero (jfg_hud_hide_health): instDrawHealth's wrapper leaves the meter out.
+bool hero_health_hidden(int character);
 // A mod sets the camera (jfg_camera_set) these ticks: the port's own camera features stand down; its FOV (0 = none).
 bool mod_camera_active();
 float mod_camera_fov();

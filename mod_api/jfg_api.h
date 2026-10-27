@@ -169,6 +169,14 @@ typedef struct {
 } JfgEnemy;
 RECOMP_IMPORT("*", int jfg_enemies_near(const JfgNear* query, JfgEnemy* out, int max));
 
+// The blast damage (grenades, rockets, mines, exploding barrels) an object took since the last call, 0 if none
+// (256 = one unit of health); reading it clears it. The port keeps it for the 16 latest objects hit.
+RECOMP_IMPORT("*", int jfg_object_blast_damage(void* object));
+
+// While hidden, the game's health meter is not drawn for that hero (0 Vela, 1 Juno, 2 Lupus): a mod that keeps its
+// own health for a hero draws its own (jfg_on_draw_hud).
+RECOMP_IMPORT("*", void jfg_hud_hide_health(int character, int hide));
+
 // --- event data ---------------------------------------------------------------------------------------------------
 
 // jfg_on_blood_spurt: a spurt of blood drops. Change any field; set cancel to 1 to drop it; amount is the drops in
