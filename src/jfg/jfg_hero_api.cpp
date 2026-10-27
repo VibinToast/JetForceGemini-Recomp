@@ -597,6 +597,47 @@ void hero_weapon(uint8_t* rdram_, recomp_context* ctx) {
     ctx->r2 = (gpr)(w < 16 ? w : -1);
 }
 
+// The first player's character (its saved state: health, weapons, ammo), 0 outside a level.
+uint32_t player_character() {
+    const int c = (int16_t)rd16(ADDR_currentCharacter);
+    return (rd32(ADDR_mainGameMode) == 0 && c >= 0 && c < 3) ? character_ptr(c) : 0;
+}
+
+// jfg_hero_ammo(int weapon): the first player's ammo for that weapon (0..15), -1 outside a level.
+void hero_ammo(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t ch = player_character();
+    const int w = (int)ctx->r4;
+    ctx->r2 = (ch != 0 && w >= 0 && w < 16) ? (gpr)Character::Ammo::get(ch, (uint32_t)w) : (gpr)-1;
+}
+
+// jfg_hero_set_ammo(int weapon, int ammo): sets it (0..0xFFFF; the game keeps it at the weapon's capacity itself).
+void hero_set_ammo(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t ch = player_character();
+    const int w = (int)ctx->r4;
+    if (ch != 0 && w >= 0 && w < 16) Character::Ammo::set(ch, (uint32_t)w, (uint16_t)std::clamp((int)ctx->r5, 0, 0xFFFF));
+}
+
+// jfg_enemy_dying(void* enemy): 1 when the squad member is dying: no health left (it plays its death), or left with the
+// sliver of health the game gives the kinds that lie down and bleed out instead of dying at once (overlay 3's
+// SquaddieControl: at most its squadron's member health / 8 (one unit at least, ten at most) plus one). 0 otherwise,
+// -1 if it is not a squad member.
+void enemy_dying(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    if (!valid_ptr(obj) || Obj::Kind::get(obj) != KIND_SQUAD_MEMBER) { ctx->r2 = (gpr)-1; return; }
+    const uint32_t dmg = Obj::Damage::get(obj);
+    const uint32_t data = Obj::Data::get(obj);
+    const int health = valid_ptr(dmg) ? Damage::Health::get(dmg) : 0;
+    if (health <= 0) { ctx->r2 = 1; return; }
+    const uint32_t squadron = valid_ptr(data) ? SquadMemberData::Squadron::get(data) : 0;
+    const uint32_t sdata = valid_ptr(squadron) ? Obj::Data::get(squadron) : 0;
+    const int full = valid_ptr(sdata) ? SquadronData::MemberHealth::get(sdata) : 0;
+    const int sliver = std::clamp(full >> 3, 0x100, 0xA00) + 1;
+    ctx->r2 = (full > 0 && health <= sliver && health < full) ? 1 : 0;
+}
+
 // jfg_hero_push(void* hero, float x, float z, int ticks): the hero is pushed x, z level units per 1/60 s for that
 // many 1/60 s ticks (the game's knockback: walls stop it); the game eases it off after.
 void hero_push(uint8_t* rdram_, recomp_context* ctx) {
@@ -864,6 +905,9 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_hero_get", hero_get);
     recomp::overlays::register_base_export("jfg_hero_state", hero_state);
     recomp::overlays::register_base_export("jfg_hero_weapon", hero_weapon);
+    recomp::overlays::register_base_export("jfg_hero_ammo", hero_ammo);
+    recomp::overlays::register_base_export("jfg_hero_set_ammo", hero_set_ammo);
+    recomp::overlays::register_base_export("jfg_enemy_dying", enemy_dying);
     recomp::overlays::register_base_export("jfg_hero_push", hero_push);
     recomp::overlays::register_base_export("jfg_hero_protect", hero_protect);
     recomp::overlays::register_base_export("jfg_floyd_get", floyd_get);

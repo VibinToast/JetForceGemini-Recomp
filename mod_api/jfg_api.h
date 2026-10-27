@@ -256,7 +256,7 @@ RECOMP_IMPORT("*", void jfg_floyd_hide(int on));
 
 // The reticle: 0 = it no longer jumps onto an enemy the aim passes over (nor shows a lock); shots still go where it
 // points, and homing weapons still lock on. 1 = the game's own. Kept until set again. To draw a reticle of your own,
-// cancel the game's in jfg_on_reticle_draw and draw at its x, y in jfg_on_draw_hud.
+// cancel the game's in jfg_on_reticle_draw and draw yours there (JfgReticle.gfx).
 RECOMP_IMPORT("*", void jfg_aim_lock(int on));
 
 // Toggled buttons: while on, each press of those N64 buttons (libultra's, as in JfgInput) holds them down until the
@@ -281,6 +281,9 @@ RECOMP_IMPORT("*", void* jfg_hero_get(void));
 RECOMP_IMPORT("*", int jfg_hero_state(void* hero));
 // The weapon in the first player's hand (0 the pistol .. 15), -1 if none. The shocker is 4, the flamethrower 6.
 RECOMP_IMPORT("*", int jfg_hero_weapon(void));
+// The first player's ammo for a weapon (0..15), -1 outside a level; and setting it.
+RECOMP_IMPORT("*", int jfg_hero_ammo(int weapon));
+RECOMP_IMPORT("*", void jfg_hero_set_ammo(int weapon, int ammo));
 // Pushes the hero x, z level units per 1/60 s for ticks 1/60 s ticks (the game's knockback: walls stop it, and it
 // eases off after). The hero walks a little over 2 units per 1/60 s.
 RECOMP_IMPORT("*", void jfg_hero_push(void* hero, float x, float z, int ticks));
@@ -313,6 +316,9 @@ RECOMP_IMPORT("*", int jfg_line_of_sight(void* from, void* to, const float* a, c
 RECOMP_IMPORT("*", void jfg_enemy_alert(void* enemy, void* shooter));
 RECOMP_IMPORT("*", void jfg_enemy_ignite(void* enemy, void* shooter));
 RECOMP_IMPORT("*", void jfg_enemy_electrocute(void* enemy, void* shooter));
+// 1 when an enemy is dying: no health left, or the sliver some kinds keep while they lie on the ground and bleed out
+// (they die by themselves); 0 otherwise; -1 if it is not a squad member.
+RECOMP_IMPORT("*", int jfg_enemy_dying(void* enemy));
 
 // A fire on the ground (the one explosions leave: flames, smoke and light; it hurts nothing itself: use
 // jfg_damage_sphere) of scale 1..127 (about 32 a small one) for ticks 1/10 s. Returns its object, NULL if none.
@@ -397,9 +403,10 @@ typedef struct {
     int width, height;
 } JfgHudGfx;
 
-// jfg_on_reticle_draw: the aiming reticle is about to be drawn at x, y (screen pixels, as jfg_on_draw_hud's), depth
-// 0 near .. 1 at the aim's reach, scale its size, locked on an enemy or not, by player (0 the first), for weapon. Set
-// cancel to 1 to draw none (since version 5).
+// jfg_on_reticle_draw: the aiming reticle is about to be drawn at x, y (screen pixels), depth 0 near .. 1 at the aim's
+// reach, scale its size, locked on an enemy or not, by player (0 the first), for weapon. Set cancel to 1 to draw none;
+// to draw your own, write 2D commands at *gfx (the HUD's display list, advancing it; set the RDP state you need and
+// put the cycle type back to 1-cycle after). width, height: the screen in pixels (since version 5).
 typedef struct {
     int x, y;
     float depth;
@@ -408,6 +415,8 @@ typedef struct {
     int player;
     int weapon;
     int cancel;
+    void** gfx;
+    int width, height;
 } JfgReticle;
 
 // --- events (since version 1) --------------------------------------------------------------------------------------

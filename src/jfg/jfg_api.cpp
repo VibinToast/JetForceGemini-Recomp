@@ -420,7 +420,7 @@ JFG_WRAP(instQueueMsg) {
 
 // hitPlayerAimCheck(obj, dist, outDist): with the aim lock off (jfg_aim_lock), the game's check still runs (homing
 // weapons' targets, the box on an enemy), but the reticle stays where the aim ray meets the level (outDist keeps its
-// value) and shows no lock (the hero's data + 0x540, bit 0).
+// value) and shows no lock (it returns 0).
 JFG_WRAP(hitPlayerAimCheck) {
     using namespace jfg;
     if (api::g_aim_lock) { hitPlayerAimCheck_orig(rdram, ctx); return; }
@@ -430,14 +430,15 @@ JFG_WRAP(hitPlayerAimCheck) {
     hitPlayerAimCheck_orig(rdram, ctx);
     g_rdram = rdram;
     if (out != 0) wr32(out, kept);
-    const uint32_t data = valid_ptr(obj) && Obj::Kind::get(obj) == 1 ? Obj::Data::get(obj) : 0;
-    if (valid_ptr(data)) wr8(data + 0x540, (uint8_t)(rd8(data + 0x540) & ~1u));
+    ctx->r2 = 0; // frontPlayerTarget sets the lock (the hero's data + 0x540, bit 0) from what this returns
+    (void)obj;
 }
 
 // frontDrawTarget(player, x, y, trans, depth)'s wrapper (jfg_interpolation.cpp), before the game's code:
 // jfg_on_reticle_draw with where the reticle goes. Returns false when a callback cancelled the game's reticle.
-// JfgReticle: s32 x, y (screen pixels, as jfg_on_draw_hud's), f32 depth (0 near .. 1 at the aim's reach), f32 scale,
-// s32 locked, s32 player, s32 weapon, s32 cancel.
+// JfgReticle: s32 x, y (screen pixels), f32 depth (0 near .. 1 at the aim's reach), f32 scale, s32 locked, s32 player,
+// s32 weapon, s32 cancel, Gfx** gfx (the HUD's display list, frontgfx, where the game draws it), s32 width, height (the
+// screen in pixels).
 bool jfg_reticle_event(uint8_t* rdram_, recomp_context* ctx) {
     using namespace jfg;
     if (!api::listened(api::Event::ReticleDraw)) return true;
@@ -446,7 +447,12 @@ bool jfg_reticle_event(uint8_t* rdram_, recomp_context* ctx) {
     const uint32_t depth_bits = rd32((uint32_t)ctx->r29 + 0x10);
     int32_t cancel;
     {
-        api::Payload p(ctx, 0x20);
+        constexpr uint32_t ADDR_frontgfx = 0x800FF398; // Gfx*, the HUD's display list
+        const uint32_t size = ((uint32_t)ctx->r29 - 0x40u) & ~0x7u; // inside the gap call_game leaves below $sp
+        call_game(viGetCurrentSize, ctx, { size, size + 4 });
+        g_rdram = rdram_;
+        const uint32_t width = rd32(size), height = rd32(size + 4);
+        api::Payload p(ctx, 0x2C);
         wr32(p.addr + 0x00, (uint32_t)(int32_t)(int16_t)ctx->r5);
         wr32(p.addr + 0x04, (uint32_t)(int32_t)(int16_t)ctx->r6);
         wr32(p.addr + 0x08, depth_bits);
@@ -458,6 +464,9 @@ bool jfg_reticle_event(uint8_t* rdram_, recomp_context* ctx) {
         const int w = ch != 0 ? Character::CurrentWeapon::get(ch) : 0xFF;
         wr32(p.addr + 0x18, (uint32_t)(w < 16 ? w : -1));
         wr32(p.addr + 0x1C, 0);
+        wr32(p.addr + 0x20, ADDR_frontgfx);
+        wr32(p.addr + 0x24, width);
+        wr32(p.addr + 0x28, height);
         api::fire(rdram_, ctx, api::Event::ReticleDraw, (int32_t)p.addr);
         g_rdram = rdram_;
         cancel = (int32_t)rd32(p.addr + 0x1C);
