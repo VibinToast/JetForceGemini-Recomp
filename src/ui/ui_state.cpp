@@ -937,6 +937,24 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                         break;
                     }
                 }
+                // JFG PORT: in the game's settings menu B is Back as well (as Esc: out of the bindings, then the menu
+                // closes), and on a mod's settings page it goes back to the mods; unless B is bound to a menu input or a
+                // binding is being set.
+                if (context_capturing_input && button == SDL_CONTROLLER_BUTTON_B && sdl_key == 0 && !recompui::is_prompt_open() &&
+                    dino::input::get_scanned_input_index() < 0) {
+                    if (recompui::is_context_shown(recompui::get_config_sub_menu_context_id())) {
+                        recompui::config_sub_menu_back();
+                        non_mouse_interacted = true;
+                        cont_interacted = true;
+                        break;
+                    }
+                    if (recompui::is_context_shown(recompui::get_config_context_id())) {
+                        ui_state->context->ProcessKeyDown(Rml::Input::KeyIdentifier::KI_ESCAPE, 0);
+                        non_mouse_interacted = true;
+                        cont_interacted = true;
+                        break;
+                    }
+                }
                 if (context_capturing_input && sdl_key) {
                     ui_state->context->ProcessKeyDown(RmlSDL::ConvertKey(sdl_key), 0);
                     latest_controller_key_pressed = sdl_key;
