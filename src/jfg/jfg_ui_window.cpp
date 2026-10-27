@@ -322,6 +322,7 @@ void draw_options() {
             options_help("Dying never uses up the last continue, so an area is never restarted from its entrance.");
             changed |= options_slider("Jetpack refuel speed %", &g.refuel_speed, 25, 1000);
             changed |= options_slider("Floyd's fuel %", &g.floyd_fuel, 100, 300);
+            changed |= ImGui::Checkbox("Faster pause menu", &g.fast_pause);
             changed |= options_slider("Vela's dive speed %", &g.dive_speed, 50, 400);
 
             options_section("Fly camera (F7)");

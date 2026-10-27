@@ -76,6 +76,18 @@ extern "C" void jfg_floyd_fuel(uint8_t* rdram_, recomp_context* ctx) {
     if (back > 0) wr16(data + 0x1E, (uint16_t)((int16_t)rd16(data + 0x1E) + back));
 }
 
+// --- the pause menu's speed ------------------------------------------------------------------------------------------
+// frontMenuFrameTick(updateRate) (overlay 12) grows the pause menu's frame to its size and fades it in and out, each
+// step times updateRate. While the game is paused (mainGetPauseMode) it is given FAST_PAUSE times the frames, so the
+// menu opens and closes that much sooner; the title screen's menus, which use the same frame, keep their speed.
+constexpr int FAST_PAUSE = 3;
+
+JFG_WRAP(frontMenuFrameTick) {
+    g_rdram = rdram;
+    if (g.fast_pause && (int8_t)rd8(ADDR_pauseMode) != 0) ctx->r4 = (gpr)(int32_t)((int32_t)ctx->r4 * FAST_PAUSE);
+    frontMenuFrameTick_orig(rdram, ctx);
+}
+
 // --- sniper zoom -----------------------------------------------------------------------------------------------------
 // Hook in controlGetManualAim where it stores the zoom (1 = none .. 5): with the option the zoom is fixed.
 extern "C" float jfg_sniper_zoom(float zoom) {

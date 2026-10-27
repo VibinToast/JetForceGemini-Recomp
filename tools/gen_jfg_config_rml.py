@@ -15,6 +15,8 @@ GENERAL = [
     ("group", None, "Menu & Cutscenes", None, None),
     ("bool", "start_skips_cutscenes", "START Skips Cutscenes", None,
      "START skips cutscenes, the logo screens at start-up and the story intro after creating a file. A skipped cutscene still runs to its end at full speed, so everything it does (flags, items, the next level) still happens."),
+    ("bool", "fast_pause", "Faster Pause Menu", None,
+     "The pause menu opens and closes three times as fast. Off is the original game's speed."),
     ("group", None, "On Screen", None, None),
     ("bool", "show_fps", "Show FPS", None, "In the top right corner: <b>Game</b>, how many times a second the game itself updates (its logic), and <b>Screen</b>, the frames a second shown (in-between frames included)."),
     ("bool", "show_level", "Show Level", None, "The level number and name in the top right corner."),

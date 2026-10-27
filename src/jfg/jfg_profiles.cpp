@@ -33,7 +33,7 @@ const BuiltinProfile BUILTIN_PROFILES[] = {
     // Every profile starts from State's defaults (jfg_options.h): Auto Save on, Keep Area Progress and Permanent Tribal
     // Saves off, so the other profiles and the player's own (also ones saved before these options existed) auto save.
     // Default is the original game: no auto save.
-    { "Default", "The original game, as it played on the N64.", "start_skips_cutscenes=0\nauto_save=0\n" },
+    { "Default", "The original game, as it played on the N64.", "start_skips_cutscenes=0\nauto_save=0\nfast_pause=0\n" },
     { "Modern", "Modern controls and visuals, smoothed to 60 fps with Frame Interpolation, with the original weapons and gameplay. Its dual-stick controls use the "
                 "Built-in Button Layout in place of your controller bindings.",
       "no_blood=0\nstart_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nhud_corners=1\nframe_rate=0\nsmooth_motion=60\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
