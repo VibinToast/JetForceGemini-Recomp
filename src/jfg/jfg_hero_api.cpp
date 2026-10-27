@@ -15,6 +15,7 @@ extern "C" void controlReadJoypad(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackPolyHeight(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackGetBlock(uint8_t* rdram, recomp_context* ctx);
 extern "C" void mainGetGameCharacter(uint8_t* rdram, recomp_context* ctx);
+extern "C" void squadsIsTribal(uint8_t* rdram, recomp_context* ctx);
 extern "C" void frontFlashScreen(uint8_t* rdram, recomp_context* ctx);
 extern "C" void camSetFOV(uint8_t* rdram, recomp_context* ctx);
 
@@ -400,7 +401,8 @@ void enemy_type(uint8_t* rdram_, recomp_context* ctx) {
 // jfg_enemies_near(const JfgNear* q, JfgEnemy* out, int max): the squad members whose hit sphere (centre, radius)
 // overlaps q's sphere, except q's source, nearest first, dying ones too (health 0 or less: they stay until removed, and
 // a further blow still makes them burst); returns how many there are (at most max copied). JfgEnemy: object, f32 x,
-// y, z (hit centre), f32 radius (hit radius), s32 health, s32 type (0x1C bytes).
+// y, z (hit centre), f32 radius (hit radius), s32 health, s32 type, s32 tribal (squadsIsTribal: a tribal to rescue,
+// not an enemy) (0x20 bytes).
 void enemies_near(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t q = (uint32_t)ctx->r4, out = (uint32_t)ctx->r5;
@@ -430,8 +432,9 @@ void enemies_near(uint8_t* rdram_, recomp_context* ctx) {
         }
     }
     std::sort(found, found + n, [](const Found& a, const Found& b) { return a.d2 < b.d2; });
+    const recomp_context saved = *ctx;
     for (int i = 0; out != 0 && i < n && i < max; i++) {
-        const uint32_t o = out + 0x1Cu * (uint32_t)i;
+        const uint32_t o = out + 0x20u * (uint32_t)i;
         wr32(o + 0x00, found[i].obj);
         wrf(o + 0x04, Damage::CentreX::get(found[i].dmg));
         wrf(o + 0x08, Damage::CentreY::get(found[i].dmg));
@@ -439,7 +442,9 @@ void enemies_near(uint8_t* rdram_, recomp_context* ctx) {
         wrf(o + 0x10, std::max(0.0f, Damage::Radius::get(found[i].dmg)));
         wr32(o + 0x14, (uint32_t)(int32_t)Damage::Health::get(found[i].dmg));
         wr32(o + 0x18, (uint32_t)found[i].type);
+        wr32(o + 0x1C, call_game(squadsIsTribal, ctx, { (uint32_t)found[i].type }) != 0 ? 1u : 0u);
     }
+    *ctx = saved;
     ctx->r2 = (gpr)n;
 }
 

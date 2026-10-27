@@ -157,8 +157,9 @@ RECOMP_IMPORT("*", void jfg_object_set_health(void* object, int health));
 // at most 10) makes it burst on its next update (the game's overkill).
 RECOMP_IMPORT("*", int jfg_enemy_type(void* object));
 
-// The enemies (squad members) whose hit sphere overlaps a sphere, except source, nearest first, with their hit
-// centre and radius, health and type (as jfg_enemy_type): up to max of them into out; returns how many there are.
+// The squad members (enemies, and the tribals: tribal is 1) whose hit sphere overlaps a sphere, except source,
+// nearest first, with their hit centre and radius, health and type (as jfg_enemy_type): up to max of them into out;
+// returns how many there are.
 // Dying ones are listed too (health 0 or less, until the game removes them): a further big blow still bursts them.
 typedef struct {
     void* object;
@@ -166,6 +167,7 @@ typedef struct {
     float radius;  // its hit radius
     int health;
     int type;
+    int tribal;    // a tribal (squad members the heroes rescue), not an enemy
 } JfgEnemy;
 RECOMP_IMPORT("*", int jfg_enemies_near(const JfgNear* query, JfgEnemy* out, int max));
 
