@@ -41,6 +41,7 @@ extern "C" void func_overlay_15_00005180_1F18B00(uint8_t* rdram, recomp_context*
 extern "C" void func_overlay_16_00004F78_1F22F90(uint8_t* rdram, recomp_context* ctx); // Juno: the same
 extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
 namespace jfg { bool hud_in_corners(); } // jfg_hud_corners.cpp
+namespace jfg { int asset_number(const std::string& ref); } // jfg_assets.cpp
 namespace jfg { void overlay_size_now(float* out); } // jfg_overlay.cpp
 
 namespace jfg::api {
@@ -1119,6 +1120,21 @@ void spawn(uint8_t* rdram_, recomp_context* ctx) {
     ctx->r2 = (gpr)(int32_t)obj;
 }
 
+// jfg_asset_number(const char* name): the number an appended entry or object type of a pack got this start
+// ("mod_id:append name", as jfg_assets.json names it; jfg_assets.cpp), -1 if no loaded mod adds it. An object type's
+// number is the object id to spawn.
+void asset_number_api(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t p = (uint32_t)ctx->r4;
+    std::string name;
+    for (uint32_t i = 0; i < 128 && mod_ptr(p + i); i++) {
+        const char c = (char)rd8(p + i);
+        if (c == 0) break;
+        name += c;
+    }
+    ctx->r2 = (gpr)jfg::asset_number(name);
+}
+
 // jfg_object_free(void* object): removes an object (objFreeObject), as its own code does when it is done.
 void object_free(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
@@ -1131,7 +1147,11 @@ void object_free(uint8_t* rdram_, recomp_context* ctx) {
 void object_set_scale(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t obj = (uint32_t)ctx->r4;
-    if (valid_ptr(obj)) wrf(obj + OBJ_SCALE, std::clamp(ctx->f14.fl, 0.0f, 1000.0f));
+    // o32: after a pointer argument a float comes in $a1, not $f14.
+    float scale;
+    const uint32_t bits = (uint32_t)ctx->r5;
+    std::memcpy(&scale, &bits, 4);
+    if (valid_ptr(obj) && scale == scale) wrf(obj + OBJ_SCALE, std::clamp(scale, 0.0f, 100.0f));
 }
 
 // jfg_object_scale(void* object): its size.
@@ -1384,6 +1404,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_shocker_end", shocker_end);
     recomp::overlays::register_base_export("jfg_flames_get", flames_get);
     recomp::overlays::register_base_export("jfg_spawn", spawn);
+    recomp::overlays::register_base_export("jfg_asset_number", asset_number_api);
     recomp::overlays::register_base_export("jfg_world_to_screen", world_to_screen);
     recomp::overlays::register_base_export("jfg_object_free", object_free);
     recomp::overlays::register_base_export("jfg_object_set_scale", object_set_scale);

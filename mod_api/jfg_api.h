@@ -546,6 +546,9 @@ typedef struct {
     int yaw;
 } JfgSpawn;
 RECOMP_IMPORT("*", void* jfg_spawn(const JfgSpawn* spawn));
+// The number a pack's appended entry or object type got this start ("mod_id:append name", as its jfg_assets.json
+// names it), -1 if no loaded mod adds it. An object type's number is the object id to give jfg_spawn.
+RECOMP_IMPORT("*", int jfg_asset_number(const char* name));
 // Removes an object, as its own code does when it is done.
 RECOMP_IMPORT("*", void jfg_object_free(void* object));
 // An object's size (1.0 = as its definition makes it), and setting it.
