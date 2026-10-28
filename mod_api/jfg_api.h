@@ -296,6 +296,9 @@ RECOMP_IMPORT("*", void jfg_hero_hit(void* hero, int units));
 // The hero rolls to its left (right 0) or right (1), as the game's side buttons make it roll while it stands: the
 // game plays the roll and moves the hero along it. Juno and Vela only; returns 1 if it rolled.
 RECOMP_IMPORT("*", int jfg_hero_roll(void* hero, int right));
+// Plays the game's own sound effect id at x, y, z (louder near the camera). Some: Juno's jump 0x4C and 0x51, landing
+// 0x6, his side rolls 0x7A (left) and 0x79 (right) (JFG_DEBUG_SOUNDS=1 logs every sound the game starts).
+RECOMP_IMPORT("*", void jfg_game_sound(int id, float x, float y, float z));
 // No damage reaches the hero for at least ticks 1/60 s ticks (8 at the least), and enemies don't aim at it.
 RECOMP_IMPORT("*", void jfg_hero_protect(void* hero, int ticks));
 

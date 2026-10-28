@@ -358,6 +358,8 @@ JFG_WRAP(objPrintObject) {
 // amSndPlay(id, handle): jfg_on_sound_play (Hide Floyd mutes his sounds); a callback may change the sound's id.
 JFG_WRAP(amSndPlay) {
     uint32_t id = (uint32_t)ctx->r4;
+    static const bool log = std::getenv("JFG_DEBUG_SOUNDS") != nullptr; // tests: every sound effect started, by id
+    if (log) std::fprintf(stderr, "[jfg] sound 0x%X (tick %u)\n", id & 0xFFFF, jfg::g_tick_count);
     if (!fire_value_cancel(rdram, ctx, jfg::api::Event::SoundPlay, id)) return;
     ctx->r4 = (gpr)(int32_t)id;
     amSndPlay_orig(rdram, ctx);

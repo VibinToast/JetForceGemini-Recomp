@@ -453,6 +453,8 @@ JFG_WRAP(mantisControl) {
 }
 
 JFG_WRAP(amSndPlayXYZ) {
+    static const bool log = std::getenv("JFG_DEBUG_SOUNDS") != nullptr; // tests: every placed sound started, by id
+    if (log) std::fprintf(stderr, "[jfg] sound xyz 0x%X (tick %u)\n", (uint32_t)ctx->r4 & 0xFFFF, jfg::g_tick_count);
     if (g_mantis_no_rock && g_mantis.direct(ctx)) {
         g_mantis_no_rock = false;
         ctx->r2 = 0;
