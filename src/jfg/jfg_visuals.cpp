@@ -231,26 +231,30 @@ int fog_distance_to_position(float d) {
 
 std::atomic<int> g_level_fog_near{ -1 }, g_level_fog_far{ -1 }; // the level's fog positions last sent (F9 status line)
 
-extern "C" void jfg_game_fog(uint8_t* rdram, uint32_t sp) {
-    g_rdram = rdram;
-    const int near_pos = (int16_t)rd16(sp + 0x3E), far_pos = (int16_t)rd16(sp + 0x3C);
-    g_level_fog_near.store(near_pos, std::memory_order_relaxed);
-    g_level_fog_far.store(far_pos, std::memory_order_relaxed);
-    const bool level_fog = near_pos < FOG_POSITION_FAR;
-    rt64_jfg_fog_blocked.store(level_fog ? 1 : 0, std::memory_order_relaxed);
-    if (!level_fog) return;
+// The fog options (No level fog, Level fog distance) applied to the level's fog positions.
+extern "C" void jfg_level_fog_options(int& near_pos, int& far_pos) {
+    if (near_pos >= FOG_POSITION_FAR) return;
     if (g.no_level_fog) {
-        wr16(sp + 0x3E, (uint16_t)FOG_OFF_NEAR);
-        wr16(sp + 0x3C, (uint16_t)FOG_OFF_FAR);
+        near_pos = FOG_OFF_NEAR;
+        far_pos = FOG_OFF_FAR;
         return;
     }
     if (g.level_fog_distance == 100) return;
     // Scaled as distances from the camera, so 200% puts the fog twice as far away.
     const float scale = (float)g.level_fog_distance / 100.0f;
-    int new_far = far_pos >= FOG_POSITION_FAR ? far_pos : std::min(fog_distance_to_position(fog_position_to_distance(far_pos) * scale), FOG_OFF_FAR);
-    int new_near = std::min(fog_distance_to_position(fog_position_to_distance(near_pos) * scale), new_far - 5);
-    wr16(sp + 0x3E, (uint16_t)(int16_t)new_near);
-    wr16(sp + 0x3C, (uint16_t)(int16_t)new_far);
+    far_pos = far_pos >= FOG_POSITION_FAR ? far_pos : std::min(fog_distance_to_position(fog_position_to_distance(far_pos) * scale), FOG_OFF_FAR);
+    near_pos = std::min(fog_distance_to_position(fog_position_to_distance(near_pos) * scale), far_pos - 5);
+}
+
+extern "C" void jfg_game_fog(uint8_t* rdram, uint32_t sp) {
+    g_rdram = rdram;
+    int near_pos = (int16_t)rd16(sp + 0x3E), far_pos = (int16_t)rd16(sp + 0x3C);
+    g_level_fog_near.store(near_pos, std::memory_order_relaxed);
+    g_level_fog_far.store(far_pos, std::memory_order_relaxed);
+    rt64_jfg_fog_blocked.store(near_pos < FOG_POSITION_FAR ? 1 : 0, std::memory_order_relaxed);
+    jfg_level_fog_options(near_pos, far_pos);
+    wr16(sp + 0x3E, (uint16_t)(int16_t)near_pos);
+    wr16(sp + 0x3C, (uint16_t)(int16_t)far_pos);
 }
 
 // The depth fog's status line in the F9 menu: the level's own fog, and what the renderer did over the last half second.

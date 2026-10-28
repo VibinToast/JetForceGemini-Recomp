@@ -45,6 +45,7 @@ int jfg_freeze_world(void);                                            // func_8
 // jfg_visuals.cpp
 float jfg_fov(uint8_t* rdram, float fov, uint32_t zoomed);             // camSetFOV
 void jfg_game_fog(uint8_t* rdram, uint32_t sp);                        // func_8001BF9C, right after trackGetFog
+void jfg_level_fog_options(int& near_pos, int& far_pos);               // the fog options on the level's fog positions
 uint32_t jfg_hit_flash(uint32_t color);                                // the hit flash's colour (jfg_visuals.cpp)
 int jfg_shadow_alpha(int alpha);                                       // func_8001B8E0's wrapper: a shadow batch's alpha
 void jfg_hit_flash_event(uint8_t* rdram, recomp_context* ctx);        // jfg_on_screen_flash handler

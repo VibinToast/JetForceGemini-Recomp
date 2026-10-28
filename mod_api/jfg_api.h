@@ -305,6 +305,14 @@ RECOMP_IMPORT("*", int jfg_hero_roll(void* hero, int right));
 #define JFG_MOVE_RUN   0x01
 #define JFG_MOVE_STAND 0x10
 RECOMP_IMPORT("*", int jfg_hero_move(void* hero, int move));
+// The hero's own voice (Juno's, Vela's or Lupus's, as the game picks them): 0 the jump, 1 the landing, 3 being hit.
+#define JFG_SPEAK_JUMP 0
+#define JFG_SPEAK_LAND 1
+#define JFG_SPEAK_HIT  3
+RECOMP_IMPORT("*", void jfg_hero_speak(void* hero, int type));
+// The object drawn tinted rgba's colour (0xRRGGBBAA), the alpha its strength (0 removes it), as the game flashes the
+// enemy it targets; kept until set again.
+RECOMP_IMPORT("*", void jfg_object_tint(void* object, unsigned int rgba));
 // Plays the game's own sound effect id at x, y, z (louder near the camera). Some: Juno's jump 0x4C and 0x51, landing
 // 0x6, his side rolls 0x7A (left) and 0x79 (right) (JFG_DEBUG_SOUNDS=1 logs every sound the game starts).
 RECOMP_IMPORT("*", void jfg_game_sound(int id, float x, float y, float z));

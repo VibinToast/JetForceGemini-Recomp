@@ -31,6 +31,7 @@ extern "C" void squadsElectrocuteSquaddie(uint8_t* rdram, recomp_context* ctx);
 extern "C" void squadsPlayerShootsSquaddie(uint8_t* rdram, recomp_context* ctx);
 extern "C" void amSndPlay(uint8_t* rdram, recomp_context* ctx);
 extern "C" void amSndPlayXYZ(uint8_t* rdram, recomp_context* ctx);
+extern "C" void charSpeak(uint8_t* rdram, recomp_context* ctx);
 extern "C" void func_overlay_15_00005180_1F18B00(uint8_t* rdram, recomp_context* ctx); // Vela: set her move (obj, data, move, frame)
 extern "C" void func_overlay_16_00004F78_1F22F90(uint8_t* rdram, recomp_context* ctx); // Juno: the same
 extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
@@ -746,6 +747,16 @@ void game_sound_flat(uint8_t* rdram_, recomp_context* ctx) {
     call_game(amSndPlay, ctx, { (uint32_t)ctx->r4 & 0xFFFF, 0 });
 }
 
+// jfg_hero_speak(void* hero, int type): the hero's own voice of that type (charSpeak: the sound set for the hero
+// playing, Juno, Vela or Lupus; 0 the jump, 1 the landing, 3 being hit), as the game plays them.
+void hero_speak(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const uint32_t type = (uint32_t)ctx->r5 & 0xFF;
+    if (hero_data(obj) == 0 || type > 15) return;
+    call_game(charSpeak, ctx, { obj, type });
+}
+
 // jfg_hero_protect(void* hero, int ticks): no damage reaches the hero for at least that many 1/60 s ticks (8 at
 // least: the game's own protection, as after a level exit).
 void hero_protect(uint8_t* rdram_, recomp_context* ctx) {
@@ -1010,6 +1021,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_hero_protect", hero_protect);
     recomp::overlays::register_base_export("jfg_hero_roll", hero_roll);
     recomp::overlays::register_base_export("jfg_hero_move", hero_move);
+    recomp::overlays::register_base_export("jfg_hero_speak", hero_speak);
     recomp::overlays::register_base_export("jfg_game_sound", game_sound);
     recomp::overlays::register_base_export("jfg_game_sound_flat", game_sound_flat);
     recomp::overlays::register_base_export("jfg_hero_hit", hero_hit);

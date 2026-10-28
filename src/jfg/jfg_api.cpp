@@ -17,6 +17,8 @@
 #include "jfg_port.h"
 
 extern "C" void recomp_trigger_event(uint8_t* rdram, recomp_context* ctx, uint32_t event_index);
+extern "C" void camGetNo(uint8_t* rdram, recomp_context* ctx);
+extern "C" void trackGetFog(uint8_t* rdram, recomp_context* ctx);
 std::string jfg_locale_shown(); // jfg_locale.cpp
 
 namespace jfg::api {
@@ -58,6 +60,23 @@ void get_tick_scale(uint8_t* rdram_, recomp_context* ctx) {
 // jfg_aim_lock(int on): 0 = the reticle no longer jumps onto an enemy it passes over (hitPlayerAimCheck's wrapper).
 bool g_aim_lock = true;
 void aim_lock(uint8_t*, recomp_context* ctx) { g_aim_lock = ctx->r4 != 0; }
+
+// jfg_object_tint(void* object, unsigned int rgba): the object drawn tinted that colour, alpha its strength (0 none),
+// through the fog colour as the game flashes the enemy it targets (objPrintModelObject); kept until set again.
+struct Tint {
+    uint32_t object, rgba;
+};
+std::vector<Tint> g_tints;
+void object_tint(uint8_t*, recomp_context* ctx) {
+    const uint32_t object = (uint32_t)ctx->r4, rgba = (uint32_t)ctx->r5;
+    auto it = std::find_if(g_tints.begin(), g_tints.end(), [&](const Tint& t) { return t.object == object; });
+    if (it != g_tints.end()) {
+        if ((rgba & 0xFF) == 0) g_tints.erase(it);
+        else it->rgba = rgba;
+    } else if ((rgba & 0xFF) != 0 && object != 0 && g_tints.size() < 64) {
+        g_tints.push_back({ object, rgba });
+    }
+}
 
 void get_level(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
@@ -172,6 +191,7 @@ void register_api() {
     jfg::register_blood_api(); // blood colours, rainbow, Blood stays, Body parts stay (jfg_gore.cpp)
     recomp::overlays::register_base_export("jfg_floyd_hide", jfg_api_floyd_hide); // Hide Floyd (jfg_visuals.cpp)
     recomp::overlays::register_base_export("jfg_aim_lock", aim_lock);
+    recomp::overlays::register_base_export("jfg_object_tint", object_tint);
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }
 
@@ -351,7 +371,36 @@ JFG_WRAP(objPrintObject) {
             return;
         }
     }
+    // jfg_object_tint: the fog set to the tint's colour, at the same strength wherever the object is (multiplier 0,
+    // offset the strength), and the level's own fog put back after it.
+    uint32_t tint = 0;
+    for (const auto& t : jfg::api::g_tints) if (t.object == object) tint = t.rgba;
+    const uint32_t dlist = (uint32_t)ctx->r4;
+    if (tint != 0) {
+        using namespace jfg;
+        g_rdram = rdram;
+        uint32_t cmd = rd32(dlist);
+        wr32(cmd, 0xF8000000u); wr32(cmd + 4, tint | 0xFF);               // gDPSetFogColor
+        wr32(cmd + 8, 0xBC000008u); wr32(cmd + 12, tint & 0xFF);         // gSPFogPosition's word: multiplier 0, offset
+        wr32(dlist, cmd + 16);
+    }
     objPrintObject_orig(rdram, ctx);
+    if (tint != 0) {
+        using namespace jfg;
+        g_rdram = rdram;
+        const uint32_t out = ((uint32_t)ctx->r29 - 0x40u) & ~0x7u; // inside the gap call_game leaves below $sp
+        const uint32_t cam = call_game(camGetNo, ctx, {}) & 3;
+        call_game(trackGetFog, ctx, { cam, out, out + 2, out + 4, out + 6, out + 7, out + 8, out + 9 });
+        int near_pos = (int16_t)rd16(out), far_pos = (int16_t)rd16(out + 2);
+        jfg_level_fog_options(near_pos, far_pos);
+        const int span = std::max(far_pos - near_pos, 1);
+        const int fm = 128000 / span, fo = (500 - near_pos) * 256 / span;
+        uint32_t cmd = rd32(dlist);
+        wr32(cmd, 0xF8000000u);
+        wr32(cmd + 4, ((uint32_t)rd8(out + 6) << 24) | ((uint32_t)rd8(out + 7) << 16) | ((uint32_t)rd8(out + 8) << 8) | 0xFF);
+        wr32(cmd + 8, 0xBC000008u); wr32(cmd + 12, ((uint32_t)(fm & 0xFFFF) << 16) | (uint32_t)(fo & 0xFFFF));
+        wr32(dlist, cmd + 16);
+    }
     jfg_interp_object_done(rdram, ctx);
 }
 
