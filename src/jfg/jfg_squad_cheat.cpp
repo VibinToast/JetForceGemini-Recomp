@@ -28,7 +28,11 @@ JFG_WRAP(squadsAddInterestingEvent) {
     squadsAddInterestingEvent_orig(rdram, ctx);
 }
 
+namespace jfg { void kills_remember_shot(uint32_t victim, uint32_t shooter); } // jfg_kills.cpp
+
+// Also remembers the shooter for jfg_on_kill (jfg_kills.cpp), cheat or not.
 JFG_WRAP(squadsPlayerShootsSquaddie) {
+    jfg::kills_remember_shot((uint32_t)ctx->r4, (uint32_t)ctx->r5);
     if (jfg::g.squads_ignore) return;
     squadsPlayerShootsSquaddie_orig(rdram, ctx);
 }

@@ -31,7 +31,7 @@ const char* const g_event_names[] = {
     "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
     "jfg_on_language_change", "jfg_on_map_open", "jfg_on_galaxy_change", "jfg_on_planet_select", "jfg_on_hero_control",
     "jfg_on_object_draw_gfx", "jfg_on_draw_hud", "jfg_on_hud_message", "jfg_on_reticle_draw",
-    "jfg_on_health_draw", "jfg_on_weapon_hud", nullptr
+    "jfg_on_health_draw", "jfg_on_weapon_hud", "jfg_on_kill", nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 

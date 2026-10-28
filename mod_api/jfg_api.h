@@ -397,7 +397,7 @@ typedef struct {
 RECOMP_IMPORT("*", void jfg_hud_weapon_icon(const JfgWeaponIcon* icon));
 // A dark disc in the game's HUD under the weapon icons (the game's own panels' translucent backing): centred at x, y,
 // radius in overlay units, color 0xRRGGBBAA. Only during jfg_on_weapon_hud. The overlay is drawn over the game, icons
-// included, so a backing that the icons sit on has to be drawn this way.
+// included, so a backing that the icons sit on has to be drawn this way. Up to 24 a frame, for all mods together.
 typedef struct {
     float x, y, radius;
     unsigned int color;
@@ -577,6 +577,22 @@ typedef struct {
     int cancel;
 } JfgWeaponHud;
 
+// jfg_on_kill: a squad member (an enemy, or a Tribal) died. victim: its object; killer: whoever fired the shot (a hero,
+// Floyd, or another object; NULL when unknown) and killer_kind (-1 unknown, 0 Vela, 1 Juno, 2 Lupus, 3 Floyd, 4 another
+// object); weapon: what the game counts the kill under (0..15, the weapons' order); tribal: 1 when the victim was a
+// Tribal. victim_name and killer_name are the objects' definition names from the player's game (up to 15 characters,
+// "" when there is none). Read only; frames is 0.
+typedef struct {
+    void* victim;
+    void* killer;
+    int killer_kind;
+    int weapon;
+    int tribal;
+    int frames;
+    char victim_name[16];
+    char killer_name[16];
+} JfgKill;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
@@ -637,5 +653,7 @@ typedef struct {
 // jfg_on_health_draw(JfgHealth* health)
 //     Each frame the health meter is drawn (not in the pause menu, cutscenes or other times the HUD is hidden),
 //     before the game draws it.
+// jfg_on_kill(JfgKill* kill)
+//     A squad member (an enemy or a Tribal) died, after the game counted it in the weapon stats.
 
 #endif

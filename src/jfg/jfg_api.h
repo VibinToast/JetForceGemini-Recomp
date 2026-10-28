@@ -37,6 +37,7 @@ enum class Event : uint32_t {
     ReticleDraw,      // jfg_on_reticle_draw(JfgReticle* reticle), since version 5
     HealthDraw,       // jfg_on_health_draw(JfgHealth* health), since version 5
     WeaponHud,        // jfg_on_weapon_hud(JfgWeaponHud* hud), since version 5
+    Kill,             // jfg_on_kill(JfgKill* kill), since version 5
     Count
 };
 

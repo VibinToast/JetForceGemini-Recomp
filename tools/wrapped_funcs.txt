@@ -204,3 +204,5 @@ instQueueMsg
 
 # Mod API: the blast damage each object takes (jfg_object_blast_damage, jfg_hero_api.cpp)
 func_8002AA7C_2B67C
+# Mod API: jfg_on_kill, every squad member's death and who shot it last (jfg_kills.cpp)
+SquaddiePassesAway

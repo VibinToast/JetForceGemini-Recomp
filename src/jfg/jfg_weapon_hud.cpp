@@ -59,7 +59,7 @@ struct Disc {
     uint32_t rgba;
 };
 std::vector<Disc> g_discs;
-constexpr int MAX_DISCS = 8, CHUNK = 16, SLICES = 64, CHUNKS = SLICES / CHUNK;
+constexpr int MAX_DISCS = 24, CHUNK = 16, SLICES = 64, CHUNKS = SLICES / CHUNK;
 constexpr uint32_t VTX_SIZE = 10, CHUNK_VTX = CHUNK + 2, CHUNK_BYTES = 184; // centre + 17 rim points, 8-aligned
 constexpr float FIX = 8.0f; // vertices in eighths of a unit (the matrix scales them back): a round edge
 // [2 frames] { float mtx[16], Mtx (64) scaled, Mtx (64) as it was, vertices [MAX_DISCS][CHUNKS] }, then triangles
