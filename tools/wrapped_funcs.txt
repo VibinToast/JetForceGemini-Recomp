@@ -228,3 +228,4 @@ objMakeGunMtx
 BTSBStandardFire
 hitVectorCheck
 hitUpdate
+GetBaddyData

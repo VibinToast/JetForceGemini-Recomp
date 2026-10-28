@@ -780,10 +780,22 @@ typedef struct {
 // its definition a copy of that enemy's with the pack's model) and the mod registers it by the definition's name.
 // Squadrons placed with that object id (Studio, or a level's data) then spawn members the mod runs in
 // jfg_on_squad_tick, in place of the like type's own fire routine.
+// The type gets its own copy of the like type's baddy row: no body parts (the like type's would cut the new model's
+// batches off on a killing hit) and the joints below, which are the new model's. Its hurt and death voices are silent
+// (the like type's would play); the mod plays its own.
 typedef struct {
     const char* name;      // "mod_id:type"
     const char* def_name;  // the pack's appended definition, "mod_id:objdef_x"
+    int flags;             // JFG_SQUAD_KEEP_VOICES, JFG_SQUAD_KEEP_BODY_PARTS: keep the like type's
+    // The model's joints (-1 keeps the like type's number, which may name another bone on a new model):
+    int head;              // the head: the eye point (aim, sight) is head_offset in its frame
+    int head_offset[3];    // -128..127
+    int lean[3];           // up to three joints that bend into turns (lean_weight 0..255 each); 0 = none
+    int lean_weight[3];
+    int aim;               // the joint that turns toward the hero; 0 = none
 } JfgSquadTypeDef;
+#define JFG_SQUAD_KEEP_VOICES 1
+#define JFG_SQUAD_KEEP_BODY_PARTS 2
 // Its type number (the same again for a name registered before), -1 if the definition is bad.
 RECOMP_IMPORT("*", int jfg_squad_type_register(const JfgSquadTypeDef* def));
 
@@ -804,8 +816,11 @@ RECOMP_IMPORT("*", int jfg_squad_set_mission(void* member, int group, int missio
 // Clears the member's mission when it is the group's; cooldown: ticks before it may fire again.
 RECOMP_IMPORT("*", void jfg_squad_clear_mission(void* member, int group, int cooldown));
 // Plays animation `anim` of the object's model list from phase / 1000 (0..1000). The mod advances the phase
-// (object +0x28, 0..1) itself; for a squad member, set its animation state (data +0x4B) to 7 first, which nothing in
-// the game advances.
+// (object +0x28, 0..1; a loop wraps below 1.0, a one-shot holds at 1.0) itself. For a squad member, set its animation
+// state (data +0x4B) to 7 first, which nothing in the game advances, and its set entry (data +0x19) to an entry of the
+// like type's set whose flags it should run with (0, an idle: no firing, stands; 19 for the ground soldier's walk),
+// never the anim number. Drive it only while data +0x4B is still 7: a hit reaction, burning or death replaces it.
+// Handing back: jfg_squad_clear_mission, data +0x4B = 0 and data +0x0A = 0 (so the game picks its own move again).
 RECOMP_IMPORT("*", void jfg_object_anim_set(void* object, int anim, int phase));
 // Shell armour: shots hitting the member stop on its hit spheres with no damage: mode 1 all but those from behind,
 // 2 all, 0 none. Blasts always hurt. jfg_squad_deflects: shots stopped since the last call. jfg_squad_forget: drop

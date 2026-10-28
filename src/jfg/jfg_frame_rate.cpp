@@ -176,7 +176,7 @@ extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
 // wrapped (tools/wrapped_funcs.txt): every call runs these first, then the game's code (<name>_orig), or a mod's patch
 // or hook of it.
 uint32_t kills_set_squaddie(uint32_t obj); // jfg_kills.cpp
-namespace squad_types { void set_frames(int frames); } // jfg_squad_types.cpp
+namespace squad_types { void set_frames(int frames); void voices(uint32_t obj, bool on); } // jfg_squad_types.cpp
 
 // Also tells jfg_kills.cpp which squad member is being updated (a Tribal lost is marked during the update).
 JFG_WRAP(SquaddieControl) {
@@ -185,7 +185,9 @@ JFG_WRAP(SquaddieControl) {
     ctx->r5 = (gpr)r;
     jfg::squad_types::set_frames(r); // a mod's squad type tick gets the update rate
     const uint32_t before = jfg::kills_set_squaddie((uint32_t)ctx->r4);
+    jfg::squad_types::voices((uint32_t)ctx->r4, true); // a mod's squad type: the like type's voices silenced
     SquaddieControl_orig(rdram, ctx);
+    jfg::squad_types::voices(0, false);
     jfg::kills_set_squaddie(before);
 }
 

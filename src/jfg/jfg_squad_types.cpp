@@ -17,6 +17,13 @@
 //   is counted: jfg_squad_deflects(member).
 // - jfg_hero_shot: a mod's projectile hits the hero as a stock shot does (decomp MSR 12e2): the hero's spheres along
 //   the segment, protection and noHit spheres skipped, the hit flags and damage written for the hero code to react.
+// - Its own baddy row (decomp MSR 12i part 2): the like type's row names that type's joints (head, leans, aim) and its
+//   body parts, which would cut a new model's batches off on a killing hit. GetBaddyData is wrapped: for a registered
+//   type's member it returns (and sets as overlay 3's current row) a copy of the like row with no body parts and the
+//   mod's head, lean and aim joints. Overlay 3 reads the row only through that call and its global.
+// - Its own voices: the hurt and death voices are per type index (the like type's), read only in SquaddieControl. Around
+//   a registered type's SquaddieControl call that index's voice record is zeroed (silence: the mod plays its own), and
+//   put back after, so stock members of the like type keep theirs.
 
 #include <algorithm>
 #include <cmath>
@@ -35,6 +42,8 @@ extern "C" void TryToSetMission(uint8_t* rdram, recomp_context* ctx);
 extern "C" void ClearMissionFields(uint8_t* rdram, recomp_context* ctx);
 extern "C" void objAnimSetMove(uint8_t* rdram, recomp_context* ctx);
 extern "C" void Arctanf(uint8_t* rdram, recomp_context* ctx);
+extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
+namespace jfg::api { uint32_t gfx_block(uint32_t bytes); } // jfg_api.cpp
 
 namespace jfg::squad_types {
 namespace {
@@ -45,11 +54,23 @@ constexpr uint32_t SPH_SIZE = 0x34, SPH_FLAGSA = 0x0A, SPH_X = 0x0C, SPH_RADIUS 
                    SPH_PERCENT = 0x2F, SPH_BITS = 0x30;
 constexpr uint8_t SPH_ARMOUR = 0x20, SPH_NOHIT = 0x40;
 constexpr uint32_t HERO_PROTECT = 0x5C8, HERO_STATE = 0x568;
+// Overlay 3 (decomp MSR 12i): the current row (GetBaddyData), its type index, the voice records (8 bytes an index).
+constexpr uint32_t OVERLAY_3_ROM = 0x01ED54E0, O3_ROW = 0x1A1E0, O3_INDEX = 0x1A1DC, O3_VOICES = 0x19460;
+// The baddy row (0x80 bytes): body part count, head joint and its offset, lean joints and weights, aim joint.
+constexpr uint32_t ROW_SIZE = 0x80, ROW_PARTS = 0x29, ROW_HEAD = 0x30, ROW_LEAN = 0x34, ROW_LEAN_WEIGHT = 0x37,
+                   ROW_AIM = 0x3A;
+// JfgSquadTypeDef flags.
+constexpr int KEEP_VOICES = 1, KEEP_BODY_PARTS = 2;
 
 struct Type {
     std::string name, def_name; // "mod:type", "mod:objdef_x"
     int def_index = -2;         // the definition's number this start (-2 not looked up yet)
     uint32_t def_ptr = 0;       // where objGetObjdef has it loaded this level
+    int flags = 0;
+    int head = -1, head_offset[3] = {}, lean[3] = { -1, -1, -1 }, lean_weight[3] = {}, aim = -1; // -1 keeps the like's
+    uint32_t row = 0;           // its row copy (the graphics region: kept for the run)
+    uint32_t row_from = 0;      // the like row it was copied from
+    int index = -1;             // the like type's index (overlay 3's, for the voices)
 };
 std::vector<Type> g_types;
 
@@ -116,8 +137,45 @@ void def_loaded(int index, uint32_t def) {
 
 void set_frames(int frames) { g_frames = frames > 0 ? frames : 1; }
 
+// The type's row copy from the like row: no body parts (unless kept), the mod's joints.
+void make_row(Type& t, uint32_t like_row) {
+    for (uint32_t i = 0; i < ROW_SIZE; i += 4) wr32(t.row + i, rd32(like_row + i));
+    if (!(t.flags & KEEP_BODY_PARTS)) wr8(t.row + ROW_PARTS, 0);
+    if (t.head >= 0) {
+        wr8(t.row + ROW_HEAD, (uint8_t)t.head);
+        for (int k = 0; k < 3; k++) wr8(t.row + ROW_HEAD + 1 + k, (uint8_t)(int8_t)std::clamp(t.head_offset[k], -128, 127));
+    }
+    for (int k = 0; k < 3; k++) {
+        if (t.lean[k] < 0) continue;
+        wr8(t.row + ROW_LEAN + k, (uint8_t)t.lean[k]);
+        wr8(t.row + ROW_LEAN_WEIGHT + k, (uint8_t)std::clamp(t.lean_weight[k], 0, 255));
+    }
+    if (t.aim >= 0) wr8(t.row + ROW_AIM, (uint8_t)t.aim);
+    t.row_from = like_row;
+}
+
+// Around a member's SquaddieControl: its type's voices silenced (on), or the like type's put back (off).
+uint8_t g_voice_saved[8];
+uint32_t g_voice_at = 0;
+void voices(uint32_t obj, bool on) {
+    if (!on) {
+        if (g_voice_at != 0) for (uint32_t i = 0; i < 8; i++) wr8(g_voice_at + i, g_voice_saved[i]);
+        g_voice_at = 0;
+        return;
+    }
+    const int type = valid_ptr(obj) ? type_of_def(rd32(obj + OBJ_DEF)) : -1;
+    if (type < 0 || (g_types[type].flags & KEEP_VOICES) || g_types[type].index < 0) return;
+    const uint32_t base = jfg_overlay_loaded_at(OVERLAY_3_ROM);
+    if (base == 0) return;
+    g_voice_at = base + O3_VOICES + 8u * (uint32_t)g_types[type].index;
+    for (uint32_t i = 0; i < 8; i++) {
+        g_voice_saved[i] = rd8(g_voice_at + i);
+        wr8(g_voice_at + i, 0);
+    }
+}
+
 void level_change() {
-    for (Type& t : g_types) t.def_ptr = 0;
+    for (Type& t : g_types) { t.def_ptr = 0; t.row_from = 0; }
     g_armoured.clear();
     g_tick_member = 0;
 }
@@ -158,6 +216,25 @@ JFG_WRAP(BTSBStandardFire) {
     }
     ctx->r4 = a0;
     if (run_stock != 0) BTSBStandardFire_orig(rdram, ctx);
+}
+
+// GetBaddyData(member): the row of its type, also overlay 3's current row. A registered type's member gets its copy.
+JFG_WRAP(GetBaddyData) {
+    g_rdram = rdram;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    GetBaddyData_orig(rdram, ctx);
+    g_rdram = rdram;
+    const uint32_t like_row = (uint32_t)ctx->r2;
+    const int type = valid_ptr(obj) && valid_ptr(like_row) ? type_of_def(rd32(obj + OBJ_DEF)) : -1;
+    const uint32_t base = type >= 0 ? jfg_overlay_loaded_at(OVERLAY_3_ROM) : 0;
+    if (base == 0) return;
+    Type& t = g_types[type];
+    t.index = (int32_t)rd32(base + O3_INDEX);
+    if (t.row == 0) t.row = jfg::api::gfx_block(ROW_SIZE);
+    if (t.row == 0) return;
+    if (t.row_from != like_row) make_row(t, like_row);
+    wr32(base + O3_ROW, t.row);
+    ctx->r2 = (gpr)(int32_t)t.row;
 }
 
 // hitVectorCheck(shot, shotHit, n, targets, &results, owner), once per shot from hitUpdate: armoured members take the
@@ -204,7 +281,8 @@ JFG_WRAP(hitUpdate) {
 
 // --- the helpers mods import -------------------------------------------------------------------------------------
 namespace {
-// jfg_squad_type_register(const JfgSquadTypeDef* def): { const char* name, *def_name; } -> its type number, or -1.
+// jfg_squad_type_register(const JfgSquadTypeDef* def) -> its type number, or -1. JfgSquadTypeDef: { const char* name,
+// *def_name; s32 flags, head, head_offset[3], lean[3], lean_weight[3], aim; } (-1 joints keep the like type's).
 void api_squad_type_register(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t d = (uint32_t)ctx->r4;
@@ -219,6 +297,14 @@ void api_squad_type_register(uint8_t* rdram_, recomp_context* ctx) {
     Type t;
     t.name = name;
     t.def_name = def;
+    t.flags = (int32_t)rd32(d + 0x08);
+    t.head = (int32_t)rd32(d + 0x0C);
+    for (int k = 0; k < 3; k++) {
+        t.head_offset[k] = (int32_t)rd32(d + 0x10 + 4 * k);
+        t.lean[k] = (int32_t)rd32(d + 0x1C + 4 * k);
+        t.lean_weight[k] = (int32_t)rd32(d + 0x28 + 4 * k);
+    }
+    t.aim = (int32_t)rd32(d + 0x34);
     t.def_index = jfg::asset_number(def);
     g_types.push_back(t);
     ctx->r2 = (gpr)(int32_t)(g_types.size() - 1);
