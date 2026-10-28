@@ -607,7 +607,8 @@ JFG_WRAP(weaponPickupControl) {
 // (func_8000BE5C_CA5C) clamps slot 15 to 8. A weapon with a held model has the pack's model loaded per hero
 // (modLoadModel, the flags the gun's own were loaded with) and put in slot 8 only for the draw's call, so nothing else
 // ever sees it; it is freed (modFreeModel) just before the hero is (func_80007C68_8868 frees the gun's models). The
-// barrel point (objMakeGunMtx) stays slot 8's.
+// barrel point (objMakeGunMtx: the model's joint point 0, a "barrel" node with jfgformats 0.7.1) is swapped the same
+// way, so shots leave the held model's muzzle; a model without one leaves the barrel where it was.
 extern "C" void modFreeModel(uint8_t* rdram, recomp_context* ctx);
 extern "C" void modLoadModel(uint8_t* rdram, recomp_context* ctx);
 extern "C" void func_8000F978_10578(uint8_t* rdram, recomp_context* ctx);
@@ -645,8 +646,9 @@ uint32_t held_instance(recomp_context* ctx, uint32_t hero, uint32_t gun, int mod
 }
 } // namespace
 
-// The gun's draw (obj, modInst, model, slot unclamped, mf).
-JFG_WRAP(func_8000BE5C_CA5C) {
+// Runs the gun's draw or its barrel matrix (both: obj, modInst, model, slot unclamped, ...) with the held model in
+// slot 8 when the first player's hero holds a modded weapon that has one.
+static void with_held(uint8_t* rdram, recomp_context* ctx, void (*orig)(uint8_t*, recomp_context*), bool draw) {
     const uint32_t hero = (uint32_t)ctx->r4;
     const int slot = (int32_t)ctx->r7;
     const int c = current_hero();
@@ -656,7 +658,7 @@ JFG_WRAP(func_8000BE5C_CA5C) {
     const uint32_t gun = w != nullptr && w->held_model >= 0 ? gun_of(hero) : 0;
     const uint32_t models = valid_ptr(gun) ? rd32(gun + OBJ_MODELS) : 0;
     if (!valid_ptr(models)) {
-        func_8000BE5C_CA5C_orig(rdram, ctx);
+        orig(rdram, ctx);
         return;
     }
     const gpr a[4] = { ctx->r4, ctx->r5, ctx->r6, ctx->r7 };
@@ -664,16 +666,21 @@ JFG_WRAP(func_8000BE5C_CA5C) {
     g_rdram = rdram;
     ctx->r4 = a[0]; ctx->r5 = a[1]; ctx->r6 = a[2]; ctx->r7 = a[3];
     if (inst == 0) {
-        func_8000BE5C_CA5C_orig(rdram, ctx);
+        orig(rdram, ctx);
         return;
     }
     const uint32_t stock = rd32(models + 4 * GUN_SLOT);
     wr32(models + 4 * GUN_SLOT, inst);
-    wr8(inst + INST_POSE, 1); // lit each frame (the game marks only the stock instance)
-    func_8000BE5C_CA5C_orig(rdram, ctx);
+    if (draw) wr8(inst + INST_POSE, 1); // lit each frame (the game marks only the stock instance)
+    orig(rdram, ctx);
     g_rdram = rdram;
     wr32(models + 4 * GUN_SLOT, stock);
 }
+
+// The gun's draw (obj, modInst, model, slot unclamped, mf).
+JFG_WRAP(func_8000BE5C_CA5C) { with_held(rdram, ctx, func_8000BE5C_CA5C_orig, true); }
+// The barrel's world position from the hand joint (obj, modInst, model, slot unclamped, mtx, &x, &y, &z).
+JFG_WRAP(objMakeGunMtx) { with_held(rdram, ctx, objMakeGunMtx_orig, false); }
 
 // An object's final free (obj, ...): a hero's held model goes first.
 JFG_WRAP(func_80007C68_8868) {
