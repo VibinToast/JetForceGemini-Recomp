@@ -20,6 +20,10 @@
 //   stock one is written there, a carried one is 15 there and kept by object here; for the pickup's tick, slot 15
 //   shows that weapon (owned or not, its ammo, row and names), so the game's own code gives it, then the carrier
 //   goes back to the weapon in hand. A slot-15 pickup that wasn't pointed anywhere gives the proximity mine.
+// - The pause menu's weapon screen (overlay 18, decomp MSR 8e): its next / previous (func_overlay_18_00001218 /
+//   _00001294) wrap over 0..14 only, so their wrappers go over all 16 by the owned mask; slot 15 shows the carried
+//   weapon in hand: its name (text 0x39 + 15, as the HUD), its ammo, and for a mod's weapon no description (texts
+//   254-258 are the proximity mine's help). Its 3D model stays the proximity mine's (item 89).
 // - Saving: the carried weapons' ammo by name, per character, in saves/<save>_weapons.txt when the game saves to that
 //   file (the jfg_auto_save.cpp hooks, as Permanent Tribal Saves); choosing a file loads its own. A file saved
 //   without it but with slot 15 owned (the proximity mine before the registry) takes slot 15 as the proximity mine.
@@ -51,6 +55,12 @@ constexpr uint32_t ADDR_front_text = 0x800A51C8; // char**, NULL until initFront
 constexpr int WEAPON_NAMES = 0x39, AMMO_NAMES = 0x48;
 constexpr uint32_t PICKUP_WEAPON = 0x88;         // weaponPickupControl's data in the object: s16 weapon
 constexpr uint32_t ROW_MAX_AMMO = 0x24, ROW_START_AMMO = 0x28, ROW_PICKUP_AMMO = 0x2A, ROW_CHARGE = 0x03;
+constexpr uint32_t ROW_THROW_DELAY = 0x06;
+constexpr int HELP_TEXT = 179;                  // front_text[179 + w * 5 ..]: the weapon screen's five help lines
+constexpr int HELP_LINES = 5;
+constexpr uint32_t OVERLAY_18_ROM = 0x01F2F9D8; // the pause menu's weapon screen
+constexpr uint32_t SHOWN_WEAPON = 0x66B0;       // overlay 18: s32, the weapon the screen shows
+constexpr uint8_t THROW_DELAY = 0x1A;
 
 const char* const STOCK_NAMES[STOCK] = {
     "stock:pistol", "stock:homing_missiles", "stock:machine_gun", "stock:plasma_shotgun", "stock:shocker",
@@ -88,6 +98,8 @@ struct SavedHero {
 SavedHero g_disk[SAVE_SLOTS][HEROES];
 bool g_loaded = false;
 std::map<uint32_t, int> g_pickups; // pickup object -> carried id (this level)
+uint32_t g_blank_text = 0;         // "" in the runtime's heap: a mod weapon's help lines
+uint32_t g_help[HELP_LINES] = {};  // the proximity mine's help lines, while a mod's weapon blanks them
 
 const Weapon* weapon_of(int id) {
     return id >= CARRIER && id < CARRIER + (int)g_weapons.size() ? &g_weapons[(size_t)(id - CARRIER)] : nullptr;
@@ -134,6 +146,9 @@ void show(uint32_t ch, int id, int ammo, bool names) {
     if (w->max_ammo >= 0) wr16(to + ROW_MAX_AMMO, (uint16_t)w->max_ammo);
     if (w->start_ammo >= 0) wr16(to + ROW_START_AMMO, (uint16_t)w->start_ammo);
     if (w->pickup_ammo >= 0) wr16(to + ROW_PICKUP_AMMO, (uint16_t)w->pickup_ammo);
+    // The throw lets go row +0x06 ticks after the press (decomp MSR 8b); a row without one (0) would throw again
+    // every few ticks. A thrown weapon gets the grenade's 26.
+    if (w->thrown && (int8_t)rd8(to + ROW_THROW_DELAY) <= 0) wr8(to + ROW_THROW_DELAY, THROW_DELAY);
     if (names) {
         const uint32_t table = rd32(ADDR_front_text);
         if (valid_ptr(table)) {
@@ -141,6 +156,14 @@ void show(uint32_t ch, int id, int ammo, bool names) {
             if (w->ammo_text == 0) w->ammo_text = heap_string(w->ammo_display);
             if (w->name_text != 0) wr32(table + 4 * (WEAPON_NAMES + CARRIER), w->name_text);
             if (w->ammo_text != 0) wr32(table + 4 * (AMMO_NAMES + CARRIER), w->ammo_text);
+            // The weapon screen's help lines: the proximity mine's own, none for a mod's weapon.
+            const uint32_t help = table + 4 * (uint32_t)(HELP_TEXT + CARRIER * HELP_LINES);
+            if (g_blank_text == 0) g_blank_text = heap_string("");
+            for (int i = 0; i < HELP_LINES && g_blank_text != 0; i++) {
+                const uint32_t at = help + 4 * (uint32_t)i, now = rd32(at);
+                if (now != g_blank_text) g_help[i] = now; // the game's (the table is filled again on a language change)
+                wr32(at, id == CARRIER ? g_help[i] : g_blank_text);
+            }
         }
     }
     Character::Ammo::set(ch, CARRIER, (uint16_t)std::clamp(ammo, 0, 0xFFFF));
@@ -298,6 +321,7 @@ void level_load(uint8_t* rdram) {
     g_rdram = rdram;
     g_pickups.clear();
     for (Weapon& w : g_weapons) w.name_text = w.ammo_text = 0; // the heap the names were in may be gone with the level
+    g_blank_text = 0;
     const int c = current_hero();
     const uint32_t ch = c >= 0 ? character_ptr(c) : 0;
     if (valid_ptr(ch)) {
@@ -383,6 +407,35 @@ void select_step(uint8_t* rdram, recomp_context* ctx, int dir, void (*orig)(uint
 
 JFG_WRAP(controlSelectNextWeapon) { select_step(rdram, ctx, 1, controlSelectNextWeapon_orig); }
 JFG_WRAP(controlSelectPreviousWeapon) { select_step(rdram, ctx, -1, controlSelectPreviousWeapon_orig); }
+
+extern "C" void func_overlay_18_00001194_1F30B6C(uint8_t* rdram, recomp_context* ctx); // show weapon w
+extern "C" void func_overlay_18_000011E4_1F30BBC(uint8_t* rdram, recomp_context* ctx); // hide the one shown
+extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom);                             // jfg_glue.cpp
+
+namespace {
+// The weapon screen's next (1) / previous (-1) over all 16 slots by the owned mask (owner: the MultiCharacter).
+void screen_step(uint8_t* rdram, recomp_context* ctx, int dir, void (*orig)(uint8_t*, recomp_context*)) {
+    g_rdram = rdram;
+    const uint32_t base = jfg_overlay_loaded_at(OVERLAY_18_ROM), owner = (uint32_t)ctx->r4;
+    if (base == 0 || !valid_ptr(owner) || !(Character::WeaponsOwned::get(owner) & (1u << CARRIER))) {
+        orig(rdram, ctx);
+        return;
+    }
+    const uint16_t owned = Character::WeaponsOwned::get(owner);
+    const int cur = (int32_t)rd32(base + SHOWN_WEAPON);
+    int w = cur;
+    for (int i = 0; i < 16; i++) {
+        w = (w + dir + 16) % 16;
+        if (owned & (1u << w)) break;
+    }
+    if (w == cur) return;
+    call_game(func_overlay_18_000011E4_1F30BBC, ctx, {});
+    call_game(func_overlay_18_00001194_1F30B6C, ctx, { (uint32_t)w });
+}
+} // namespace
+
+JFG_WRAP(func_overlay_18_00001218_1F30BF0) { screen_step(rdram, ctx, 1, func_overlay_18_00001218_1F30BF0_orig); }
+JFG_WRAP(func_overlay_18_00001294_1F30C6C) { screen_step(rdram, ctx, -1, func_overlay_18_00001294_1F30C6C_orig); }
 
 // The fire code (obj, player): jfg_on_weapon_fire, then a carried weapon fires as its host. JfgWeaponFire: s32 weapon,
 // character; void* hero; s32 charge, cancel, take_ammo.

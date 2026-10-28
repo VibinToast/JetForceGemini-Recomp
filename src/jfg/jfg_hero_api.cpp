@@ -26,6 +26,10 @@ extern "C" void camSetFOV(uint8_t* rdram, recomp_context* ctx);
 extern "C" void controlSelectNextWeapon(uint8_t* rdram, recomp_context* ctx);
 extern "C" void controlSelectPreviousWeapon(uint8_t* rdram, recomp_context* ctx);
 extern "C" void objSetupObject(uint8_t* rdram, recomp_context* ctx);
+extern "C" void objFreeObject(uint8_t* rdram, recomp_context* ctx);
+extern "C" void explosionStart(uint8_t* rdram, recomp_context* ctx);
+extern "C" void explosionAddBlast(uint8_t* rdram, recomp_context* ctx);
+extern "C" void shockwaveStart(uint8_t* rdram, recomp_context* ctx);
 extern "C" void hitsCheckLineOfSight(uint8_t* rdram, recomp_context* ctx);
 extern "C" void SetSquaddieOnFire(uint8_t* rdram, recomp_context* ctx);
 extern "C" void squadsElectrocuteSquaddie(uint8_t* rdram, recomp_context* ctx);
@@ -1040,6 +1044,159 @@ void fx_fire(uint8_t* rdram_, recomp_context* ctx) {
     ctx->r2 = (gpr)(int32_t)(valid_ptr(fire) ? fire : 0);
 }
 
+// --- objects and effects for mods' weapons (since version 6) ---------------------------------------------------------
+constexpr uint32_t OBJ_SCALE = 0x08;   // the object's size (its transform's scale; 1.0 = its definition's)
+constexpr uint32_t OBJ_PHYSICS = 0x7C; // ObjPhysics*, when its definition has a physics block (+0xD0); byte 0: flags
+constexpr uint8_t PHYS_AT_REST = 2;
+
+// A pointer a mod passed: the game's memory, or mods' own above 0x81000000 (docs/MEMORY.md).
+bool mod_ptr(uint32_t p) { return p >= 0x80000400u && p < 0xA0000000u; }
+
+uint32_t s16_arg(float v) { return (uint32_t)(int32_t)(int16_t)std::clamp(v, -32768.0f, 32767.0f); }
+uint32_t float_bits(float f) { uint32_t v; std::memcpy(&v, &f, 4); return v; }
+
+// jfg_spawn(const JfgSpawn* s): { s32 object; f32 x, y, z, vx, vy, vz; s32 yaw; } an object of that id (any object
+// type, a pack's included) at x, y, z, as a weapon's shot is made (objSetupObject, list 1: gone with the level). With
+// a physics block (definition +0xD0) it is set flying at vx, vy, vz (units a tick) and falls, bounces and comes to
+// rest by the game's own physics (decomp MSR 8c). The object, or NULL.
+void spawn(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t s = (uint32_t)ctx->r4;
+    ctx->r2 = 0;
+    if (!mod_ptr(s)) return;
+    const int id = (int32_t)rd32(s);
+    if (id <= 0 || id > 0x7FFF || rd32(ADDR_mainGameMode) != 0) return;
+    const float x = rdf(s + 4), y = rdf(s + 8), z = rdf(s + 12);
+    const uint32_t e = entry_at(ctx);
+    for (uint32_t i = 0; i < 0x10; i += 4) wr32(e + i, 0);
+    wr16(e + 0x00, (uint16_t)id);
+    wr8(e + 0x02, 0x10);
+    wr16(e + 0x04, (uint16_t)s16_arg(x));
+    wr16(e + 0x06, (uint16_t)s16_arg(y));
+    wr16(e + 0x08, (uint16_t)s16_arg(z));
+    const uint32_t obj = call_game(objSetupObject, ctx, { e, 1 });
+    g_rdram = rdram_;
+    if (!valid_ptr(obj)) return;
+    wr32(obj + 0x3C, 0);
+    wrf(obj + 0x0C, x); // the entry only holds whole units
+    wrf(obj + 0x10, y);
+    wrf(obj + 0x14, z);
+    Obj::Yaw::set(obj, (uint16_t)rd32(s + 28));
+    wrf(obj + 0x1C, rdf(s + 16));
+    wrf(obj + 0x20, rdf(s + 20));
+    wrf(obj + 0x24, rdf(s + 24));
+    const uint32_t phys = rd32(obj + OBJ_PHYSICS);
+    if (valid_ptr(phys)) wr8(phys, rd8(phys) & (uint8_t)~PHYS_AT_REST);
+    ctx->r2 = (gpr)(int32_t)obj;
+}
+
+// jfg_object_free(void* object): removes an object (objFreeObject), as its own code does when it is done.
+void object_free(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    if (!valid_ptr(obj) || rd32(ADDR_mainGameMode) != 0) return;
+    call_game(objFreeObject, ctx, { obj });
+}
+
+// jfg_object_set_scale(void* object, float scale): its size, 1.0 = as its definition makes it.
+void object_set_scale(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    if (valid_ptr(obj)) wrf(obj + OBJ_SCALE, std::clamp(ctx->f14.fl, 0.0f, 1000.0f));
+}
+
+// jfg_object_scale(void* object): its size.
+void object_scale(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    ctx->f0.fl = valid_ptr(obj) ? rdf(obj + OBJ_SCALE) : 0.0f;
+}
+
+// jfg_object_physics(void* object): its physics flags (1 in water, 2 at rest, 4 riding a moving object), -1 when it
+// has no physics.
+void object_physics(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const uint32_t phys = valid_ptr(obj) ? rd32(obj + OBJ_PHYSICS) : 0;
+    ctx->r2 = valid_ptr(phys) ? (gpr)rd8(phys) : (gpr)-1;
+}
+
+// jfg_explosion(const JfgExplosion* e): { s32 type; f32 x, y, z; void* owner; } one of the game's explosions
+// (explosionStart: its look, sound, blast and damage; 0 the grenade's, 4 under water), credited to owner (a hero, or
+// NULL).
+void explosion(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t e = (uint32_t)ctx->r4;
+    if (!mod_ptr(e) || rd32(ADDR_mainGameMode) != 0) return;
+    const int type = (int32_t)rd32(e);
+    const uint32_t owner = rd32(e + 16);
+    if (type < 0) return;
+    call_game(explosionStart, ctx, { (uint32_t)type, s16_arg(rdf(e + 4)), s16_arg(rdf(e + 8)), s16_arg(rdf(e + 12)), 8,
+                                     valid_ptr(owner) ? owner : 0 });
+}
+
+// jfg_blast(const JfgBlast* b): { f32 x, y, z, radius, damage, seconds; void* owner; } damage only (explosionAddBlast:
+// strongest at the middle, less out to the radius, fading over the seconds), to whatever it reaches; 16 at a time.
+void blast(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t b = (uint32_t)ctx->r4;
+    if (!mod_ptr(b) || rd32(ADDR_mainGameMode) != 0) return;
+    const float radius = std::max(1.0f, rdf(b + 12)), seconds = std::max(1.0f / 60.0f, rdf(b + 20));
+    const uint32_t owner = rd32(b + 24);
+    const recomp_context saved = *ctx;
+    ctx->f12.fl = rdf(b);     // x and y go in $f12 / $f14 (o32: leading floats), the rest as words
+    ctx->f14.fl = rdf(b + 4);
+    call_game(explosionAddBlast, ctx, { 0, 0, rd32(b + 8), float_bits(radius), rd32(b + 16), float_bits(seconds), 0,
+                                        valid_ptr(owner) ? owner : 0 });
+    *ctx = saved;
+}
+
+// jfg_shockwave(const JfgShockwave* w): { f32 x, y, z, inner, outer, inner_speed, outer_speed; s32 hold, fade; } the
+// game's flat ring effect (shockwaveStart, object 0x73): its inner and outer radius grow by their speeds each tick
+// (negative: it shrinks, inward), it holds for hold ticks, then fades over fade ticks. Radii and speeds within +-100.
+void shockwave(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t w = (uint32_t)ctx->r4;
+    if (!mod_ptr(w) || rd32(ADDR_mainGameMode) != 0) return;
+    const auto lim = [&](uint32_t at) { return float_bits(std::clamp(rdf(at), -100.0f, 100.0f)); };
+    call_game(shockwaveStart, ctx, { s16_arg(rdf(w)), s16_arg(rdf(w + 4)), s16_arg(rdf(w + 8)) & 0xFFFF, lim(w + 12),
+                                     lim(w + 16), lim(w + 20), lim(w + 24),
+                                     (uint32_t)std::clamp((int32_t)rd32(w + 28), 0, 0x7FFF),
+                                     (uint32_t)std::clamp((int32_t)rd32(w + 32), 0, 255) });
+}
+
+// jfg_enemy_traits(void* enemy, JfgEnemyTraits* out): { s32 full_health (256 a unit: the health its squadron gives
+// each member), health; f32 radius (its hit sphere), scale, height (above the floor under it: flyers are high),
+// floor; }. 1, or 0 if it is not a squad member.
+void enemy_traits(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4, out = (uint32_t)ctx->r5;
+    ctx->r2 = 0;
+    if (!valid_ptr(obj) || !mod_ptr(out) || Obj::Kind::get(obj) != KIND_SQUAD_MEMBER) return;
+    const uint32_t data = Obj::Data::get(obj), dmg = Obj::Damage::get(obj);
+    const uint32_t squadron = valid_ptr(data) ? SquadMemberData::Squadron::get(data) : 0;
+    const uint32_t sdata = valid_ptr(squadron) ? Obj::Data::get(squadron) : 0;
+    const int health = valid_ptr(dmg) ? Damage::Health::get(dmg) : 0;
+    int full = valid_ptr(sdata) ? SquadronData::MemberHealth::get(sdata) : 0;
+    if (full < health) full = health;
+    const float x = Obj::PosX::get(obj), y = Obj::PosY::get(obj), z = Obj::PosZ::get(obj);
+    float floor = y;
+    // Straight down from a little above it: the first track surface below (the result's point at +0x04).
+    const uint32_t q = ((uint32_t)ctx->r29 - 0x80u) & ~0x7u;
+    wrf(q, x); wrf(q + 4, y + 5.0f); wrf(q + 8, z);
+    wrf(q + 12, x); wrf(q + 16, y - 3000.0f); wrf(q + 20, z);
+    const bool found = (call_game(trackNearestIntersection, ctx, { 0u, q, q + 12, q + 24, 0u, 0u }) & 0xFF) != 0;
+    g_rdram = rdram_;
+    if (found) floor = rdf(q + 24 + 8);
+    wr32(out + 0, (uint32_t)full);
+    wr32(out + 4, (uint32_t)health);
+    wrf(out + 8, valid_ptr(dmg) ? Damage::Radius::get(dmg) : 0.0f);
+    wrf(out + 12, rdf(obj + OBJ_SCALE));
+    wrf(out + 16, y - floor);
+    wrf(out + 20, floor);
+    ctx->r2 = 1;
+}
+
 // jfg_shocker_end(void* hero, float* out): 1 while the hero's shocker beam is on, with where it ends (x, y, z: what
 // it touches, or its full reach) in out.
 void shocker_end(uint8_t* rdram_, recomp_context* ctx) {
@@ -1197,6 +1354,15 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_fx_fire", fx_fire);
     recomp::overlays::register_base_export("jfg_shocker_end", shocker_end);
     recomp::overlays::register_base_export("jfg_flames_get", flames_get);
+    recomp::overlays::register_base_export("jfg_spawn", spawn);
+    recomp::overlays::register_base_export("jfg_object_free", object_free);
+    recomp::overlays::register_base_export("jfg_object_set_scale", object_set_scale);
+    recomp::overlays::register_base_export("jfg_object_scale", object_scale);
+    recomp::overlays::register_base_export("jfg_object_physics", object_physics);
+    recomp::overlays::register_base_export("jfg_explosion", explosion);
+    recomp::overlays::register_base_export("jfg_blast", blast);
+    recomp::overlays::register_base_export("jfg_shockwave", shockwave);
+    recomp::overlays::register_base_export("jfg_enemy_traits", enemy_traits);
 }
 
 } // namespace jfg::api

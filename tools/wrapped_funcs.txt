@@ -216,3 +216,5 @@ func_800319C0_325C0
 controlSelectNextWeapon
 controlSelectPreviousWeapon
 weaponPickupControl
+func_overlay_18_00001218_1F30BF0
+func_overlay_18_00001294_1F30C6C

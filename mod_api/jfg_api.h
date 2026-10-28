@@ -535,6 +535,64 @@ RECOMP_IMPORT("*", void jfg_hero_take_weapon(int id));
 RECOMP_IMPORT("*", void jfg_weapon_pickup_set(void* pickup, int id));
 RECOMP_IMPORT("*", int jfg_weapon_pickup_get(void* pickup));
 
+// --- objects and effects for mods' weapons (since version 6) ---------------------------------------------------------
+// An object of any type (a pack's own included) at x, y, z, as a shot is made (gone with the level). With a physics
+// block in its definition it flies at vx, vy, vz (units a tick) and falls, bounces and comes to rest by the game's own
+// physics; yaw 0..0xFFFF. The object, or NULL.
+typedef struct {
+    int object;
+    float x, y, z;
+    float vx, vy, vz;
+    int yaw;
+} JfgSpawn;
+RECOMP_IMPORT("*", void* jfg_spawn(const JfgSpawn* spawn));
+// Removes an object, as its own code does when it is done.
+RECOMP_IMPORT("*", void jfg_object_free(void* object));
+// An object's size (1.0 = as its definition makes it), and setting it.
+RECOMP_IMPORT("*", float jfg_object_scale(void* object));
+RECOMP_IMPORT("*", void jfg_object_set_scale(void* object, float scale));
+// Its physics flags: 1 in water, 2 at rest (landed), 4 riding a moving object; -1 when it has no physics.
+RECOMP_IMPORT("*", int jfg_object_physics(void* object));
+// One of the game's explosions (its look, sound, blast and damage; type 0 the grenade's, 4 under water), credited to
+// owner (a hero, or NULL).
+typedef struct {
+    int type;
+    float x, y, z;
+    void* owner;
+} JfgExplosion;
+RECOMP_IMPORT("*", void jfg_explosion(const JfgExplosion* explosion));
+// Damage only, no look: strongest at the middle, less out to the radius, fading over the seconds; damage 256 a unit
+// of health. At most 16 at a time (the oldest gives way).
+typedef struct {
+    float x, y, z;
+    float radius;
+    float damage;
+    float seconds;
+    void* owner;
+} JfgBlast;
+RECOMP_IMPORT("*", void jfg_blast(const JfgBlast* blast));
+// The game's flat ring effect: its inner and outer radius grow by their speeds each tick (negative: it shrinks
+// inward), it holds for hold ticks, then fades over fade ticks. Radii and speeds within -100..100.
+typedef struct {
+    float x, y, z;
+    float inner, outer;
+    float inner_speed, outer_speed;
+    int hold, fade;
+} JfgShockwave;
+RECOMP_IMPORT("*", void jfg_shockwave(const JfgShockwave* wave));
+// What a squad member is like, for weighing it: full_health (256 a unit, what its squadron gives each member) and
+// health now, radius (its hit sphere), scale, height above the floor under it (flyers are high up) and that floor.
+// 1, or 0 if it is not a squad member.
+typedef struct {
+    int full_health;
+    int health;
+    float radius;
+    float scale;
+    float height;
+    float floor;
+} JfgEnemyTraits;
+RECOMP_IMPORT("*", int jfg_enemy_traits(void* enemy, JfgEnemyTraits* out));
+
 // --- event data ---------------------------------------------------------------------------------------------------
 
 // Who bleeds (JfgBloodSpurt.group, JfgBloodHit.group; since version 5).
