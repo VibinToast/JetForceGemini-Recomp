@@ -10,10 +10,18 @@
 // port remembers the last one each squad member was shot by: squadsPlayerShootsSquaddie(member, shooter), called by
 // the hits (hitUpdate), the flamethrower and decapitations (its wrapper is in jfg_squad_cheat.cpp). Names are the
 // objects' own definition names from the player's ROM (ObjDef +4, 16 bytes): the port and mods ship none.
+//
+// Mods' weapons hurt in their own ways (setting health, blasts, the game's explosions), which the game counts under
+// whatever weapon is in hand. A mod credits what its weapon hurt (jfg_weapon_credit: victim, weapon id, for how
+// long); a death within that time reports that weapon, and the mod's hero as the killer when the game knows none.
 #include <cstdio>
 #include <cstdlib>
+#include <algorithm>
 #include <cstdint>
+#include <iterator>
+#include <chrono>
 #include <cstring>
+#include <unordered_map>
 
 #include "librecomp/overlays.hpp"
 #include "jfg_api.h"
@@ -103,6 +111,15 @@ namespace jfg {
 namespace {
 bool g_in_passes = false; // inside SquaddiePassesAway: its own kill count is reported by its wrapper
 
+// Kills mods credit to their weapons (jfg_weapon_credit): victim -> weapon id, shooter, until when.
+struct Credit {
+    int weapon;
+    uint32_t shooter;
+    std::chrono::steady_clock::time_point until;
+};
+std::unordered_map<uint32_t, Credit> g_credits;
+constexpr size_t MAX_CREDITS = 256;
+
 uint32_t current_hero(recomp_context* ctx) {
     const uint32_t hero = player_object(ctx);
     return valid_ptr(hero) ? hero : 0;
@@ -113,6 +130,13 @@ void report_kill(uint8_t* rdram, recomp_context* ctx, uint32_t victim, uint32_t 
                  const char* where) {
     g_rdram = rdram;
     if (!valid_ptr(victim) || (!api::listened(api::Event::Kill) && !debug_kills())) return;
+    if (auto c = g_credits.find(victim); c != g_credits.end()) {
+        if (std::chrono::steady_clock::now() <= c->second.until) {
+            weapon = c->second.weapon;
+            if (!valid_ptr(killer) || Obj::Kind::get(killer) != KIND_HERO) killer = c->second.shooter;
+        }
+        g_credits.erase(c);
+    }
     int killer_kind = KILLER_NONE;
     if (valid_ptr(killer)) {
         const int16_t kind = Obj::Kind::get(killer);
@@ -136,7 +160,7 @@ void report_kill(uint8_t* rdram, recomp_context* ctx, uint32_t victim, uint32_t 
         wr32(p.addr + 0x00, victim);
         wr32(p.addr + 0x04, valid_ptr(killer) ? killer : 0);
         wr32(p.addr + 0x08, (uint32_t)killer_kind);
-        wr32(p.addr + 0x0C, (uint32_t)weapon);
+        wr32(p.addr + 0x0C, (uint32_t)weapon); // a mod's credited weapon: its id (16 up)
         wr32(p.addr + 0x10, tribal ? 1u : 0u);
         wr32(p.addr + 0x14, 0);
         for (uint32_t i = 0; i < 16; i++) {
@@ -226,3 +250,27 @@ JFG_WRAP(mainSetTribalStatus) {
     const uint32_t hit = valid_ptr(shot) ? shot : (valid_ptr(dmg) ? rd32(dmg + 0x3C) : 0);
     report_kill(rdram, ctx, victim, shooter_of(hit), weapon, true, "Tribal lost");
 }
+
+namespace {
+// jfg_weapon_credit(void* victim, int weapon, void* shooter, int ticks): if the victim (a squad member) dies within
+// ticks (1/60 s, at most 10 s), jfg_on_kill reports that weapon (any id: a mod's own) and shooter (when the game
+// knows no hero who did it). Credit again to renew it.
+void weapon_credit(uint8_t* rdram_, recomp_context* ctx) {
+    jfg::g_rdram = rdram_;
+    const uint32_t victim = (uint32_t)ctx->r4, shooter = (uint32_t)ctx->r6;
+    const int weapon = (int32_t)ctx->r5, ticks = std::clamp((int32_t)ctx->r7, 1, 600);
+    if (!jfg::valid_ptr(victim) || weapon < 0) return;
+    const auto now = std::chrono::steady_clock::now();
+    if (jfg::g_credits.size() >= jfg::MAX_CREDITS) { // the oldest go first: expired ones
+        for (auto it = jfg::g_credits.begin(); it != jfg::g_credits.end();) it = it->second.until < now ? jfg::g_credits.erase(it) : std::next(it);
+        if (jfg::g_credits.size() >= jfg::MAX_CREDITS) jfg::g_credits.clear();
+    }
+    jfg::g_credits[victim] = { weapon, jfg::valid_ptr(shooter) ? shooter : 0u, now + std::chrono::milliseconds(ticks * 1000 / 60) };
+}
+} // namespace
+
+namespace jfg {
+void register_kill_api() {
+    recomp::overlays::register_base_export("jfg_weapon_credit", weapon_credit);
+}
+} // namespace jfg

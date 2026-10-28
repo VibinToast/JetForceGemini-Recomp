@@ -542,6 +542,10 @@ RECOMP_IMPORT("*", void jfg_hero_take_weapon(int id));
 // it gives. Pickups are the level's: point them again after each level change.
 RECOMP_IMPORT("*", void jfg_weapon_pickup_set(void* pickup, int id));
 RECOMP_IMPORT("*", int jfg_weapon_pickup_get(void* pickup));
+// Credits what your weapon hurts: if the victim (a squad member) dies within ticks (1/60 s, at most 600), jfg_on_kill
+// reports that weapon (your weapon's id) and shooter (when the game knows no hero who did it), so kill feeds and stats
+// show your weapon. Call it as you hurt it (setting its health, a blast, an explosion you set off); again to renew.
+RECOMP_IMPORT("*", void jfg_weapon_credit(void* victim, int weapon, void* shooter, int ticks));
 
 // --- objects and effects for mods' weapons (since version 6) ---------------------------------------------------------
 // An object of any type (a pack's own included) at x, y, z, as a shot is made (gone with the level). With a physics
@@ -735,8 +739,9 @@ typedef struct {
 
 // jfg_on_kill: a squad member (an enemy, or a Tribal) died. victim: its object; killer: whoever fired the shot (a hero,
 // Floyd, or another object; NULL when unknown) and killer_kind (-1 unknown, 0 Vela, 1 Juno, 2 Lupus, 3 Floyd, 4 another
-// object); weapon: what the game counts the kill under (0..15, the weapons' order); tribal: 1 when the victim was a
-// Tribal. victim_name and killer_name are the objects' definition names from the player's game (up to 15 characters,
+// object); weapon: what the game counts the kill under (0..15, the weapons' order), or a modded weapon's id (16 up)
+// when its mod credited the kill (jfg_weapon_credit; its name and icon: jfg_weapon_info, jfg_hud_weapon_icon); tribal:
+// 1 when the victim was a Tribal. victim_name and killer_name are the objects' definition names from the player's game (up to 15 characters,
 // "" when there is none). Read only; frames is 0.
 typedef struct {
     void* victim;

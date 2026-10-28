@@ -23,6 +23,7 @@ std::string jfg_locale_shown(); // jfg_locale.cpp
 namespace jfg::overlay { void register_api(); void frame_done(); } // jfg_overlay.cpp
 namespace jfg { void register_weapon_hud_api(); }                 // jfg_weapon_hud.cpp
 namespace jfg { void register_weapon_registry_api(); }            // jfg_weapon_registry.cpp
+namespace jfg { void register_kill_api(); }                       // jfg_kills.cpp
 
 namespace jfg::api {
 namespace {
@@ -220,6 +221,7 @@ void register_api() {
     jfg::overlay::register_api(); // pictures and shapes over the game at the window's resolution (jfg_overlay.cpp)
     jfg::register_weapon_hud_api(); // the weapon panel's icons, the game's texts, Tribal counts (jfg_weapon_hud.cpp)
     jfg::register_weapon_registry_api(); // modded weapons on slot 15 (jfg_weapon_registry.cpp)
+    jfg::register_kill_api();            // kills credited to mods' weapons (jfg_kills.cpp)
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }
 
