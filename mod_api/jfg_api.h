@@ -313,6 +313,40 @@ RECOMP_IMPORT("*", void jfg_hero_speak(void* hero, int type));
 // The object drawn tinted rgba's colour (0xRRGGBBAA), the alpha its strength (0 removes it), as the game flashes the
 // enemy it targets; kept until set again.
 RECOMP_IMPORT("*", void jfg_object_tint(void* object, unsigned int rgba));
+// Memory for a mod's graphics data (textures, display lists, vertices) that the renderer can read: a mod's own memory
+// is above what it reads. size bytes, zeroed, 16-byte aligned, kept for the whole run (allocate once); NULL when the
+// 4 MB set aside for this is used up. A texture image's address in a display list is the pointer & 0x1FFFFFFF.
+RECOMP_IMPORT("*", void* jfg_gfx_alloc(unsigned int size));
+
+// The overlay: pictures, polygons and circles the port draws over the game at the window's own resolution,
+// anti-aliased (not on the game's pixels). Places are in overlay units: the game's picture is 240 high and as wide as
+// it is shown (jfg_overlay_size: 320 in 4:3, about 427 in 16:9), (0, 0) its top left. Send them each frame the game
+// draws (from jfg_on_game_tick or jfg_on_draw_hud): they show from the end of that frame until the next, and go a
+// quarter of a second after the game last drew a frame (menus, the title screen). Colours are 0xRRGGBBAA.
+RECOMP_IMPORT("*", void jfg_overlay_size(float* width_height));
+// A picture to draw (by id), w x h colours 0xRRGGBBAA, at most 1024 x 1024; kept until sent again. Send it once (or when
+// it changes): it is copied and uploaded.
+RECOMP_IMPORT("*", void jfg_overlay_image(int id, int w, int h, const unsigned int* rgba));
+typedef struct {
+    float x, y, w, h;   // where, in overlay units
+    unsigned int tint;  // multiplies the picture's colours (0xFFFFFFFF as it is; the alpha fades it)
+    int id;
+} JfgOverlayImage;
+RECOMP_IMPORT("*", void jfg_overlay_draw_image(const JfgOverlayImage* image));
+typedef struct {
+    const float* xy;    // count points: x, y, x, y, ... (at most 64)
+    int count;
+    unsigned int fill;  // 0: not filled (the polygon must be convex to be filled)
+    unsigned int line;  // 0: no outline
+    float thickness;    // of the outline, in overlay units
+} JfgOverlayPolygon;
+RECOMP_IMPORT("*", void jfg_overlay_polygon(const JfgOverlayPolygon* polygon));
+typedef struct {
+    float x, y, radius;
+    unsigned int fill, line;
+    float thickness;
+} JfgOverlayCircle;
+RECOMP_IMPORT("*", void jfg_overlay_circle(const JfgOverlayCircle* circle));
 // Plays the game's own sound effect id at x, y, z (louder near the camera). Some: Juno's jump 0x4C and 0x51, landing
 // 0x6, his side rolls 0x7A (left) and 0x79 (right) (JFG_DEBUG_SOUNDS=1 logs every sound the game starts).
 RECOMP_IMPORT("*", void jfg_game_sound(int id, float x, float y, float z));

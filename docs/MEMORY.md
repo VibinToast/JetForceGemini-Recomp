@@ -12,7 +12,7 @@ The game sees one block of RAM (the runtime commits 512 MB). Addresses as the ga
 |---|---|---|
 | `0x80000000`–`0x80400000` | 4 MB | The game's own code, data and heap (`mmEndRam` was `0x80400000`). |
 | `0x80400000`–`0x80800000` | 4 MB | The Expansion Pak's second 4 MB: now part of the game's main heap (`jfg_memory.cpp`). |
-| `0x80800000`–`0x80C00000` | 4 MB | **Free.** Nothing uses it yet: the next room to give the game. |
+| `0x80800000`–`0x80C00000` | 4 MB | Mods' graphics data (`jfg_gfx_alloc`, `jfg_api.cpp`): handed out from the bottom, kept for the run (the Minimap mod's pictures take 32 KB). The rest is free. |
 | `0x80C00000`–`0x81000000` | 4 MB | The gore blocks: display lists that draw the extra blood splats, 2 MB each (`jfg_gore.cpp`). |
 | `0x81000000` upward | to 512 MB | Mods: their code and data, then the runtime's heap (`recomp_alloc`), to the end. |
 | `0x82000000` upward | | Not memory: the overlays' private code addresses, where hooked code runs (`jfg_mods.cpp`). |
@@ -26,8 +26,8 @@ lists) can live anywhere, up to 512 MB. Audio is the exception: the port lets au
 
 1. **A bigger heap.** `mempool_init` is wrapped: when the game makes its main pool (ending at `mmEndRam`), the pool
    is grown to end at `0x80800000` and `mmEndRam` is moved with it. Everything the game `mmAlloc`s (levels, objects,
-   models, sounds) gets twice the room. `jfg_memory.log` notes it once. The free 4 MB above it could be added the
-   same way, but the game's own size checks (`osMemSize`, 8 MB) need checking first.
+   models, sounds) gets twice the room. `jfg_memory.log` notes it once. The 4 MB above it is mods' graphics data now
+   (`jfg_gfx_alloc`); growing the heap into it would need the game's own size checks (`osMemSize`, 8 MB) checked first.
 2. **A bigger fixed block.** Some of the game's buffers are one `mmAlloc` of a fixed size with no check on what
    goes in. The `mmAlloc` and `mmAlloc2` wrappers (`jfg_diagnostics.cpp`) call `jfg_memory_alloc_size`, which
    asks for more for the ones we know. The track buffer was `0x9F000` (651 KB): a pack level's track and its

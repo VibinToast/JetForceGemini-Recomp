@@ -20,6 +20,7 @@ extern "C" void recomp_trigger_event(uint8_t* rdram, recomp_context* ctx, uint32
 extern "C" void camGetNo(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackGetFog(uint8_t* rdram, recomp_context* ctx);
 std::string jfg_locale_shown(); // jfg_locale.cpp
+namespace jfg::overlay { void register_api(); void frame_done(); } // jfg_overlay.cpp
 
 namespace jfg::api {
 namespace {
@@ -60,6 +61,25 @@ void get_tick_scale(uint8_t* rdram_, recomp_context* ctx) {
 // jfg_aim_lock(int on): 0 = the reticle no longer jumps onto an enemy it passes over (hitPlayerAimCheck's wrapper).
 bool g_aim_lock = true;
 void aim_lock(uint8_t*, recomp_context* ctx) { g_aim_lock = ctx->r4 != 0; }
+
+// jfg_gfx_alloc(unsigned int size): a block for a mod's graphics data (textures, display lists, vertices) in the
+// free 4 MB at 0x80800000 (docs/MEMORY.md): below the 16 MB line, so the renderer reads it, unlike mod memory. Zeroed,
+// 16-byte aligned, kept for the whole run (a mod allocates once); NULL when the region is full.
+constexpr uint32_t GFX_REGION = 0x80800000u, GFX_REGION_END = 0x80C00000u;
+uint32_t g_gfx_next = GFX_REGION;
+void gfx_alloc(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t size = ((uint32_t)ctx->r4 + 15u) & ~15u;
+    if (size == 0 || size > GFX_REGION_END - g_gfx_next) {
+        ctx->r2 = 0;
+        return;
+    }
+    const uint32_t block = g_gfx_next;
+    g_gfx_next += size;
+    for (uint32_t a = block; a < block + size; a += 4) wr32(a, 0);
+    std::fprintf(stderr, "[jfg] jfg_gfx_alloc: %u bytes at 0x%08X (%u KB of 4096 used)\n", size, block, (g_gfx_next - GFX_REGION) / 1024);
+    ctx->r2 = (gpr)(int32_t)block;
+}
 
 // jfg_object_tint(void* object, unsigned int rgba): the object drawn tinted that colour, alpha its strength (0 none),
 // through the fog colour as the game flashes the enemy it targets (objPrintModelObject); kept until set again.
@@ -192,6 +212,8 @@ void register_api() {
     recomp::overlays::register_base_export("jfg_floyd_hide", jfg_api_floyd_hide); // Hide Floyd (jfg_visuals.cpp)
     recomp::overlays::register_base_export("jfg_aim_lock", aim_lock);
     recomp::overlays::register_base_export("jfg_object_tint", object_tint);
+    recomp::overlays::register_base_export("jfg_gfx_alloc", gfx_alloc);
+    jfg::overlay::register_api(); // pictures and shapes over the game at the window's resolution (jfg_overlay.cpp)
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }
 
@@ -450,6 +472,7 @@ JFG_WRAP(prnBorder) {
         api::fire(rdram, ctx, api::Event::DrawHud, (int32_t)p.addr);
     }
     prnBorder_orig(rdram, ctx);
+    jfg::overlay::frame_done(); // what mods sent for this frame's overlay is shown from now on
 }
 
 // instQueueMsg(player, msg): a message for a player's HUD panel (a pick-up's name, a hit): jfg_on_hud_message first.
