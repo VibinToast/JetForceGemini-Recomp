@@ -28,6 +28,11 @@
 #include "jfg_game.h"
 #include "jfg_rt64.h"
 
+namespace jfg {
+void overlay_set_image(int id, int w, int h, std::vector<uint32_t> pixels);
+void overlay_draw(int id, float x, float y, float w, float h, uint32_t tint);
+}
+
 namespace jfg::overlay {
 // The overlay's width in its units (240 high, as wide as the game's picture is shown).
 float overlay_width() {
@@ -118,10 +123,19 @@ void overlay_image(uint8_t* rdram_, recomp_context* ctx) {
     const uint32_t src = (uint32_t)ctx->r7;
     if (w <= 0 || h <= 0 || w > MAX_IMAGE || h > MAX_IMAGE || src == 0) return;
     std::vector<uint32_t> pixels((size_t)w * h);
-    for (size_t i = 0; i < pixels.size(); i++) {
-        const uint32_t c = rd32(src + (uint32_t)i * 4);
+    for (size_t i = 0; i < pixels.size(); i++) pixels[i] = rd32(src + (uint32_t)i * 4);
+    jfg::overlay_set_image(id, w, h, std::move(pixels));
+}
+} // namespace
+} // namespace jfg::overlay
+
+// A picture for the overlay from the port's own code: w x h words 0xRRGGBBAA (the same as jfg_overlay_image).
+void jfg::overlay_set_image(int id, int w, int h, std::vector<uint32_t> pixels) {
+    using namespace jfg::overlay;
+    if (w <= 0 || h <= 0 || w > MAX_IMAGE || h > MAX_IMAGE || pixels.size() != (size_t)w * h) return;
+    for (uint32_t& c : pixels) {
         // ImGui's RGBA32 is bytes R, G, B, A in memory: on a little-endian host, A << 24 | B << 16 | G << 8 | R.
-        pixels[i] = (c >> 24) | ((c >> 8) & 0xFF00) | ((c << 8) & 0xFF0000) | (c << 24);
+        c = (c >> 24) | ((c >> 8) & 0xFF00) | ((c << 8) & 0xFF0000) | (c << 24);
     }
     std::lock_guard<std::mutex> lock(g_mutex);
     Image& img = g_images[id];
@@ -137,6 +151,18 @@ void overlay_image(uint8_t* rdram_, recomp_context* ctx) {
     img.changed = true;
 }
 
+// Draws one this frame, in overlay units (as jfg_overlay_draw_image).
+void jfg::overlay_draw(int id, float x, float y, float w, float h, uint32_t tint) {
+    using namespace jfg::overlay;
+    Shape s{ Kind::Image };
+    s.x = x; s.y = y; s.w = w; s.h = h;
+    s.fill = tint;
+    s.image = id;
+    add(std::move(s));
+}
+
+namespace jfg::overlay {
+namespace {
 // jfg_overlay_draw_image(const JfgOverlayImage* image): { float x, y, w, h; unsigned int tint; int id; }
 void overlay_draw_image(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;

@@ -85,7 +85,10 @@ void hud_weapon_icon(uint8_t* rdram_, recomp_context* ctx) {
     const uint32_t p = (uint32_t)ctx->r4;
     if (p == 0 || g_icons.size() >= 32) return;
     int weapon = (int)rd32(p);
-    if (weapon >= WEAPONS && weapons::known(weapon)) weapon = WEAPONS - 1; // modded weapons: slot 15's icon
+    // Modded weapons: their big icon (sharp, the overlay), else slot 15's.
+    if (weapon >= WEAPONS - 1 && weapons::draw_big_icon(weapon, f32_of(rd32(p + 4)), f32_of(rd32(p + 8)),
+                                                         f32_of(rd32(p + 12)), f32_of(rd32(p + 16)))) return;
+    if (weapon >= WEAPONS && weapons::known(weapon)) weapon = WEAPONS - 1;
     if (weapon < 0 || weapon >= WEAPONS) return;
     g_icons.push_back({ weapon, f32_of(rd32(p + 4)), f32_of(rd32(p + 8)), f32_of(rd32(p + 12)), f32_of(rd32(p + 16)) });
 }

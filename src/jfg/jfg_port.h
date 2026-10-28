@@ -198,6 +198,7 @@ void on_save(int slot);
 void forget(int slot);
 void tick(recomp_context* ctx);         // start of the tick: slot 15 as the weapon in hand, and its icon
 bool known(int id);                     // a carried weapon id (15 up)
+bool draw_big_icon(int id, float x, float y, float scale, float alpha); // its big icon, if it has one
 void level_load(uint8_t* rdram);        // objSetupPlayers
 int weapon_in_hand(uint32_t ch, int hero); // carried weapons by their id (15 up), -1 none
 int carried_ammo(int id);               // the first player's, -1 not owned

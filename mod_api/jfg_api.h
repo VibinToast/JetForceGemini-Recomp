@@ -517,6 +517,10 @@ RECOMP_IMPORT("*", int jfg_weapon_find(const char* name));
 // the game's, made with jfgformats' sprites.write and HUD_ICON_ANCHOR), shown in the weapon panel, the weapon strip and
 // the pause screen while the weapon is in hand. Set it after jfg_weapon_register. jfg_hud_weapon_icon takes modded ids.
 RECOMP_IMPORT("*", void jfg_weapon_set_icon(int id, int sprite));
+// A modded weapon's big icon: w x h colours 0xRRGGBBAA (at most 512 x 512; it is copied). Where mods draw the weapon's
+// icon (jfg_hud_weapon_icon: Ammo Ring, ...) it is drawn instead of the game's sprite, sharp at the window's resolution,
+// about 44 units wide at scale 1 (the game's are about 32).
+RECOMP_IMPORT("*", void jfg_weapon_set_icon_image(int id, int w, int h, const unsigned int* rgba));
 // How many weapon ids there are: 0 .. count - 1 are all weapons.
 RECOMP_IMPORT("*", int jfg_weapon_count(void));
 typedef struct {

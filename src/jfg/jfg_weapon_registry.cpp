@@ -27,7 +27,9 @@
 // - Icons: the weapon panel, the HUD's weapon strip and the pause screen's d-pad icons draw slot 15 as front-end item
 //   25, which is entry 25 of the front-end item list (D_800A51D0, s16 ids: 0x8000 | a 2D sprite; decomp MSR 8a). A
 //   weapon with its own icon (jfg_weapon_set_icon: a pack's sprite) has its sprite written there while it is in hand,
-//   and the item freed (freeFrontEndItem), so the next frame loads it; others get the game's entry back.
+//   and the item freed (freeFrontEndItem), so the next frame loads it; others get the game's entry back. A weapon can
+//   also have a big picture (jfg_weapon_set_icon_image): where a mod draws the weapon's icon (jfg_hud_weapon_icon) it
+//   is drawn instead, sharp at the window's resolution, through the overlay.
 // - Saving: the carried weapons' ammo by name, per character, in saves/<save>_weapons.txt when the game saves to that
 //   file (the jfg_auto_save.cpp hooks, as Permanent Tribal Saves); choosing a file loads its own. A file saved
 //   without it but with slot 15 owned (the proximity mine before the registry) takes slot 15 as the proximity mine.
@@ -51,6 +53,10 @@
 #include "jfg_port.h"
 
 namespace recomp { void* alloc(uint8_t* rdram, size_t size); }
+namespace jfg {
+void overlay_set_image(int id, int w, int h, std::vector<uint32_t> pixels); // jfg_overlay.cpp
+void overlay_draw(int id, float x, float y, float w, float h, uint32_t tint);
+}
 
 namespace jfg::weapons {
 namespace {
@@ -67,6 +73,8 @@ constexpr uint32_t SHOWN_WEAPON = 0x66B0;       // overlay 18: s32, the weapon t
 constexpr uint32_t ADDR_FRONT_ITEMS = 0x800A51D0; // s16*: the front-end item list (initFront loads asset 0x1A)
 constexpr int CARRIER_ITEM = 10 + CARRIER;        // front-end item 25: slot 15's icon
 constexpr uint16_t ITEM_SPRITE = 0x8000;
+constexpr int BIG_ICON_IMAGE = 0x7E570000;        // overlay picture ids of the weapons' big icons: + weapon id
+constexpr float BIG_ICON_WIDTH = 44.0f;           // a big icon's width at scale 1 (the game's are about 32 wide)
 constexpr uint8_t THROW_DELAY = 0x1A;
 
 const char* const STOCK_NAMES[STOCK] = {
@@ -84,6 +92,7 @@ struct Weapon {
     int max_ammo = -1, start_ammo = -1, pickup_ammo = -1; // -1 = the row's
     uint32_t name_text = 0, ammo_text = 0; // the names, in the runtime's heap (made when first shown)
     int icon = -1;       // its HUD icon: a 2D sprite number (jfg_weapon_set_icon), -1 = slot 15's own
+    int big_w = 0, big_h = 0; // its big icon's size (jfg_weapon_set_icon_image), 0 = none
 };
 // Index id - CARRIER.
 std::vector<Weapon> g_weapons = {
@@ -443,6 +452,16 @@ void freeFrontEndItem_call(recomp_context* ctx, int item) { call_game(freeFrontE
 
 // A carried weapon id (15 up) the registry knows.
 bool known(int id) { return weapon_of(id) != nullptr; }
+
+// Draws a weapon's big icon centred at x, y (overlay units) for a mod's jfg_hud_weapon_icon; false if it has none.
+bool draw_big_icon(int id, float x, float y, float scale, float alpha) {
+    const Weapon* w = weapon_of(id);
+    if (w == nullptr || w->big_w <= 0) return false;
+    const float bw = BIG_ICON_WIDTH * scale, bh = bw * (float)w->big_h / (float)w->big_w;
+    const int a = (int)std::lround(std::clamp(alpha, 0.0f, 1.0f) * 255.0f);
+    jfg::overlay_draw(BIG_ICON_IMAGE + id, x - bw * 0.5f, y - bh * 0.5f, bw, bh, 0xFFFFFF00u | (uint32_t)a);
+    return true;
+}
 }
 
 namespace {
@@ -641,6 +660,21 @@ void api_weapon_set_icon(uint8_t* rdram_, recomp_context* ctx) {
     if (w != nullptr) w->icon = sprite >= 0 && sprite < 0x4000 ? sprite : -1;
 }
 
+// jfg_weapon_set_icon_image(int id, int w, int h, const unsigned int* rgba): a modded weapon's big icon, w x h words
+// 0xRRGGBBAA (at most 512 x 512), drawn sharp where mods draw the weapon's icon (jfg_hud_weapon_icon).
+void api_weapon_set_icon_image(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const int id = (int32_t)ctx->r4, w = (int32_t)ctx->r5, h = (int32_t)ctx->r6;
+    const uint32_t src = (uint32_t)ctx->r7;
+    Weapon* weapon = const_cast<Weapon*>(weapon_of(id));
+    if (weapon == nullptr || w <= 0 || h <= 0 || w > 512 || h > 512 || !mod_ptr(src)) return;
+    std::vector<uint32_t> pixels((size_t)w * h);
+    for (size_t i = 0; i < pixels.size(); i++) pixels[i] = rd32(src + (uint32_t)i * 4);
+    jfg::overlay_set_image(BIG_ICON_IMAGE + id, w, h, std::move(pixels));
+    weapon->big_w = w;
+    weapon->big_h = h;
+}
+
 // jfg_weapon_find(const char* name): the id of a weapon by name ("stock:pistol" .. "stock:cluster_bombs",
 // "port:proximity_mine", mods' "mod_id:weapon"), -1 if none.
 void api_weapon_find(uint8_t* rdram_, recomp_context* ctx) {
@@ -800,6 +834,7 @@ void register_weapon_registry_api() {
     recomp::overlays::register_base_export("jfg_weapon_register", api_weapon_register);
     recomp::overlays::register_base_export("jfg_weapon_find", api_weapon_find);
     recomp::overlays::register_base_export("jfg_weapon_set_icon", api_weapon_set_icon);
+    recomp::overlays::register_base_export("jfg_weapon_set_icon_image", api_weapon_set_icon_image);
     recomp::overlays::register_base_export("jfg_weapon_count", api_weapon_count);
     recomp::overlays::register_base_export("jfg_weapon_info", api_weapon_info);
     recomp::overlays::register_base_export("jfg_hero_has_weapon", api_hero_has_weapon);
