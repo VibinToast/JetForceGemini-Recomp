@@ -298,13 +298,15 @@ ultramodern::renderer::GraphicsApi map_graphics_api(RT64::UserConfiguration::Gra
 RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool debug) {
     fprintf(stderr, "[JFG] Initializing RT64 renderer\n");
     static unsigned char dummy_rom_header[0x40];
-    recompui::set_render_hooks();
 #if !defined(__APPLE__)
     // The inherited developer-only ImGui overlay has D3D12 and Vulkan
     // backends, but no Metal backend. The regular RmlUi launcher and menus
     // have their own renderer and remain enabled on macOS.
+    // JFG PORT: hooks draw in the order added. The ImGui layer (mods' overlay shapes, the port's toasts, F9's window)
+    // goes first so the RmlUi menus and F10's tools are drawn over it, not under a mod's HUD.
     debug_ui::backend::set_render_hooks();
 #endif
+    recompui::set_render_hooks();
 
     // Set up the RT64 application core fields.
     RT64::Application::Core appCore{};
