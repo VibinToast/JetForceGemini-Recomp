@@ -80,6 +80,11 @@ std::vector<Type> g_types;
 
 struct Armoured { uint32_t obj; int mode; int deflects; int16_t health; };
 std::vector<Armoured> g_armoured;
+// A mod's shot on the hero (jfg_hero_shot) between ticks: hitUpdate clears the hit flags at the start of the object
+// pass, before controlPlayer reads them for the hurt reaction (flash, shake, voice), so they are written again after it,
+// where hitUpdate itself marks a stock shot's hit.
+struct HeroHit { uint32_t hit = 0, sphere = 0, source = 0; uint8_t part = 0, flags8 = 0; };
+std::vector<HeroHit> g_hero_hits;
 uint32_t g_tick_member = 0; // the member whose jfg_on_squad_tick is running (the helpers' overlay globals are its)
 int g_frames = 2;           // its SquaddieControl update rate
 
@@ -181,6 +186,7 @@ void voices(uint32_t obj, bool on) {
 void level_change() {
     for (Type& t : g_types) { t.def_ptr = 0; t.row_from = 0; }
     g_armoured.clear();
+    g_hero_hits.clear();
     g_tick_member = 0;
 }
 } // namespace jfg::squad_types
@@ -291,6 +297,15 @@ JFG_WRAP(hitUpdate) {
     }
     hitUpdate_orig(rdram, ctx);
     g_rdram = rdram;
+    for (const HeroHit& h : g_hero_hits) {
+        if (!valid_ptr(h.hit) || !valid_ptr(h.sphere)) continue;
+        wr16(h.sphere + SPH_FLAGSA, (uint16_t)(rd16(h.sphere + SPH_FLAGSA) | 0x40));
+        wr16(h.hit + HIT_FLAGSA, (uint16_t)(rd16(h.hit + HIT_FLAGSA) | 0x20));
+        wr32(h.hit + HIT_LAST, h.source);
+        wr8(h.hit + HIT_PART, h.part);
+        wr8(h.hit + HIT_FLAGS8, (uint8_t)((rd8(h.hit + HIT_FLAGS8) & ~0x3F) | h.flags8));
+    }
+    g_hero_hits.clear();
     for (Armoured& a : g_armoured) {
         if (!valid_ptr(a.obj)) continue;
         set_sphere_armour(a.obj, false);
@@ -448,6 +463,14 @@ void api_hero_shot(uint8_t* rdram_, recomp_context* ctx) {
     const int dealt = percent == 100 ? damage : percent == 0xFF ? health : damage * percent / 100;
     wr16(sp + SPH_DEALT, (uint16_t)((int16_t)rd16(sp + SPH_DEALT) + dealt));
     wr16(hit + HIT_HEALTH, (uint16_t)(int16_t)std::max(-0x8000, health - dealt));
+    // Marked again after the next hitUpdate, for the hero code to react (it clears them before the hero reads them).
+    HeroHit h;
+    h.hit = hit;
+    h.sphere = sp;
+    h.source = valid_ptr(source) ? source : 0;
+    h.part = (uint8_t)best;
+    h.flags8 = (uint8_t)(weapon | (back ? 0x20 : 0));
+    g_hero_hits.push_back(h);
     ctx->r2 = 1;
 }
 } // namespace
