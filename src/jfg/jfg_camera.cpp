@@ -103,7 +103,12 @@ extern "C" int jfg_freeze_world(void) {
 void jfg_camera_restore() {
     if (!g_cam.overridden) return;
     g_cam.overridden = false;
-    for (uint32_t i = 0; i < Camera::Size; i += 4) { uint32_t v; std::memcpy(&v, &g_cam.saved[i], 4); wr32(g_cam.camera_addr + i, v); }
+    // Not the shake (+0x30..+0x3B): camTick sets it after the scene is drawn, so the saved one is stale, and putting it
+    // back each tick kept the shake at 0 for good (camStartShake did nothing with this camera on).
+    for (uint32_t i = 0; i < Camera::Size; i += 4) {
+        if (i >= Camera::SHAKE && i < Camera::SHAKE + 12) continue;
+        uint32_t v; std::memcpy(&v, &g_cam.saved[i], 4); wr32(g_cam.camera_addr + i, v);
+    }
 }
 
 // The game's follow camera keeps itself out of walls with func_8002CC70 (from the point it looks at, the wanted camera
