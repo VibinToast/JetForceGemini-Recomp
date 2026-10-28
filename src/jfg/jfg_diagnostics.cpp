@@ -537,7 +537,12 @@ static void objsetup_step_call(uint8_t* rdram, recomp_context* ctx, recomp_func_
     if (outer) jfg_objsetup_step(rdram, ctx, step);
 }
 
-JFG_WRAP(objGetObjdef) { objsetup_step_call(rdram, ctx, objGetObjdef_orig, 0); }
+namespace jfg::squad_types { void def_loaded(int index, uint32_t def); } // jfg_squad_types.cpp
+JFG_WRAP(objGetObjdef) {
+    const int index = (int32_t)ctx->r4;
+    objsetup_step_call(rdram, ctx, objGetObjdef_orig, 0);
+    jfg::squad_types::def_loaded(index, (uint32_t)ctx->r2); // a mod's squad type: its members are told by it
+}
 JFG_WRAP(func_8000F978_10578) { objsetup_step_call(rdram, ctx, func_8000F978_10578_orig, 1); }
 namespace jfg { void texture_loaded(int tex_id, uint32_t tex); } // jfg_texture_packs.cpp: mods' textures in a dump
 JFG_WRAP(texLoadTexture) {

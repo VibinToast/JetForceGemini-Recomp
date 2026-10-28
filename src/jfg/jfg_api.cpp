@@ -24,6 +24,8 @@ namespace jfg::overlay { void register_api(); void frame_done(); } // jfg_overla
 namespace jfg { void register_weapon_hud_api(); }                 // jfg_weapon_hud.cpp
 namespace jfg { void register_weapon_registry_api(); }            // jfg_weapon_registry.cpp
 namespace jfg { void register_kill_api(); }                       // jfg_kills.cpp
+namespace jfg { void register_squad_type_api(); }                 // jfg_squad_types.cpp
+extern "C" void jfg_squad_types_level_change(uint8_t* rdram, recomp_context* ctx); // jfg_squad_types.cpp
 
 namespace jfg::api {
 namespace {
@@ -33,7 +35,7 @@ const char* const g_event_names[] = {
     "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
     "jfg_on_language_change", "jfg_on_map_open", "jfg_on_galaxy_change", "jfg_on_planet_select", "jfg_on_hero_control",
     "jfg_on_object_draw_gfx", "jfg_on_draw_hud", "jfg_on_hud_message", "jfg_on_reticle_draw",
-    "jfg_on_health_draw", "jfg_on_weapon_hud", "jfg_on_kill", "jfg_on_weapon_fire", nullptr
+    "jfg_on_health_draw", "jfg_on_weapon_hud", "jfg_on_kill", "jfg_on_weapon_fire", "jfg_on_squad_tick", nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
@@ -197,6 +199,7 @@ void register_api() {
     // A handler with an option runs only while it's on (the last argument), so with the options at their defaults and no
     // mod listening, the frequent events (object draw, sound) cost nothing.
     add_internal(Event::LevelChange, jfg_change_level_log); // JFG_DEBUG_STATS log (jfg_diagnostics.cpp)
+    add_internal(Event::LevelChange, jfg_squad_types_level_change); // mods' squad types: definitions reload
     add_internal(Event::BossFightControl, jfg_boss_tick);   // boss-fight control layout (jfg_controls.cpp)
     // Blood stays and Body parts stay, for a mod (jfg_blood_keep, jfg_limbs_keep; jfg_gore.cpp).
     add_internal(Event::LevelChange, jfg_gore_level_change, [] { return jfg_gore_keep_blood(); }); // kept splats go
@@ -222,6 +225,7 @@ void register_api() {
     jfg::register_weapon_hud_api(); // the weapon panel's icons, the game's texts, Tribal counts (jfg_weapon_hud.cpp)
     jfg::register_weapon_registry_api(); // modded weapons on slot 15 (jfg_weapon_registry.cpp)
     jfg::register_kill_api();            // kills credited to mods' weapons (jfg_kills.cpp)
+    jfg::register_squad_type_api();      // new squad enemy types run by mods (jfg_squad_types.cpp)
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }
 

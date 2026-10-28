@@ -775,6 +775,58 @@ typedef struct {
     int take_ammo;
 } JfgWeaponFire;
 
+// --- new squad enemy types (since version 6) -----------------------------------------------------------------------
+// A pack appends an object type the squad code treats like a stock enemy ("objtypes" with "like" in jfg_assets.json,
+// its definition a copy of that enemy's with the pack's model) and the mod registers it by the definition's name.
+// Squadrons placed with that object id (Studio, or a level's data) then spawn members the mod runs in
+// jfg_on_squad_tick, in place of the like type's own fire routine.
+typedef struct {
+    const char* name;      // "mod_id:type"
+    const char* def_name;  // the pack's appended definition, "mod_id:objdef_x"
+} JfgSquadTypeDef;
+// Its type number (the same again for a name registered before), -1 if the definition is bad.
+RECOMP_IMPORT("*", int jfg_squad_type_register(const JfgSquadTypeDef* def));
+
+// jfg_on_squad_tick: a member of a registered type, at the point of its update where the game runs its type's own
+// routine (before steering and the move). data is its squad control data (object +0x68), frames the update rate of
+// this call (squad members move once per call). Set run_stock to 1 to run the like type's routine after yours.
+typedef struct {
+    int type;
+    void* member;
+    void* data;
+    int frames;
+    int run_stock;
+} JfgSquadTick;
+
+// Only inside jfg_on_squad_tick, for that member. A mod holds a member with mission 7 under its own group (0x20 up):
+// nothing in the game replaces it except burning, hit-stop and electrocution. 1 if set.
+RECOMP_IMPORT("*", int jfg_squad_set_mission(void* member, int group, int mission, int a, int b, int c));
+// Clears the member's mission when it is the group's; cooldown: ticks before it may fire again.
+RECOMP_IMPORT("*", void jfg_squad_clear_mission(void* member, int group, int cooldown));
+// Plays animation `anim` of the object's model list from phase / 1000 (0..1000). The mod advances the phase
+// (object +0x28, 0..1) itself; for a squad member, set its animation state (data +0x4B) to 7 first, which nothing in
+// the game advances.
+RECOMP_IMPORT("*", void jfg_object_anim_set(void* object, int anim, int phase));
+// Shell armour: shots hitting the member stop on its hit spheres with no damage: mode 1 all but those from behind,
+// 2 all, 0 none. Blasts always hurt. jfg_squad_deflects: shots stopped since the last call. jfg_squad_forget: drop
+// a member (dead or gone) from the armour list.
+RECOMP_IMPORT("*", void jfg_squad_set_armour(void* member, int mode));
+RECOMP_IMPORT("*", int jfg_squad_deflects(void* member));
+RECOMP_IMPORT("*", void jfg_squad_forget(void* member));
+
+// A mod's projectile hits the first player's hero as an enemy's shot does: the segment from `from` to `to` (its last
+// and current position) with radius, against the hero's hit spheres; damage 256 a unit; weapon (0..15) for what the
+// game records; source the projectile. The hero's protection and dodges count; the hero code reacts (flash, voice,
+// death). 1 if it hit.
+typedef struct {
+    float from[3], to[3];
+    float radius;
+    int damage;
+    int weapon;
+    void* source;
+} JfgHeroShot;
+RECOMP_IMPORT("*", int jfg_hero_shot(const JfgHeroShot* shot));
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
@@ -842,5 +894,7 @@ typedef struct {
 
 // jfg_on_weapon_fire(JfgWeaponFire* fire)
 //     The first player's hero is about to fire a shot (or release a throw), before the game makes it.
+// jfg_on_squad_tick(JfgSquadTick* tick)
+//     A member of a squad type a mod registered is updated (jfg_squad_type_register).
 
 #endif
