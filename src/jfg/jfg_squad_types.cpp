@@ -310,8 +310,10 @@ JFG_WRAP(hitUpdate) {
         if (!valid_ptr(a.obj)) continue;
         set_sphere_armour(a.obj, false);
         const uint32_t hit = rd32(a.obj + OBJ_HIT);
-        // A shot crossed it (hit +0x3C) and took no health: it was stopped by the armour.
-        if (valid_ptr(hit) && rd32(hit + HIT_LAST) != 0 && (int16_t)rd16(hit + HIT_HEALTH) == a.health && a.mode != 0)
+        // A shot crossed it (hit +0x0A bit 0x40, with hit +0x3C the shot) and took no health: the armour stopped it.
+        // Bodies pressing together (the hero against it) also set +0x3C, with bit 0x20 only: not a deflect.
+        if (valid_ptr(hit) && rd32(hit + HIT_LAST) != 0 && (rd16(hit + HIT_FLAGSA) & 0x40) &&
+            (int16_t)rd16(hit + HIT_HEALTH) == a.health && a.mode != 0)
             a.deflects++;
     }
 }
