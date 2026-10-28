@@ -433,14 +433,20 @@ JFG_WRAP(objPrintObject) {
     jfg_interp_object_done(rdram, ctx);
 }
 
-// amSndPlay(id, handle): jfg_on_sound_play (Hide Floyd mutes his sounds); a callback may change the sound's id.
+namespace jfg { void sound_replaced_play(recomp_context* ctx, uint32_t id, uint32_t handle_addr, bool was_playing, bool placed, float x, float y, float z); } // jfg_music.cpp
+
+// amSndPlay(id, handle): jfg_on_sound_play (Hide Floyd mutes his sounds); a callback may change the sound's id. Then a
+// sound a mod replaces plays the mod's in its place (jfg_music.cpp).
 JFG_WRAP(amSndPlay) {
     uint32_t id = (uint32_t)ctx->r4;
     static const bool log = std::getenv("JFG_DEBUG_SOUNDS") != nullptr; // tests: every sound effect started, by id
     if (log) std::fprintf(stderr, "[jfg] sound 0x%X (tick %u)\n", id & 0xFFFF, jfg::g_tick_count);
     if (!fire_value_cancel(rdram, ctx, jfg::api::Event::SoundPlay, id)) return;
     ctx->r4 = (gpr)(int32_t)id;
+    const uint32_t handle_addr = (uint32_t)ctx->r5;
     amSndPlay_orig(rdram, ctx);
+    jfg::g_rdram = rdram;
+    jfg::sound_replaced_play(ctx, id, handle_addr, false, false, 0.0f, 0.0f, 0.0f);
 }
 
 // frontFlashScreen(?, ?, colour, ...): jfg_on_screen_flash (Hit flash opacity); a callback may change the colour.

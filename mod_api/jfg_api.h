@@ -209,6 +209,10 @@ RECOMP_IMPORT("*", int jfg_hero_heads(int character, int tribal));
 // -1 left to 1 right, pitch 1 = as recorded (2 an octave up); mixed at the game's sound effects volume. Play returns a
 // voice (0: no such sound); a loop plays until stopped. jfg_sound_set changes a playing voice and returns 1 while it
 // plays, 0 once it has ended.
+// The same file can replace the game's own sound effects (since version 5): "replace": { "0xE1": "<name>",
+// "0xFA": { "sound": "<name>", "loop": true, "volume": 0.8 } } by the game's sound id (JFG_DEBUG_SOUNDS=1 logs every id
+// played). The game's sound is muted and the mod's plays in its place, stopping when the game stops its own; "loop"
+// keeps it going till then (for the game's looping sounds). The first enabled mod to replace an id has it.
 RECOMP_IMPORT("*", int jfg_sound_play(const char* name, float volume, float pan, float pitch));
 RECOMP_IMPORT("*", int jfg_sound_loop(const char* name, float volume, float pan, float pitch));
 RECOMP_IMPORT("*", int jfg_sound_set(int voice, float volume, float pan, float pitch));

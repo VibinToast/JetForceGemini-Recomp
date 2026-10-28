@@ -2,6 +2,7 @@
 // game's osSyncPrintf messages.
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <string>
 #include <unordered_map>
@@ -452,6 +453,10 @@ JFG_WRAP(mantisControl) {
     g_mantis_no_rock = prev;
 }
 
+namespace jfg { void sound_replaced_play(recomp_context* ctx, uint32_t id, uint32_t handle_addr, bool was_playing, bool placed, float x, float y, float z); } // jfg_music.cpp
+
+// amSndPlayXYZ(id, x, y, z, flags, SoundMask** mask): a sound a mod replaces plays the mod's in its place
+// (jfg_music.cpp); the game starts nothing when *mask is already set, and nor does the replacement.
 JFG_WRAP(amSndPlayXYZ) {
     static const bool log = std::getenv("JFG_DEBUG_SOUNDS") != nullptr; // tests: every placed sound started, by id
     if (log) std::fprintf(stderr, "[jfg] sound xyz 0x%X (tick %u)\n", (uint32_t)ctx->r4 & 0xFFFF, jfg::g_tick_count);
@@ -460,7 +465,18 @@ JFG_WRAP(amSndPlayXYZ) {
         ctx->r2 = 0;
         return;
     }
+    jfg::g_rdram = rdram;
+    const uint32_t id = (uint32_t)ctx->r4;
+    const uint32_t xb = (uint32_t)ctx->r5, yb = (uint32_t)ctx->r6, zb = (uint32_t)ctx->r7;
+    const uint32_t mask_addr = jfg::rd32((uint32_t)ctx->r29 + 0x14);
+    const bool was_playing = jfg::valid_ptr(mask_addr) && jfg::rd32(mask_addr) != 0;
     amSndPlayXYZ_orig(rdram, ctx);
+    jfg::g_rdram = rdram;
+    float x, y, z;
+    std::memcpy(&x, &xb, 4);
+    std::memcpy(&y, &yb, 4);
+    std::memcpy(&z, &zb, 4);
+    jfg::sound_replaced_play(ctx, id, mask_addr, was_playing, true, x, y, z);
 }
 
 static void mantis_rock_failed(uint8_t* rdram, recomp_context* ctx) {
