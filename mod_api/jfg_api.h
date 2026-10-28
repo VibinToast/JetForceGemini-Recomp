@@ -148,6 +148,7 @@ RECOMP_IMPORT("*", int jfg_objects_near(const JfgNear* query, JfgNearObject* out
 #define JFG_KIND_QUEST       102  // power cells, circuit breakers
 #define JFG_KIND_PART        103  // parts to bring back (lubricant, DNA, ore, machine parts)
 #define JFG_KIND_TOKEN       109
+#define JFG_KIND_TOTEM       141  // totem poles
 typedef struct {
     void* object;
     float x, y, z;
