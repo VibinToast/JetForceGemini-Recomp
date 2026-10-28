@@ -511,8 +511,12 @@ JFG_WRAP(hitPlayerAimCheck) {
     hitPlayerAimCheck_orig(rdram, ctx);
     g_rdram = rdram;
     if (out != 0) wr32(out, kept);
+    // The aim is on something: keep frontPlayerTarget's countdown (the hero's data + 0x541, high nibble) full, as a
+    // lock does. Run out, it forgets the target (+0x1A8[5]) and the next check finds it again as new, replaying the
+    // scan sound (0x1D) over and over while the reticle rests on a Tribal.
+    const uint32_t data = valid_ptr(obj) ? Obj::Data::get(obj) : 0;
+    if (ctx->r2 != 0 && valid_ptr(data)) wr8(data + 0x541, (uint8_t)((rd8(data + 0x541) & 0x0F) | 0xA0));
     ctx->r2 = 0; // frontPlayerTarget sets the lock (the hero's data + 0x540, bit 0) from what this returns
-    (void)obj;
 }
 
 // frontDrawTarget(player, x, y, trans, depth)'s wrapper (jfg_interpolation.cpp), before the game's code:
