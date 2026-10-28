@@ -469,8 +469,10 @@ void jfg_restore_menu_place() {
     if (jfg_menu_closed_tab < 0) return;
     recompui::get_config_tabset()->SetActiveTab(jfg_menu_closed_tab);
     if (jfg_restore_tab_place()) return;
-    if (!recompui::get_cont_active()) return;
-    if (jfg_menu_closed_tab == recompui::config_tab_to_index(recompui::ConfigTab::Mods) && recompui::focus_selected_mod()) return;
+    // Without the controller the focus still moves off the first tab (the menu's autofocus), onto this one: else A,
+    // Enter or Space on it (or Right, then A) switched to Profiles or General.
+    if (recompui::get_cont_active() && jfg_menu_closed_tab == recompui::config_tab_to_index(recompui::ConfigTab::Mods) &&
+        recompui::focus_selected_mod()) return;
     if (Rml::Element* tabs = recompui::get_child_by_tag(recompui::get_config_tabset(), "tabs")) {
         if (Rml::Element* tab = tabs->GetChild(jfg_menu_closed_tab)) tab->Focus(true);
     }
@@ -483,6 +485,11 @@ void close_config_menu_impl() {
     recompui::ContextId sub_menu_context = recompui::get_config_sub_menu_context_id();
 
     if (recompui::is_context_shown(sub_menu_context)) {
+        // JFG PORT: closed from a mod's settings (the menu itself hidden under them): it reopens on the Mods tab, on that
+        // mod (jfg_restore_menu_place).
+        if (ultramodern::is_game_started()) {
+            jfg_menu_closed_tab = recompui::get_config_tabset()->GetActiveTab();
+        }
     	recompui::hide_context(sub_menu_context);
     }
     else if (recompui::is_context_shown(config_context)) {

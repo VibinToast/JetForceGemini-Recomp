@@ -1056,6 +1056,9 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
             if (open_config) {
                 ::jfg_config_menu_refresh(); // JFG PORT
+                // JFG PORT: opened with a controller button, the controller is the menu's input from the start, so its
+                // focus goes back to the mod or option it was on (jfg_restore_menu_place), not the first tab.
+                if (cur_event.type == SDL_EventType::SDL_CONTROLLERBUTTONDOWN) recompui::set_cont_active(true);
                 recompui::show_context(recompui::get_config_context_id(), "");
                 ::jfg_restore_menu_place(); // JFG PORT
             }
@@ -1100,6 +1103,19 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
         if (debug_close_secs >= 0.0f && config_was_open && since_start >= std::chrono::duration<float>(debug_close_secs)) {
             close_config_menu();
             debug_close_secs = -1.0f;
+        }
+        // JFG_DEBUG_CONFIG_REOPEN=<secs>: opens this menu again as Esc does (where it was closed) <secs> seconds after start.
+        static float debug_reopen_secs = -2.0f;
+        if (debug_reopen_secs == -2.0f) {
+            const char* env = std::getenv("JFG_DEBUG_CONFIG_REOPEN");
+            debug_reopen_secs = env ? (float)std::atof(env) : -1.0f;
+        }
+        if (debug_reopen_secs >= 0.0f && !config_was_open && ultramodern::is_game_started() &&
+            since_start >= std::chrono::duration<float>(debug_reopen_secs)) {
+            ::jfg_config_menu_refresh();
+            recompui::show_context(recompui::get_config_context_id(), "");
+            ::jfg_restore_menu_place();
+            debug_reopen_secs = -1.0f;
         }
     }
 
