@@ -157,8 +157,8 @@ ImTextureData* g_white = nullptr; // a white texture: shapes take its colour (th
 std::atomic<bool> g_menu_shown{ false };
 } // namespace
 
-// A menu that takes input (the settings menu, a prompt) is open: the overlay is left out, so it never covers it. The
-// game draws on behind the menu, so what mods send keeps coming.
+// The settings menu or a prompt is open: the overlay is left out, so it never covers it (F10's tools bar leaves it
+// up). The game draws on behind the menu, so what mods send keeps coming.
 void set_menu_shown(bool shown) { g_menu_shown.store(shown, std::memory_order_relaxed); }
 
 // The game finished a frame: what was sent for it is shown from now on.

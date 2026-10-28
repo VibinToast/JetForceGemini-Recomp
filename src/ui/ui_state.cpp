@@ -720,7 +720,8 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
     bool config_was_open = recompui::is_context_shown(recompui::get_config_context_id()) || recompui::is_context_shown(recompui::get_config_sub_menu_context_id());
     jfg_settings_menu_open(config_was_open ? 1 : 0); // JFG PORT
-    jfg::overlay::set_menu_shown(ui_state->is_context_capturing_input()); // JFG PORT: mods' overlay stays under menus
+    // JFG PORT: mods' overlay stays under the settings menu and prompts (not F10's tools bar, which leaves the HUD up)
+    jfg::overlay::set_menu_shown(config_was_open || recompui::is_prompt_open());
     jfg_tools_ui_frame(); // JFG PORT: F10's tools (src/jfg/jfg_ui_tools.cpp)
     jfg_language_prompt_frame(); // JFG PORT: the first-run language question (src/ui/ui_language_prompt.cpp)
     jfg::mod_options_frame(); // JFG PORT: old blood / Hide Floyd settings and profiles' mod keys, once mods are scanned
