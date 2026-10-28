@@ -912,21 +912,53 @@ void level_ray(uint8_t* rdram_, recomp_context* ctx) {
     };
     float p[3];
     if (!cast(0, 0, 0, p)) return;
-    // Two lines beside the first, 4 units off across it.
+    // Four lines beside the first, 6 units off across it (right, up, left, down), each started 24 units further back
+    // and run 24 further on: a start right at the surface can be behind it and miss. Hits more than 30 units from the
+    // first are on another surface (an edge) and left out; the plane is that of the first hit and the two others that
+    // span it best.
     float ux = 0, uy = 1, uz = 0;
     if (std::fabs(dy) > 0.9f) { ux = 1; uy = 0; }
     float sx = dy * uz - dz * uy, sy = dz * ux - dx * uz, sz = dx * uy - dy * ux; // side = d x up
-    float sl = std::sqrt(sx * sx + sy * sy + sz * sz);
+    const float sl = std::sqrt(sx * sx + sy * sy + sz * sz);
     sx /= sl; sy /= sl; sz /= sl;
-    const float tx = sy * dz - sz * dy, ty = sz * dx - sx * dz, tz = sx * dy - sy * dx; // d x side ... the other way
-    float q[3], r[3];
-    float nx = -dx, ny = -dy, nz = -dz; // facing straight back, if the plane can't be measured
-    if (cast(sx * 4, sy * 4, sz * 4, q) && cast(tx * 4, ty * 4, tz * 4, r)) {
-        const float e1x = q[0] - p[0], e1y = q[1] - p[1], e1z = q[2] - p[2];
-        const float e2x = r[0] - p[0], e2y = r[1] - p[1], e2z = r[2] - p[2];
-        float cx = e1y * e2z - e1z * e2y, cy = e1z * e2x - e1x * e2z, cz = e1x * e2y - e1y * e2x;
-        const float cl = std::sqrt(cx * cx + cy * cy + cz * cz);
-        if (cl > 0.0001f) {
+    const float tx = sy * dz - sz * dy, ty = sz * dx - sx * dz, tz = sx * dy - sy * dx; // across both
+    constexpr float OFF = 6.0f, BACK = 24.0f;
+    const float offs[4][3] = { { sx, sy, sz }, { tx, ty, tz }, { -sx, -sy, -sz }, { -tx, -ty, -tz } };
+    float near[4][3];
+    int count = 0;
+    for (const auto& o : offs) {
+        float h[3];
+        // Back by BACK along the line at the start, on by BACK at the end: offset the start and end differently.
+        g_rdram = rdram_;
+        wrf(buf + 0, ax + o[0] * OFF - dx * BACK); wrf(buf + 4, ay + o[1] * OFF - dy * BACK); wrf(buf + 8, az + o[2] * OFF - dz * BACK);
+        wrf(buf + 12, bx + o[0] * OFF + dx * BACK); wrf(buf + 16, by + o[1] * OFF + dy * BACK); wrf(buf + 20, bz + o[2] * OFF + dz * BACK);
+        const bool found = (call_game(trackNearestIntersection, ctx, { 0u, buf, buf + 12, buf + 24, 0u, 0u }) & 0xFF) != 0;
+        g_rdram = rdram_;
+        if (!found) continue;
+        h[0] = rdf(buf + 24 + 4); h[1] = rdf(buf + 24 + 8); h[2] = rdf(buf + 24 + 12);
+        if (!std::isfinite(h[0]) || !std::isfinite(h[1]) || !std::isfinite(h[2])) continue;
+        const float ex = h[0] - p[0], ey = h[1] - p[1], ez = h[2] - p[2];
+        if (ex * ex + ey * ey + ez * ez > 30.0f * 30.0f) continue;
+        near[count][0] = h[0]; near[count][1] = h[1]; near[count][2] = h[2];
+        count++;
+    }
+    // If the plane can't be measured: a floor or ceiling for a line going steeply down or up, else a wall facing back.
+    float nx, ny, nz;
+    if (std::fabs(dy) > 0.5f) {
+        nx = 0; ny = dy > 0 ? -1.0f : 1.0f; nz = 0;
+    } else {
+        const float hl = std::sqrt(dx * dx + dz * dz);
+        nx = -dx / hl; ny = 0; nz = -dz / hl;
+    }
+    float best = 0.0f;
+    for (int i = 0; i < count; i++) {
+        for (int j = i + 1; j < count; j++) {
+            const float e1x = near[i][0] - p[0], e1y = near[i][1] - p[1], e1z = near[i][2] - p[2];
+            const float e2x = near[j][0] - p[0], e2y = near[j][1] - p[1], e2z = near[j][2] - p[2];
+            float cx = e1y * e2z - e1z * e2y, cy = e1z * e2x - e1x * e2z, cz = e1x * e2y - e1y * e2x;
+            const float cl = std::sqrt(cx * cx + cy * cy + cz * cz);
+            if (cl <= best || cl < 1.0f) continue;
+            best = cl;
             cx /= cl; cy /= cl; cz /= cl;
             if (cx * dx + cy * dy + cz * dz > 0) { cx = -cx; cy = -cy; cz = -cz; }
             nx = cx; ny = cy; nz = cz;
