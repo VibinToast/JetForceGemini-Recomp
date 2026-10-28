@@ -8,6 +8,7 @@
 // last drew a frame with them (menus, the title screen). Pictures are kept by id until replaced: RGBA, up to
 // 1024 x 1024, uploaded once as ImGui textures (both of the port's renderer backends update them).
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -153,7 +154,12 @@ void overlay_circle(uint8_t* rdram_, recomp_context* ctx) {
 }
 
 ImTextureData* g_white = nullptr; // a white texture: shapes take its colour (the list's own texture)
+std::atomic<bool> g_menu_shown{ false };
 } // namespace
+
+// A menu that takes input (the settings menu, a prompt) is open: the overlay is left out, so it never covers it. The
+// game draws on behind the menu, so what mods send keeps coming.
+void set_menu_shown(bool shown) { g_menu_shown.store(shown, std::memory_order_relaxed); }
 
 // The game finished a frame: what was sent for it is shown from now on.
 void frame_done() {
@@ -183,7 +189,8 @@ bool build(ImDrawList* list, ImVector<ImTextureData*>& textures) {
         IM_DELETE(t);
         return true;
     }), g_retired.end());
-    if (g_shown.empty() || std::chrono::steady_clock::now() - g_shown_at > STALE) return !textures.empty();
+    if (g_shown.empty() || g_menu_shown.load(std::memory_order_relaxed) ||
+        std::chrono::steady_clock::now() - g_shown_at > STALE) return !textures.empty();
     if (g_white == nullptr) {
         g_white = IM_NEW(ImTextureData)();
         g_white->Create(ImTextureFormat_RGBA32, 4, 4);

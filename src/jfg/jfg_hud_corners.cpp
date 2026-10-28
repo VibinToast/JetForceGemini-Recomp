@@ -115,6 +115,12 @@ void pop() {
 }
 }
 
+// The single-player HUD goes to the window's edges (HUD in Screen Corners, in widescreen): jfg_hud_in_corners.
+bool hud_in_corners() {
+    static const bool env = std::getenv("JFG_HUD_CORNERS") != nullptr;
+    return (g.hud_corners || env) && jfg_widescreen_active();
+}
+
 // frontSingleInstruments, right after its camStandardOrtho (the target and its box are drawn before and stay put).
 extern "C" void jfg_hud_begin(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;

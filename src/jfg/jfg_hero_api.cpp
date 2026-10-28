@@ -35,6 +35,7 @@ extern "C" void charSpeak(uint8_t* rdram, recomp_context* ctx);
 extern "C" void func_overlay_15_00005180_1F18B00(uint8_t* rdram, recomp_context* ctx); // Vela: set her move (obj, data, move, frame)
 extern "C" void func_overlay_16_00004F78_1F22F90(uint8_t* rdram, recomp_context* ctx); // Juno: the same
 extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
+namespace jfg { bool hud_in_corners(); } // jfg_hud_corners.cpp
 
 namespace jfg::api {
 // A camera a mod set this tick (jfg_camera_set), applied by the camera step's wrapper.
@@ -592,6 +593,10 @@ void hud_hide_health(uint8_t*, recomp_context* ctx) {
     const int character = (int)ctx->r4;
     if (character >= 0 && character < CHARACTERS) g_hide_health[character] = ctx->r5 != 0;
 }
+
+// jfg_hud_in_corners(void): 1 while the single-player HUD is at the window's edges (HUD in Screen Corners, in
+// widescreen), 0 while it is in the middle 4:3 area.
+void hud_in_corners_export(uint8_t*, recomp_context* ctx) { ctx->r2 = jfg::hud_in_corners() ? 1 : 0; }
 // --- toggled buttons (input thread) --------------------------------------------------------------------------------
 std::atomic<uint16_t> g_toggle_mask{ 0 };    // jfg_input_toggle: buttons that toggle
 std::atomic<uint16_t> g_toggle_latched{ 0 }; // ... and read as held now
@@ -1032,6 +1037,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_enemies_near", enemies_near);
     recomp::overlays::register_base_export("jfg_object_blast_damage", object_blast_damage);
     recomp::overlays::register_base_export("jfg_hud_hide_health", hud_hide_health);
+    recomp::overlays::register_base_export("jfg_hud_in_corners", hud_in_corners_export);
     recomp::overlays::register_base_export("jfg_hero_heads", hero_heads);
     recomp::overlays::register_base_export("jfg_hero_game_control", hero_game_control);
     recomp::overlays::register_base_export("jfg_hero_select_weapon", hero_select_weapon);

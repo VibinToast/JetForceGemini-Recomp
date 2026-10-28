@@ -369,6 +369,9 @@ typedef struct {
     float thickness;
 } JfgOverlayCircle;
 RECOMP_IMPORT("*", void jfg_overlay_circle(const JfgOverlayCircle* circle));
+// 1 while the single-player HUD is at the window's edges (the HUD in Screen Corners option, in widescreen), 0 while
+// it is in the middle 4:3 area: its left edge is then at x (overlay width - 320) / 2 in overlay units, else at 0.
+RECOMP_IMPORT("*", int jfg_hud_in_corners(void));
 // Plays the game's own sound effect id at x, y, z (louder near the camera). Some: Juno's jump 0x4C and 0x51, landing
 // 0x6, his side rolls 0x7A (left) and 0x79 (right) (JFG_DEBUG_SOUNDS=1 logs every sound the game starts).
 RECOMP_IMPORT("*", void jfg_game_sound(int id, float x, float y, float z));
