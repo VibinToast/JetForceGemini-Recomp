@@ -658,6 +658,16 @@ void hero_push(uint8_t* rdram_, recomp_context* ctx) {
     Hero::PushTicks::set(data, (int8_t)std::clamp((int)ctx->r7, 0, 127));
 }
 
+// jfg_hero_hit(void* hero, int units): the hero is hit as by an enemy's shot: the hero's control code takes one unit of
+// health (0x80 in the hero's data + 0x190) or two (0xC0), with its hit reaction, sound and red flash, unless the hero
+// is protected (+0x5C8) (overlays 15-17's control code, e.g. overlay_16.c's boy control).
+void hero_hit(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t data = hero_data((uint32_t)ctx->r4);
+    if (data == 0) return;
+    wr8(data + 0x190, (int)ctx->r5 >= 2 ? 0xC0 : 0x80);
+}
+
 // jfg_hero_protect(void* hero, int ticks): no damage reaches the hero for at least that many 1/60 s ticks (8 at
 // least: the game's own protection, as after a level exit).
 void hero_protect(uint8_t* rdram_, recomp_context* ctx) {
@@ -919,6 +929,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_enemy_dying", enemy_dying);
     recomp::overlays::register_base_export("jfg_hero_push", hero_push);
     recomp::overlays::register_base_export("jfg_hero_protect", hero_protect);
+    recomp::overlays::register_base_export("jfg_hero_hit", hero_hit);
     recomp::overlays::register_base_export("jfg_floyd_get", floyd_get);
     recomp::overlays::register_base_export("jfg_fire_bolt", fire_bolt);
     recomp::overlays::register_base_export("jfg_line_of_sight", line_of_sight);

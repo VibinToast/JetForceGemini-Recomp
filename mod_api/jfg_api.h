@@ -290,6 +290,9 @@ RECOMP_IMPORT("*", void jfg_hero_set_ammo(int weapon, int ammo));
 // Pushes the hero x, z level units per 1/60 s for ticks 1/60 s ticks (the game's knockback: walls stop it, and it
 // eases off after). The hero walks a little over 2 units per 1/60 s.
 RECOMP_IMPORT("*", void jfg_hero_push(void* hero, float x, float z, int ticks));
+// The hero is hit as by an enemy's shot: one unit of health (units 1) or two (2), with the hit reaction, its sound and
+// the red flash, unless it is protected (just hit, or jfg_hero_protect).
+RECOMP_IMPORT("*", void jfg_hero_hit(void* hero, int units));
 // No damage reaches the hero for at least ticks 1/60 s ticks (8 at the least), and enemies don't aim at it.
 RECOMP_IMPORT("*", void jfg_hero_protect(void* hero, int ticks));
 
