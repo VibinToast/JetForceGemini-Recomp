@@ -100,6 +100,35 @@ static bool floyd_hidden(uint32_t obj) {
     return rd8(ADDR_robotMission) == 0 && rd8(ADDR_cooperativeGame) == 0;
 }
 
+// Floyd's lights, for a mod (jfg_floyd_light, API version 5). func_800319C0_325C0(obj, sidekick, player, updateRate), each
+// tick he follows a hero, picks the texture frame of his light parts (his model's parts of type 3: model = *(obj + 0x6C),
+// part count u8 at *(model + 0) + 0x2C, parts 8 bytes each from *(model + 0x74), u32 type at +4, u16 frame << 8 at +0):
+// 3 (dark) as a rule, 1 (blue) when his +0x54 value is under 0.6, and 0 (red) every other 32 ticks while the hero's aim is locked on an enemy
+// (player + 0x540 & 0xF: the enemy warning, with its beep in controlUpdatePlayerAim). A mod's frame replaces his
+// usual one after the game's code; the enemy warning keeps the game's.
+static int g_floyd_light = -1; // -1: the game's own
+
+// jfg_floyd_light(int frame) (mod API).
+extern "C" void jfg_api_floyd_light(uint8_t*, recomp_context* ctx) {
+    const int frame = (int)(int32_t)ctx->r4;
+    g_floyd_light = frame >= 0 && frame <= 255 ? frame : -1;
+}
+
+JFG_WRAP(func_800319C0_325C0) {
+    const uint32_t obj = (uint32_t)ctx->r4, player = (uint32_t)ctx->r6;
+    func_800319C0_325C0_orig(rdram, ctx);
+    if (g_floyd_light < 0 || !valid_ptr(obj) || !valid_ptr(player) || (rd16(player + 0x540) & 0xF) != 0) return;
+    const uint32_t models = rd32(obj + 0x6C);
+    const uint32_t model = valid_ptr(models) ? rd32(models) : 0;
+    if (!valid_ptr(model)) return;
+    const uint32_t header = rd32(model), parts = rd32(model + 0x74);
+    if (!valid_ptr(header) || !valid_ptr(parts)) return;
+    const int count = rd8(header + 0x2C);
+    for (int i = 0; i < count; i++) {
+        if ((rd32(parts + i * 8 + 4) & 0xFF) == 3) wr16(parts + i * 8, (uint16_t)(g_floyd_light << 8));
+    }
+}
+
 extern "C" void jfg_floyd_seen(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t obj = (uint32_t)ctx->r4;

@@ -52,6 +52,7 @@ void jfg_hit_flash_event(uint8_t* rdram, recomp_context* ctx);        // jfg_on_
 void jfg_floyd_seen(uint8_t* rdram, recomp_context* ctx);              // jfg_on_sidekick_tick handler
 bool jfg_floyd_hide_on(void);                                          // jfg_floyd_hide (a mod's Hide Floyd)
 void jfg_api_floyd_hide(uint8_t* rdram, recomp_context* ctx);          // jfg_floyd_hide(int on), for mods
+void jfg_api_floyd_light(uint8_t* rdram, recomp_context* ctx);         // jfg_floyd_light(int frame), for mods
 void jfg_floyd_fuel(uint8_t* rdram, recomp_context* ctx);              // jfg_on_sidekick_tick handler (Floyd's Fuel)
 void jfg_hide_object(uint8_t* rdram, recomp_context* ctx);             // jfg_on_object_draw handler
 void jfg_floyd_done(void);                                             // after sidekickControl

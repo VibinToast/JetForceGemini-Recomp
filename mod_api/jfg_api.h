@@ -429,6 +429,10 @@ RECOMP_IMPORT("*", void jfg_hero_protect(void* hero, int ticks));
 // Floyd's object while he is with the first player's hero, else NULL; state (may be NULL): 0 the game's AI flies him
 // after the hero, 1 a player flies him, 2 a Floyd mission.
 RECOMP_IMPORT("*", void* jfg_floyd_get(int* state));
+// Floyd's lights show texture frame (0..255) of his model's light parts while he follows a hero (0 red, 1 blue, 2 green,
+// 3 dark): the game shows 3, 1 at times, and blinks 0 while the hero's aim is locked on an enemy (that warning still wins).
+// -1 gives them back to the game. Kept until set again.
+RECOMP_IMPORT("*", void jfg_floyd_light(int frame));
 // A laser bolt (Floyd's) from x, y, z towards tx, ty, tz. damage in units of health (1..127; an ant soldier has a few);
 // speed in level units per 1/30 s (Floyd's 35); life in 1/10 s (Floyd's 30); owner is never hit by it; sound -1 = none
 // (Floyd's 0xDA). Returns the bolt object, NULL if none was made.

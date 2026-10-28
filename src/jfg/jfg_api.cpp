@@ -212,6 +212,7 @@ void register_api() {
     jfg::register_world_api(); // planets and galaxies (jfg_worldmap.cpp)
     jfg::register_blood_api(); // blood colours, rainbow, Blood stays, Body parts stay (jfg_gore.cpp)
     recomp::overlays::register_base_export("jfg_floyd_hide", jfg_api_floyd_hide); // Hide Floyd (jfg_visuals.cpp)
+    recomp::overlays::register_base_export("jfg_floyd_light", jfg_api_floyd_light); // his lights' frame (jfg_visuals.cpp)
     recomp::overlays::register_base_export("jfg_aim_lock", aim_lock);
     recomp::overlays::register_base_export("jfg_object_tint", object_tint);
     recomp::overlays::register_base_export("jfg_gfx_alloc", gfx_alloc);

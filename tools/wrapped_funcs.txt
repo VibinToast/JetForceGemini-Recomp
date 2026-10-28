@@ -210,3 +210,5 @@ mainIncreaseWeaponKills
 mainSetTribalStatus
 # Mod sound replacement: placed stand-ins stop with the game's (jfg_music.cpp)
 amSndStopXYZ
+# Floyd's lights' frame for mods (jfg_visuals.cpp)
+func_800319C0_325C0
