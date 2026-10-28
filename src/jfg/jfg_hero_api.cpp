@@ -564,6 +564,15 @@ void hud_hide_health(uint8_t*, recomp_context* ctx) {
 std::atomic<uint16_t> g_toggle_mask{ 0 };    // jfg_input_toggle: buttons that toggle
 std::atomic<uint16_t> g_toggle_latched{ 0 }; // ... and read as held now
 std::atomic<uint16_t> g_toggle_release{ 0 }; // jfg_input_toggle_release: let go at the next poll
+std::atomic<uint16_t> g_blocked{ 0 };        // jfg_input_block: buttons that read as let go
+
+// jfg_input_block(unsigned int buttons, int on): while on, those N64 buttons read as not pressed (a dodge that may not
+// fire, say).
+void input_block(uint8_t*, recomp_context* ctx) {
+    const uint16_t mask = (uint16_t)ctx->r4;
+    if (ctx->r5 != 0) g_blocked.fetch_or(mask);
+    else g_blocked.fetch_and((uint16_t)~mask);
+}
 
 // jfg_input_toggle(unsigned int buttons, int on): those N64 buttons toggle: a press holds them down, the next lets go.
 void input_toggle(uint8_t*, recomp_context* ctx) {
@@ -910,7 +919,7 @@ extern "C" void jfg_input_toggles(uint16_t* buttons) {
     latched ^= (uint16_t)(b & ~prev & mask); // presses flip
     prev = b;
     g_toggle_latched.store(latched, std::memory_order_relaxed);
-    *buttons = (uint16_t)((b & ~mask) | latched);
+    *buttons = (uint16_t)(((b & ~mask) | latched) & ~g_blocked.load(std::memory_order_relaxed));
 }
 
 void note_blast_damage(uint32_t dmg, int damage) {
@@ -989,6 +998,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_input_toggle", input_toggle);
     recomp::overlays::register_base_export("jfg_input_toggle_release", input_toggle_release);
     recomp::overlays::register_base_export("jfg_input_toggled", input_toggled);
+    recomp::overlays::register_base_export("jfg_input_block", input_block);
     recomp::overlays::register_base_export("jfg_hero_get", hero_get);
     recomp::overlays::register_base_export("jfg_hero_state", hero_state);
     recomp::overlays::register_base_export("jfg_hero_weapon", hero_weapon);

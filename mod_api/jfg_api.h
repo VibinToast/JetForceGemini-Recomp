@@ -266,6 +266,8 @@ RECOMP_IMPORT("*", void jfg_input_toggle(unsigned int buttons, int on));
 RECOMP_IMPORT("*", void jfg_input_toggle_release(unsigned int buttons));
 // The toggled buttons held now.
 RECOMP_IMPORT("*", unsigned int jfg_input_toggled(void));
+// While on, those N64 buttons read as let go for the first player (any controls). Kept until turned off.
+RECOMP_IMPORT("*", void jfg_input_block(unsigned int buttons, int on));
 
 // 1 while the world stands still (the pause menu, the settings menu, the fly camera's freeze): jfg_on_game_tick still
 // fires then, so a mod that acts in it should wait.
