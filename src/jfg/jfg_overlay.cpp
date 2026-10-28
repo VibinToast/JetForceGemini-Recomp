@@ -123,7 +123,7 @@ void overlay_draw_image(uint8_t* rdram_, recomp_context* ctx) {
 }
 
 // jfg_overlay_polygon(const JfgOverlayPolygon* polygon): { const float* xy; int count; unsigned int fill, line;
-// float thickness; } A convex polygon, filled and/or outlined.
+// float thickness; } A polygon (sides not crossing), filled and/or outlined.
 void overlay_polygon(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t p = (uint32_t)ctx->r4;
@@ -225,7 +225,7 @@ bool build(ImDrawList* list, ImVector<ImTextureData*>& textures) {
         case Kind::Polygon: {
             std::vector<ImVec2> pts;
             for (const ImVec2& p : s.points) pts.push_back(at(p.x, p.y));
-            if (s.fill & 0xFF) list->AddConvexPolyFilled(pts.data(), (int)pts.size(), to_im(s.fill));
+            if (s.fill & 0xFF) list->AddConcavePolyFilled(pts.data(), (int)pts.size(), to_im(s.fill)); // convex or not
             if ((s.line & 0xFF) && s.thickness > 0.0f) list->AddPolyline(pts.data(), (int)pts.size(), to_im(s.line), ImDrawFlags_Closed, s.thickness * scale);
             break;
         }

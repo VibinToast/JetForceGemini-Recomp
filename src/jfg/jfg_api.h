@@ -35,6 +35,7 @@ enum class Event : uint32_t {
     DrawHud,          // jfg_on_draw_hud(JfgHudGfx* hud), since version 4
     HudMessage,       // jfg_on_hud_message(int msg, int character, int player), since version 4
     ReticleDraw,      // jfg_on_reticle_draw(JfgReticle* reticle), since version 5
+    HealthDraw,       // jfg_on_health_draw(JfgHealth* health), since version 5
     Count
 };
 

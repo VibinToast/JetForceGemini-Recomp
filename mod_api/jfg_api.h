@@ -358,7 +358,7 @@ RECOMP_IMPORT("*", void jfg_overlay_draw_image(const JfgOverlayImage* image));
 typedef struct {
     const float* xy;    // count points: x, y, x, y, ... (at most 64)
     int count;
-    unsigned int fill;  // 0: not filled (the polygon must be convex to be filled)
+    unsigned int fill;  // 0: not filled (any polygon whose sides do not cross, convex or not)
     unsigned int line;  // 0: no outline
     float thickness;    // of the outline, in overlay units
 } JfgOverlayPolygon;
@@ -506,6 +506,22 @@ typedef struct {
     int width, height;
 } JfgReticle;
 
+// jfg_on_health_draw: the hero's health meter is about to be drawn. health in units (0 .. max; jfg_object_health is
+// 256 per unit), segments: the meter's segments (6, one more per health upgrade, up to 12), max = 5 * segments + 4 (the
+// meter fills its segments five times over: health / (segments + 1) full rounds, then health % (segments + 1)
+// segments of the next). players: 1 in the single-player game. frames: video frames the tick covers. Set cancel to 1
+// to draw none (and draw your own, e.g. with the overlay).
+typedef struct {
+    void* hero;
+    int health;
+    int segments;
+    int max;
+    int character;
+    int players;
+    int frames;
+    int cancel;
+} JfgHealth;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
@@ -561,5 +577,8 @@ typedef struct {
 
 // jfg_on_reticle_draw(JfgReticle* reticle)
 //     Each frame the aiming reticle is drawn, before the game draws it.
+// jfg_on_health_draw(JfgHealth* health)
+//     Each frame the health meter is drawn (not in the pause menu, cutscenes or other times the HUD is hidden),
+//     before the game draws it.
 
 #endif

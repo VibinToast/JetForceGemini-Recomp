@@ -29,7 +29,8 @@ const char* const g_event_names[] = {
     "jfg_on_game_tick", "jfg_on_level_change", "jfg_on_boss_fight_control", "jfg_on_blood_spurt", "jfg_on_blood_hit",
     "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
     "jfg_on_language_change", "jfg_on_map_open", "jfg_on_galaxy_change", "jfg_on_planet_select", "jfg_on_hero_control",
-    "jfg_on_object_draw_gfx", "jfg_on_draw_hud", "jfg_on_hud_message", "jfg_on_reticle_draw", nullptr
+    "jfg_on_object_draw_gfx", "jfg_on_draw_hud", "jfg_on_hud_message", "jfg_on_reticle_draw",
+    "jfg_on_health_draw", nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
@@ -545,5 +546,40 @@ bool jfg_reticle_event(uint8_t* rdram_, recomp_context* ctx) {
         g_rdram = rdram_;
         cancel = (int32_t)rd32(p.addr + 0x1C);
     }
+    return cancel == 0;
+}
+
+// instDrawHealth(hero, health, segments, updateRate)'s wrapper (jfg_hud_corners.cpp), before the game's code:
+// jfg_on_health_draw. Returns false when a callback cancelled the game's meter.
+// JfgHealth: void* hero, s32 health (units), segments (6, +1 per health upgrade, up to 12), max (5 * segments + 4),
+// character, players (1 in the single-player game), frames, cancel.
+bool jfg_health_event(uint8_t* rdram_, recomp_context* ctx) {
+    using namespace jfg;
+    if (!api::listened(api::Event::HealthDraw)) return true;
+    g_rdram = rdram_;
+    constexpr uint32_t ADDR_numberOfPlayers = 0x800A4FD0; // u8
+    const uint32_t hero = (uint32_t)ctx->r4;
+    const uint32_t data = valid_ptr(hero) ? Obj::Data::get(hero) : 0;
+    const int segments = (int32_t)ctx->r6;
+    const gpr a0 = ctx->r4, a1 = ctx->r5, a2 = ctx->r6, a3 = ctx->r7;
+    int32_t cancel;
+    {
+        api::Payload p(ctx, 0x20);
+        wr32(p.addr + 0x00, hero);
+        wr32(p.addr + 0x04, (uint32_t)(int32_t)a1);
+        wr32(p.addr + 0x08, (uint32_t)segments);
+        wr32(p.addr + 0x0C, (uint32_t)(5 * segments + 4));
+        wr32(p.addr + 0x10, valid_ptr(data) ? (PlayerData::Character::get(data) & 3u) : 0u);
+        wr32(p.addr + 0x14, rd8(ADDR_numberOfPlayers));
+        wr32(p.addr + 0x18, (uint32_t)(int32_t)a3);
+        wr32(p.addr + 0x1C, 0);
+        api::fire(rdram_, ctx, api::Event::HealthDraw, (int32_t)p.addr);
+        g_rdram = rdram_;
+        cancel = (int32_t)rd32(p.addr + 0x1C);
+    }
+    ctx->r4 = a0;
+    ctx->r5 = a1;
+    ctx->r6 = a2;
+    ctx->r7 = a3;
     return cancel == 0;
 }

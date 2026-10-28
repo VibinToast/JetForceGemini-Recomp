@@ -382,13 +382,16 @@ JFG_HUD_PIECE(func_overlay_14_00000220_1F0DB78, jfg::jfg_hud_middle)       // th
 JFG_HUD_PIECE(func_overlay_14_00000074_1F0D9CC, jfg::jfg_hud_middle)       // the arrows at the screen's sides
 #undef JFG_HUD_PIECE
 
-// instDrawHealth(player, health, max, updateRate), the health meter: left out for a hero whose health a mod shows
-// itself (jfg_hud_hide_health), else a HUD piece as above.
+// instDrawHealth(player, health, segments, updateRate), the health meter: left out for a hero whose health a mod shows
+// itself (jfg_hud_hide_health) or draws its own (jfg_on_health_draw), else a HUD piece as above.
+bool jfg_health_event(uint8_t* rdram, recomp_context* ctx); // jfg_api.cpp
 JFG_WRAP(instDrawHealth) {
     jfg::g_rdram = rdram;
     const uint32_t obj = (uint32_t)ctx->r4;
     const uint32_t data = jfg::valid_ptr(obj) ? jfg::Obj::Data::get(obj) : 0;
     if (jfg::valid_ptr(data) && jfg::api::hero_health_hidden(jfg::PlayerData::Character::get(data) & 3)) return;
+    if (!jfg_health_event(rdram, ctx)) return; // a mod draws its own meter
+    jfg::g_rdram = rdram;
     jfg::jfg_hud_health(rdram, ctx);
     instDrawHealth_orig(rdram, ctx);
     jfg::jfg_hud_pop(rdram, ctx);
