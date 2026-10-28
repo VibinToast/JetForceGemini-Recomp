@@ -1,11 +1,15 @@
 // Jet Force Gemini port: kills for mods (mod_api/jfg_api.h, jfg_on_kill).
 //
-// Every squad member (enemies and Tribals) dies through SquaddiePassesAway (overlay 3), which also counts the kill in
-// the game's weapon stats (mainIncreaseWeaponKills with its damage's low nibble: the weapon that killed it). Its
-// wrapper fires jfg_on_kill with the victim, the weapon and who fired. The game keeps no shooter for most kills (the
-// damage's last hitter, +0x3C, is set only by a decapitation), so the port remembers the last one each squad member
-// was shot by: squadsPlayerShootsSquaddie(member, shooter), called by the hits (hitUpdate) and the flamethrower (its wrapper is in jfg_squad_cheat.cpp). Names
-// are the objects' own definition names from the player's ROM (ObjDef +4, 16 bytes): the port and mods ship none.
+// The game ends a squad member (an enemy or a Tribal) in several places, and jfg_on_kill comes from each:
+// - shot down: SquaddiePassesAway (overlay 3), which counts the kill in the game's weapon stats
+//   (mainIncreaseWeaponKills with its damage's low nibble: the weapon that killed it);
+// - blown apart by a blast (explosionHitTick), finished by some projectiles (hitUpdate) or beheaded by a shuriken:
+//   counted by mainIncreaseWeaponKills straight from those;
+// - a Tribal lost: counted by neither; the game marks it lost (mainSetTribalStatus) while SquaddieControl updates it.
+// The game keeps no shooter for most kills (the damage's last hitter, +0x3C, is set only by a decapitation), so the
+// port remembers the last one each squad member was shot by: squadsPlayerShootsSquaddie(member, shooter), called by
+// the hits (hitUpdate), the flamethrower and decapitations (its wrapper is in jfg_squad_cheat.cpp). Names are the
+// objects' own definition names from the player's ROM (ObjDef +4, 16 bytes): the port and mods ship none.
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -35,11 +39,21 @@ struct Shot {
 constexpr int SHOTS = 32;
 Shot g_shots[SHOTS];
 int g_next_shot = 0;
+uint32_t g_last_shot_victim = 0; // the squad member shot last (a shuriken's decapitation counts its kill after)
+uint32_t g_squaddie = 0;          // the squad member SquaddieControl is updating
 
 } // namespace
 
+// From SquaddieControl's wrapper (jfg_frame_rate.cpp): the member being updated; returns the one before.
+uint32_t kills_set_squaddie(uint32_t obj) {
+    const uint32_t before = g_squaddie;
+    g_squaddie = obj;
+    return before;
+}
+
 // From squadsPlayerShootsSquaddie's wrapper (jfg_squad_cheat.cpp).
 void kills_remember_shot(uint32_t victim, uint32_t shooter) {
+    g_last_shot_victim = victim;
     for (Shot& s : g_shots) {
         if (s.victim == victim) { s.shooter = shooter; return; }
     }
@@ -162,20 +176,25 @@ JFG_WRAP(SquaddiePassesAway) {
 }
 
 // mainIncreaseWeaponKills(weapon), called from elsewhere than SquaddiePassesAway: a blast or a projectile finished a
-// squad member (never a Tribal: both callers skip those). The victim is the caller's $s2; the shooter, when the caller
-// has one, its $s5, else the hero.
+// squad member (never a Tribal: both callers skip those), the victim in the caller's $s2 and the shooter, when the
+// caller has one, in its $s5, else the hero; or a shuriken took a squad member's head (weapon 9), right after
+// squadsDecapitateSquaddie shot it: the member shot last.
 JFG_WRAP(mainIncreaseWeaponKills) {
     using namespace jfg;
     const gpr a0 = ctx->r4;
     mainIncreaseWeaponKills_orig(rdram, ctx);
     if (g_in_passes) return;
     g_rdram = rdram;
-    const uint32_t victim = (uint32_t)ctx->r18;
-    if (!valid_ptr(victim) || Obj::Kind::get(victim) != 0x18) {
-        if (debug_kills()) std::fprintf(stderr, "[kills] counted weapon %d, no victim in $s2 (%08X)\n", (int)a0, victim);
-        return;
-    }
+    uint32_t victim = (uint32_t)ctx->r18;
     uint32_t killer = (uint32_t)ctx->r21;
+    if (!valid_ptr(victim) || Obj::Kind::get(victim) != 0x18) {
+        victim = g_last_shot_victim;
+        killer = 0;
+        if (!valid_ptr(victim) || Obj::Kind::get(victim) != 0x18) {
+            if (debug_kills()) std::fprintf(stderr, "[kills] counted weapon %d, no victim\n", (int)a0);
+            return;
+        }
+    }
     if (!valid_ptr(killer) || (Obj::Kind::get(killer) != KIND_HERO && Obj::Kind::get(killer) != KIND_FLOYD)) {
         killer = take_shot(victim);
         killer = valid_ptr(killer) ? shooter_of(killer) : current_hero(ctx);
@@ -183,4 +202,27 @@ JFG_WRAP(mainIncreaseWeaponKills) {
         take_shot(victim);
     }
     report_kill(rdram, ctx, victim, killer, (int)(int32_t)a0, false, "counted");
+}
+
+// mainSetTribalStatus(tribal, status): status 2 is a Tribal lost. The game counts no kill for it; the Tribal is the
+// squad member SquaddieControl is updating, and its shooter the one that shot it last.
+JFG_WRAP(mainSetTribalStatus) {
+    using namespace jfg;
+    g_rdram = rdram;
+    const int status = (int32_t)ctx->r5;
+    const uint32_t game = rd32(ADDR_gameplay);
+    const int lost = valid_ptr(game) ? rd8(game + 5) : 0;
+    mainSetTribalStatus_orig(rdram, ctx);
+    g_rdram = rdram;
+    if (status != 2 || !valid_ptr(game) || rd8(game + 5) == lost) return;
+    const uint32_t victim = g_squaddie;
+    if (!valid_ptr(victim)) {
+        if (debug_kills()) std::fprintf(stderr, "[kills] Tribal lost, no squad member being updated\n");
+        return;
+    }
+    const uint32_t dmg = Obj::Damage::get(victim);
+    const int weapon = valid_ptr(dmg) ? (rd8(dmg + 0x08) & 0xF) : -1;
+    const uint32_t shot = take_shot(victim);
+    const uint32_t hit = valid_ptr(shot) ? shot : (valid_ptr(dmg) ? rd32(dmg + 0x3C) : 0);
+    report_kill(rdram, ctx, victim, shooter_of(hit), weapon, true, "Tribal lost");
 }

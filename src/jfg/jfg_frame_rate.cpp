@@ -175,11 +175,16 @@ extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
 // function from the ROM, and enemies ran twice as fast at 60 fps when the cadence was a hook inside them). They are
 // wrapped (tools/wrapped_funcs.txt): every call runs these first, then the game's code (<name>_orig), or a mod's patch
 // or hook of it.
+uint32_t kills_set_squaddie(uint32_t obj); // jfg_kills.cpp
+
+// Also tells jfg_kills.cpp which squad member is being updated (a Tribal lost is marked during the update).
 JFG_WRAP(SquaddieControl) {
     const int r = jfg_squad_frames(rdram, (uint32_t)ctx->r4, (int32_t)ctx->r5);
     if (r == 0) return;
     ctx->r5 = (gpr)r;
+    const uint32_t before = jfg::kills_set_squaddie((uint32_t)ctx->r4);
     SquaddieControl_orig(rdram, ctx);
+    jfg::kills_set_squaddie(before);
 }
 
 JFG_WRAP(SquadronControl) {
