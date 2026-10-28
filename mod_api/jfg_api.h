@@ -293,6 +293,9 @@ RECOMP_IMPORT("*", void jfg_hero_push(void* hero, float x, float z, int ticks));
 // The hero is hit as by an enemy's shot: one unit of health (units 1) or two (2), with the hit reaction, its sound and
 // the red flash, unless it is protected (just hit, or jfg_hero_protect).
 RECOMP_IMPORT("*", void jfg_hero_hit(void* hero, int units));
+// The hero rolls to its left (right 0) or right (1), as the game's side buttons make it roll while it stands: the
+// game plays the roll and moves the hero along it. Juno and Vela only; returns 1 if it rolled.
+RECOMP_IMPORT("*", int jfg_hero_roll(void* hero, int right));
 // No damage reaches the hero for at least ticks 1/60 s ticks (8 at the least), and enemies don't aim at it.
 RECOMP_IMPORT("*", void jfg_hero_protect(void* hero, int ticks));
 

@@ -30,6 +30,8 @@ extern "C" void SetSquaddieOnFire(uint8_t* rdram, recomp_context* ctx);
 extern "C" void squadsElectrocuteSquaddie(uint8_t* rdram, recomp_context* ctx);
 extern "C" void squadsPlayerShootsSquaddie(uint8_t* rdram, recomp_context* ctx);
 extern "C" void amSndPlay(uint8_t* rdram, recomp_context* ctx);
+extern "C" void func_overlay_15_00005180_1F18B00(uint8_t* rdram, recomp_context* ctx); // Vela: set her move (obj, data, move, frame)
+extern "C" void func_overlay_16_00004F78_1F22F90(uint8_t* rdram, recomp_context* ctx); // Juno: the same
 extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
 
 namespace jfg::api {
@@ -55,7 +57,9 @@ using BodyYaw  = Field<uint16_t, 0x11C>;
 using PushX      = Field<float, 0x6C>;     // a push (knockback): world x and z per 1/60 s tick, the move functions
 using PushZ      = Field<float, 0x70>;     // add it while PushTicks runs, and walls stop it as they stop walking
 using PushTicks  = Field<int8_t, 0x149>;
-using State      = Field<uint16_t, 0x568>; // low 4 bits: 0 walk/run, 1 stand, 2 crouch, 3 air, 4 swim, 5/11 aim, 10 dead
+using State      = Field<uint8_t, 0x568>;  // low 4 bits: 0 walk/run, 1 stand, 2 crouch, 3 air, 4 swim, 5/11 aim, 10 dead
+using SideMoving = Field<uint8_t, 0x56C>;  // set while the hero moves sideways (a strafe or a roll)
+using Roll       = Field<uint8_t, 0x584>;  // a roll under way: 1 left, 2 right (3, 4 crouched); its speed follows a curve
 using Protected  = Field<int16_t, 0x5C8>;  // 60 Hz ticks of protection: damage is dropped, enemies don't aim at it
 using Floyd      = Field<uint32_t, 0x50C>; // Floyd's object while he follows this hero
 using FloydFlown = Field<uint8_t, 0x10D>;  // bit 0: the player flies Floyd
@@ -668,6 +672,31 @@ void hero_hit(uint8_t* rdram_, recomp_context* ctx) {
     wr8(data + 0x190, (int)ctx->r5 >= 2 ? 0xC0 : 0x80);
 }
 
+// jfg_hero_roll(void* hero, int right): the hero rolls to its left (0) or right (1) as the game's side buttons start a
+// roll while it stands (overlay 16's func_00004934: the roll state, the roll move from its start, the sideways flag): the
+// game then plays the roll and moves the hero along the roll's speed curve. Juno and Vela only (Lupus has no roll);
+// returns 1 if it rolled.
+void hero_roll(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const bool right = ctx->r5 != 0;
+    const uint32_t data = hero_data(obj);
+    const int character = (int16_t)rd16(ADDR_currentCharacter);
+    ctx->r2 = 0;
+    if (data == 0 || rd32(ADDR_mainGameMode) != 0) return;
+    void (*set_move)(uint8_t*, recomp_context*) = nullptr;
+    uint32_t move = 0;
+    if (character == 1) { set_move = func_overlay_16_00004F78_1F22F90; move = right ? 0x0B : 0x31; }      // Juno
+    else if (character == 0) { set_move = func_overlay_15_00005180_1F18B00; move = right ? 0x0B : 0x32; } // Vela
+    if (set_move == nullptr) return;
+    Hero::Roll::set(data, right ? 2 : 1);
+    call_game(set_move, ctx, { obj, data, move, 0 }); // frame 0.0f
+    g_rdram = rdram_;
+    Obj::AnimPhase::set(obj, 0.0f);
+    Hero::SideMoving::set(data, 1);
+    ctx->r2 = 1;
+}
+
 // jfg_hero_protect(void* hero, int ticks): no damage reaches the hero for at least that many 1/60 s ticks (8 at
 // least: the game's own protection, as after a level exit).
 void hero_protect(uint8_t* rdram_, recomp_context* ctx) {
@@ -929,6 +958,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_enemy_dying", enemy_dying);
     recomp::overlays::register_base_export("jfg_hero_push", hero_push);
     recomp::overlays::register_base_export("jfg_hero_protect", hero_protect);
+    recomp::overlays::register_base_export("jfg_hero_roll", hero_roll);
     recomp::overlays::register_base_export("jfg_hero_hit", hero_hit);
     recomp::overlays::register_base_export("jfg_floyd_get", floyd_get);
     recomp::overlays::register_base_export("jfg_fire_bolt", fire_bolt);
