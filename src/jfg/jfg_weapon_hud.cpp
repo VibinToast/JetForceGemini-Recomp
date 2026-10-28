@@ -238,10 +238,15 @@ bool jfg_weapon_hud_event(uint8_t* rdram_, recomp_context* ctx) {
     const gpr a0 = ctx->r4;
     const int weapon = Character::CurrentWeapon::get(ch) & 0xF;
     // The charge bar as the game fills it (0..252, 42 a segment): the pistol's heat, or the charge of the weapons that
-    // charge (3, 4, 6), from full to empty as they charge up.
+    // charge (3, 4, 6, and slot 15 holding a modded charge weapon, counted as 3), from full to empty as they charge up.
     float charge = -1.0f;
+    const bool carried_charge = weapon == 15 && (int8_t)rd8(ADDR_weaponTable + WeaponDef::Size * 15 + 0x06) == -1;
     if (weapon == 0) {
         charge = rd8(data + 0x542) / 252.0f;
+    } else if (carried_charge) {
+        const int max = ((int)Character::MaxCharge::get(ch, 15) << 5) - 32;
+        const int value = (int16_t)rd16(data + 0x53E) - 32;
+        charge = max > 0 ? (252 - (value * 252) / max) / 252.0f : 0.0f;
     } else if (weapon == 3 || weapon == 4 || weapon == 6) {
         int max = (int32_t)call_game(controlGetMaxCharge, ctx, { ch, (uint32_t)weapon });
         g_rdram = rdram_;
