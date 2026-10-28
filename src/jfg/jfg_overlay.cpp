@@ -359,3 +359,11 @@ bool build(ImDrawList* list, ImVector<ImTextureData*>& textures) {
 }
 
 } // namespace jfg::overlay
+
+namespace jfg {
+// The overlay's width and height (240), for the port's own helpers (jfg_world_to_screen).
+void overlay_size_now(float* out) {
+    out[0] = jfg::overlay::overlay_width();
+    out[1] = 240.0f;
+}
+} // namespace jfg

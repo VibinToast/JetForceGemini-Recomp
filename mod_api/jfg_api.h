@@ -592,6 +592,12 @@ typedef struct {
     float floor;
 } JfgEnemyTraits;
 RECOMP_IMPORT("*", int jfg_enemy_traits(void* enemy, JfgEnemyTraits* out));
+// Where a point of the level (x, y, z) shows on screen this frame, in the overlay's units (jfg_overlay_size): out[0]
+// x, out[1] y, out[2] its distance in front of the camera, out[3] overlay units per level unit there (to size a
+// picture drawn at it). 1 if it is in front of the camera, else 0. Overlay pictures cover the game: to hide one behind
+// a wall, test the line from the camera (jfg_camera_get) with jfg_level_ray. Picture ids (jfg_overlay_image) are
+// shared by all mods: use numbers of your own (a few high bits from your mod's name).
+RECOMP_IMPORT("*", int jfg_world_to_screen(const float* world, float* out));
 
 // --- event data ---------------------------------------------------------------------------------------------------
 

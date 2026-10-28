@@ -41,6 +41,7 @@ extern "C" void func_overlay_15_00005180_1F18B00(uint8_t* rdram, recomp_context*
 extern "C" void func_overlay_16_00004F78_1F22F90(uint8_t* rdram, recomp_context* ctx); // Juno: the same
 extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
 namespace jfg { bool hud_in_corners(); } // jfg_hud_corners.cpp
+namespace jfg { void overlay_size_now(float* out); } // jfg_overlay.cpp
 
 namespace jfg::api {
 // A camera a mod set this tick (jfg_camera_set), applied by the camera step's wrapper.
@@ -195,6 +196,34 @@ void camera_get(uint8_t* rdram_, recomp_context* ctx) {
     wrf(out + 0x08, Camera::PosZ::get(cam));
     wr32(out + 0x0C, Camera::Yaw::get(cam));
     wr32(out + 0x10, Camera::Pitch::get(cam));
+}
+
+// jfg_world_to_screen(const float* world, float* out): where a point of the level shows on screen, in the overlay's
+// units (jfg_overlay_size): out[0] x, out[1] y, out[2] its distance in front of the camera, out[3] overlay units per
+// level unit at that distance (to size a picture drawn there). 1 if it is in front of the camera, else 0 (out not
+// filled). It uses the game's view-projection matrix of the frame (D_800FAAF0, camera.c: view x perspective, row
+// vectors), which maps the middle 4:3 of the picture: RT64's widescreen only widens it at the sides, so the 4:3 half
+// width (160 units of 240 high) is the scale in both modes.
+void world_to_screen(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    constexpr uint32_t VIEW_PROJ = 0x800FAAF0, PERSPECTIVE = 0x800FAA70;
+    const uint32_t in = (uint32_t)ctx->r4, out = (uint32_t)ctx->r5;
+    ctx->r2 = 0;
+    if (in == 0 || out == 0 || rd32(ADDR_mainGameMode) != 0) return;
+    const float v[4] = { rdf(in), rdf(in + 4), rdf(in + 8), 1.0f };
+    float clip[4];
+    for (int j = 0; j < 4; j++) {
+        clip[j] = 0.0f;
+        for (int i = 0; i < 4; i++) clip[j] += v[i] * rdf(VIEW_PROJ + (uint32_t)(i * 16 + j * 4));
+    }
+    if (clip[3] < 1.0f) return;
+    float screen[2];
+    jfg::overlay_size_now(screen);
+    wrf(out + 0, screen[0] * 0.5f + clip[0] / clip[3] * 160.0f);
+    wrf(out + 4, 120.0f - clip[1] / clip[3] * 120.0f);
+    wrf(out + 8, clip[3]);
+    wrf(out + 12, rdf(PERSPECTIVE + 5 * 4) * 120.0f / clip[3]); // [1][1]: the vertical scale
+    ctx->r2 = 1;
 }
 
 // Calls fn(segment, batch flags, texture, first face, end face, first vertex) for every batch of the level's track.
@@ -1355,6 +1384,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_shocker_end", shocker_end);
     recomp::overlays::register_base_export("jfg_flames_get", flames_get);
     recomp::overlays::register_base_export("jfg_spawn", spawn);
+    recomp::overlays::register_base_export("jfg_world_to_screen", world_to_screen);
     recomp::overlays::register_base_export("jfg_object_free", object_free);
     recomp::overlays::register_base_export("jfg_object_set_scale", object_set_scale);
     recomp::overlays::register_base_export("jfg_object_scale", object_scale);
