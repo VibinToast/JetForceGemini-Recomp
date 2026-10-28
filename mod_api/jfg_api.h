@@ -296,6 +296,13 @@ RECOMP_IMPORT("*", void jfg_hero_hit(void* hero, int units));
 // The hero rolls to its left (right 0) or right (1), as the game's side buttons make it roll while it stands: the
 // game plays the roll and moves the hero along it. Juno and Vela only; returns 1 if it rolled.
 RECOMP_IMPORT("*", int jfg_hero_roll(void* hero, int right));
+// Sets the hero's move (its animation, which the game carries on from) from its start: 0 walk, 1 run, 0x10 standing
+// still (4 and 0x0E are crouched). The game's side roll ends crouched; a mod that rolls the hero can stand it up again
+// with this. Juno and Vela only; returns 1 if set.
+#define JFG_MOVE_WALK  0x00
+#define JFG_MOVE_RUN   0x01
+#define JFG_MOVE_STAND 0x10
+RECOMP_IMPORT("*", int jfg_hero_move(void* hero, int move));
 // Plays the game's own sound effect id at x, y, z (louder near the camera). Some: Juno's jump 0x4C and 0x51, landing
 // 0x6, his side rolls 0x7A (left) and 0x79 (right) (JFG_DEBUG_SOUNDS=1 logs every sound the game starts).
 RECOMP_IMPORT("*", void jfg_game_sound(int id, float x, float y, float z));

@@ -673,6 +673,30 @@ void hero_hit(uint8_t* rdram_, recomp_context* ctx) {
     wr8(data + 0x190, (int)ctx->r5 >= 2 ? 0xC0 : 0x80);
 }
 
+// The hero's move setter (overlay 15 Vela's, 16 Juno's), or null for Lupus and outside a level.
+static void (*move_setter())(uint8_t*, recomp_context*) {
+    if (rd32(ADDR_mainGameMode) != 0) return nullptr;
+    const int character = (int16_t)rd16(ADDR_currentCharacter);
+    if (character == 1) return func_overlay_16_00004F78_1F22F90;
+    if (character == 0) return func_overlay_15_00005180_1F18B00;
+    return nullptr;
+}
+
+// jfg_hero_move(void* hero, int move): the hero's move (its animation, which the game's move picker carries on from:
+// 0 walk, 1 run, 0x10 standing still; 4 and 0x0E are crouched) from its start. Juno and Vela only; returns 1 if set.
+void hero_move(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const uint32_t data = hero_data(obj);
+    const auto set_move = move_setter();
+    ctx->r2 = 0;
+    if (data == 0 || set_move == nullptr) return;
+    call_game(set_move, ctx, { obj, data, (uint32_t)ctx->r5 & 0xFF, 0 }); // frame 0.0f
+    g_rdram = rdram_;
+    Obj::AnimPhase::set(obj, 0.0f);
+    ctx->r2 = 1;
+}
+
 // jfg_hero_roll(void* hero, int right): the hero rolls to its left (0) or right (1) as the game's side buttons start a
 // roll while it stands (overlay 16's func_00004934: the roll state, the roll move from its start, the sideways flag): the
 // game then plays the roll and moves the hero along the roll's speed curve. Juno and Vela only (Lupus has no roll);
@@ -975,6 +999,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_hero_push", hero_push);
     recomp::overlays::register_base_export("jfg_hero_protect", hero_protect);
     recomp::overlays::register_base_export("jfg_hero_roll", hero_roll);
+    recomp::overlays::register_base_export("jfg_hero_move", hero_move);
     recomp::overlays::register_base_export("jfg_game_sound", game_sound);
     recomp::overlays::register_base_export("jfg_game_sound_flat", game_sound_flat);
     recomp::overlays::register_base_export("jfg_hero_hit", hero_hit);
