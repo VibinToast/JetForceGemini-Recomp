@@ -706,6 +706,13 @@ void game_sound(uint8_t* rdram_, recomp_context* ctx) {
     call_game(amSndPlayXYZ, ctx, { id, (uint32_t)ctx->r5, (uint32_t)ctx->r6, (uint32_t)ctx->r7, 4, 0 });
 }
 
+// jfg_game_sound_flat(int id): the game's sound effect id, not placed (amSndPlay, as the game plays its menu and HUD
+// sounds): heard the same wherever the camera is.
+void game_sound_flat(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    call_game(amSndPlay, ctx, { (uint32_t)ctx->r4 & 0xFFFF, 0 });
+}
+
 // jfg_hero_protect(void* hero, int ticks): no damage reaches the hero for at least that many 1/60 s ticks (8 at
 // least: the game's own protection, as after a level exit).
 void hero_protect(uint8_t* rdram_, recomp_context* ctx) {
@@ -969,6 +976,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_hero_protect", hero_protect);
     recomp::overlays::register_base_export("jfg_hero_roll", hero_roll);
     recomp::overlays::register_base_export("jfg_game_sound", game_sound);
+    recomp::overlays::register_base_export("jfg_game_sound_flat", game_sound_flat);
     recomp::overlays::register_base_export("jfg_hero_hit", hero_hit);
     recomp::overlays::register_base_export("jfg_floyd_get", floyd_get);
     recomp::overlays::register_base_export("jfg_fire_bolt", fire_bolt);

@@ -299,6 +299,8 @@ RECOMP_IMPORT("*", int jfg_hero_roll(void* hero, int right));
 // Plays the game's own sound effect id at x, y, z (louder near the camera). Some: Juno's jump 0x4C and 0x51, landing
 // 0x6, his side rolls 0x7A (left) and 0x79 (right) (JFG_DEBUG_SOUNDS=1 logs every sound the game starts).
 RECOMP_IMPORT("*", void jfg_game_sound(int id, float x, float y, float z));
+// Plays the game's own sound effect id, the same loudness wherever the camera is.
+RECOMP_IMPORT("*", void jfg_game_sound_flat(int id));
 // No damage reaches the hero for at least ticks 1/60 s ticks (8 at the least), and enemies don't aim at it.
 RECOMP_IMPORT("*", void jfg_hero_protect(void* hero, int ticks));
 
