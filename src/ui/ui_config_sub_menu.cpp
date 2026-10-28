@@ -35,7 +35,7 @@ ConfigOptionElement::ConfigOptionElement(Element *parent) : Element(parent, Even
     set_padding_top(16.0f); set_padding_bottom(18.0f); set_padding_left(22.0f); set_padding_right(22.0f);
     set_margin_bottom(12.0f);
     set_background_color(modui::panel);
-    set_border_width(1.0f);
+    set_border_width(2.0f);
     set_border_color(modui::edge);
 
     name_label = get_current_context().create_element<Label>(this, LabelStyle::Normal);
@@ -44,6 +44,12 @@ ConfigOptionElement::ConfigOptionElement(Element *parent) : Element(parent, Even
 
 ConfigOptionElement::~ConfigOptionElement() {
 
+}
+
+void ConfigOptionElement::set_highlighted(bool on) {
+    set_border_color(on ? modui::cyan : modui::edge);
+    set_background_color(on ? modui::hover : modui::panel);
+    name_label->set_color(on ? modui::cyan : modui::text);
 }
 
 void ConfigOptionElement::set_option_id(std::string_view id) {
@@ -154,7 +160,7 @@ void config_sub_menu_back() {
 
     recompui::hide_context(sub_menu_context);
     recompui::show_context(config_context, "");
-    recompui::focus_mod_configure_button();
+    if (!recompui::focus_selected_mod()) recompui::focus_mod_configure_button(); // JFG PORT: back on the mod's card
 }
 
 void ConfigSubMenu::set_description_option_element(ConfigOptionElement *option, bool active) {
@@ -251,8 +257,10 @@ void ConfigSubMenu::add_option(ConfigOptionElement *option, std::string_view id,
     option->set_hover_callback([this](ConfigOptionElement *option, bool active){ set_description_option_element(option, active); });
     option->set_focus_callback([this, option](const std::string &id, bool active) {
         set_description_option_element(option, active);
-        // JFG PORT: the whole card in view, centred: the first one scrolls the list to its top (its title showed cut
-        // off), the last to its bottom.
+        // JFG PORT: the chosen option's card stands out (cyan edge, lighter blue, its name in cyan), and the whole card
+        // is in view, centred: the first one scrolls the list to its top (its title showed cut off), the last to its
+        // bottom.
+        option->set_highlighted(active);
         if (active) option->scroll_into_view();
     });
     if (config_option_elements.empty()) {
