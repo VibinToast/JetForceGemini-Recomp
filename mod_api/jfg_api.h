@@ -134,6 +134,27 @@ typedef struct {
 } JfgNearObject;
 RECOMP_IMPORT("*", int jfg_objects_near(const JfgNear* query, JfgNearObject* out, int max));
 
+// The level's objects of one kind (their behaviour) that are shown, so not a pickup already taken: up to max of them
+// into out; returns how many there are. The pickups' kinds (every kind, and which levels place what: Recomp-Docs
+// LEVEL_OBJECTS.md):
+#define JFG_KIND_WEAPON      43   // weapon pickups
+#define JFG_KIND_COLLECTABLE 59   // ship parts, Floyd's parts, coins
+#define JFG_KIND_KEY         60
+#define JFG_KIND_HEALTH      61
+#define JFG_KIND_AMMO        66   // ammo boxes (full, capacity, extra)
+#define JFG_KIND_MULTI       79   // multiplayer pickups
+#define JFG_KIND_POWERUP     81   // invincibility
+#define JFG_KIND_CHEST       98
+#define JFG_KIND_QUEST       102  // power cells, circuit breakers
+#define JFG_KIND_PART        103  // parts to bring back (lubricant, DNA, ore, machine parts)
+#define JFG_KIND_TOKEN       109
+typedef struct {
+    void* object;
+    float x, y, z;
+    int kind;
+} JfgObjectInfo;
+RECOMP_IMPORT("*", int jfg_objects_of_kind(int kind, JfgObjectInfo* out, int max));
+
 // The collision triangles of the solid objects (crates, doors, lifts, props: the game's hit models) whose box overlaps
 // the sphere, except source, in world space: up to max of them into out; returns how many there are. flags are their
 // batch's (the same bits as JfgTriangle's). Call it each tick for moving ones.

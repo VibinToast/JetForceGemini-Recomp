@@ -356,6 +356,37 @@ void objects_near(uint8_t* rdram_, recomp_context* ctx) {
     ctx->r2 = (gpr)n;
 }
 
+// jfg_objects_of_kind(int kind, JfgObjectInfo* out, int max): the level's objects of that kind (Obj::Kind, their
+// behaviour: 60 keys, 98 chests, 61 health, ...) that are shown (none of the transform's hidden flags, 0xC00, which
+// objPrintObject skips: a pickup taken), with their place; returns how many there are (at most max copied).
+// JfgObjectInfo: object, f32 x, y, z, s32 kind (0x14 bytes).
+void objects_of_kind(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const int kind = (int)(int32_t)ctx->r4;
+    const uint32_t out = (uint32_t)ctx->r5;
+    const int max = (int)ctx->r6;
+    int n = 0;
+    const uint32_t list = rd32(ADDR_ObjList);
+    const int count = (int)rd32(ADDR_ObjListCount);
+    if (valid_ptr(list) && count > 0 && count < 4096) {
+        for (int i = 0; i < count; i++) {
+            const uint32_t obj = rd32(list + 4u * (uint32_t)i);
+            if (!valid_ptr(obj) || Obj::Kind::get(obj) != kind) continue;
+            if (rd16(obj + 0x06) & 0xC00) continue; // hidden
+            if (out != 0 && n < max) {
+                const uint32_t o = out + 0x14u * (uint32_t)n;
+                wr32(o + 0x00, obj);
+                wrf(o + 0x04, Obj::PosX::get(obj));
+                wrf(o + 0x08, Obj::PosY::get(obj));
+                wrf(o + 0x0C, Obj::PosZ::get(obj));
+                wr32(o + 0x10, (uint32_t)kind);
+            }
+            n++;
+        }
+    }
+    ctx->r2 = (gpr)n;
+}
+
 // jfg_object_triangles(const JfgNear* q, JfgObjectTriangle* out, int max): the collision triangles of the solid
 // objects (the game's hit models: crates, doors, lifts, props) whose box overlaps q's sphere, in world space, with
 // their batch's flags and their object; returns how many there are (at most max copied). JfgObjectTriangle: f32 v[3][3],
@@ -1022,6 +1053,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_hero_roll", hero_roll);
     recomp::overlays::register_base_export("jfg_hero_move", hero_move);
     recomp::overlays::register_base_export("jfg_hero_speak", hero_speak);
+    recomp::overlays::register_base_export("jfg_objects_of_kind", objects_of_kind);
     recomp::overlays::register_base_export("jfg_game_sound", game_sound);
     recomp::overlays::register_base_export("jfg_game_sound_flat", game_sound_flat);
     recomp::overlays::register_base_export("jfg_hero_hit", hero_hit);
