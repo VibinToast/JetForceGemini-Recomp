@@ -470,6 +470,7 @@ void jfg_restore_menu_place() {
     recompui::get_config_tabset()->SetActiveTab(jfg_menu_closed_tab);
     if (jfg_restore_tab_place()) return;
     if (!recompui::get_cont_active()) return;
+    if (jfg_menu_closed_tab == recompui::config_tab_to_index(recompui::ConfigTab::Mods) && recompui::focus_selected_mod()) return;
     if (Rml::Element* tabs = recompui::get_child_by_tag(recompui::get_config_tabset(), "tabs")) {
         if (Rml::Element* tab = tabs->GetChild(jfg_menu_closed_tab)) tab->Focus(true);
     }

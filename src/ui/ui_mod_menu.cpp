@@ -953,6 +953,18 @@ void set_config_tabset_mod_nav() {
     }
 }
 
+bool ModMenu::focus_active_mod() {
+    if (active_mod_index < 0 || (size_t)active_mod_index >= mod_entry_buttons.size()) return false;
+    mod_entry_buttons[active_mod_index]->focus();
+    mod_entry_buttons[active_mod_index]->scroll_into_view();
+    return true;
+}
+
+bool focus_selected_mod() {
+    ModMenu* mod_menu = sub_menu_owner != nullptr ? sub_menu_owner : config_mod_menu();
+    return mod_menu != nullptr && mod_menu->focus_active_mod();
+}
+
 void focus_mod_configure_button() {
     ModMenu* mod_menu = sub_menu_owner != nullptr ? sub_menu_owner : config_mod_menu();
     if (mod_menu == nullptr) return;
