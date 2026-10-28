@@ -24,6 +24,10 @@
 //   _00001294) wrap over 0..14 only, so their wrappers go over all 16 by the owned mask; slot 15 shows the carried
 //   weapon in hand: its name (text 0x39 + 15, as the HUD), its ammo, and for a mod's weapon no description (texts
 //   254-258 are the proximity mine's help). Its 3D model stays the proximity mine's (item 89).
+// - Icons: the weapon panel, the HUD's weapon strip and the pause screen's d-pad icons draw slot 15 as front-end item
+//   25, which is entry 25 of the front-end item list (D_800A51D0, s16 ids: 0x8000 | a 2D sprite; decomp MSR 8a). A
+//   weapon with its own icon (jfg_weapon_set_icon: a pack's sprite) has its sprite written there while it is in hand,
+//   and the item freed (freeFrontEndItem), so the next frame loads it; others get the game's entry back.
 // - Saving: the carried weapons' ammo by name, per character, in saves/<save>_weapons.txt when the game saves to that
 //   file (the jfg_auto_save.cpp hooks, as Permanent Tribal Saves); choosing a file loads its own. A file saved
 //   without it but with slot 15 owned (the proximity mine before the registry) takes slot 15 as the proximity mine.
@@ -60,6 +64,9 @@ constexpr int HELP_TEXT = 179;                  // front_text[179 + w * 5 ..]: t
 constexpr int HELP_LINES = 5;
 constexpr uint32_t OVERLAY_18_ROM = 0x01F2F9D8; // the pause menu's weapon screen
 constexpr uint32_t SHOWN_WEAPON = 0x66B0;       // overlay 18: s32, the weapon the screen shows
+constexpr uint32_t ADDR_FRONT_ITEMS = 0x800A51D0; // s16*: the front-end item list (initFront loads asset 0x1A)
+constexpr int CARRIER_ITEM = 10 + CARRIER;        // front-end item 25: slot 15's icon
+constexpr uint16_t ITEM_SPRITE = 0x8000;
 constexpr uint8_t THROW_DELAY = 0x1A;
 
 const char* const STOCK_NAMES[STOCK] = {
@@ -76,6 +83,7 @@ struct Weapon {
     int row_from = 0;    // the stock weapon whose WeaponDef row it takes
     int max_ammo = -1, start_ammo = -1, pickup_ammo = -1; // -1 = the row's
     uint32_t name_text = 0, ammo_text = 0; // the names, in the runtime's heap (made when first shown)
+    int icon = -1;       // its HUD icon: a 2D sprite number (jfg_weapon_set_icon), -1 = slot 15's own
 };
 // Index id - CARRIER.
 std::vector<Weapon> g_weapons = {
@@ -99,6 +107,7 @@ SavedHero g_disk[SAVE_SLOTS][HEROES];
 bool g_loaded = false;
 std::map<uint32_t, int> g_pickups; // pickup object -> carried id (this level)
 uint32_t g_blank_text = 0;         // "" in the runtime's heap: a mod weapon's help lines
+int g_item_stock = -1;             // item 25's entry as the game has it (read before it is first changed)
 uint32_t g_help[HELP_LINES] = {};  // the proximity mine's help lines, while a mod's weapon blanks them
 
 const Weapon* weapon_of(int id) {
@@ -301,10 +310,26 @@ void forget(int slot) {
     write_file();
 }
 
+// Slot 15's icon (front-end item 25) as the weapon in hand wants it.
+void update_icon(recomp_context* ctx, int hero) {
+    extern void freeFrontEndItem_call(recomp_context* ctx, int item);
+    const uint32_t list = rd32(ADDR_FRONT_ITEMS);
+    if (!valid_ptr(list)) return;
+    const uint32_t at = list + 2 * CARRIER_ITEM;
+    const uint16_t now = rd16(at);
+    if (g_item_stock < 0) g_item_stock = now;
+    const Weapon* w = hero >= 0 ? weapon_of(g_heroes[hero].current) : nullptr;
+    const uint16_t want = w != nullptr && w->icon >= 0 ? (uint16_t)(ITEM_SPRITE | w->icon) : (uint16_t)g_item_stock;
+    if (now == want) return;
+    wr16(at, want);
+    freeFrontEndItem_call(ctx, CARRIER_ITEM); // loaded again, as the new picture, where it is drawn next
+}
+
 // Start of each tick: slot 15's ammo back into the weapon in hand, then slot 15 as the carried weapons say.
-void tick() {
+void tick(recomp_context* ctx) {
     if (!in_game()) return;
     const int c = current_hero();
+    update_icon(ctx, c);
     for (int hero = 0; hero < HEROES; hero++) {
         const uint32_t ch = character_ptr(hero);
         if (!valid_ptr(ch)) continue;
@@ -411,6 +436,14 @@ JFG_WRAP(controlSelectPreviousWeapon) { select_step(rdram, ctx, -1, controlSelec
 extern "C" void func_overlay_18_00001194_1F30B6C(uint8_t* rdram, recomp_context* ctx); // show weapon w
 extern "C" void func_overlay_18_000011E4_1F30BBC(uint8_t* rdram, recomp_context* ctx); // hide the one shown
 extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom);                             // jfg_glue.cpp
+extern "C" void freeFrontEndItem(uint8_t* rdram, recomp_context* ctx);
+
+namespace jfg::weapons {
+void freeFrontEndItem_call(recomp_context* ctx, int item) { call_game(freeFrontEndItem, ctx, { (uint32_t)item }); }
+
+// A carried weapon id (15 up) the registry knows.
+bool known(int id) { return weapon_of(id) != nullptr; }
+}
 
 namespace {
 // The weapon screen's next (1) / previous (-1) over all 16 slots by the owned mask (owner: the MultiCharacter).
@@ -599,6 +632,15 @@ void api_weapon_register(uint8_t* rdram_, recomp_context* ctx) {
     ctx->r2 = (gpr)id;
 }
 
+// jfg_weapon_set_icon(int id, int sprite): a modded weapon's HUD icon is that 2D sprite (a pack's: its number from
+// jfg_asset_number), drawn where the game draws slot 15's; -1 gives slot 15's own back.
+void api_weapon_set_icon(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    Weapon* w = const_cast<Weapon*>(weapon_of((int32_t)ctx->r4));
+    const int sprite = (int32_t)ctx->r5;
+    if (w != nullptr) w->icon = sprite >= 0 && sprite < 0x4000 ? sprite : -1;
+}
+
 // jfg_weapon_find(const char* name): the id of a weapon by name ("stock:pistol" .. "stock:cluster_bombs",
 // "port:proximity_mine", mods' "mod_id:weapon"), -1 if none.
 void api_weapon_find(uint8_t* rdram_, recomp_context* ctx) {
@@ -757,6 +799,7 @@ namespace jfg {
 void register_weapon_registry_api() {
     recomp::overlays::register_base_export("jfg_weapon_register", api_weapon_register);
     recomp::overlays::register_base_export("jfg_weapon_find", api_weapon_find);
+    recomp::overlays::register_base_export("jfg_weapon_set_icon", api_weapon_set_icon);
     recomp::overlays::register_base_export("jfg_weapon_count", api_weapon_count);
     recomp::overlays::register_base_export("jfg_weapon_info", api_weapon_info);
     recomp::overlays::register_base_export("jfg_hero_has_weapon", api_hero_has_weapon);

@@ -84,7 +84,8 @@ void hud_weapon_icon(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t p = (uint32_t)ctx->r4;
     if (p == 0 || g_icons.size() >= 32) return;
-    const int weapon = (int)rd32(p);
+    int weapon = (int)rd32(p);
+    if (weapon >= WEAPONS && weapons::known(weapon)) weapon = WEAPONS - 1; // modded weapons: slot 15's icon
     if (weapon < 0 || weapon >= WEAPONS) return;
     g_icons.push_back({ weapon, f32_of(rd32(p + 4)), f32_of(rd32(p + 8)), f32_of(rd32(p + 12)), f32_of(rd32(p + 16)) });
 }

@@ -513,6 +513,10 @@ typedef struct {
 RECOMP_IMPORT("*", int jfg_weapon_register(const JfgWeaponDef* def));
 // A weapon's id by name ("stock:pistol" .. "stock:cluster_bombs", "port:proximity_mine", "mod_id:weapon"), -1 none.
 RECOMP_IMPORT("*", int jfg_weapon_find(const char* name));
+// A modded weapon's HUD icon: a 2D sprite of your pack (its number from jfg_asset_number; a picture of about 32 x 22 as
+// the game's, made with jfgformats' sprites.write and HUD_ICON_ANCHOR), shown in the weapon panel, the weapon strip and
+// the pause screen while the weapon is in hand. Set it after jfg_weapon_register. jfg_hud_weapon_icon takes modded ids.
+RECOMP_IMPORT("*", void jfg_weapon_set_icon(int id, int sprite));
 // How many weapon ids there are: 0 .. count - 1 are all weapons.
 RECOMP_IMPORT("*", int jfg_weapon_count(void));
 typedef struct {
@@ -524,7 +528,7 @@ typedef struct {
     int max_ammo;
 } JfgWeaponInfo;
 // 1 and out filled, 0 for no such weapon.
-RECOMP_IMPORT("*", int jfg_weapon_info(int id, JfgWeaponInfo* out));
+RECOMP_IMPORT("*", int jfg_weapon_info(int id, JfgWeaponInfo* out)); // display: a weapon's name to show (any id)
 // The first player's hero: owns it?; give it (ammo -1 = its start ammo; owned already: added up to its capacity);
 // take it away (not the pistol; in hand: the hero holds the next weapon).
 RECOMP_IMPORT("*", int jfg_hero_has_weapon(int id));
