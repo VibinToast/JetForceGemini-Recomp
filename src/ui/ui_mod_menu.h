@@ -84,7 +84,13 @@ public:
     ModMenu(Element *parent);
     virtual ~ModMenu();
     void set_mods_dirty(bool scan_mods) { mods_dirty = true; mod_scan_queued = scan_mods; }
-    Element* get_first_mod_entry() { return !mod_entry_buttons.empty() ? mod_entry_buttons[0] : nullptr; }
+    // JFG PORT: the card the menu is entered on (from the tabs, or the launcher's Mods button): the mod selected last,
+    // else the first.
+    Element* get_first_mod_entry() {
+        if (active_mod_index >= 0 && (size_t)active_mod_index < mod_entry_buttons.size()) return mod_entry_buttons[active_mod_index];
+        return !mod_entry_buttons.empty() ? mod_entry_buttons[0] : nullptr;
+    }
+    void update_entry_nav(); // JFG PORT: points the way into the menu at that card
     Element* get_mod_configure_button() { return mod_details_panel != nullptr ? mod_details_panel->get_configure_button() : nullptr; }
     // JFG PORT: the selected mod's card gets the focus (and is scrolled to); false if no mod is selected.
     bool focus_active_mod();

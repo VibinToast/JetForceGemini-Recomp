@@ -862,7 +862,10 @@ void jfg_config_step_tab(int dir) {
         if (tab == nullptr || tab->GetComputedValues().display() == Rml::Style::Display::None) continue;
         jfg_save_tab_place();
         tabset->SetActiveTab(i);
-        if (!jfg_restore_tab_place()) tab->Focus();
+        if (jfg_restore_tab_place()) return;
+        // JFG PORT: back on Mods, the mod selected last (as the other tabs keep their option).
+        if (i == recompui::config_tab_to_index(recompui::ConfigTab::Mods) && recompui::focus_selected_mod()) return;
+        tab->Focus();
         return;
     }
 }

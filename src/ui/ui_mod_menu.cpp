@@ -370,6 +370,24 @@ void ModMenu::apply_scale() {
     mod_entry_floating_view->set_scale(s, radius);
 }
 
+// JFG PORT: down from the settings menu's tabs, and right from the launcher's Mods button (spatial nav found the
+// toggle), go to the mod selected last (else the first), so switching pages and coming back keeps the place.
+void ModMenu::update_entry_nav() {
+    Rml::ElementTabSet* tabset = recompui::get_config_tabset();
+    if (owner_context == recompui::get_config_context_id() && tabset && tabset->GetActiveTab() == recompui::config_tab_to_index(ConfigTab::Mods)) {
+        recompui::set_config_tabset_mod_nav();
+    }
+    if (owner_context == recompui::get_launcher_context_id()) {
+        Rml::ElementDocument* doc = owner_context.get_document();
+        Rml::Element* mods_button = doc != nullptr ? doc->GetElementById(mod_tab_id.substr(1)) : nullptr;
+        if (mods_button != nullptr) {
+            Element* entry = get_first_mod_entry();
+            const std::string target = entry != nullptr ? entry->get_id() : install_mods_button->get_id();
+            mods_button->SetProperty(Rml::PropertyId::NavRight, Rml::Property{ "#" + target, Rml::Unit::STRING });
+        }
+    }
+}
+
 void ModMenu::mod_selected(uint32_t mod_index) {
     if (active_mod_index >= 0) {
         mod_entry_buttons[active_mod_index]->set_selected(false);
@@ -387,6 +405,7 @@ void ModMenu::mod_selected(uint32_t mod_index) {
         bool configure_enabled = config_schema.options.size() > (modui::has_switch(mod_details[mod_index].mod_id) ? 1u : 0u);
         mod_details_panel->set_mod_details(mod_details[mod_index], thumbnail_src, toggle_checked, toggle_enabled, auto_enabled, configure_enabled);
         mod_entry_buttons[active_mod_index]->set_selected(true);
+        update_entry_nav(); // JFG PORT
 
         mod_details_panel->setup_mod_navigation(mod_entry_buttons[mod_index]);
 
@@ -709,24 +728,7 @@ void ModMenu::create_mod_list() {
         install_mods_button->set_nav_manual(NavDirection::Up, mod_tab_id);
     }
 
-    Rml::ElementTabSet* tabset = recompui::get_config_tabset();
-    if (tabset && tabset->GetActiveTab() == recompui::config_tab_to_index(ConfigTab::Mods)) {
-        recompui::set_config_tabset_mod_nav();
-    }       
-
-    // JFG PORT: in the launcher, right from the Mods button goes to the first mod (spatial nav found the toggle).
-    if (owner_context == recompui::get_launcher_context_id()) {
-        Rml::ElementDocument* doc = owner_context.get_document();
-        Rml::Element* mods_button = doc != nullptr ? doc->GetElementById(mod_tab_id.substr(1)) : nullptr;
-        if (mods_button != nullptr) {
-            if (!mod_entry_buttons.empty()) {
-                mods_button->SetProperty(Rml::PropertyId::NavRight, Rml::Property{ "#" + mod_entry_buttons.front()->get_id(), Rml::Unit::STRING });
-            }
-            else {
-                mods_button->SetProperty(Rml::PropertyId::NavRight, Rml::Property{ "#" + install_mods_button->get_id(), Rml::Unit::STRING });
-            }
-        }
-    }
+    update_entry_nav();
 
     // Add one extra spacer at the bottom.
     ModEntrySpacer *spacer = context.create_element<ModEntrySpacer>(list_scroll_container);
