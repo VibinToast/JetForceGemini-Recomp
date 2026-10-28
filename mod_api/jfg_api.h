@@ -446,6 +446,10 @@ typedef struct {
     void* owner;
 } JfgPlasma;
 RECOMP_IMPORT("*", void* jfg_fire_plasma(const JfgPlasma* plasma));
+// The first point of the level (walls, floors, ceilings: the track, as shots test their flight) on the line from a to
+// b (x, y, z each): 1 if there is one, with out = its x, y, z and the surface's normal (nx, ny, nz, facing a); 0 if the
+// line is clear. Since version 5.
+RECOMP_IMPORT("*", int jfg_level_ray(const float* a, const float* b, float* out));
 // 1 when nothing (the level, or an object with a hit model other than from and to) stands between a and b (x, y, z).
 RECOMP_IMPORT("*", int jfg_line_of_sight(void* from, void* to, const float* a, const float* b));
 

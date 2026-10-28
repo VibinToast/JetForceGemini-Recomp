@@ -16,6 +16,7 @@
 #include "jfg_port.h"
 
 extern "C" void controlReadJoypad(uint8_t* rdram, recomp_context* ctx);
+extern "C" void trackNearestIntersection(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackPolyHeight(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackGetBlock(uint8_t* rdram, recomp_context* ctx);
 extern "C" void mainGetGameCharacter(uint8_t* rdram, recomp_context* ctx);
@@ -884,6 +885,58 @@ void fire_plasma(uint8_t* rdram_, recomp_context* ctx) {
     ctx->r2 = (gpr)(int32_t)(valid_ptr(ball) ? ball : 0);
 }
 
+// jfg_level_ray(const float* from, const float* to, float* out): the first point of the level (its track, as a plasma
+// ball tests its flight: trackNearestIntersection) on the line from -> to. 1 if there is one, with out = x, y, z of it
+// and the surface's normal (nx, ny, nz, facing from); 0 otherwise. The result (+0x04 the point, +0x20 its distance)
+// carries no normal the port has found, so it is the plane of three such hits on lines a little apart.
+void level_ray(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t a = (uint32_t)ctx->r4, b = (uint32_t)ctx->r5, out = (uint32_t)ctx->r6;
+    ctx->r2 = 0;
+    if (a == 0 || b == 0 || out == 0) return;
+    const float ax = rdf(a), ay = rdf(a + 4), az = rdf(a + 8), bx = rdf(b), by = rdf(b + 4), bz = rdf(b + 8);
+    float dx = bx - ax, dy = by - ay, dz = bz - az;
+    const float len = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (len < 0.001f) return;
+    dx /= len; dy /= len; dz /= len;
+    const uint32_t buf = ((uint32_t)ctx->r29 - 0x80u) & ~0x7u; // in the gap call_game leaves below $sp
+    auto cast = [&](float ox, float oy, float oz, float* hit) -> bool {
+        g_rdram = rdram_;
+        wrf(buf + 0, ax + ox); wrf(buf + 4, ay + oy); wrf(buf + 8, az + oz);
+        wrf(buf + 12, bx + ox); wrf(buf + 16, by + oy); wrf(buf + 20, bz + oz);
+        const bool found = (call_game(trackNearestIntersection, ctx, { 0u, buf, buf + 12, buf + 24, 0u, 0u }) & 0xFF) != 0;
+        g_rdram = rdram_;
+        if (!found) return false;
+        hit[0] = rdf(buf + 24 + 4); hit[1] = rdf(buf + 24 + 8); hit[2] = rdf(buf + 24 + 12);
+        return std::isfinite(hit[0]) && std::isfinite(hit[1]) && std::isfinite(hit[2]);
+    };
+    float p[3];
+    if (!cast(0, 0, 0, p)) return;
+    // Two lines beside the first, 4 units off across it.
+    float ux = 0, uy = 1, uz = 0;
+    if (std::fabs(dy) > 0.9f) { ux = 1; uy = 0; }
+    float sx = dy * uz - dz * uy, sy = dz * ux - dx * uz, sz = dx * uy - dy * ux; // side = d x up
+    float sl = std::sqrt(sx * sx + sy * sy + sz * sz);
+    sx /= sl; sy /= sl; sz /= sl;
+    const float tx = sy * dz - sz * dy, ty = sz * dx - sx * dz, tz = sx * dy - sy * dx; // d x side ... the other way
+    float q[3], r[3];
+    float nx = -dx, ny = -dy, nz = -dz; // facing straight back, if the plane can't be measured
+    if (cast(sx * 4, sy * 4, sz * 4, q) && cast(tx * 4, ty * 4, tz * 4, r)) {
+        const float e1x = q[0] - p[0], e1y = q[1] - p[1], e1z = q[2] - p[2];
+        const float e2x = r[0] - p[0], e2y = r[1] - p[1], e2z = r[2] - p[2];
+        float cx = e1y * e2z - e1z * e2y, cy = e1z * e2x - e1x * e2z, cz = e1x * e2y - e1y * e2x;
+        const float cl = std::sqrt(cx * cx + cy * cy + cz * cz);
+        if (cl > 0.0001f) {
+            cx /= cl; cy /= cl; cz /= cl;
+            if (cx * dx + cy * dy + cz * dz > 0) { cx = -cx; cy = -cy; cz = -cz; }
+            nx = cx; ny = cy; nz = cz;
+        }
+    }
+    wrf(out + 0, p[0]); wrf(out + 4, p[1]); wrf(out + 8, p[2]);
+    wrf(out + 12, nx); wrf(out + 16, ny); wrf(out + 20, nz);
+    ctx->r2 = 1;
+}
+
 // jfg_line_of_sight(void* from, void* to, const float* a, const float* b): 1 when nothing (the level, or an object
 // with a hit model other than from and to) stands between points a and b (x, y, z each).
 void line_of_sight(uint8_t* rdram_, recomp_context* ctx) {
@@ -1096,6 +1149,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_floyd_get", floyd_get);
     recomp::overlays::register_base_export("jfg_fire_bolt", fire_bolt);
     recomp::overlays::register_base_export("jfg_fire_plasma", fire_plasma);
+    recomp::overlays::register_base_export("jfg_level_ray", level_ray);
     recomp::overlays::register_base_export("jfg_line_of_sight", line_of_sight);
     recomp::overlays::register_base_export("jfg_enemy_alert", enemy_alert);
     recomp::overlays::register_base_export("jfg_enemy_ignite", enemy_ignite);
