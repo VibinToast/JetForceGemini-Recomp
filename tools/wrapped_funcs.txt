@@ -229,3 +229,4 @@ BTSBStandardFire
 hitVectorCheck
 hitUpdate
 GetBaddyData
+func_overlay_3_0000D360_1EE2840

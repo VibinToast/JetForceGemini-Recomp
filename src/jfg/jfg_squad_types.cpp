@@ -21,6 +21,9 @@
 //   body parts, which would cut a new model's batches off on a killing hit. GetBaddyData is wrapped: for a registered
 //   type's member it returns (and sets as overlay 3's current row) a copy of the like row with no body parts and the
 //   mod's head, lean and aim joints. Overlay 3 reads the row only through that call and its global.
+// - Its own size: a squad member's scale is its squadron's percent (+0x02) alone (the member setup,
+//   func_overlay_3_0000D360), not its definition's +0x00. For a registered type the setup runs with the percent times
+//   the definition's scale, so the model, its hit box (set up there from that scale) and spheres all agree.
 // - Its own voices: the hurt and death voices are per type index (the like type's), read only in SquaddieControl. Around
 //   a registered type's SquaddieControl call that index's voice record is zeroed (silence: the mod plays its own), and
 //   put back after, so stock members of the like type keep theirs.
@@ -55,7 +58,8 @@ constexpr uint32_t SPH_SIZE = 0x34, SPH_FLAGSA = 0x0A, SPH_X = 0x0C, SPH_RADIUS 
 constexpr uint8_t SPH_ARMOUR = 0x20, SPH_NOHIT = 0x40;
 constexpr uint32_t HERO_PROTECT = 0x5C8, HERO_STATE = 0x568;
 // Overlay 3 (decomp MSR 12i): the current row (GetBaddyData), its type index, the voice records (8 bytes an index).
-constexpr uint32_t OVERLAY_3_ROM = 0x01ED54E0, O3_ROW = 0x1A1E0, O3_INDEX = 0x1A1DC, O3_VOICES = 0x19460;
+constexpr uint32_t OVERLAY_3_ROM = 0x01ED54E0, O3_ROW = 0x1A1E0, O3_INDEX = 0x1A1DC, O3_VOICES = 0x19460,
+                   O3_MEMBER = 0x1A1CC, O3_SQUADRON = 0x1A1D8, SQUADRON_SCALE = 0x02;
 // The baddy row (0x80 bytes): body part count, head joint and its offset, lean joints and weights, aim joint.
 constexpr uint32_t ROW_SIZE = 0x80, ROW_PARTS = 0x29, ROW_HEAD = 0x30, ROW_LEAN = 0x34, ROW_LEAN_WEIGHT = 0x37,
                    ROW_AIM = 0x3A;
@@ -235,6 +239,24 @@ JFG_WRAP(GetBaddyData) {
     if (t.row_from != like_row) make_row(t, like_row);
     wr32(base + O3_ROW, t.row);
     ctx->r2 = (gpr)(int32_t)t.row;
+}
+
+// The member setup (once a member): a registered type's scale is its squadron's percent times its definition's scale.
+JFG_WRAP(func_overlay_3_0000D360_1EE2840) {
+    g_rdram = rdram;
+    const uint32_t base = jfg_overlay_loaded_at(OVERLAY_3_ROM);
+    const uint32_t member = base != 0 ? rd32(base + O3_MEMBER) : 0, sqd = base != 0 ? rd32(base + O3_SQUADRON) : 0;
+    const int type = valid_ptr(member) && valid_ptr(sqd) ? type_of_def(rd32(member + OBJ_DEF)) : -1;
+    const float scale = type >= 0 ? rdf(g_types[type].def_ptr) : 1.0f;
+    if (type < 0 || !(scale > 0.0f) || scale == 1.0f) {
+        func_overlay_3_0000D360_1EE2840_orig(rdram, ctx);
+        return;
+    }
+    const uint8_t old = rd8(sqd + SQUADRON_SCALE);
+    wr8(sqd + SQUADRON_SCALE, (uint8_t)std::clamp((int)std::lround((old != 0 ? old : 100) * scale), 1, 255));
+    func_overlay_3_0000D360_1EE2840_orig(rdram, ctx);
+    g_rdram = rdram;
+    wr8(sqd + SQUADRON_SCALE, old);
 }
 
 // hitVectorCheck(shot, shotHit, n, targets, &results, owner), once per shot from hitUpdate: armoured members take the
