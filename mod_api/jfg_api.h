@@ -582,7 +582,8 @@ typedef struct {
 RECOMP_IMPORT("*", void jfg_explosion(const JfgExplosion* explosion));
 // The first player's view jolts up and down by up to magnitude level units, fading out over ms milliseconds (the
 // game's strong hits: 15-25 over 2-4 s; 5-8 a light thump). A new call replaces the running shake, 0 stops it, a level
-// change ends it. Since version 6.
+// change ends it. It shakes whichever camera is on: the game's, the port's dual-stick and aiming views, and a mod's own
+// (jfg_camera_set). Since version 6.
 RECOMP_IMPORT("*", void jfg_camera_shake(int magnitude, int ms));
 // Damage only, no look: strongest at the middle, less out to the radius, fading over the seconds; damage 256 a unit
 // of health. At most 16 at a time (the oldest gives way).
