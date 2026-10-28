@@ -503,6 +503,19 @@ void sound_replace_enable(uint8_t*, recomp_context* ctx) {
     ctx->r2 = 1;
 }
 
+// jfg_sound_replace_use(int id, const char* name, float volume): another of the mod's sounds stands in for a replaced id
+// from its next play on (one game sound shared by two weapons, told apart by the weapon in hand). 1 if done, else 0 (not
+// replaced, or no such sound in the mod). Voices already playing carry on.
+void sound_replace_use(uint8_t* rdram, recomp_context* ctx, size_t mod_index) {
+    const uint32_t id = (uint32_t)ctx->r4 & 0xFFFF;
+    const ModSound* snd = find_sound(mod_index, _arg_string<1>(rdram, ctx));
+    const auto it = g_replace.find(id);
+    if (it == g_replace.end() || !snd) { ctx->r2 = 0; return; }
+    it->second.sound = snd;
+    it->second.volume = std::max(0.0f, float_arg(ctx, 2));
+    ctx->r2 = 1;
+}
+
 constexpr uint32_t ADDR_sfxIndex = 0x800E9508;     // SoundData*: amSndPlay's table
 constexpr uint32_t ADDR_sfxIndexXYZ = 0x800F29F0;  // SoundData*: amSndPlayXYZ's (the same table, kept apart)
 constexpr uint32_t ADDR_maxSound = 0x800E9510;     // s32: the highest id
@@ -623,6 +636,7 @@ extern "C" void jfg_register_music_mods(void) {
     recomp::overlays::register_base_export("jfg_sound_set", sound_set);
     recomp::overlays::register_base_export("jfg_sound_stop", sound_stop);
     recomp::overlays::register_base_export("jfg_sound_replace_enable", sound_replace_enable);
+    recomp::overlays::register_ext_base_export("jfg_sound_replace_use", sound_replace_use);
 }
 
 // Mixes the mods' playing sounds into the game's audio (as jfg_music_mix): linear resampling to the game's rate times

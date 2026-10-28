@@ -215,7 +215,10 @@ RECOMP_IMPORT("*", int jfg_hero_heads(int character, int tribal));
 // looping sounds) stops when the game stops its own. "stopped_by": [ "0xE1" ] ends it when one of those ids plays (a
 // charge cut off by its shot). The first enabled mod to replace an id has it. jfg_sound_replace_enable turns one
 // replacement off (the game's own sound back) and on again while the game runs; 1 if the id is replaced.
+// jfg_sound_replace_use puts another of the mod's sounds (and volume) in for a replaced id from its next play on: one
+// game sound shared by two weapons, told apart by jfg_hero_weapon. 1 if done, 0 if not replaced or no such sound.
 RECOMP_IMPORT("*", int jfg_sound_replace_enable(int id, int on));
+RECOMP_IMPORT("*", int jfg_sound_replace_use(int id, const char* name, float volume));
 RECOMP_IMPORT("*", int jfg_sound_play(const char* name, float volume, float pan, float pitch));
 RECOMP_IMPORT("*", int jfg_sound_loop(const char* name, float volume, float pan, float pitch));
 RECOMP_IMPORT("*", int jfg_sound_set(int voice, float volume, float pan, float pitch));
