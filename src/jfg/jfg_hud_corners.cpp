@@ -115,6 +115,14 @@ void pop() {
 }
 }
 
+// Mods' icons and discs (jfg_weapon_hud.cpp) right of the middle: measured from the window's right edge, as the game's
+// own pieces there are, rather than with the weapon panel from its left. From the left they would be past the 4:3
+// area's right side, which the sniper scope's clipping cuts off. right false: back to the panel's side.
+void hud_align_right(bool right) {
+    if (!g_on) return;
+    set_side(right ? RIGHT : (g_depth > 0 && g_depth <= (int)(sizeof(g_stack) / sizeof(g_stack[0])) ? g_stack[g_depth - 1] : MIDDLE));
+}
+
 // The single-player HUD goes to the window's edges (HUD in Screen Corners, in widescreen): jfg_hud_in_corners.
 bool hud_in_corners() {
     static const bool env = std::getenv("JFG_HUD_CORNERS") != nullptr;

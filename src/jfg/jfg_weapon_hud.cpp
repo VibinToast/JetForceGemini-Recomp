@@ -30,7 +30,7 @@ extern "C" void controlGetMaxCharge(uint8_t* rdram, recomp_context* ctx);
 extern "C" void texDPTextureX(uint8_t* rdram, recomp_context* ctx);
 extern "C" void camCopyOrthoMatrix(uint8_t* rdram, recomp_context* ctx);
 extern "C" void mathMtxF2L(uint8_t* rdram, recomp_context* ctx);
-namespace jfg { bool hud_in_corners(); }                // jfg_hud_corners.cpp
+namespace jfg { bool hud_in_corners(); void hud_align_right(bool right); } // jfg_hud_corners.cpp
 namespace jfg::api { uint32_t gfx_block(uint32_t bytes); } // jfg_api.cpp
 namespace jfg::overlay { float overlay_width(); }        // jfg_overlay.cpp
 
@@ -108,7 +108,9 @@ void emit(uint32_t w0, uint32_t w1) {
 
 // The discs, as the game draws its own panels' dark backing (overlay 14's func_1AD8: no texture, its combiner and
 // render mode, translucent), in the HUD's orthographic space.
-void draw_discs(uint8_t* rdram_, recomp_context* ctx, float hud_left) {
+// right_left: with the HUD in the corners, the 4:3 area's left when measured from the window's right edge (discs right
+// of the middle are drawn that way, hud_align_right); < 0 otherwise.
+void draw_discs(uint8_t* rdram_, recomp_context* ctx, float hud_left, float right_left, float middle) {
     if (g_buffers == 0) {
         g_buffers = jfg::api::gfx_block(FRAME_BYTES * 2 + CHUNK * 16);
         if (g_buffers == 0) return;
@@ -130,11 +132,18 @@ void draw_discs(uint8_t* rdram_, recomp_context* ctx, float hud_left) {
     emit(0xFC71FEE3u, 0xFFFEFB7Du);             // the panels' combiner
     emit(0xEF000C0Fu, 0x00504240u);             // ... and render mode
     emit(0x01000040u, mtxl);                    // the matrix, slot 0
+    bool right = false;
     for (size_t d = 0; d < g_discs.size(); d++) {
         const Disc& disc = g_discs[d];
+        const bool on_right = right_left >= 0.0f && disc.x > middle;
+        if (on_right != right) {
+            right = on_right;
+            hud_align_right(right);
+            g_rdram = rdram_;
+        }
         emit(0xFA000000u, disc.rgba);           // the disc's colour (the combiner takes the primitive colour's)
         emit(0xFB000000u, disc.rgba);           // ... and opacity (the environment colour's alpha)
-        const float gx = disc.x - hud_left - 160.0f, gy = 120.0f - disc.y;
+        const float gx = disc.x - (right ? right_left : hud_left) - 160.0f, gy = 120.0f - disc.y;
         for (int c = 0; c < CHUNKS; c++) {
             const uint32_t v = verts + ((uint32_t)d * CHUNKS + (uint32_t)c) * CHUNK_BYTES;
             for (uint32_t k = 0; k < CHUNK_VTX; k++) {
@@ -153,6 +162,10 @@ void draw_discs(uint8_t* rdram_, recomp_context* ctx, float hud_left) {
             emit((0x04u << 24) | (((CHUNK_VTX << 3) | (v & 6)) << 16) | (CHUNK_VTX * VTX_SIZE + 8), v);
             emit((0x05u << 24) | ((((uint32_t)CHUNK - 1) << 4) << 16) | ((uint32_t)CHUNK * 16), tris);
         }
+    }
+    if (right) {
+        hud_align_right(false);
+        g_rdram = rdram_;
     }
     emit(0xE7000000u, 0);
     emit(0x01000040u, ortho);                   // the HUD's own matrix again
@@ -263,8 +276,9 @@ void jfg_weapon_hud_icons(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const float width = jfg::overlay::overlay_width();
     const float hud_left = hud_in_corners() ? 0.0f : (width - 320.0f) / 2.0f;
+    const float right_left = hud_in_corners() ? width - 320.0f : -1.0f, middle = width / 2.0f;
     const gpr s0 = ctx->r4, s1 = ctx->r5;
-    if (!g_discs.empty()) draw_discs(rdram_, ctx, hud_left);
+    if (!g_discs.empty()) draw_discs(rdram_, ctx, hud_left, right_left, middle);
     g_discs.clear();
     ctx->r4 = s0;
     ctx->r5 = s1;
@@ -276,8 +290,15 @@ void jfg_weapon_hud_icons(uint8_t* rdram_, recomp_context* ctx) {
     const uint32_t trans0 = rd32(ADDR_objtrans);
     const gpr a0 = ctx->r4, a1 = ctx->r5;
     call_game(sprSetTextureFilter_orig, ctx, { 0 });
+    bool right = false;
     for (const Icon& icon : g_icons) {
         g_rdram = rdram_;
+        const bool on_right = right_left >= 0.0f && icon.x > middle;
+        if (on_right != right) {
+            right = on_right;
+            hud_align_right(right);
+            g_rdram = rdram_;
+        }
         const uint32_t item = (uint32_t)(ICON_ITEM + icon.weapon);
         if (rd32(ADDR_frontendptrs + item * 4) == 0) {
             call_game(loadFrontEndItem, ctx, { item });
@@ -286,12 +307,13 @@ void jfg_weapon_hud_icons(uint8_t* rdram_, recomp_context* ctx) {
         }
         wr16(obj + FO_ITEM, (uint16_t)item);
         wr32(obj + FO_SCALE, bits_of(icon.scale));
-        wr32(obj + FO_X, bits_of(icon.x - hud_left - 160.0f));
+        wr32(obj + FO_X, bits_of(icon.x - (right ? right_left : hud_left) - 160.0f));
         wr32(obj + FO_Y, bits_of(120.0f - icon.y));
         const float a = icon.alpha < 0.0f ? 0.0f : icon.alpha > 1.0f ? 1.0f : icon.alpha;
         wr32(ADDR_objtrans, (uint32_t)std::lround(a * 255.0f));
         call_game(frontDrawObj_orig, ctx, { 0 });
     }
+    if (right) hud_align_right(false);
     g_rdram = rdram_;
     wr16(obj + FO_ITEM, item0);
     wr32(obj + FO_SCALE, scale0);
