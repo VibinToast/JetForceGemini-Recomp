@@ -22,6 +22,7 @@ extern "C" void trackGetFog(uint8_t* rdram, recomp_context* ctx);
 std::string jfg_locale_shown(); // jfg_locale.cpp
 namespace jfg::overlay { void register_api(); void frame_done(); } // jfg_overlay.cpp
 namespace jfg { void register_weapon_hud_api(); }                 // jfg_weapon_hud.cpp
+namespace jfg { void register_weapon_registry_api(); }            // jfg_weapon_registry.cpp
 
 namespace jfg::api {
 namespace {
@@ -31,7 +32,7 @@ const char* const g_event_names[] = {
     "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
     "jfg_on_language_change", "jfg_on_map_open", "jfg_on_galaxy_change", "jfg_on_planet_select", "jfg_on_hero_control",
     "jfg_on_object_draw_gfx", "jfg_on_draw_hud", "jfg_on_hud_message", "jfg_on_reticle_draw",
-    "jfg_on_health_draw", "jfg_on_weapon_hud", "jfg_on_kill", nullptr
+    "jfg_on_health_draw", "jfg_on_weapon_hud", "jfg_on_kill", "jfg_on_weapon_fire", nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
@@ -218,6 +219,7 @@ void register_api() {
     recomp::overlays::register_base_export("jfg_gfx_alloc", gfx_alloc);
     jfg::overlay::register_api(); // pictures and shapes over the game at the window's resolution (jfg_overlay.cpp)
     jfg::register_weapon_hud_api(); // the weapon panel's icons, the game's texts, Tribal counts (jfg_weapon_hud.cpp)
+    jfg::register_weapon_registry_api(); // modded weapons on slot 15 (jfg_weapon_registry.cpp)
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }
 

@@ -9,7 +9,7 @@
 
 #include "modding.h"
 
-#define JFG_API_VERSION 5
+#define JFG_API_VERSION 6
 
 // --- helpers -------------------------------------------------------------------------------------------------------
 
@@ -316,9 +316,10 @@ RECOMP_IMPORT("*", void* jfg_hero_get(void));
 #define JFG_HERO_AIMING_MOVING 11
 #define JFG_HERO_DEAD     10
 RECOMP_IMPORT("*", int jfg_hero_state(void* hero));
-// The weapon in the first player's hand (0 the pistol .. 15), -1 if none. The shocker is 4, the flamethrower 6.
+// The weapon in the first player's hand (0 the pistol .. 14, 15 the proximity mine, 16 up modded weapons: see
+// jfg_weapon_register), -1 if none. The shocker is 4, the flamethrower 6.
 RECOMP_IMPORT("*", int jfg_hero_weapon(void));
-// The first player's ammo for a weapon (0..15), -1 outside a level; and setting it.
+// The first player's ammo for a weapon (any id; 15 up: -1 when not owned), -1 outside a level; and setting it.
 RECOMP_IMPORT("*", int jfg_hero_ammo(int weapon));
 RECOMP_IMPORT("*", void jfg_hero_set_ammo(int weapon, int ammo));
 // Pushes the hero x, z level units per 1/60 s for ticks 1/60 s ticks (the game's knockback: walls stop it, and it
@@ -486,6 +487,54 @@ RECOMP_IMPORT("*", int jfg_shocker_end(void* hero, float* out));
 // Where the hero's flamethrower flames are now (x, y, z each into out, at most max); returns how many (0: not firing).
 RECOMP_IMPORT("*", int jfg_flames_get(void* hero, float* out, int max));
 
+// --- weapons past the game's own (since version 6) -------------------------------------------------------------------
+// The game has 16 weapon slots: 0..14 the heroes' weapons, 15 the cut proximity mine. A mod adds weapons by name and
+// gets an id for this run (16, 17, ... in the order mods register, any number of them): keep the name, not the
+// number. Whichever modded weapon is in hand takes slot 15 (its ammo, its row of weapon stats and its names), so the
+// game's own code shows, fires and throws it; next / previous weapon step through all of them. Owned weapons and
+// their ammo are saved with the save file, by name. A randomizer lists every weapon (jfg_weapon_count, jfg_weapon_info),
+// gives or takes them (jfg_hero_give_weapon, jfg_hero_take_weapon) and points pickups at any of them
+// (jfg_weapon_pickup_set).
+typedef struct {
+    const char* name;         // unique, "mod_id:weapon" (no spaces)
+    const char* display;      // its name in the HUD and pick-up message ("" = name)
+    const char* ammo_display; // plural, for "more ammo" messages ("" = display)
+    int host;         // the stock weapon (0..14) whose shot it fires and how it is held; -1 the default shot (a laser
+                      // bolt) or cancel it in jfg_on_weapon_fire and fire your own
+    int charge;       // the charge given to the host's shot (as the plasma shotgun's or a mine's type), -1 as it is
+    int thrown;       // 1: thrown (the hero's throw), 0: as the host
+    int row_from;     // the stock weapon whose stats row it uses (refire, speed, spread, damage): 0..14
+    int max_ammo;     // -1 = the row's
+    int start_ammo;   // given with the weapon, -1 = the row's
+    int pickup_ammo;  // a pickup of it when owned, -1 = the row's
+} JfgWeaponDef;
+// Its id (16 up; the same id again for a name registered before), -1 if the definition is bad. Register on your first
+// jfg_on_game_tick: a weapon saved in the file in play is given back when it registers.
+RECOMP_IMPORT("*", int jfg_weapon_register(const JfgWeaponDef* def));
+// A weapon's id by name ("stock:pistol" .. "stock:cluster_bombs", "port:proximity_mine", "mod_id:weapon"), -1 none.
+RECOMP_IMPORT("*", int jfg_weapon_find(const char* name));
+// How many weapon ids there are: 0 .. count - 1 are all weapons.
+RECOMP_IMPORT("*", int jfg_weapon_count(void));
+typedef struct {
+    char name[48];    // as jfg_weapon_find takes it
+    char display[40]; // in the language shown for stock weapons
+    int modded;       // 1 for a mod's weapon (16 up)
+    int host;         // stock weapons: their own number
+    int thrown;       // -1: the game's own rule (stock weapons)
+    int max_ammo;
+} JfgWeaponInfo;
+// 1 and out filled, 0 for no such weapon.
+RECOMP_IMPORT("*", int jfg_weapon_info(int id, JfgWeaponInfo* out));
+// The first player's hero: owns it?; give it (ammo -1 = its start ammo; owned already: added up to its capacity);
+// take it away (not the pistol; in hand: the hero holds the next weapon).
+RECOMP_IMPORT("*", int jfg_hero_has_weapon(int id));
+RECOMP_IMPORT("*", void jfg_hero_give_weapon(int id, int ammo));
+RECOMP_IMPORT("*", void jfg_hero_take_weapon(int id));
+// A weapon pickup (an object of kind JFG_KIND_WEAPON) gives that weapon from now on (its model stays); and the weapon
+// it gives. Pickups are the level's: point them again after each level change.
+RECOMP_IMPORT("*", void jfg_weapon_pickup_set(void* pickup, int id));
+RECOMP_IMPORT("*", int jfg_weapon_pickup_get(void* pickup));
+
 // --- event data ---------------------------------------------------------------------------------------------------
 
 // Who bleeds (JfgBloodSpurt.group, JfgBloodHit.group; since version 5).
@@ -625,6 +674,18 @@ typedef struct {
     char killer_name[16];
 } JfgKill;
 
+// jfg_on_weapon_fire (since version 6): the first player's hero fires: weapon (any id, modded ones included),
+// character (0 Vela, 1 Juno, 2 Lupus), hero (its object), charge (the plasma shotgun's charge as the game keeps it).
+// Set cancel to 1 to fire nothing of the game's (fire your own); then take_ammo (1) says whether one ammo is used.
+typedef struct {
+    int weapon;
+    int character;
+    void* hero;
+    int charge;
+    int cancel;
+    int take_ammo;
+} JfgWeaponFire;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
@@ -687,5 +748,10 @@ typedef struct {
 //     before the game draws it.
 // jfg_on_kill(JfgKill* kill)
 //     A squad member (an enemy or a Tribal) died, after the game counted it in the weapon stats.
+
+// --- events (since version 6) --------------------------------------------------------------------------------------
+
+// jfg_on_weapon_fire(JfgWeaponFire* fire)
+//     The first player's hero is about to fire a shot (or release a throw), before the game makes it.
 
 #endif

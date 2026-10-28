@@ -190,6 +190,19 @@ void tribal_saves_on_save(int slot);  // a save to slot is carried out this tick
 void tribal_saves_forget(int slot);   // the game deletes a file (-1: all files)
 void tribal_saves_tick();             // start of the tick: notices rescues
 
+// --- jfg_weapon_registry.cpp -------------------------------------------------------------------------------------
+// Weapons past slot 14 (the proximity mine and mods'), carried on slot 15. The save hooks as tribal_saves_*.
+namespace weapons {
+void file_chosen();
+void on_save(int slot);
+void forget(int slot);
+void tick();                            // start of the tick: slot 15 as the weapon in hand
+void level_load(uint8_t* rdram);        // objSetupPlayers
+int weapon_in_hand(uint32_t ch, int hero); // carried weapons by their id (15 up), -1 none
+int carried_ammo(int id);               // the first player's, -1 not owned
+void set_carried_ammo(int id, int ammo);
+}
+
 // Mods' planets and galaxies on the planet-select map (jfg_worldmap.cpp). Planets and galaxies by index; keys "mod:id".
 int world_find(const std::string& key);    // a planet's index, -1 = none
 int world_state(int planet);               // bits: 1 open, 2 entered, 4 completed; -1 = no such planet

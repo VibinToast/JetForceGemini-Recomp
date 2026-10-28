@@ -212,3 +212,7 @@ mainSetTribalStatus
 amSndStopXYZ
 # Floyd's lights' frame for mods (jfg_visuals.cpp)
 func_800319C0_325C0
+# Weapon registry: modded weapons on slot 15 (jfg_weapon_registry.cpp)
+controlSelectNextWeapon
+controlSelectPreviousWeapon
+weaponPickupControl

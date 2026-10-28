@@ -12,7 +12,7 @@
 
 namespace jfg::api {
 
-constexpr int VERSION = 5;
+constexpr int VERSION = 6;
 
 // The events, in the order they are registered: a released event keeps its place, new ones go before Count.
 enum class Event : uint32_t {
@@ -38,6 +38,7 @@ enum class Event : uint32_t {
     HealthDraw,       // jfg_on_health_draw(JfgHealth* health), since version 5
     WeaponHud,        // jfg_on_weapon_hud(JfgWeaponHud* hud), since version 5
     Kill,             // jfg_on_kill(JfgKill* kill), since version 5
+    WeaponFire,       // jfg_on_weapon_fire(JfgWeaponFire* fire), since version 6
     Count
 };
 

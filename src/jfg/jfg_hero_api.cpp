@@ -157,6 +157,12 @@ void hero_select_weapon(uint8_t* rdram_, recomp_context* ctx) {
     const recomp_context saved = *ctx;
     call_game(direction > 0 ? controlSelectNextWeapon : controlSelectPreviousWeapon, ctx, { obj, data });
     *ctx = saved;
+    // The control code puts back the weapon it last chose (+0x585) when the one in hand differs, as its own buttons
+    // set it: it is the new one now.
+    g_rdram = rdram_;
+    const int c = rd8(data + 1) & 3;
+    const uint32_t ch = c < 3 ? character_ptr(c) : 0;
+    if (valid_ptr(ch)) wr8(data + 0x585, Character::CurrentWeapon::get(ch));
 }
 
 // jfg_input_get(JfgInput* out): the first player's controller as the hero's control reads it this tick.
@@ -645,8 +651,7 @@ void hero_weapon(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const int c = (int16_t)rd16(ADDR_currentCharacter);
     const uint32_t ch = (rd32(ADDR_mainGameMode) == 0 && c >= 0 && c < 3) ? character_ptr(c) : 0;
-    const int w = ch != 0 ? Character::CurrentWeapon::get(ch) : 0xFF;
-    ctx->r2 = (gpr)(w < 16 ? w : -1);
+    ctx->r2 = (gpr)(ch != 0 ? weapons::weapon_in_hand(ch, c) : -1); // modded weapons: their ids (16 up)
 }
 
 // jfg_game_paused(void): 1 while the world stands still: the pause menu, or the settings menu with Pause in the Settings
@@ -663,12 +668,14 @@ uint32_t player_character() {
     return (rd32(ADDR_mainGameMode) == 0 && c >= 0 && c < 3) ? character_ptr(c) : 0;
 }
 
-// jfg_hero_ammo(int weapon): the first player's ammo for that weapon (0..15), -1 outside a level.
+// jfg_hero_ammo(int weapon): the first player's ammo for that weapon (0..14; 15 up: the proximity mine and modded
+// weapons, -1 when not owned), -1 outside a level.
 void hero_ammo(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t ch = player_character();
     const int w = (int)ctx->r4;
-    ctx->r2 = (ch != 0 && w >= 0 && w < 16) ? (gpr)Character::Ammo::get(ch, (uint32_t)w) : (gpr)-1;
+    if (w >= 15) { ctx->r2 = (gpr)(ch != 0 ? weapons::carried_ammo(w) : -1); return; }
+    ctx->r2 = (ch != 0 && w >= 0) ? (gpr)Character::Ammo::get(ch, (uint32_t)w) : (gpr)-1;
 }
 
 // jfg_hero_set_ammo(int weapon, int ammo): sets it (0..0xFFFF; the game keeps it at the weapon's capacity itself).
@@ -676,7 +683,8 @@ void hero_set_ammo(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t ch = player_character();
     const int w = (int)ctx->r4;
-    if (ch != 0 && w >= 0 && w < 16) Character::Ammo::set(ch, (uint32_t)w, (uint16_t)std::clamp((int)ctx->r5, 0, 0xFFFF));
+    if (w >= 15) { if (ch != 0) weapons::set_carried_ammo(w, (int)ctx->r5); return; }
+    if (ch != 0 && w >= 0) Character::Ammo::set(ch, (uint32_t)w, (uint16_t)std::clamp((int)ctx->r5, 0, 0xFFFF));
 }
 
 // jfg_enemy_dying(void* enemy): 1 when the squad member is dying: no health left (it plays its death), or left with the

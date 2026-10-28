@@ -250,7 +250,7 @@ bool jfg_weapon_hud_event(uint8_t* rdram_, recomp_context* ctx) {
     int32_t cancel;
     {
         api::Payload p(ctx, 0x20);
-        wr32(p.addr + 0x00, (uint32_t)weapon);
+        wr32(p.addr + 0x00, (uint32_t)weapons::weapon_in_hand(ch, c)); // modded weapons: their ids (16 up)
         wr32(p.addr + 0x04, rd16(ch + 0x14 + (uint32_t)weapon * 2));
         wr32(p.addr + 0x08, rd16(ch + 0x34 + (uint32_t)weapon * 2));
         wr32(p.addr + 0x0C, bits_of(charge));

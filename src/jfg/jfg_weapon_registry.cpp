@@ -1,0 +1,715 @@
+// Jet Force Gemini port: the weapon registry - weapons beyond the game's own, for mods (mod API version 6).
+//
+// The game has 16 weapon slots and no room for more: a character's owned weapons are a u16 mask (+0x0A), its ammo,
+// capacity and charge are arrays of 16 (+0x14, +0x34, +0x54), the shot counts too (Game +0x474), and weaponTable has 16
+// rows. Slots 0-14 are the heroes' weapons; 15 is a cut proximity mine the game never gives (Restored Content's pickup
+// does). So slot 15 is the carrier: every weapon past 14 lives in the port, and the one selected borrows slot 15 -
+// its ammo and capacity are copied in, its row (a stock weapon's WeaponDef row with its own ammo numbers) is written to
+// row 15, its names to texts 0x39 + 15 and 0x48 + 15, and bit 15 is owned while any of them is. Ids: 15 is the
+// proximity mine (built in), mods' weapons get 16, 17, ... in the order they register (jfg_weapon_register), any
+// number of them; an id is only good for this run, so saves and mods keep names ("mod_id:weapon").
+// - Switching: controlSelectNextWeapon / PreviousWeapon step through the owned slots by the mask. Their wrappers step
+//   through the carried weapons while slot 15 is in hand (the game's code still runs, for its sound, hand and selector
+//   slide, then 15 is put back with the next carried weapon), and pick the first (next) or last (previous) carried
+//   weapon on stepping into 15.
+// - Firing: the fire code (func_800386B0_392B0) picks the shot by the current weapon. For one shot of a carried weapon
+//   with a host, the hero holds the host weapon with the carried weapon's ammo and its charge, then all is put back
+//   and the shot counted on 15. jfg_on_weapon_fire comes first, for any weapon: a mod can cancel the game's shot and
+//   fire its own. Throwing: controlThrowWeapon(15) answers the carried weapon's `thrown`.
+// - Pick-ups: weaponPickupControl gives weapon data +0 (s16). jfg_weapon_pickup_set points a pickup at any weapon: a
+//   stock one is written there, a carried one is 15 there and kept by object here; for the pickup's tick, slot 15
+//   shows that weapon (owned or not, its ammo, row and names), so the game's own code gives it, then the carrier
+//   goes back to the weapon in hand. A slot-15 pickup that wasn't pointed anywhere gives the proximity mine.
+// - Saving: the carried weapons' ammo by name, per character, in saves/<save>_weapons.txt when the game saves to that
+//   file (the jfg_auto_save.cpp hooks, as Permanent Tribal Saves); choosing a file loads its own. A file saved
+//   without it but with slot 15 owned (the proximity mine before the registry) takes slot 15 as the proximity mine.
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <map>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#include "librecomp/overlays.hpp"
+#include "ultramodern/ultramodern.hpp"
+#include "jfg_api.h"
+#include "jfg_fields.h"
+#include "jfg_game.h"
+#include "jfg_hooks.h"
+#include "jfg_port.h"
+
+namespace recomp { void* alloc(uint8_t* rdram, size_t size); }
+
+namespace jfg::weapons {
+namespace {
+constexpr int CARRIER = 15, FIRST_MOD = 16, STOCK = 15, HEROES = 3, SAVE_SLOTS = 6;
+constexpr uint32_t ADDR_front_text = 0x800A51C8; // char**, NULL until initFront
+constexpr int WEAPON_NAMES = 0x39, AMMO_NAMES = 0x48;
+constexpr uint32_t PICKUP_WEAPON = 0x88;         // weaponPickupControl's data in the object: s16 weapon
+constexpr uint32_t ROW_MAX_AMMO = 0x24, ROW_START_AMMO = 0x28, ROW_PICKUP_AMMO = 0x2A, ROW_CHARGE = 0x03;
+
+const char* const STOCK_NAMES[STOCK] = {
+    "stock:pistol", "stock:homing_missiles", "stock:machine_gun", "stock:plasma_shotgun", "stock:shocker",
+    "stock:tri_rocket_launcher", "stock:flamethrower", "stock:sniper_rifle", "stock:grenades", "stock:shuriken",
+    "stock:fish_food", "stock:timed_mines", "stock:remote_mines", "stock:flares", "stock:cluster_bombs",
+};
+
+struct Weapon {
+    std::string name, display, ammo_display;
+    int host = -1;       // the stock weapon whose shot it fires (0..14), -1 = the default shot (or a mod's own)
+    int charge = -1;     // the charge for the host's shot, -1 = as it is
+    bool thrown = false;
+    int row_from = 0;    // the stock weapon whose WeaponDef row it takes
+    int max_ammo = -1, start_ammo = -1, pickup_ammo = -1; // -1 = the row's
+    uint32_t name_text = 0, ammo_text = 0; // the names, in the runtime's heap (made when first shown)
+};
+// Index id - CARRIER.
+std::vector<Weapon> g_weapons = {
+    // 15: fires as the timed mine uncharged ((0x20 - 0x20) >> 4 == 0: mine type 0, object 0x127, the proximity
+    // mine), thrown, the remote mine's row (refire, speed, 10 mines, +5 a pickup).
+    { "port:proximity_mine", "Proximity Mine", "Proximity Mines", 11, 0x20, true, 12 },
+};
+
+// What a hero carries past slot 14: ammo by id (owned when present), and the one slot 15 holds.
+struct Hero {
+    std::map<int, int> ammo;
+    int current = -1;
+};
+Hero g_heroes[HEROES];
+// The same by name, as saved: [slot][hero] name -> ammo, and the one in hand.
+struct SavedHero {
+    std::map<std::string, int> ammo;
+    std::string current;
+};
+SavedHero g_disk[SAVE_SLOTS][HEROES];
+bool g_loaded = false;
+std::map<uint32_t, int> g_pickups; // pickup object -> carried id (this level)
+
+const Weapon* weapon_of(int id) {
+    return id >= CARRIER && id < CARRIER + (int)g_weapons.size() ? &g_weapons[(size_t)(id - CARRIER)] : nullptr;
+}
+
+// A pointer a mod passed: the game's memory, or mods' own above 0x81000000 (docs/MEMORY.md, to 512 MB).
+bool mod_ptr(uint32_t p) { return p >= 0x80000400u && p < 0xA0000000u; }
+
+std::string read_string(uint32_t addr, size_t max = 128) {
+    std::string s;
+    if (!mod_ptr(addr)) return s;
+    for (size_t i = 0; i < max; i++) {
+        const char c = (char)rd8(addr + (uint32_t)i);
+        if (c == 0) break;
+        s += c;
+    }
+    return s;
+}
+
+uint32_t heap_string(const std::string& text) {
+    const size_t n = text.size() + 1;
+    void* block = recomp::alloc(g_rdram, (n + 3) & ~size_t(3));
+    if (block == nullptr) return 0;
+    const uint32_t at = 0x80000000u + (uint32_t)((uint8_t*)block - g_rdram);
+    for (size_t i = 0; i < n; i++) wr8(at + (uint32_t)i, i < text.size() ? (uint8_t)text[i] : 0);
+    return at;
+}
+
+bool in_game() { return rd32(ADDR_mainGameMode) == 0; }
+
+int popcount16(uint16_t v) {
+    int n = 0;
+    for (; v != 0; v &= (uint16_t)(v - 1)) n++;
+    return n;
+}
+
+// Row 15, capacity, charge and ammo of `id` (the hero's own ammo of it, or none); its names when `names`.
+void show(uint32_t ch, int id, int ammo, bool names) {
+    Weapon* w = const_cast<Weapon*>(weapon_of(id));
+    if (w == nullptr || !valid_ptr(ch)) return;
+    const uint32_t from = ADDR_weaponTable + WeaponDef::Size * (uint32_t)w->row_from;
+    const uint32_t to = ADDR_weaponTable + WeaponDef::Size * CARRIER;
+    for (uint32_t i = 0; i < WeaponDef::Size; i++) wr8(to + i, rd8(from + i));
+    if (w->max_ammo >= 0) wr16(to + ROW_MAX_AMMO, (uint16_t)w->max_ammo);
+    if (w->start_ammo >= 0) wr16(to + ROW_START_AMMO, (uint16_t)w->start_ammo);
+    if (w->pickup_ammo >= 0) wr16(to + ROW_PICKUP_AMMO, (uint16_t)w->pickup_ammo);
+    if (names) {
+        const uint32_t table = rd32(ADDR_front_text);
+        if (valid_ptr(table)) {
+            if (w->name_text == 0) w->name_text = heap_string(w->display);
+            if (w->ammo_text == 0) w->ammo_text = heap_string(w->ammo_display);
+            if (w->name_text != 0) wr32(table + 4 * (WEAPON_NAMES + CARRIER), w->name_text);
+            if (w->ammo_text != 0) wr32(table + 4 * (AMMO_NAMES + CARRIER), w->ammo_text);
+        }
+    }
+    Character::Ammo::set(ch, CARRIER, (uint16_t)std::clamp(ammo, 0, 0xFFFF));
+    wr16(ch + 0x34 + 2 * CARRIER, rd16(to + ROW_MAX_AMMO)); // capacity
+    Character::MaxCharge::set(ch, CARRIER, rd8(to + ROW_CHARGE));
+}
+
+// Bit 15 and the weapon count as the carried weapons say.
+void set_owned_bit(uint32_t ch, bool owned) {
+    uint16_t mask = Character::WeaponsOwned::get(ch);
+    mask = owned ? (uint16_t)(mask | (1u << CARRIER)) : (uint16_t)(mask & ~(1u << CARRIER));
+    Character::WeaponsOwned::set(ch, mask);
+    Character::WeaponCount::set(ch, (uint8_t)popcount16(mask));
+}
+
+// Slot 15 takes the weapon `h` has in hand (the first it owns if none); its names too when `names`.
+void load_carrier(uint32_t ch, Hero& h, bool names) {
+    if (h.ammo.empty()) { h.current = -1; return; }
+    if (h.ammo.find(h.current) == h.ammo.end()) h.current = h.ammo.begin()->first;
+    if (!(Character::WeaponsOwned::get(ch) & (1u << CARRIER))) set_owned_bit(ch, true);
+    show(ch, h.current, h.ammo[h.current], names);
+}
+
+// Slot 15's ammo back into the weapon in hand (firing and the game's pick-ups change it there).
+void store_carrier(uint32_t ch, Hero& h) {
+    if (h.current >= 0 && h.ammo.find(h.current) != h.ammo.end()) h.ammo[h.current] = Character::Ammo::get(ch, CARRIER);
+}
+
+int current_hero() {
+    const int c = (int16_t)rd16(ADDR_currentCharacter);
+    return in_game() && c >= 0 && c < HEROES ? c : -1;
+}
+
+// The hero a ControlPlayer belongs to (its +1: the character), in single player.
+int hero_of_player(uint32_t player) {
+    if (!in_game() || !valid_ptr(player)) return -1;
+    const int c = rd8(player + 1) & 3;
+    return c < HEROES ? c : -1;
+}
+
+// Slot 15 owned with no carried weapon: the game gave it (a file saved before the registry, a proximity-mine pickup
+// left alone): it is the proximity mine.
+void adopt(uint32_t ch, Hero& h) {
+    if (h.ammo.empty() && (Character::WeaponsOwned::get(ch) & (1u << CARRIER))) {
+        h.ammo[CARRIER] = Character::Ammo::get(ch, CARRIER);
+        h.current = CARRIER;
+    }
+}
+
+// --- saving --------------------------------------------------------------------------------------------------------
+std::filesystem::path file_path() {
+    std::filesystem::path save = ultramodern::get_save_file_path();
+    return save.parent_path() / (save.stem().u8string() + u8"_weapons.txt");
+}
+
+// Lines: slot hero current name ammo (current 1 for the one in hand).
+void load_file() {
+    if (g_loaded) return;
+    g_loaded = true;
+    std::ifstream in(file_path());
+    std::string line;
+    while (std::getline(in, line)) {
+        std::istringstream s(line);
+        int slot = -1, hero = -1, current = 0, ammo = 0;
+        std::string name;
+        if (!(s >> slot >> hero >> current >> name >> ammo)) continue;
+        if (slot < 0 || slot >= SAVE_SLOTS || hero < 0 || hero >= HEROES) continue;
+        g_disk[slot][hero].ammo[name] = ammo;
+        if (current) g_disk[slot][hero].current = name;
+    }
+}
+
+void write_file() {
+    std::ofstream out(file_path(), std::ios::trunc);
+    for (int slot = 0; slot < SAVE_SLOTS; slot++) {
+        for (int hero = 0; hero < HEROES; hero++) {
+            const SavedHero& s = g_disk[slot][hero];
+            for (const auto& [name, ammo] : s.ammo) {
+                out << slot << ' ' << hero << ' ' << (name == s.current ? 1 : 0) << ' ' << name << ' ' << ammo << '\n';
+            }
+        }
+    }
+}
+
+int find(const std::string& name) {
+    for (size_t i = 0; i < g_weapons.size(); i++) if (g_weapons[i].name == name) return CARRIER + (int)i;
+    for (int i = 0; i < STOCK; i++) if (name == STOCK_NAMES[i]) return i;
+    return -1;
+}
+
+// What a file has, by name, into the heroes (weapons whose mod is gone are kept on disk, not given).
+void heroes_from_disk(int slot) {
+    for (int hero = 0; hero < HEROES; hero++) {
+        Hero& h = g_heroes[hero];
+        h = Hero{};
+        if (slot < 0 || slot >= SAVE_SLOTS) continue;
+        for (const auto& [name, ammo] : g_disk[slot][hero].ammo) {
+            const int id = find(name);
+            if (id >= CARRIER) h.ammo[id] = ammo;
+            if (id >= CARRIER && name == g_disk[slot][hero].current) h.current = id;
+        }
+    }
+}
+} // namespace
+
+// --- the hooks -------------------------------------------------------------------------------------------------------
+void file_chosen() {
+    load_file();
+    const uint32_t game = rd32(ADDR_gameplay);
+    heroes_from_disk(valid_ptr(game) ? Game::SaveSlot::get(game) : -1);
+}
+
+void on_save(int slot) {
+    if (slot < 0 || slot >= SAVE_SLOTS) return;
+    load_file();
+    for (int hero = 0; hero < HEROES; hero++) {
+        const uint32_t ch = character_ptr(hero);
+        Hero& h = g_heroes[hero];
+        if (valid_ptr(ch) && hero == current_hero()) store_carrier(ch, h);
+        SavedHero& s = g_disk[slot][hero];
+        // Weapons of mods not loaded now stay saved.
+        for (auto it = s.ammo.begin(); it != s.ammo.end();) it = find(it->first) >= CARRIER ? s.ammo.erase(it) : std::next(it);
+        for (const auto& [id, ammo] : h.ammo) s.ammo[weapon_of(id)->name] = ammo;
+        s.current = weapon_of(h.current) != nullptr ? weapon_of(h.current)->name : std::string();
+    }
+    write_file();
+}
+
+void forget(int slot) {
+    load_file();
+    for (int i = 0; i < SAVE_SLOTS; i++) {
+        if (slot >= 0 && i != slot) continue;
+        for (SavedHero& s : g_disk[i]) s = SavedHero{};
+    }
+    write_file();
+}
+
+// Start of each tick: slot 15's ammo back into the weapon in hand, then slot 15 as the carried weapons say.
+void tick() {
+    if (!in_game()) return;
+    const int c = current_hero();
+    for (int hero = 0; hero < HEROES; hero++) {
+        const uint32_t ch = character_ptr(hero);
+        if (!valid_ptr(ch)) continue;
+        Hero& h = g_heroes[hero];
+        adopt(ch, h);
+        if (h.ammo.empty()) continue;
+        store_carrier(ch, h);
+        if (hero == c) load_carrier(ch, h, false);
+    }
+}
+
+// objSetupPlayers (each level load): this level's pickups are new objects; slot 15 shows the weapon in hand.
+void level_load(uint8_t* rdram) {
+    g_rdram = rdram;
+    g_pickups.clear();
+    for (Weapon& w : g_weapons) w.name_text = w.ammo_text = 0; // the heap the names were in may be gone with the level
+    const int c = current_hero();
+    const uint32_t ch = c >= 0 ? character_ptr(c) : 0;
+    if (valid_ptr(ch)) {
+        Hero& h = g_heroes[c];
+        adopt(ch, h);
+        load_carrier(ch, h, true);
+    }
+}
+
+// The first player's ammo of a carried weapon (15 up), -1 if not owned or no such weapon.
+int carried_ammo(int id) {
+    const int hero = current_hero();
+    const uint32_t ch = hero >= 0 ? character_ptr(hero) : 0;
+    if (!valid_ptr(ch) || weapon_of(id) == nullptr) return -1;
+    Hero& h = g_heroes[hero];
+    adopt(ch, h);
+    store_carrier(ch, h);
+    const auto it = h.ammo.find(id);
+    return it != h.ammo.end() ? it->second : -1;
+}
+
+// Sets it (owned weapons only).
+void set_carried_ammo(int id, int ammo) {
+    const int hero = current_hero();
+    const uint32_t ch = hero >= 0 ? character_ptr(hero) : 0;
+    if (!valid_ptr(ch) || weapon_of(id) == nullptr) return;
+    Hero& h = g_heroes[hero];
+    adopt(ch, h);
+    store_carrier(ch, h);
+    if (h.ammo.find(id) == h.ammo.end()) return;
+    h.ammo[id] = std::clamp(ammo, 0, 0xFFFF);
+    load_carrier(ch, h, false);
+}
+
+// The weapon a hero has in hand, carried weapons by their own id; -1 none.
+int weapon_in_hand(uint32_t ch, int hero) {
+    if (!valid_ptr(ch)) return -1;
+    const int w = Character::CurrentWeapon::get(ch);
+    if (w == CARRIER && hero >= 0 && hero < HEROES && g_heroes[hero].current >= CARRIER) return g_heroes[hero].current;
+    return w < 16 ? w : -1;
+}
+} // namespace jfg::weapons
+
+namespace {
+using namespace jfg;
+using namespace jfg::weapons;
+
+// The next (step 1) or previous (-1) carried weapon after `from`, -1 when `from` is the last that way.
+int step(const Hero& h, int from, int dir) {
+    if (dir > 0) {
+        const auto it = h.ammo.upper_bound(from);
+        return it != h.ammo.end() ? it->first : -1;
+    }
+    auto it = h.ammo.lower_bound(from);
+    if (it == h.ammo.begin()) return -1;
+    return std::prev(it)->first;
+}
+
+void select_step(uint8_t* rdram, recomp_context* ctx, int dir, void (*orig)(uint8_t*, recomp_context*)) {
+    g_rdram = rdram;
+    const int hero = hero_of_player((uint32_t)ctx->r5);
+    const uint32_t ch = hero >= 0 ? character_ptr(hero) : 0;
+    if (!valid_ptr(ch) || g_heroes[hero].ammo.empty()) {
+        orig(rdram, ctx);
+        return;
+    }
+    Hero& h = g_heroes[hero];
+    set_owned_bit(ch, true); // the all-weapons cheat writes the mask without bit 15 each tick
+    const int before = Character::CurrentWeapon::get(ch);
+    store_carrier(ch, h);
+    const int next = before == CARRIER ? step(h, h.current, dir) : -1;
+    orig(rdram, ctx);
+    g_rdram = rdram;
+    if (next >= 0) {
+        Character::CurrentWeapon::set(ch, CARRIER); // the game's switch ran (sound, hand, selector); 15 stays in hand
+        h.current = next;
+    } else if (before != CARRIER && Character::CurrentWeapon::get(ch) == CARRIER) {
+        h.current = dir > 0 ? h.ammo.begin()->first : h.ammo.rbegin()->first;
+    }
+    load_carrier(ch, h, true);
+}
+} // namespace
+
+JFG_WRAP(controlSelectNextWeapon) { select_step(rdram, ctx, 1, controlSelectNextWeapon_orig); }
+JFG_WRAP(controlSelectPreviousWeapon) { select_step(rdram, ctx, -1, controlSelectPreviousWeapon_orig); }
+
+// The fire code (obj, player): jfg_on_weapon_fire, then a carried weapon fires as its host. JfgWeaponFire: s32 weapon,
+// character; void* hero; s32 charge, cancel, take_ammo.
+JFG_WRAP(func_800386B0_392B0) {
+    const int hero = current_hero();
+    const uint32_t ch = hero >= 0 ? character_ptr(hero) : 0;
+    if (!valid_ptr(ch)) {
+        func_800386B0_392B0_orig(rdram, ctx);
+        return;
+    }
+    const uint32_t player = (uint32_t)ctx->r5;
+    const int in_hand = weapon_in_hand(ch, hero);
+    if (api::listened(api::Event::WeaponFire)) {
+        const gpr a0 = ctx->r4, a1 = ctx->r5;
+        int32_t cancel, take;
+        {
+            api::Payload p(ctx, 0x18);
+            wr32(p.addr + 0x00, (uint32_t)in_hand);
+            wr32(p.addr + 0x04, (uint32_t)hero);
+            wr32(p.addr + 0x08, (uint32_t)a0);
+            wr32(p.addr + 0x0C, (uint32_t)(int32_t)PlayerData::Charge::get(player));
+            wr32(p.addr + 0x10, 0);
+            wr32(p.addr + 0x14, 1);
+            api::fire(rdram, ctx, api::Event::WeaponFire, (int32_t)p.addr);
+            g_rdram = rdram;
+            cancel = (int32_t)rd32(p.addr + 0x10);
+            take = (int32_t)rd32(p.addr + 0x14);
+        }
+        ctx->r4 = a0;
+        ctx->r5 = a1;
+        if (cancel != 0) {
+            const int slot = Character::CurrentWeapon::get(ch);
+            if (take != 0 && slot < 16 && Character::Ammo::get(ch, (uint32_t)slot) > 0 && slot != 0) {
+                Character::Ammo::set(ch, (uint32_t)slot, (uint16_t)(Character::Ammo::get(ch, (uint32_t)slot) - 1));
+            }
+            return;
+        }
+    }
+    const Weapon* w = Character::CurrentWeapon::get(ch) == CARRIER ? weapon_of(in_hand) : nullptr;
+    if (w == nullptr || w->host < 0) {
+        func_800386B0_392B0_orig(rdram, ctx);
+        return;
+    }
+    const uint32_t as = (uint32_t)w->host;
+    const uint32_t game = rd32(ADDR_gameplay);
+    const uint16_t as_ammo = Character::Ammo::get(ch, as);
+    const uint32_t as_shots = Game::WeaponShots::get(game, as);
+    const int16_t charge = PlayerData::Charge::get(player);
+    Character::Ammo::set(ch, as, Character::Ammo::get(ch, CARRIER));
+    Character::CurrentWeapon::set(ch, (uint8_t)as);
+    if (w->charge >= 0) PlayerData::Charge::set(player, (int16_t)w->charge);
+    func_800386B0_392B0_orig(rdram, ctx);
+    g_rdram = rdram;
+    Character::Ammo::set(ch, CARRIER, Character::Ammo::get(ch, as));
+    Character::Ammo::set(ch, as, as_ammo);
+    Character::CurrentWeapon::set(ch, CARRIER);
+    PlayerData::Charge::set(player, charge);
+    const uint32_t shots = Game::WeaponShots::get(game, as);
+    if (shots != as_shots) {
+        Game::WeaponShots::set(game, CARRIER, Game::WeaponShots::get(game, CARRIER) + (shots - as_shots));
+        Game::WeaponShots::set(game, as, as_shots);
+    }
+}
+
+JFG_WRAP(controlThrowWeapon) {
+    const int weapon = (int32_t)ctx->r4;
+    if (weapon == CARRIER) {
+        const int hero = current_hero();
+        const Weapon* w = hero >= 0 ? weapon_of(g_heroes[hero].current) : nullptr;
+        if (w == nullptr) w = weapon_of(CARRIER);
+        if (w->thrown) {
+            ctx->r2 = 1;
+            return;
+        }
+        if (w->host >= 0) ctx->r4 = (gpr)w->host; // as its host throws (or not)
+    }
+    controlThrowWeapon_orig(rdram, ctx);
+}
+
+// A pickup of slot 15 gives the weapon it was pointed at: slot 15 shows that weapon for the call.
+JFG_WRAP(weaponPickupControl) {
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const int hero = current_hero();
+    const uint32_t ch = hero >= 0 ? character_ptr(hero) : 0;
+    if (!valid_ptr(obj) || !valid_ptr(ch) || (int16_t)rd16(obj + PICKUP_WEAPON) != CARRIER) {
+        weaponPickupControl_orig(rdram, ctx);
+        return;
+    }
+    const auto found = g_pickups.find(obj);
+    const int id = found != g_pickups.end() ? found->second : CARRIER;
+    Hero& h = g_heroes[hero];
+    adopt(ch, h);
+    store_carrier(ch, h);
+    const bool had = h.ammo.find(id) != h.ammo.end();
+    set_owned_bit(ch, had);
+    show(ch, id, had ? h.ammo[id] : 0, true);
+    weaponPickupControl_orig(rdram, ctx);
+    g_rdram = rdram;
+    const int ammo_after = Character::Ammo::get(ch, CARRIER);
+    const bool taken = (Character::WeaponsOwned::get(ch) & (1u << CARRIER)) && (!had || ammo_after != h.ammo[id]);
+    if (Character::WeaponsOwned::get(ch) & (1u << CARRIER)) {
+        if (!had && h.ammo.empty()) h.current = id;
+        h.ammo[id] = ammo_after;
+    }
+    if (h.ammo.empty()) {
+        set_owned_bit(ch, false);
+        return;
+    }
+    set_owned_bit(ch, true);
+    // Taken: the names stay the picked weapon's until the next switch (the message panel reads them as it draws).
+    load_carrier(ch, h, !taken);
+}
+
+// --- the helpers mods import -------------------------------------------------------------------------------------------
+namespace {
+// jfg_weapon_register(const JfgWeaponDef* def): { const char* name, *display, *ammo_display; s32 host, charge, thrown,
+// row_from, max_ammo, start_ammo, pickup_ammo; }. The weapon's id (16 up; the same id again for a name already
+// registered), -1 if the definition is bad.
+void api_weapon_register(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t d = (uint32_t)ctx->r4;
+    ctx->r2 = (gpr)-1;
+    if (!mod_ptr(d)) return;
+    Weapon w;
+    w.name = read_string(rd32(d + 0x00));
+    w.display = read_string(rd32(d + 0x04), 40);
+    w.ammo_display = read_string(rd32(d + 0x08), 40);
+    w.host = (int32_t)rd32(d + 0x0C);
+    w.charge = (int32_t)rd32(d + 0x10);
+    w.thrown = rd32(d + 0x14) != 0;
+    w.row_from = (int32_t)rd32(d + 0x18);
+    w.max_ammo = (int32_t)rd32(d + 0x1C);
+    w.start_ammo = (int32_t)rd32(d + 0x20);
+    w.pickup_ammo = (int32_t)rd32(d + 0x24);
+    if (w.name.empty() || w.name.find(':') == std::string::npos || w.name.find(' ') != std::string::npos) return;
+    if (w.host < -1 || w.host >= STOCK || w.row_from < 0 || w.row_from >= STOCK) return;
+    if (w.display.empty()) w.display = w.name;
+    if (w.ammo_display.empty()) w.ammo_display = w.display;
+    const int existing = find(w.name);
+    if (existing >= CARRIER) {
+        ctx->r2 = (gpr)existing;
+        return;
+    }
+    if (existing >= 0) return; // a stock name
+    g_weapons.push_back(std::move(w));
+    const int id = CARRIER + (int)g_weapons.size() - 1;
+    std::fprintf(stderr, "[jfg] weapons: %s is weapon %d\n", g_weapons.back().name.c_str(), id);
+    // A file chosen before the mod registered: its saved ammo of this weapon is given now.
+    const uint32_t game = rd32(ADDR_gameplay);
+    const int slot = valid_ptr(game) && auto_save_file_in_play() ? Game::SaveSlot::get(game) : -1;
+    if (slot >= 0 && slot < SAVE_SLOTS) {
+        load_file();
+        for (int hero = 0; hero < HEROES; hero++) {
+            const SavedHero& s = g_disk[slot][hero];
+            const auto it = s.ammo.find(g_weapons.back().name);
+            if (it == s.ammo.end() || g_heroes[hero].ammo.count(id)) continue;
+            g_heroes[hero].ammo[id] = it->second;
+            if (s.current == it->first) g_heroes[hero].current = id;
+        }
+    }
+    ctx->r2 = (gpr)id;
+}
+
+// jfg_weapon_find(const char* name): the id of a weapon by name ("stock:pistol" .. "stock:cluster_bombs",
+// "port:proximity_mine", mods' "mod_id:weapon"), -1 if none.
+void api_weapon_find(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    ctx->r2 = (gpr)find(read_string((uint32_t)ctx->r4));
+}
+
+// jfg_weapon_count(void): how many weapon ids there are: 0 .. count - 1 are all weapons.
+void api_weapon_count(uint8_t*, recomp_context* ctx) {
+    ctx->r2 = (gpr)(CARRIER + (int)g_weapons.size());
+}
+
+// jfg_weapon_info(int id, JfgWeaponInfo* out): { char name[48]; char display[40]; s32 modded, host, thrown, max_ammo; }.
+// 1, or 0 for no such weapon.
+void api_weapon_info(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const int id = (int32_t)ctx->r4;
+    const uint32_t out = (uint32_t)ctx->r5;
+    ctx->r2 = 0;
+    if (!mod_ptr(out) || id < 0 || id >= CARRIER + (int)g_weapons.size()) return;
+    std::string name, display;
+    int modded = 0, host = id, thrown = 0, max_ammo = 0;
+    if (id < STOCK) {
+        name = STOCK_NAMES[id];
+        const uint32_t table = rd32(ADDR_front_text);
+        if (valid_ptr(table)) display = read_string(rd32(table + 4 * (uint32_t)(WEAPON_NAMES + id)), 39);
+        max_ammo = (int16_t)rd16(ADDR_weaponTable + WeaponDef::Size * (uint32_t)id + ROW_MAX_AMMO);
+        thrown = -1; // the game's own rule
+    } else {
+        const Weapon* w = weapon_of(id);
+        name = w->name;
+        display = w->display;
+        modded = id >= FIRST_MOD;
+        host = w->host;
+        thrown = w->thrown;
+        max_ammo = w->max_ammo >= 0 ? w->max_ammo
+                                    : (int16_t)rd16(ADDR_weaponTable + WeaponDef::Size * (uint32_t)w->row_from + ROW_MAX_AMMO);
+    }
+    for (uint32_t i = 0; i < 48; i++) wr8(out + i, i < name.size() && i < 47 ? (uint8_t)name[i] : 0);
+    for (uint32_t i = 0; i < 40; i++) wr8(out + 48 + i, i < display.size() && i < 39 ? (uint8_t)display[i] : 0);
+    wr32(out + 88, (uint32_t)modded);
+    wr32(out + 92, (uint32_t)host);
+    wr32(out + 96, (uint32_t)thrown);
+    wr32(out + 100, (uint32_t)max_ammo);
+    ctx->r2 = 1;
+}
+
+// jfg_hero_has_weapon(int id): 1 if the first player's hero owns it.
+void api_hero_has_weapon(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const int id = (int32_t)ctx->r4, hero = current_hero();
+    const uint32_t ch = hero >= 0 ? character_ptr(hero) : 0;
+    ctx->r2 = 0;
+    if (!valid_ptr(ch)) return;
+    if (id >= 0 && id < STOCK) ctx->r2 = (Character::WeaponsOwned::get(ch) >> id) & 1;
+    else if (weapon_of(id) != nullptr) ctx->r2 = g_heroes[hero].ammo.count(id) ? 1 : 0;
+}
+
+// jfg_hero_give_weapon(int id, int ammo): the first player's hero owns it, with that ammo (-1: its start ammo; owned
+// already: added, up to the capacity).
+void api_hero_give_weapon(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const int id = (int32_t)ctx->r4, ammo = (int32_t)ctx->r5, hero = current_hero();
+    const uint32_t ch = hero >= 0 ? character_ptr(hero) : 0;
+    if (!valid_ptr(ch)) return;
+    int row = id, max = 0, start = 0;
+    const Weapon* w = weapon_of(id);
+    if (id >= 0 && id < STOCK) {
+        max = (int16_t)rd16(ADDR_weaponTable + WeaponDef::Size * (uint32_t)row + ROW_MAX_AMMO);
+        start = (int16_t)rd16(ADDR_weaponTable + WeaponDef::Size * (uint32_t)row + ROW_START_AMMO);
+        const uint16_t mask = Character::WeaponsOwned::get(ch);
+        const int add = ammo >= 0 ? ammo : start;
+        if (!(mask & (1u << id))) {
+            Character::WeaponsOwned::set(ch, (uint16_t)(mask | (1u << id)));
+            Character::WeaponCount::set(ch, (uint8_t)popcount16((uint16_t)(mask | (1u << id))));
+            wr16(ch + 0x34 + 2 * (uint32_t)id, (uint16_t)max);
+            Character::MaxCharge::set(ch, (uint32_t)id, rd8(ADDR_weaponTable + WeaponDef::Size * (uint32_t)id + ROW_CHARGE));
+            Character::Ammo::set(ch, (uint32_t)id, (uint16_t)std::clamp(add, 0, max));
+        } else {
+            Character::Ammo::set(ch, (uint32_t)id, (uint16_t)std::clamp(Character::Ammo::get(ch, (uint32_t)id) + add, 0, max));
+        }
+        return;
+    }
+    if (w == nullptr) return;
+    row = w->row_from;
+    max = w->max_ammo >= 0 ? w->max_ammo : (int16_t)rd16(ADDR_weaponTable + WeaponDef::Size * (uint32_t)row + ROW_MAX_AMMO);
+    start = w->start_ammo >= 0 ? w->start_ammo : (int16_t)rd16(ADDR_weaponTable + WeaponDef::Size * (uint32_t)row + ROW_START_AMMO);
+    Hero& h = g_heroes[hero];
+    adopt(ch, h);
+    store_carrier(ch, h);
+    const int add = ammo >= 0 ? ammo : start;
+    const auto it = h.ammo.find(id);
+    h.ammo[id] = std::clamp((it != h.ammo.end() ? it->second : 0) + add, 0, max);
+    load_carrier(ch, h, true);
+}
+
+// jfg_hero_take_weapon(int id): the first player's hero no longer owns it (not the pistol). If it was in hand the hero
+// switches to the next owned weapon.
+void api_hero_take_weapon(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const int id = (int32_t)ctx->r4, hero = current_hero();
+    const uint32_t ch = hero >= 0 ? character_ptr(hero) : 0;
+    if (!valid_ptr(ch) || id <= 0) return;
+    uint16_t mask = Character::WeaponsOwned::get(ch);
+    if (id < STOCK) {
+        mask = (uint16_t)(mask & ~(1u << id));
+        Character::WeaponsOwned::set(ch, mask);
+        Character::WeaponCount::set(ch, (uint8_t)popcount16(mask));
+        Character::Ammo::set(ch, (uint32_t)id, 0);
+        if (Character::CurrentWeapon::get(ch) == id) Character::CurrentWeapon::set(ch, 0);
+        return;
+    }
+    Hero& h = g_heroes[hero];
+    adopt(ch, h);
+    store_carrier(ch, h);
+    if (!h.ammo.erase(id)) return;
+    if (h.ammo.empty()) {
+        set_owned_bit(ch, false);
+        Character::Ammo::set(ch, CARRIER, 0);
+        if (Character::CurrentWeapon::get(ch) == CARRIER) Character::CurrentWeapon::set(ch, 0);
+        h.current = -1;
+        return;
+    }
+    load_carrier(ch, h, true);
+}
+
+// jfg_weapon_pickup_set(void* pickup, int id): a weapon pickup (kind JFG_KIND_WEAPON) gives that weapon from now on.
+// Its model stays the one it has.
+void api_weapon_pickup_set(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const int id = (int32_t)ctx->r5;
+    if (!valid_ptr(obj) || id < 0 || id >= CARRIER + (int)g_weapons.size()) return;
+    if (id < STOCK) {
+        g_pickups.erase(obj);
+        wr16(obj + PICKUP_WEAPON, (uint16_t)id);
+    } else {
+        g_pickups[obj] = id;
+        wr16(obj + PICKUP_WEAPON, CARRIER);
+    }
+}
+
+// jfg_weapon_pickup_get(void* pickup): the weapon a weapon pickup gives.
+void api_weapon_pickup_get(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    ctx->r2 = (gpr)-1;
+    if (!valid_ptr(obj)) return;
+    const int w = (int16_t)rd16(obj + PICKUP_WEAPON);
+    const auto it = g_pickups.find(obj);
+    ctx->r2 = (gpr)(w == CARRIER && it != g_pickups.end() ? it->second : w);
+}
+} // namespace
+
+namespace jfg {
+void register_weapon_registry_api() {
+    recomp::overlays::register_base_export("jfg_weapon_register", api_weapon_register);
+    recomp::overlays::register_base_export("jfg_weapon_find", api_weapon_find);
+    recomp::overlays::register_base_export("jfg_weapon_count", api_weapon_count);
+    recomp::overlays::register_base_export("jfg_weapon_info", api_weapon_info);
+    recomp::overlays::register_base_export("jfg_hero_has_weapon", api_hero_has_weapon);
+    recomp::overlays::register_base_export("jfg_hero_give_weapon", api_hero_give_weapon);
+    recomp::overlays::register_base_export("jfg_hero_take_weapon", api_hero_take_weapon);
+    recomp::overlays::register_base_export("jfg_weapon_pickup_set", api_weapon_pickup_set);
+    recomp::overlays::register_base_export("jfg_weapon_pickup_get", api_weapon_pickup_get);
+}
+} // namespace jfg
