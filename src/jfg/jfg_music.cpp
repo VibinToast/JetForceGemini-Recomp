@@ -267,6 +267,9 @@ struct Replacement {
     float volume = 1.0f;
     uint16_t range = 0; // the game's range for it (placed sounds), read before it is muted
     std::vector<uint32_t> stopped_by; // ids whose playing stops this one's voices
+    bool enabled = true;  // off (jfg_sound_replace_enable): the game's own sound plays again
+    bool saved = false;   // the game's volume and minimum volume for it, kept to give back
+    uint8_t volume_game = 0, minimum_game = 0;
 };
 std::map<uint32_t, Replacement> g_replace;
 
@@ -480,12 +483,33 @@ void sound_stop(uint8_t*, recomp_context* ctx) {
     stop_voice((uint32_t)ctx->r4);
 }
 
+// jfg_sound_replace_enable(int id, int on): a replacement (jfg_sounds.json "replace") on or off while the game runs; off,
+// the game's own sound plays again (its volume given back next tick) and the stand-in's voices stop. 1 if the id is
+// replaced, else 0.
+void sound_replace_enable(uint8_t*, recomp_context* ctx) {
+    const uint32_t id = (uint32_t)ctx->r4 & 0xFFFF;
+    const bool on = ctx->r5 != 0;
+    const auto it = g_replace.find(id);
+    if (it == g_replace.end()) { ctx->r2 = 0; return; }
+    if (it->second.enabled && !on) {
+        for (size_t i = 0; i < g_tracked.size();) {
+            if (g_tracked[i].id != id) { i++; continue; }
+            stop_voice(g_tracked[i].voice);
+            g_tracked[i] = g_tracked.back();
+            g_tracked.pop_back();
+        }
+    }
+    it->second.enabled = on;
+    ctx->r2 = 1;
+}
+
 constexpr uint32_t ADDR_sfxIndex = 0x800E9508;     // SoundData*: amSndPlay's table
 constexpr uint32_t ADDR_sfxIndexXYZ = 0x800F29F0;  // SoundData*: amSndPlayXYZ's (the same table, kept apart)
 constexpr uint32_t ADDR_maxSound = 0x800E9510;     // s32: the highest id
 constexpr uint32_t SOUND_DATA = 10;
 
-// The replaced ids silent in the game's tables (their range kept first).
+// The replaced ids silent in the game's tables (their range and volumes kept first), or given their volumes back while
+// a mod has turned the replacement off.
 void mute_replaced() {
     using namespace jfg;
     const int max = (int)rd32(ADDR_maxSound);
@@ -494,9 +518,19 @@ void mute_replaced() {
         for (auto& [id, r] : g_replace) {
             if ((int)id > max) continue;
             const uint32_t e = table + id * SOUND_DATA;
-            if (r.range == 0 && rd8(e + 2) != 0) r.range = rd16(e + 6);
-            wr8(e + 2, 0);
-            wr8(e + 3, 0);
+            if (!r.saved && rd8(e + 2) != 0) {
+                r.range = rd16(e + 6);
+                r.volume_game = rd8(e + 2);
+                r.minimum_game = rd8(e + 3);
+                r.saved = true;
+            }
+            if (r.enabled) {
+                wr8(e + 2, 0);
+                wr8(e + 3, 0);
+            } else if (r.saved) {
+                wr8(e + 2, r.volume_game);
+                wr8(e + 3, r.minimum_game);
+            }
         }
     }
 }
@@ -521,7 +555,7 @@ void sound_replaced_play(recomp_context* ctx, uint32_t id, uint32_t handle_addr,
         }
     }
     const auto it = g_replace.find(id);
-    if (it == g_replace.end() || was_playing) return;
+    if (it == g_replace.end() || was_playing || !it->second.enabled) return;
     const Replacement& r = it->second;
     if (placed) { // the same placed sound again: the older one makes way
         for (size_t i = 0; i < g_tracked.size();) {
@@ -588,6 +622,7 @@ extern "C" void jfg_register_music_mods(void) {
     recomp::overlays::register_ext_base_export("jfg_sound_loop", sound_loop);
     recomp::overlays::register_base_export("jfg_sound_set", sound_set);
     recomp::overlays::register_base_export("jfg_sound_stop", sound_stop);
+    recomp::overlays::register_base_export("jfg_sound_replace_enable", sound_replace_enable);
 }
 
 // Mixes the mods' playing sounds into the game's audio (as jfg_music_mix): linear resampling to the game's rate times
