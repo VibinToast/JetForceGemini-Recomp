@@ -21,6 +21,7 @@ extern "C" void camGetNo(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackGetFog(uint8_t* rdram, recomp_context* ctx);
 std::string jfg_locale_shown(); // jfg_locale.cpp
 namespace jfg::overlay { void register_api(); void frame_done(); } // jfg_overlay.cpp
+namespace jfg { void register_weapon_hud_api(); }                 // jfg_weapon_hud.cpp
 
 namespace jfg::api {
 namespace {
@@ -30,7 +31,7 @@ const char* const g_event_names[] = {
     "jfg_on_severed_limb_tick", "jfg_on_object_draw", "jfg_on_sound_play", "jfg_on_screen_flash", "jfg_on_sidekick_tick",
     "jfg_on_language_change", "jfg_on_map_open", "jfg_on_galaxy_change", "jfg_on_planet_select", "jfg_on_hero_control",
     "jfg_on_object_draw_gfx", "jfg_on_draw_hud", "jfg_on_hud_message", "jfg_on_reticle_draw",
-    "jfg_on_health_draw", nullptr
+    "jfg_on_health_draw", "jfg_on_weapon_hud", nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
 
@@ -68,18 +69,18 @@ void aim_lock(uint8_t*, recomp_context* ctx) { g_aim_lock = ctx->r4 != 0; }
 // 16-byte aligned, kept for the whole run (a mod allocates once); NULL when the region is full.
 constexpr uint32_t GFX_REGION = 0x80800000u, GFX_REGION_END = 0x80C00000u;
 uint32_t g_gfx_next = GFX_REGION;
-void gfx_alloc(uint8_t* rdram_, recomp_context* ctx) {
-    g_rdram = rdram_;
-    const uint32_t size = ((uint32_t)ctx->r4 + 15u) & ~15u;
-    if (size == 0 || size > GFX_REGION_END - g_gfx_next) {
-        ctx->r2 = 0;
-        return;
-    }
+uint32_t gfx_take(uint32_t bytes) {
+    const uint32_t size = (bytes + 15u) & ~15u;
+    if (size == 0 || size > GFX_REGION_END - g_gfx_next) return 0;
     const uint32_t block = g_gfx_next;
     g_gfx_next += size;
     for (uint32_t a = block; a < block + size; a += 4) wr32(a, 0);
     std::fprintf(stderr, "[jfg] jfg_gfx_alloc: %u bytes at 0x%08X (%u KB of 4096 used)\n", size, block, (g_gfx_next - GFX_REGION) / 1024);
-    ctx->r2 = (gpr)(int32_t)block;
+    return block;
+}
+void gfx_alloc(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    ctx->r2 = (gpr)(int32_t)gfx_take((uint32_t)ctx->r4);
 }
 
 // jfg_object_tint(void* object, unsigned int rgba): the object drawn tinted that colour, alpha its strength (0 none),
@@ -215,8 +216,13 @@ void register_api() {
     recomp::overlays::register_base_export("jfg_object_tint", object_tint);
     recomp::overlays::register_base_export("jfg_gfx_alloc", gfx_alloc);
     jfg::overlay::register_api(); // pictures and shapes over the game at the window's resolution (jfg_overlay.cpp)
+    jfg::register_weapon_hud_api(); // the weapon panel's icons, the game's texts, Tribal counts (jfg_weapon_hud.cpp)
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }
+
+// A block of the graphics region for the port's own use (the weapon panel's discs, jfg_weapon_hud.cpp), as
+// jfg_gfx_alloc gives mods: 0 when full.
+uint32_t gfx_block(uint32_t bytes) { return gfx_take(bytes); }
 
 } // namespace jfg::api
 

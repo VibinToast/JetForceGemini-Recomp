@@ -383,10 +383,20 @@ JFG_HUD_PIECE(frontDrawObj, jfg::jfg_hud_object)
 JFG_HUD_PIECE(frontPrintNum, jfg::jfg_hud_number)
 JFG_HUD_PIECE(fontPrintXY, jfg::jfg_hud_text)
 JFG_HUD_PIECE(frontDrawRectangles, jfg::jfg_hud_rectangles)
-JFG_HUD_PIECE(func_overlay_14_0000292C_1F10284, jfg::jfg_hud_weapon_panel) // the weapon panel
 JFG_HUD_PIECE(func_overlay_14_00000220_1F0DB78, jfg::jfg_hud_middle)       // the target's panel
 JFG_HUD_PIECE(func_overlay_14_00000074_1F0D9CC, jfg::jfg_hud_middle)       // the arrows at the screen's sides
 #undef JFG_HUD_PIECE
+
+// The weapon panel (func_overlay_14_0000292C, with the message, objective and selector panels it draws): a HUD piece on
+// the left, which a mod can take over (jfg_on_weapon_hud) and whose weapon icons it can place (jfg_weapon_hud.cpp).
+bool jfg_weapon_hud_event(uint8_t* rdram, recomp_context* ctx); // jfg_weapon_hud.cpp
+void jfg_weapon_hud_icons(uint8_t* rdram, recomp_context* ctx);
+JFG_WRAP(func_overlay_14_0000292C_1F10284) {
+    jfg::jfg_hud_weapon_panel(rdram, ctx);
+    if (jfg_weapon_hud_event(rdram, ctx)) func_overlay_14_0000292C_1F10284_orig(rdram, ctx);
+    jfg_weapon_hud_icons(rdram, ctx);
+    jfg::jfg_hud_pop(rdram, ctx);
+}
 
 // instDrawHealth(player, health, segments, updateRate), the health meter: left out for a hero whose health a mod shows
 // itself (jfg_hud_hide_health) or draws its own (jfg_on_health_draw), else a HUD piece as above.

@@ -356,7 +356,7 @@ typedef struct {
 } JfgOverlayImage;
 RECOMP_IMPORT("*", void jfg_overlay_draw_image(const JfgOverlayImage* image));
 typedef struct {
-    const float* xy;    // count points: x, y, x, y, ... (at most 64)
+    const float* xy;    // count points: x, y, x, y, ... (at most 512)
     int count;
     unsigned int fill;  // 0: not filled (any polygon whose sides do not cross, convex or not)
     unsigned int line;  // 0: no outline
@@ -369,9 +369,45 @@ typedef struct {
     float thickness;
 } JfgOverlayCircle;
 RECOMP_IMPORT("*", void jfg_overlay_circle(const JfgOverlayCircle* circle));
+// A line of text with the port's fonts, sharp at the window's resolution: its top at y, size units from the top of its
+// capitals to the bottom of its descenders; x is its left (align 0), middle (1) or right (2). UTF-8, one line.
+#define JFG_FONT_LATO      0   // Lato Bold, the menus' font
+#define JFG_FONT_JFG       1   // JFG Bold, the launcher's lettering after the game's
+#define JFG_FONT_LATO_THIN 2   // Lato Regular
+typedef struct {
+    float x, y, size;
+    unsigned int color;   // 0xRRGGBBAA
+    int align;
+    int font;
+    const char* text;
+} JfgOverlayText;
+RECOMP_IMPORT("*", void jfg_overlay_text(const JfgOverlayText* text));
+// How wide that text is, in overlay units.
+RECOMP_IMPORT("*", void jfg_overlay_text_width(const JfgOverlayText* text, float* width));
 // 1 while the single-player HUD is at the window's edges (the HUD in Screen Corners option, in widescreen), 0 while
 // it is in the middle 4:3 area: its left edge is then at x (overlay width - 320) / 2 in overlay units, else at 0.
 RECOMP_IMPORT("*", int jfg_hud_in_corners(void));
+// A weapon's icon (0 the pistol .. 15), the game's own picture (texture packs replace it), centred at x, y in overlay
+// units, scale 1 the size the game's weapon panel shows it (about 30 x 20 units), alpha 0..1. Only during
+// jfg_on_weapon_hud: the port draws it with the game's HUD, so it is under the overlay's shapes.
+typedef struct {
+    int weapon;
+    float x, y, scale, alpha;
+} JfgWeaponIcon;
+RECOMP_IMPORT("*", void jfg_hud_weapon_icon(const JfgWeaponIcon* icon));
+// A dark disc in the game's HUD under the weapon icons (the game's own panels' translucent backing): centred at x, y,
+// radius in overlay units, color 0xRRGGBBAA. Only during jfg_on_weapon_hud. The overlay is drawn over the game, icons
+// included, so a backing that the icons sit on has to be drawn this way.
+typedef struct {
+    float x, y, radius;
+    unsigned int color;
+} JfgHudDisc;
+RECOMP_IMPORT("*", void jfg_hud_disc(const JfgHudDisc* disc));
+// One of the game's texts (front_text[id], in the language shown) into out (size bytes, ended by 0); its length, 0 if
+// none. Weapon w's name is 0x39 + w; jfg_on_hud_message's msg is a text id too.
+RECOMP_IMPORT("*", int jfg_game_text(int id, char* out, int size));
+// The area's Tribals: saved, killed and left (the counts the game's objective panel shows). 0 outside a game.
+RECOMP_IMPORT("*", int jfg_tribal_counts(int* saved, int* killed, int* left));
 // Plays the game's own sound effect id at x, y, z (louder near the camera). Some: Juno's jump 0x4C and 0x51, landing
 // 0x6, his side rolls 0x7A (left) and 0x79 (right) (JFG_DEBUG_SOUNDS=1 logs every sound the game starts).
 RECOMP_IMPORT("*", void jfg_game_sound(int id, float x, float y, float z));
@@ -525,6 +561,22 @@ typedef struct {
     int cancel;
 } JfgHealth;
 
+// jfg_on_weapon_hud: the weapon panel is about to be drawn: the weapon in hand (0..15), its ammo and max ammo, charge
+// (the charge bar: 0..1, the pistol's heat or a charging weapon's charge; -1 for a weapon without one), owned (bit w:
+// weapon w), character (0 Vela, 1 Juno, 2 Lupus), frames. Set cancel to 1 to draw none of it (the weapon frame, the
+// pick-up message panel, the Tribal panel, the weapon selector) and draw your own, placing the weapon icons with
+// jfg_hud_weapon_icon. The pick-up messages still come as jfg_on_hud_message, the counts from jfg_tribal_counts.
+typedef struct {
+    int weapon;
+    int ammo;
+    int max_ammo;
+    float charge;
+    unsigned int owned;
+    int character;
+    int frames;
+    int cancel;
+} JfgWeaponHud;
+
 // --- events (since version 1) --------------------------------------------------------------------------------------
 
 // jfg_on_game_tick(int frames)
@@ -580,6 +632,8 @@ typedef struct {
 
 // jfg_on_reticle_draw(JfgReticle* reticle)
 //     Each frame the aiming reticle is drawn, before the game draws it.
+// jfg_on_weapon_hud(JfgWeaponHud* hud)
+//     Each frame the weapon panel is drawn (single player, not in menus or cutscenes), before the game draws it.
 // jfg_on_health_draw(JfgHealth* health)
 //     Each frame the health meter is drawn (not in the pause menu, cutscenes or other times the HUD is hidden),
 //     before the game draws it.

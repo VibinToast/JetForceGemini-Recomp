@@ -6,8 +6,11 @@
 // 16:9; jfg_overlay_size). What mods send while the game draws a frame (from its game tick or jfg_on_draw_hud) is shown
 // from the end of that frame (prnBorder) until the next; shapes stop being shown a quarter of a second after the game
 // last drew a frame with them (menus, the title screen). Pictures are kept by id until replaced: RGBA, up to
-// 1024 x 1024, uploaded once as ImGui textures (both of the port's renderer backends update them).
+// 1024 x 1024, uploaded once as ImGui textures (both of the port's renderer backends update them). Text is drawn with
+// the port's fonts (jfg_overlay_font.cpp): each string becomes a picture at the window's pixel size, kept while it is
+// drawn and dropped a second after it last was.
 #include <algorithm>
+#include <cmath>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -15,6 +18,8 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "imgui/imgui.h"
@@ -24,13 +29,23 @@
 #include "jfg_rt64.h"
 
 namespace jfg::overlay {
+// The overlay's width in its units (240 high, as wide as the game's picture is shown).
+float overlay_width() {
+    const RT64JfgPresentInfo& info = rt64_jfg_present_info;
+    if (info.viewHeight > 0.0f && info.viewWidth > 0.0f) return 240.0f * info.viewWidth / info.viewHeight;
+    return 320.0f;
+}
+
+float text_width(int font, const std::string& text, float size);                               // jfg_overlay_font.cpp
+bool text_picture(int font, const std::string& text, int size, std::vector<uint32_t>& pixels, int& w, int& h);
+
 namespace {
 constexpr float HEIGHT = 240.0f;
 constexpr int MAX_IMAGE = 1024;
-constexpr size_t MAX_SHAPES = 4096, MAX_POINTS = 64;
+constexpr size_t MAX_SHAPES = 4096, MAX_POINTS = 512;
 constexpr auto STALE = std::chrono::milliseconds(250);
 
-enum class Kind : uint8_t { Image, Polygon, Circle };
+enum class Kind : uint8_t { Image, Polygon, Circle, Text };
 struct Shape {
     Kind kind;
     int image = 0;
@@ -38,7 +53,20 @@ struct Shape {
     float thickness = 0.0f;
     float x = 0, y = 0, w = 0, h = 0, r = 0;
     std::vector<ImVec2> points;
+    int font = 0, align = 0;  // text: 0 left, 1 centre, 2 right of x
+    std::string text;
 };
+
+// A string drawn as a picture: by font, pixel size and text.
+struct TextPicture {
+    ImTextureData* tex = nullptr;
+    int w = 0, h = 0;
+    uint64_t used = 0;  // the build it was last drawn in
+};
+std::unordered_map<std::string, TextPicture> g_text_pictures; // under g_mutex
+uint64_t g_builds = 0;
+constexpr uint64_t TEXT_KEEP = 60;  // builds a string's picture is kept after it was last drawn
+constexpr int TEXT_PAD = 2;         // jfg_overlay_font.cpp's border round a picture, in pixels
 
 struct Image {
     int w = 0, h = 0;
@@ -74,9 +102,7 @@ void add(Shape&& s) {
 void overlay_size(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t out = (uint32_t)ctx->r4;
-    const RT64JfgPresentInfo& info = rt64_jfg_present_info;
-    float w = HEIGHT * 4.0f / 3.0f;
-    if (info.viewHeight > 0.0f && info.viewWidth > 0.0f) w = HEIGHT * info.viewWidth / info.viewHeight;
+    const float w = overlay_width();
     uint32_t bits;
     std::memcpy(&bits, &w, 4);
     wr32(out, bits);
@@ -153,6 +179,50 @@ void overlay_circle(uint8_t* rdram_, recomp_context* ctx) {
     add(std::move(s));
 }
 
+// JfgOverlayText: { float x, y, size; unsigned int color; int align; int font; const char* text; }
+std::string read_text(uint32_t p) {
+    std::string out;
+    for (uint32_t i = 0; i < 255; i++) {
+        const char c = (char)rd8(p + i);
+        if (c == 0) break;
+        out += c;
+    }
+    return out;
+}
+
+Shape text_shape(uint32_t p) {
+    Shape s{ Kind::Text };
+    s.x = rdf(p); s.y = rdf(p + 4); s.h = rdf(p + 8);
+    s.fill = rd32(p + 12);
+    s.align = (int)rd32(p + 16);
+    s.font = (int)rd32(p + 20);
+    const uint32_t text = rd32(p + 24);
+    if (text != 0) s.text = read_text(text);
+    return s;
+}
+
+// jfg_overlay_text(const JfgOverlayText* text): a line of text, size units high, its top at y.
+void overlay_text(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t p = (uint32_t)ctx->r4;
+    if (p == 0) return;
+    Shape s = text_shape(p);
+    if (s.text.empty() || s.h <= 0.0f) return;
+    add(std::move(s));
+}
+
+// jfg_overlay_text_width(const JfgOverlayText* text, float* width): how wide the text is, in overlay units.
+void overlay_text_width(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t p = (uint32_t)ctx->r4, out = (uint32_t)ctx->r5;
+    if (p == 0 || out == 0) return;
+    const Shape s = text_shape(p);
+    const float w = text_width(s.font, s.text, s.h);
+    uint32_t bits;
+    std::memcpy(&bits, &w, 4);
+    wr32(out, bits);
+}
+
 ImTextureData* g_white = nullptr; // a white texture: shapes take its colour (the list's own texture)
 std::atomic<bool> g_menu_shown{ false };
 } // namespace
@@ -175,6 +245,8 @@ void register_api() {
     recomp::overlays::register_base_export("jfg_overlay_draw_image", overlay_draw_image);
     recomp::overlays::register_base_export("jfg_overlay_polygon", overlay_polygon);
     recomp::overlays::register_base_export("jfg_overlay_circle", overlay_circle);
+    recomp::overlays::register_base_export("jfg_overlay_text", overlay_text);
+    recomp::overlays::register_base_export("jfg_overlay_text_width", overlay_text_width);
 }
 
 // Present thread (render hook): the overlay in window pixels into list, the textures to create or update into
@@ -183,6 +255,15 @@ bool build(ImDrawList* list, ImVector<ImTextureData*>& textures) {
     const RT64JfgPresentInfo& info = rt64_jfg_present_info;
     if (info.fbWidth == 0 || info.viewWidth <= 0.0f || info.viewHeight <= 0.0f) return false;
     std::lock_guard<std::mutex> lock(g_mutex);
+    g_builds++;
+    // Strings not drawn for a while: their pictures go.
+    for (auto it = g_text_pictures.begin(); it != g_text_pictures.end();) {
+        if (g_builds - it->second.used <= TEXT_KEEP) { ++it; continue; }
+        it->second.tex->SetStatus(ImTextureStatus_WantDestroy);
+        it->second.tex->UnusedFrames = 8;
+        g_retired.push_back(it->second.tex);
+        it = g_text_pictures.erase(it);
+    }
     for (ImTextureData* t : g_retired) textures.push_back(t);
     g_retired.erase(std::remove_if(g_retired.begin(), g_retired.end(), [](ImTextureData* t) {
         if (t->Status != ImTextureStatus_Destroyed) return false;
@@ -236,6 +317,32 @@ bool build(ImDrawList* list, ImVector<ImTextureData*>& textures) {
             if ((s.line & 0xFF) && s.thickness > 0.0f) list->AddPolyline(pts.data(), (int)pts.size(), to_im(s.line), ImDrawFlags_Closed, s.thickness * scale);
             break;
         }
+        case Kind::Text: {
+            const int px = (int)std::lround(s.h * scale);
+            if (px < 4 || px > 512) break;
+            const std::string key = std::to_string(s.font) + "|" + std::to_string(px) + "|" + s.text;
+            auto it = g_text_pictures.find(key);
+            if (it == g_text_pictures.end()) {
+                std::vector<uint32_t> pixels;
+                int w = 0, h = 0;
+                if (!text_picture(s.font, s.text, px, pixels, w, h)) break;
+                TextPicture tp;
+                tp.tex = IM_NEW(ImTextureData)();
+                tp.tex->Create(ImTextureFormat_RGBA32, w, h);
+                std::memcpy(tp.tex->GetPixels(), pixels.data(), pixels.size() * 4);
+                tp.w = w;
+                tp.h = h;
+                it = g_text_pictures.emplace(key, tp).first;
+            }
+            TextPicture& tp = it->second;
+            tp.used = g_builds;
+            const float content = (float)(tp.w - TEXT_PAD * 2);
+            const ImVec2 a = at(s.x, s.y);
+            const float left = std::round(a.x - content * (s.align == 1 ? 0.5f : s.align == 2 ? 1.0f : 0.0f)) - TEXT_PAD;
+            const float top = std::round(a.y) - TEXT_PAD;
+            list->AddImage(tp.tex->GetTexRef(), ImVec2(left, top), ImVec2(left + tp.w, top + tp.h), ImVec2(0, 0), ImVec2(1, 1), to_im(s.fill));
+            break;
+        }
         case Kind::Circle: {
             const ImVec2 c = at(s.x, s.y);
             const float r = s.r * scale;
@@ -247,6 +354,7 @@ bool build(ImDrawList* list, ImVector<ImTextureData*>& textures) {
         }
     }
     list->PopTexture();
+    for (auto& [key, tp] : g_text_pictures) textures.push_back(tp.tex);
     return true;
 }
 
