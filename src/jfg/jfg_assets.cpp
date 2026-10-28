@@ -1284,6 +1284,12 @@ extern "C" void jfg_apply_asset_mods(void) {
     // Animation rows for appended models.
     std::vector<AnimRows> animrows = std::move(g_animrows);
     g_animrows.clear();
+    // Placed in model order: each model's rows go at the end of the tables, and a model's count is the gap to the next
+    // model's start, so a lower model placed after a higher one left the higher one's rows looking empty (its list
+    // became 0 animations and the game drew a jointed model with no matrices: a crash in its lighting).
+    std::stable_sort(animrows.begin(), animrows.end(), [](const AnimRows& x, const AnimRows& y) {
+        return jfg::asset_number(x.model) < jfg::asset_number(y.model);
+    });
     std::set<int> with_rows;
     for (const AnimRows& a : animrows) {
         const int m = jfg::asset_number(a.model);
