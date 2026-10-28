@@ -517,6 +517,10 @@ RECOMP_IMPORT("*", int jfg_weapon_find(const char* name));
 // the game's, made with jfgformats' sprites.write and HUD_ICON_ANCHOR), shown in the weapon panel, the weapon strip and
 // the pause screen while the weapon is in hand. Set it after jfg_weapon_register. jfg_hud_weapon_icon takes modded ids.
 RECOMP_IMPORT("*", void jfg_weapon_set_icon(int id, int sprite));
+// A modded weapon's model in the hero's hand: a pack's model (its number from jfg_asset_number, "mod:model_gun"), static
+// (no joints), drawn on the hand where the stock guns are, at their size and axes; -1 = none of its own (an empty
+// hand, a grenade for Lupus). Since version 6.
+RECOMP_IMPORT("*", void jfg_weapon_set_held_model(int id, int model));
 // A modded weapon's big icon: w x h colours 0xRRGGBBAA (at most 512 x 512; it is copied). Where mods draw the weapon's
 // icon (jfg_hud_weapon_icon: Ammo Ring, ...) it is drawn instead of the game's sprite, sharp at the window's resolution,
 // about 44 units wide at scale 1 (the game's are about 32).
@@ -576,6 +580,10 @@ typedef struct {
     void* owner;
 } JfgExplosion;
 RECOMP_IMPORT("*", void jfg_explosion(const JfgExplosion* explosion));
+// The first player's view jolts up and down by up to magnitude level units, fading out over ms milliseconds (the
+// game's strong hits: 15-25 over 2-4 s; 5-8 a light thump). A new call replaces the running shake, 0 stops it, a level
+// change ends it. Since version 6.
+RECOMP_IMPORT("*", void jfg_camera_shake(int magnitude, int ms));
 // Damage only, no look: strongest at the middle, less out to the radius, fading over the seconds; damage 256 a unit
 // of health. At most 16 at a time (the oldest gives way).
 typedef struct {

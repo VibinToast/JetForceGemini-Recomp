@@ -28,6 +28,7 @@ extern "C" void controlSelectPreviousWeapon(uint8_t* rdram, recomp_context* ctx)
 extern "C" void objSetupObject(uint8_t* rdram, recomp_context* ctx);
 extern "C" void objFreeObject(uint8_t* rdram, recomp_context* ctx);
 extern "C" void explosionStart(uint8_t* rdram, recomp_context* ctx);
+extern "C" void camStartShake(uint8_t* rdram, recomp_context* ctx);
 extern "C" void explosionAddBlast(uint8_t* rdram, recomp_context* ctx);
 extern "C" void shockwaveStart(uint8_t* rdram, recomp_context* ctx);
 extern "C" void hitsCheckLineOfSight(uint8_t* rdram, recomp_context* ctx);
@@ -1184,6 +1185,18 @@ void explosion(uint8_t* rdram_, recomp_context* ctx) {
                                      valid_ptr(owner) ? owner : 0 });
 }
 
+// jfg_camera_shake(s32 magnitude, s32 ms): the first player's view jolts up and down by up to magnitude level units,
+// fading out over ms (camStartShake(0, attack 0, sustain 0, decay s, magnitude), decomp MSR 10a: the game's strong hits
+// use 15-25 over 2-4 s). A new call replaces the running shake; 0 stops it; a level change ends it.
+void camera_shake(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    if (rd32(ADDR_mainGameMode) != 0) return;
+    const int magnitude = std::clamp((int)(int32_t)ctx->r4, 0, 100);
+    const float seconds = std::clamp((int)(int32_t)ctx->r5, 0, 10000) / 1000.0f;
+    // o32: the first argument is an int, so the floats go in a1..a3 and magnitude on the stack.
+    call_game(camStartShake, ctx, { 0, float_bits(0.0f), float_bits(0.0f), float_bits(seconds), (uint32_t)magnitude });
+}
+
 // jfg_blast(const JfgBlast* b): { f32 x, y, z, radius, damage, seconds; void* owner; } damage only (explosionAddBlast:
 // strongest at the middle, less out to the radius, fading over the seconds), to whatever it reaches; 16 at a time.
 void blast(uint8_t* rdram_, recomp_context* ctx) {
@@ -1411,6 +1424,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_object_scale", object_scale);
     recomp::overlays::register_base_export("jfg_object_physics", object_physics);
     recomp::overlays::register_base_export("jfg_explosion", explosion);
+    recomp::overlays::register_base_export("jfg_camera_shake", camera_shake);
     recomp::overlays::register_base_export("jfg_blast", blast);
     recomp::overlays::register_base_export("jfg_shockwave", shockwave);
     recomp::overlays::register_base_export("jfg_enemy_traits", enemy_traits);

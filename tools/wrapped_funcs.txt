@@ -218,3 +218,7 @@ controlSelectPreviousWeapon
 weaponPickupControl
 func_overlay_18_00001218_1F30BF0
 func_overlay_18_00001294_1F30C6C
+
+# The held model of a modded weapon (jfg_weapon_registry.cpp, decomp MSR 10e)
+func_8000BE5C_CA5C
+func_80007C68_8868

@@ -93,6 +93,7 @@ struct Weapon {
     uint32_t name_text = 0, ammo_text = 0; // the names, in the runtime's heap (made when first shown)
     int icon = -1;       // its HUD icon: a 2D sprite number (jfg_weapon_set_icon), -1 = slot 15's own
     int big_w = 0, big_h = 0; // its big icon's size (jfg_weapon_set_icon_image), 0 = none
+    int held_model = -1; // the model in the hero's hand (jfg_weapon_set_held_model: a pack's), -1 = slot 8's
 };
 // Index id - CARRIER.
 std::vector<Weapon> g_weapons = {
@@ -601,6 +602,94 @@ JFG_WRAP(weaponPickupControl) {
     load_carrier(ch, h, !taken);
 }
 
+// --- the held model (decomp MSR 10e) ---------------------------------------------------------------------------------
+// The hero's gun is a bare child object (hero +0x60 -> +0x04) with one model instance per slot (+0x6C); the draw
+// (func_8000BE5C_CA5C) clamps slot 15 to 8. A weapon with a held model has the pack's model loaded per hero
+// (modLoadModel, the flags the gun's own were loaded with) and put in slot 8 only for the draw's call, so nothing else
+// ever sees it; it is freed (modFreeModel) just before the hero is (func_80007C68_8868 frees the gun's models). The
+// barrel point (objMakeGunMtx) stays slot 8's.
+extern "C" void modFreeModel(uint8_t* rdram, recomp_context* ctx);
+extern "C" void modLoadModel(uint8_t* rdram, recomp_context* ctx);
+extern "C" void func_8000F978_10578(uint8_t* rdram, recomp_context* ctx);
+
+namespace {
+constexpr uint32_t OBJ_CHILDREN = 0x60, OBJ_MODELS = 0x6C, OBJ_DEF = 0x40, DEF_BEHAVIOUR = 0x1C, INST_POSE = 0x0A;
+constexpr int GUN_SLOT = 8;
+struct Held { uint32_t hero = 0, inst = 0; int model = -1; };
+std::vector<Held> g_held;
+
+uint32_t gun_of(uint32_t hero) {
+    const uint32_t children = valid_ptr(hero) ? rd32(hero + OBJ_CHILDREN) : 0;
+    return valid_ptr(children) ? rd32(children + 4) : 0;
+}
+
+void free_held(recomp_context* ctx, Held& h) {
+    if (h.inst != 0) call_game(modFreeModel, ctx, { h.inst });
+    h.inst = 0;
+}
+
+// The pack's instance of `model` for this hero's gun (loaded when first wanted), 0 if it can't be.
+uint32_t held_instance(recomp_context* ctx, uint32_t hero, uint32_t gun, int model) {
+    Held* h = nullptr;
+    for (Held& e : g_held) if (e.hero == hero) h = &e;
+    if (h == nullptr) { g_held.push_back({ hero, 0, -1 }); h = &g_held.back(); }
+    if (h->inst != 0 && h->model == model) return h->inst;
+    free_held(ctx, *h);
+    const uint32_t def = rd32(gun + OBJ_DEF);
+    if (!valid_ptr(def)) return 0;
+    const uint32_t flags = call_game(func_8000F978_10578, ctx, { (uint32_t)(int32_t)(int16_t)rd16(def + DEF_BEHAVIOUR) }) & 7;
+    const uint32_t inst = call_game(modLoadModel, ctx, { (uint32_t)model, flags });
+    h->inst = valid_ptr(inst) ? inst : 0;
+    h->model = model;
+    return h->inst;
+}
+} // namespace
+
+// The gun's draw (obj, modInst, model, slot unclamped, mf).
+JFG_WRAP(func_8000BE5C_CA5C) {
+    const uint32_t hero = (uint32_t)ctx->r4;
+    const int slot = (int32_t)ctx->r7;
+    const int c = current_hero();
+    const uint32_t ch = c >= 0 ? character_ptr(c) : 0;
+    const Weapon* w = slot == CARRIER && valid_ptr(ch) && valid_ptr(hero) && Obj::Kind::get(hero) == 1 &&
+                              hero == g_cam.player ? weapon_of(weapon_in_hand(ch, c)) : nullptr;
+    const uint32_t gun = w != nullptr && w->held_model >= 0 ? gun_of(hero) : 0;
+    const uint32_t models = valid_ptr(gun) ? rd32(gun + OBJ_MODELS) : 0;
+    if (!valid_ptr(models)) {
+        func_8000BE5C_CA5C_orig(rdram, ctx);
+        return;
+    }
+    const gpr a[4] = { ctx->r4, ctx->r5, ctx->r6, ctx->r7 };
+    const uint32_t inst = held_instance(ctx, hero, gun, w->held_model);
+    g_rdram = rdram;
+    ctx->r4 = a[0]; ctx->r5 = a[1]; ctx->r6 = a[2]; ctx->r7 = a[3];
+    if (inst == 0) {
+        func_8000BE5C_CA5C_orig(rdram, ctx);
+        return;
+    }
+    const uint32_t stock = rd32(models + 4 * GUN_SLOT);
+    wr32(models + 4 * GUN_SLOT, inst);
+    wr8(inst + INST_POSE, 1); // lit each frame (the game marks only the stock instance)
+    func_8000BE5C_CA5C_orig(rdram, ctx);
+    g_rdram = rdram;
+    wr32(models + 4 * GUN_SLOT, stock);
+}
+
+// An object's final free (obj, ...): a hero's held model goes first.
+JFG_WRAP(func_80007C68_8868) {
+    const uint32_t obj = (uint32_t)ctx->r4;
+    for (size_t i = 0; i < g_held.size(); i++) {
+        if (g_held[i].hero != obj) continue;
+        const gpr a0 = ctx->r4, a1 = ctx->r5;
+        free_held(ctx, g_held[i]);
+        g_rdram = rdram;
+        ctx->r4 = a0; ctx->r5 = a1;
+        g_held.erase(g_held.begin() + (long)i);
+        break;
+    }
+    func_80007C68_8868_orig(rdram, ctx);
+}
+
 // --- the helpers mods import -------------------------------------------------------------------------------------------
 namespace {
 // jfg_weapon_register(const JfgWeaponDef* def): { const char* name, *display, *ammo_display; s32 host, charge, thrown,
@@ -658,6 +747,16 @@ void api_weapon_set_icon(uint8_t* rdram_, recomp_context* ctx) {
     Weapon* w = const_cast<Weapon*>(weapon_of((int32_t)ctx->r4));
     const int sprite = (int32_t)ctx->r5;
     if (w != nullptr) w->icon = sprite >= 0 && sprite < 0x4000 ? sprite : -1;
+}
+
+// jfg_weapon_set_held_model(int id, int model): a modded weapon's model in the hero's hand, a pack's model (its number
+// from jfg_asset_number, e.g. "mod:model_gun"): static (no joints), drawn on the hand where the game draws slot 8's
+// (the gun's own size and axes); -1 gives slot 8's back.
+void api_weapon_set_held_model(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    Weapon* w = const_cast<Weapon*>(weapon_of((int32_t)ctx->r4));
+    const int model = (int32_t)ctx->r5;
+    if (w != nullptr && w->name.rfind("stock:", 0) != 0) w->held_model = model >= 0 && model < 0x10000 ? model : -1;
 }
 
 // jfg_weapon_set_icon_image(int id, int w, int h, const unsigned int* rgba): a modded weapon's big icon, w x h words
@@ -835,6 +934,7 @@ void register_weapon_registry_api() {
     recomp::overlays::register_base_export("jfg_weapon_find", api_weapon_find);
     recomp::overlays::register_base_export("jfg_weapon_set_icon", api_weapon_set_icon);
     recomp::overlays::register_base_export("jfg_weapon_set_icon_image", api_weapon_set_icon_image);
+    recomp::overlays::register_base_export("jfg_weapon_set_held_model", api_weapon_set_held_model);
     recomp::overlays::register_base_export("jfg_weapon_count", api_weapon_count);
     recomp::overlays::register_base_export("jfg_weapon_info", api_weapon_info);
     recomp::overlays::register_base_export("jfg_hero_has_weapon", api_hero_has_weapon);
