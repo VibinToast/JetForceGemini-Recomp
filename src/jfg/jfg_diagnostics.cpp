@@ -453,7 +453,16 @@ JFG_WRAP(mantisControl) {
     g_mantis_no_rock = prev;
 }
 
-namespace jfg { void sound_replaced_play(recomp_context* ctx, uint32_t id, uint32_t handle_addr, bool was_playing, bool placed, float x, float y, float z); } // jfg_music.cpp
+namespace jfg {
+void sound_replaced_play(recomp_context* ctx, uint32_t id, uint32_t handle_addr, bool was_playing, bool placed, float x, float y, float z);
+void sound_replaced_stop(uint32_t mask);
+} // jfg_music.cpp
+
+// amSndStopXYZ(mask): a mod's stand-in for that placed sound stops with it (jfg_music.cpp).
+JFG_WRAP(amSndStopXYZ) {
+    jfg::sound_replaced_stop((uint32_t)ctx->r4);
+    amSndStopXYZ_orig(rdram, ctx);
+}
 
 // amSndPlayXYZ(id, x, y, z, flags, SoundMask** mask): a sound a mod replaces plays the mod's in its place
 // (jfg_music.cpp); the game starts nothing when *mask is already set, and nor does the replacement.

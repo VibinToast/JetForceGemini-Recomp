@@ -208,3 +208,5 @@ func_8002AA7C_2B67C
 SquaddiePassesAway
 mainIncreaseWeaponKills
 mainSetTribalStatus
+# Mod sound replacement: placed stand-ins stop with the game's (jfg_music.cpp)
+amSndStopXYZ

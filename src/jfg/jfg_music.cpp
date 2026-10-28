@@ -13,8 +13,12 @@
 // replaced ids' volume in the game's sound table (sfxIndex, and the placed sounds' copy at D_800F29F0; 10 bytes a
 // sound, +2 volume, +3 minimum volume) is 0, set again every tick. In its place the mod's sound plays (amSndPlay,
 // amSndPlayXYZ: sound_replaced_play), a placed one quieter with its distance from the hero over the game's range for
-// it (+6). One started with a handle stops when the game stops it or the handle is cleared (sound_replace_tick); "loop"
-// keeps it going till then. A placed sound already playing on its handle is not started again (the game doesn't).
+// it (+6). A plain one-shot plays out; a "loop" started with a handle stops when the game stops it or the handle is
+// cleared (sound_replace_tick). A placed one can't go by its handle: the placed sounds' manager
+// lets go of a silent point at once, clearing it, so it stops when the game stops it by that handle (amSndStopXYZ:
+// sound_replaced_stop), when the same id starts again, or when one of its "stopped_by" ids plays ("0xFA": { "sound":
+// "charge", "stopped_by": [ "0xE1" ] }: the shot ends the charge). A placed sound already playing on its handle is not
+// started again (the game doesn't).
 //
 // Music:
 //
@@ -262,6 +266,7 @@ struct Replacement {
     bool loop = false;
     float volume = 1.0f;
     uint16_t range = 0; // the game's range for it (placed sounds), read before it is muted
+    std::vector<uint32_t> stopped_by; // ids whose playing stops this one's voices
 };
 std::map<uint32_t, Replacement> g_replace;
 
@@ -368,6 +373,11 @@ void on_sound_mod_enabled(recomp::mods::ModContext&, const recomp::mods::ModHand
             name = value["sound"].get<std::string>();
             if (value.contains("loop") && value["loop"].is_boolean()) r.loop = value["loop"].get<bool>();
             if (value.contains("volume") && value["volume"].is_number()) r.volume = std::max(0.0f, value["volume"].get<float>());
+            if (value.contains("stopped_by") && value["stopped_by"].is_array()) {
+                for (const auto& v : value["stopped_by"]) {
+                    if (v.is_string()) r.stopped_by.push_back((uint32_t)std::strtoul(v.get<std::string>().c_str(), nullptr, 0));
+                }
+            }
         }
         const std::string full = id + ":" + name;
         for (const auto& snd : g_sounds) {
@@ -425,7 +435,8 @@ void stop_voice(uint32_t id) {
 
 // Replaced sounds started with a handle: stopped when the handle no longer holds what the game put there.
 struct Tracked {
-    uint32_t handle_addr, handle, voice;
+    uint32_t handle_addr, handle, voice, id, tick;
+    bool placed; // a placed sound: not stopped by its handle clearing
 };
 std::vector<Tracked> g_tracked;
 
@@ -498,9 +509,28 @@ namespace jfg {
 void sound_replaced_play(recomp_context* ctx, uint32_t id, uint32_t handle_addr, bool was_playing, bool placed,
                          float x, float y, float z) {
     if (g_replace.empty()) return;
-    const auto it = g_replace.find(id & 0xFFFF);
+    id &= 0xFFFF;
+    // Any sound, replaced or not, ends the voices of the replacements it stops.
+    for (const auto& [rid, rep] : g_replace) {
+        if (std::find(rep.stopped_by.begin(), rep.stopped_by.end(), id) == rep.stopped_by.end()) continue;
+        for (size_t i = 0; i < g_tracked.size();) {
+            if (g_tracked[i].id != rid) { i++; continue; }
+            stop_voice(g_tracked[i].voice);
+            g_tracked[i] = g_tracked.back();
+            g_tracked.pop_back();
+        }
+    }
+    const auto it = g_replace.find(id);
     if (it == g_replace.end() || was_playing) return;
     const Replacement& r = it->second;
+    if (placed) { // the same placed sound again: the older one makes way
+        for (size_t i = 0; i < g_tracked.size();) {
+            if (g_tracked[i].id != id || !g_tracked[i].placed) { i++; continue; }
+            stop_voice(g_tracked[i].voice);
+            g_tracked[i] = g_tracked.back();
+            g_tracked.pop_back();
+        }
+    }
     float volume = r.volume;
     if (placed) {
         const uint32_t hero = player_object(ctx);
@@ -516,8 +546,23 @@ void sound_replaced_play(recomp_context* ctx, uint32_t id, uint32_t handle_addr,
     if (debug) std::fprintf(stderr, "[jfg] sound 0x%X replaced by %s (volume %.2f%s)\n", id & 0xFFFF, r.sound->key.c_str(), volume, r.loop ? ", loop" : "");
     if (valid_ptr(handle_addr)) {
         const uint32_t handle = rd32(handle_addr);
-        if (handle != 0) g_tracked.push_back({ handle_addr, handle, voice });
-        else if (r.loop) stop_voice(voice); // the game has nothing playing to end the loop
+        // Only a loop goes by the handle: a one-shot plays out (its tail would be cut when the game reuses the handle).
+        if (handle != 0 && (r.loop || placed)) g_tracked.push_back({ handle_addr, handle, voice, id, jfg::g_tick_count, placed });
+        else if (handle == 0 && r.loop) stop_voice(voice); // the game has nothing playing to end the loop
+        else if (!r.stopped_by.empty()) g_tracked.push_back({ 0, 0, voice, id, jfg::g_tick_count, true });
+    } else if (placed || !r.stopped_by.empty()) {
+        g_tracked.push_back({ 0, 0, voice, id, jfg::g_tick_count, true }); // for stopped_by and restarts
+    }
+}
+
+// amSndStopXYZ(mask)'s wrapper (jfg_diagnostics.cpp), before the game's code: the stand-ins started on that handle stop.
+void sound_replaced_stop(uint32_t mask) {
+    if (mask == 0) return;
+    for (size_t i = 0; i < g_tracked.size();) {
+        if (g_tracked[i].handle != mask) { i++; continue; }
+        stop_voice(g_tracked[i].voice);
+        g_tracked[i] = g_tracked.back();
+        g_tracked.pop_back();
     }
 }
 } // namespace jfg
@@ -622,12 +667,25 @@ void sound_replace_tick() {
     mute_replaced();
     for (size_t i = 0; i < g_tracked.size();) {
         const Tracked& t = g_tracked[i];
-        if (rd32(t.handle_addr) == t.handle) { i++; continue; }
+        if (t.placed || rd32(t.handle_addr) == t.handle) { i++; continue; }
+        static const bool debug = std::getenv("JFG_DEBUG_SOUNDS") != nullptr;
+        if (debug) std::fprintf(stderr, "[jfg] sound 0x%X: the game's ended after %u ticks, its stand-in stops\n", t.id, jfg::g_tick_count - t.tick);
         stop_voice(t.voice);
         g_tracked[i] = g_tracked.back();
         g_tracked.pop_back();
     }
-    if (g_tracked.size() > 64) g_tracked.erase(g_tracked.begin(), g_tracked.begin() + 32); // never stopped: forget
+    // Placed and stopped_by entries whose voice has ended, and any never stopped, are forgotten.
+    {
+        std::lock_guard<std::mutex> lock(g_voice_mutex);
+        for (size_t i = 0; i < g_tracked.size();) {
+            bool alive = false;
+            for (const Voice& v : g_voices) alive = alive || v.id == g_tracked[i].voice;
+            if (alive || !g_tracked[i].placed) { i++; continue; }
+            g_tracked[i] = g_tracked.back();
+            g_tracked.pop_back();
+        }
+    }
+    if (g_tracked.size() > 64) g_tracked.erase(g_tracked.begin(), g_tracked.begin() + 32);
 }
 
 // Every game tick: starts or stops the level's track and keeps the game's tune silent while one plays.
