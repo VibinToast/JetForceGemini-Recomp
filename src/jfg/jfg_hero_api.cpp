@@ -854,6 +854,36 @@ void fire_bolt(uint8_t* rdram_, recomp_context* ctx) {
     ctx->r2 = (gpr)(int32_t)(valid_ptr(bolt) ? bolt : 0);
 }
 
+// jfg_fire_plasma(const JfgPlasma* plasma): a plasma ball (the plasma shotgun's: object 0x13E, kind 0xA3, its code
+// twisterInit / twisterControl in overlay 131) from plasma's start towards its target, as shoot_plasmashot spawns it.
+// JfgPlasma: f32 x, y, z, tx, ty, tz; s32 size (its damage in units of health, 1..15; drawn and sized as the
+// shotgun's 1..4 charge, larger ones as 4); f32 speed (0: it stays where it is); s32 time (1/10 s); owner (whose shot it
+// is: its hits count as that hero's plasma shotgun). Returns the ball, NULL if none was made.
+void fire_plasma(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t b = (uint32_t)ctx->r4;
+    ctx->r2 = 0;
+    if (b == 0) return;
+    const float x = rdf(b + 0x00), y = rdf(b + 0x04), z = rdf(b + 0x08);
+    const float dx = x - rdf(b + 0x0C), dy = rdf(b + 0x10) - y, dz = z - rdf(b + 0x14);
+    const uint32_t e = entry_at(ctx);
+    for (uint32_t i = 0; i < 0x18; i += 4) wr32(e + i, 0);
+    wr16(e + 0x00, 0x13E);
+    wr8(e + 0x02, 0x18);
+    wr16(e + 0x04, (uint16_t)(int16_t)std::clamp(x, -32768.0f, 32767.0f));
+    wr16(e + 0x06, (uint16_t)(int16_t)std::clamp(y, -32768.0f, 32767.0f));
+    wr16(e + 0x08, (uint16_t)(int16_t)std::clamp(z, -32768.0f, 32767.0f));
+    wr8(e + 0x0A, (uint8_t)std::clamp((int)rd32(b + 0x18), 1, 15));
+    wr8(e + 0x0B, (uint8_t)std::clamp((int)rd32(b + 0x20), 1, 255));
+    wr16(e + 0x0C, (uint16_t)angle(dx, dz));
+    wr16(e + 0x0E, (uint16_t)angle(dy, std::sqrt(dx * dx + dz * dz)));
+    wrf(e + 0x10, std::max(0.0f, rdf(b + 0x1C)));
+    wr32(e + 0x14, rd32(b + 0x24));
+    const uint32_t ball = call_game(objSetupObject, ctx, { e, 1 });
+    if (valid_ptr(ball)) wr32(ball + 0x3C, 0);
+    ctx->r2 = (gpr)(int32_t)(valid_ptr(ball) ? ball : 0);
+}
+
 // jfg_line_of_sight(void* from, void* to, const float* a, const float* b): 1 when nothing (the level, or an object
 // with a hit model other than from and to) stands between points a and b (x, y, z each).
 void line_of_sight(uint8_t* rdram_, recomp_context* ctx) {
@@ -1065,6 +1095,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_hero_hit", hero_hit);
     recomp::overlays::register_base_export("jfg_floyd_get", floyd_get);
     recomp::overlays::register_base_export("jfg_fire_bolt", fire_bolt);
+    recomp::overlays::register_base_export("jfg_fire_plasma", fire_plasma);
     recomp::overlays::register_base_export("jfg_line_of_sight", line_of_sight);
     recomp::overlays::register_base_export("jfg_enemy_alert", enemy_alert);
     recomp::overlays::register_base_export("jfg_enemy_ignite", enemy_ignite);

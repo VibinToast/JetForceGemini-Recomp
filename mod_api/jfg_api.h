@@ -432,6 +432,20 @@ typedef struct {
     int sound;
 } JfgBolt;
 RECOMP_IMPORT("*", void* jfg_fire_bolt(const JfgBolt* bolt));
+// A plasma ball (the plasma shotgun's) from x, y, z towards tx, ty, tz. size: its damage in units of health (1..15), and
+// how big it is (the shotgun's charge 1..4; larger ones are drawn as 4); speed in level units per 1/30 s (0: it stays
+// put); time in 1/10 s; owner: whose shot it is (its hits and kills count as that hero's plasma shotgun). Returns the
+// ball object (its kind is JFG_KIND_PLASMA), NULL if none was made. Since version 5.
+#define JFG_KIND_PLASMA 163
+typedef struct {
+    float x, y, z;
+    float tx, ty, tz;
+    int size;
+    float speed;
+    int time;
+    void* owner;
+} JfgPlasma;
+RECOMP_IMPORT("*", void* jfg_fire_plasma(const JfgPlasma* plasma));
 // 1 when nothing (the level, or an object with a hit model other than from and to) stands between a and b (x, y, z).
 RECOMP_IMPORT("*", int jfg_line_of_sight(void* from, void* to, const float* a, const float* b));
 
