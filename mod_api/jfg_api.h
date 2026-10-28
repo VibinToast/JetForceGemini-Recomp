@@ -616,6 +616,18 @@ typedef struct {
     float floor;
 } JfgEnemyTraits;
 RECOMP_IMPORT("*", int jfg_enemy_traits(void* enemy, JfgEnemyTraits* out));
+// Knockback for enemies (the hero's is jfg_hero_push). Flings a squad member the game's own way: its velocity (level
+// units a squad call: squads move once per 1/30 s, so twice a 1/60 s speed), track collision, and its AI off for
+// `calls` calls or until it lands; walls stop it (a fast stop is a slam a mod can look for). 1 if flung, 0 if the
+// game can't move it so (no collision data, held still, riding): the mod moves it itself if it wants.
+typedef struct {
+    float vx, vy, vz;
+    int calls;           // walkers about 12, flyers about 14
+} JfgFling;
+RECOMP_IMPORT("*", int jfg_enemy_fling(void* enemy, const JfgFling* f));
+// 1 while a squad member is flung (by jfg_enemy_fling, another mod or the game). A mod that drives its own enemy's
+// velocity leaves it alone meanwhile, so the throw isn't undone.
+RECOMP_IMPORT("*", int jfg_enemy_flung(void* enemy));
 // Where a point of the level (x, y, z) shows on screen this frame, in the overlay's units (jfg_overlay_size): out[0]
 // x, out[1] y, out[2] its distance in front of the camera, out[3] overlay units per level unit there (to size a
 // picture drawn at it). 1 if it is in front of the camera, else 0. Overlay pictures cover the game: to hide one behind
