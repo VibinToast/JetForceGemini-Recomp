@@ -206,3 +206,4 @@ instQueueMsg
 func_8002AA7C_2B67C
 # Mod API: jfg_on_kill, every squad member's death and who shot it last (jfg_kills.cpp)
 SquaddiePassesAway
+mainIncreaseWeaponKills

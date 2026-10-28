@@ -85,28 +85,20 @@ uint32_t shooter_of(uint32_t hit) {
 } // namespace
 } // namespace jfg
 
-// SquaddiePassesAway(obj): jfg_on_kill(JfgKill* kill) after the game's code. JfgKill: void* victim, void* killer
-// (0 when unknown), s32 killer_kind (-1 unknown, 0 Vela, 1 Juno, 2 Lupus, 3 Floyd, 4 another object), weapon (0..15),
-// tribal (1: the victim is a Tribal), frames (0), char victim_name[16], killer_name[16].
-JFG_WRAP(SquaddiePassesAway) {
-    using namespace jfg;
-    g_rdram = rdram;
-    const uint32_t victim = (uint32_t)ctx->r4;
-    const uint32_t dmg = valid_ptr(victim) ? Obj::Damage::get(victim) : 0;
-    const int weapon = valid_ptr(dmg) ? (rd8(dmg + 0x08) & 0xF) : -1;
-    const uint32_t shot = take_shot(victim);
-    const uint32_t hit = valid_ptr(shot) ? shot : (valid_ptr(dmg) ? rd32(dmg + 0x3C) : 0);
-    const uint32_t game = rd32(ADDR_gameplay);
-    const int tribals_killed = valid_ptr(game) ? rd8(game + 5) : 0;
-    SquaddiePassesAway_orig(rdram, ctx);
-    g_rdram = rdram;
-    // A Tribal: its squad member flag (bit 3 of its data's first word, squadsIsTribal of its squadron), or the game
-    // counting a Tribal lost during the call.
-    const uint32_t vdata = valid_ptr(victim) ? Obj::Data::get(victim) : 0;
-    const bool tribal = (valid_ptr(vdata) && (rd32(vdata) & 0x8)) || (valid_ptr(game) && rd8(game + 5) != tribals_killed);
-    if (!valid_ptr(victim) || (!api::listened(api::Event::Kill) && !debug_kills())) return;
+namespace jfg {
+namespace {
+bool g_in_passes = false; // inside SquaddiePassesAway: its own kill count is reported by its wrapper
 
-    const uint32_t killer = shooter_of(hit);
+uint32_t current_hero(recomp_context* ctx) {
+    const uint32_t hero = player_object(ctx);
+    return valid_ptr(hero) ? hero : 0;
+}
+
+// jfg_on_kill (and the debug log) for one death.
+void report_kill(uint8_t* rdram, recomp_context* ctx, uint32_t victim, uint32_t killer, int weapon, bool tribal,
+                 const char* where) {
+    g_rdram = rdram;
+    if (!valid_ptr(victim) || (!api::listened(api::Event::Kill) && !debug_kills())) return;
     int killer_kind = KILLER_NONE;
     if (valid_ptr(killer)) {
         const int16_t kind = Obj::Kind::get(killer);
@@ -119,11 +111,8 @@ JFG_WRAP(SquaddiePassesAway) {
     def_name(victim, vname);
     def_name(killer, kname);
     if (debug_kills()) {
-        char hname[16];
-        def_name(hit, hname);
-        std::fprintf(stderr, "[kills] victim %08X kind %d '%s' weapon %d tribal %d | hit %08X kind %d '%s' | killer %08X kind %d '%s' -> %d\n",
-                     victim, Obj::Kind::get(victim), vname, weapon, tribal ? 1 : 0, hit,
-                     valid_ptr(hit) ? Obj::Kind::get(hit) : -1, hname, killer,
+        std::fprintf(stderr, "[kills] %s: victim %08X kind %d '%s' weapon %d tribal %d | killer %08X kind %d '%s' -> %d\n",
+                     where, victim, Obj::Kind::get(victim), vname, weapon, tribal ? 1 : 0, killer,
                      valid_ptr(killer) ? Obj::Kind::get(killer) : -1, kname, killer_kind);
     }
     if (!api::listened(api::Event::Kill)) return;
@@ -143,4 +132,55 @@ JFG_WRAP(SquaddiePassesAway) {
         api::fire(rdram, ctx, api::Event::Kill, (int32_t)p.addr);
     }
     ctx->r4 = a0;
+}
+} // namespace
+} // namespace jfg
+
+// SquaddiePassesAway(obj): jfg_on_kill after the game's code. JfgKill: void* victim, void* killer (0 when unknown),
+// s32 killer_kind (-1 unknown, 0 Vela, 1 Juno, 2 Lupus, 3 Floyd, 4 another object), weapon (0..15), tribal (1: the
+// victim is a Tribal), frames (0), char victim_name[16], killer_name[16].
+JFG_WRAP(SquaddiePassesAway) {
+    using namespace jfg;
+    g_rdram = rdram;
+    const uint32_t victim = (uint32_t)ctx->r4;
+    const uint32_t dmg = valid_ptr(victim) ? Obj::Damage::get(victim) : 0;
+    const int weapon = valid_ptr(dmg) ? (rd8(dmg + 0x08) & 0xF) : -1;
+    const uint32_t shot = take_shot(victim);
+    const uint32_t hit = valid_ptr(shot) ? shot : (valid_ptr(dmg) ? rd32(dmg + 0x3C) : 0);
+    const uint32_t game = rd32(ADDR_gameplay);
+    const int tribals_killed = valid_ptr(game) ? rd8(game + 5) : 0;
+    const bool was_in = g_in_passes;
+    g_in_passes = true;
+    SquaddiePassesAway_orig(rdram, ctx);
+    g_in_passes = was_in;
+    g_rdram = rdram;
+    // A Tribal: its squad member flag (bit 3 of its data's first word, squadsIsTribal of its squadron), or the game
+    // counting a Tribal lost during the call.
+    const uint32_t vdata = valid_ptr(victim) ? Obj::Data::get(victim) : 0;
+    const bool tribal = (valid_ptr(vdata) && (rd32(vdata) & 0x8)) || (valid_ptr(game) && rd8(game + 5) != tribals_killed);
+    report_kill(rdram, ctx, victim, shooter_of(hit), weapon, tribal, "passes away");
+}
+
+// mainIncreaseWeaponKills(weapon), called from elsewhere than SquaddiePassesAway: a blast or a projectile finished a
+// squad member (never a Tribal: both callers skip those). The victim is the caller's $s2; the shooter, when the caller
+// has one, its $s5, else the hero.
+JFG_WRAP(mainIncreaseWeaponKills) {
+    using namespace jfg;
+    const gpr a0 = ctx->r4;
+    mainIncreaseWeaponKills_orig(rdram, ctx);
+    if (g_in_passes) return;
+    g_rdram = rdram;
+    const uint32_t victim = (uint32_t)ctx->r18;
+    if (!valid_ptr(victim) || Obj::Kind::get(victim) != 0x18) {
+        if (debug_kills()) std::fprintf(stderr, "[kills] counted weapon %d, no victim in $s2 (%08X)\n", (int)a0, victim);
+        return;
+    }
+    uint32_t killer = (uint32_t)ctx->r21;
+    if (!valid_ptr(killer) || (Obj::Kind::get(killer) != KIND_HERO && Obj::Kind::get(killer) != KIND_FLOYD)) {
+        killer = take_shot(victim);
+        killer = valid_ptr(killer) ? shooter_of(killer) : current_hero(ctx);
+    } else {
+        take_shot(victim);
+    }
+    report_kill(rdram, ctx, victim, killer, (int)(int32_t)a0, false, "counted");
 }
