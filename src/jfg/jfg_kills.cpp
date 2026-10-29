@@ -240,9 +240,10 @@ JFG_WRAP(SquaddiePassesAway) {
 }
 
 // mainIncreaseWeaponKills(weapon), called from elsewhere than SquaddiePassesAway: a blast or a projectile finished a
-// squad member (never a Tribal: both callers skip those), the victim in the caller's $s2 and the shooter, when the
-// caller has one, in its $s5, else the hero; or a shuriken took a squad member's head (weapon 9), right after
-// squadsDecapitateSquaddie shot it: the member shot last.
+// squad member (never a Tribal: both callers skip those), the victim in the caller's $s2; or a shuriken took a squad
+// member's head (weapon 9), right after squadsDecapitateSquaddie shot it: the member shot last. The shooter: a
+// blast's (explosionHitTick: $s1 is the blast, explosionAddBlast's owner at +0x20; an enemy's grenade has its
+// thrower or none, never the hero), else a projectile's (hitUpdate's $s5), else the hero.
 JFG_WRAP(mainIncreaseWeaponKills) {
     using namespace jfg;
     const gpr a0 = ctx->r4;
@@ -251,6 +252,16 @@ JFG_WRAP(mainIncreaseWeaponKills) {
     g_rdram = rdram;
     uint32_t victim = (uint32_t)ctx->r18;
     uint32_t killer = (uint32_t)ctx->r21;
+    constexpr uint32_t ADDR_BLASTS = 0x800F6B60, BLAST_SIZE = 0x24, BLASTS = 16, BLAST_OWNER = 0x20;
+    const uint32_t blast = (uint32_t)ctx->r17;
+    const bool from_blast = blast >= ADDR_BLASTS && blast < ADDR_BLASTS + BLAST_SIZE * BLASTS &&
+                            (blast - ADDR_BLASTS) % BLAST_SIZE == 0;
+    if (from_blast && valid_ptr(victim) && Obj::Kind::get(victim) == 0x18) {
+        const uint32_t owner = rd32(blast + BLAST_OWNER);
+        take_shot(victim);
+        report_kill(rdram, ctx, victim, valid_ptr(owner) ? shooter_of(owner) : 0u, (int)(int32_t)a0, false, "blast");
+        return;
+    }
     if (!valid_ptr(victim) || Obj::Kind::get(victim) != 0x18) {
         victim = g_last_shot_victim;
         killer = 0;
