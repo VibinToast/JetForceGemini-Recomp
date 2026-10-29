@@ -26,6 +26,8 @@
 #include "jfg_port.h"
 #include "jfg_update_check.h"
 
+void jfg_note_code_mods(); // jfg_mods.cpp
+
 namespace jfg {
 
 bool g_story_skip_pending = false;
@@ -53,6 +55,11 @@ void request_warp(int level, int character, int entrance, int front_mode) {
 // Called once per game tick on the game's main thread (hook at the entry of func_80044FAC_45BAC).
 extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     g_rdram = rdram;
+    static bool noted = false; // the mods are loaded by the first tick: where each code mod went, for crash reports
+    if (!noted) {
+        noted = true;
+        ::jfg_note_code_mods();
+    }
     jfg::api::fire(rdram, ctx, jfg::api::Event::GameTick, (int32_t)rd32(ADDR_delayDat));
     jfg::api::mod_camera_tick();
     jfg_camera_restore();

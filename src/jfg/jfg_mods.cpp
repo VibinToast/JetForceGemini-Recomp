@@ -174,7 +174,6 @@ extern "C" void jfg_mods_alias_overlays(void) {
     std::snprintf(line, sizeof line, "mods: %d functions of %d overlays callable at their private addresses", funcs,
                   sections);
     jfg::jfg_log_line("jfg_mods.log", line);
-    jfg_note_code_mods();
 }
 
 // Where each code mod's code and data went this run: logged, and kept for the crash report (jfg_mod_at), which names the
