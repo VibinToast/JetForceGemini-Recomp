@@ -43,6 +43,9 @@ constexpr uint32_t ADDR_front_text = 0x800A51C8;     // char**, NULL until initF
 constexpr uint32_t ADDR_frontgfx = 0x800FF398;       // Gfx*, the HUD's display list
 // A FrontEndObject's item (s16), scale, x (from the screen's middle), y (from the middle, up).
 constexpr uint32_t FO_ITEM = 0x06, FO_SCALE = 0x08, FO_X = 0x0C, FO_Y = 0x10;
+// A sprite item's frame (f32; frontDrawObj copies it into the sprite it draws). The weapon icons with more than one
+// frame (the machine gun's, the cluster bombs') jumped between them with whatever currentobjects[0] held: frame 0.
+constexpr uint32_t FO_FRAME = 0x18;
 constexpr int ICON_ITEM = 10;                         // front-end items 10..25: the weapons' icons
 constexpr int WEAPONS = 16;
 
@@ -296,7 +299,7 @@ void jfg_weapon_hud_icons(uint8_t* rdram_, recomp_context* ctx) {
     if (g_icons.empty()) return;
     const uint32_t obj = ADDR_currentobjects; // currentobjects[0]
     const uint16_t item0 = rd16(obj + FO_ITEM);
-    const uint32_t scale0 = rd32(obj + FO_SCALE), x0 = rd32(obj + FO_X), y0 = rd32(obj + FO_Y);
+    const uint32_t scale0 = rd32(obj + FO_SCALE), x0 = rd32(obj + FO_X), y0 = rd32(obj + FO_Y), frame0 = rd32(obj + FO_FRAME);
     const uint32_t trans0 = rd32(ADDR_objtrans);
     const gpr a0 = ctx->r4, a1 = ctx->r5;
     call_game(sprSetTextureFilter_orig, ctx, { 0 });
@@ -317,6 +320,7 @@ void jfg_weapon_hud_icons(uint8_t* rdram_, recomp_context* ctx) {
         }
         wr16(obj + FO_ITEM, (uint16_t)item);
         wr32(obj + FO_SCALE, bits_of(icon.scale));
+        wr32(obj + FO_FRAME, bits_of(0.0f));
         wr32(obj + FO_X, bits_of(icon.x - (right ? right_left : hud_left) - 160.0f));
         wr32(obj + FO_Y, bits_of(120.0f - icon.y));
         const float a = icon.alpha < 0.0f ? 0.0f : icon.alpha > 1.0f ? 1.0f : icon.alpha;
@@ -327,6 +331,7 @@ void jfg_weapon_hud_icons(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     wr16(obj + FO_ITEM, item0);
     wr32(obj + FO_SCALE, scale0);
+    wr32(obj + FO_FRAME, frame0);
     wr32(obj + FO_X, x0);
     wr32(obj + FO_Y, y0);
     wr32(ADDR_objtrans, trans0);
