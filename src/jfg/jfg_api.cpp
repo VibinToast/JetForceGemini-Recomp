@@ -29,6 +29,7 @@ namespace jfg { void register_claim_api(); }                      // jfg_object_
 namespace jfg { void register_weapon_ammo_api(); }                // jfg_weapon_ammo.cpp
 namespace jfg { void register_object_events_api(); }              // jfg_object_events.cpp
 namespace jfg { void register_fx_api(); }                         // jfg_fx.cpp
+namespace jfg { void register_pull_api(); }                       // jfg_pulls.cpp
 namespace jfg { void register_squad_type_api(); }                 // jfg_squad_types.cpp
 extern "C" void jfg_squad_types_level_change(uint8_t* rdram, recomp_context* ctx); // jfg_squad_types.cpp
 
@@ -116,6 +117,15 @@ void object_tint(uint8_t*, recomp_context* ctx, size_t mod_index) {
     if ((rgba & 0xFF) != 0 && object != 0 && g_tints.size() < MAX_TINTS) g_tints.push_back({ object, rgba, mod_index });
 }
 void tints_level_change(uint8_t*, recomp_context*) { g_tints.clear(); }
+} // namespace
+// From C++ (jfg_pulls.cpp): a mod's tint, as jfg_object_tint.
+void tint_for_mod(uint32_t object, uint32_t rgba, size_t mod_index) {
+    recomp_context c{};
+    c.r4 = (gpr)(int32_t)object;
+    c.r5 = (gpr)rgba;
+    object_tint(nullptr, &c, mod_index);
+}
+namespace {
 
 void get_level(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
@@ -254,6 +264,7 @@ void register_api() {
     jfg::register_weapon_ammo_api();     // mods' weapons' ammo sources (jfg_weapon_ammo.cpp)
     jfg::register_object_events_api();   // objects made and freed, for mods watching their kind
     jfg::register_fx_api();              // short-lived effects the port runs for mods (jfg_fx.cpp)
+    jfg::register_pull_api();            // mods' pull fields (jfg_pulls.cpp)
     jfg::register_squad_type_api();      // new squad enemy types run by mods (jfg_squad_types.cpp)
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }

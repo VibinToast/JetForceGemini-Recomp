@@ -285,3 +285,12 @@ void register_kill_api() {
     register_drop_api();
 }
 } // namespace jfg
+
+namespace jfg {
+// From C++ (jfg_pulls.cpp): as jfg_weapon_credit.
+void credit_weapon(uint8_t* rdram, uint32_t victim, int weapon, uint32_t shooter, int ticks) {
+    recomp_context c{};
+    c.r4 = (gpr)(int32_t)victim; c.r5 = (gpr)weapon; c.r6 = (gpr)(int32_t)shooter; c.r7 = (gpr)ticks;
+    weapon_credit(rdram, &c);
+}
+} // namespace jfg

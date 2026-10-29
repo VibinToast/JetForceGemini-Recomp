@@ -495,6 +495,35 @@ typedef struct {
 } JfgFx;
 RECOMP_IMPORT("*", void* jfg_fx_spawn(const JfgFx* fx));
 RECOMP_IMPORT("*", void jfg_object_set_opacity(void* obj, int opacity));
+// A pull field (a vortex, a black hole), run by the port: the enemies around x, y, z within reach, with nothing between,
+// are caught (tinted tint, 0 none; alerted to owner, or stunned with JFG_PULL_STUN) and slide toward it: strength
+// level units a tick at the middle, edge times that at the reach's edge, stopping hold from the middle (JFG_PULL_MASS:
+// heavier enemies slower, flyers drawn up or down too). Every hurt_ticks (1/60 s) those within core x reach + hold
+// lose damage (256 a unit; never past dying), credited to weapon (-1 none) and owner. Tribals only with
+// JFG_PULL_TRIBALS, and never hurt. All mods' pulls run together: an enemy two pulls catch moves by the strongest.
+// jfg_pull_set: id -1 makes a new pull and returns its id; your pull's id moves or changes it (call it each tick to
+// move it). jfg_pull_end stops it and takes its tints off; a level change ends them all. jfg_pull_caught copies what
+// it holds (up to max) and returns how many.
+#define JFG_PULL_TRIBALS 1
+#define JFG_PULL_MASS    2
+#define JFG_PULL_STUN    4
+typedef struct {
+    float x, y, z;
+    float reach, strength, edge, hold, core;
+    int damage;
+    int hurt_ticks;
+    unsigned int tint;
+    int flags;
+    int weapon;
+    void* owner;
+} JfgPull;
+typedef struct {
+    void* enemy;
+    int tribal;
+} JfgPullCaught;
+RECOMP_IMPORT("*", int jfg_pull_set(int id, const JfgPull* pull));
+RECOMP_IMPORT("*", void jfg_pull_end(int id));
+RECOMP_IMPORT("*", int jfg_pull_caught(int id, JfgPullCaught* out, int max));
 // Objects coming and going: while on, the mod gets jfg_on_object_spawn and jfg_on_object_free for objects of that kind
 // (JFG_KIND_*), instead of scanning for them each tick. Only the mods watching a kind are told.
 RECOMP_IMPORT("*", void jfg_object_watch(int kind, int on));

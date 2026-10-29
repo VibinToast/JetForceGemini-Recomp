@@ -1780,6 +1780,70 @@ bool game_is_paused(uint8_t* rdram, recomp_context* ctx) {
     g_rdram = rdram;
     return c.r2 != 0;
 }
+// The squad members near a point (as jfg_enemies_near), nearest first: at most max into out.
+struct NearEnemy { uint32_t obj; float x, y, z; int health; bool tribal; };
+int near_enemies(uint8_t* rdram, recomp_context* ctx, float x, float y, float z, float radius, NearEnemy* out, int max) {
+    recomp_context c = *ctx;
+    int n = 0;
+    {
+        api::Payload q(&c, 0x14);
+        wrf(q.addr + 0x00, x); wrf(q.addr + 0x04, y); wrf(q.addr + 0x08, z); wrf(q.addr + 0x0C, radius);
+        wr32(q.addr + 0x10, 0);
+        api::Payload o(&c, 0x20u * (uint32_t)max);
+        c.r4 = (gpr)(int32_t)q.addr;
+        c.r5 = (gpr)(int32_t)o.addr;
+        c.r6 = (gpr)max;
+        api::enemies_near(rdram, &c);
+        n = std::min((int)(int32_t)c.r2, max);
+        for (int i = 0; i < n; i++) {
+            const uint32_t e = o.addr + 0x20u * (uint32_t)i;
+            out[i] = { rd32(e), rdf(e + 0x04), rdf(e + 0x08), rdf(e + 0x0C), (int)(int32_t)rd32(e + 0x14), rd32(e + 0x1C) != 0 };
+        }
+    }
+    g_rdram = rdram;
+    return n;
+}
+// Nothing between a and b (as jfg_line_of_sight).
+bool clear_line(uint8_t* rdram, recomp_context* ctx, uint32_t from, uint32_t to, const float* a, const float* b) {
+    recomp_context c = *ctx;
+    bool clear = false;
+    {
+        api::Payload p(&c, 0x18);
+        for (int i = 0; i < 3; i++) { wrf(p.addr + 4u * (uint32_t)i, a[i]); wrf(p.addr + 12u + 4u * (uint32_t)i, b[i]); }
+        c.r4 = (gpr)(int32_t)from; c.r5 = (gpr)(int32_t)to; c.r6 = (gpr)(int32_t)p.addr; c.r7 = (gpr)(int32_t)(p.addr + 12);
+        api::line_of_sight(rdram, &c);
+        clear = c.r2 != 0;
+    }
+    g_rdram = rdram;
+    return clear;
+}
+void alert_enemy(uint8_t* rdram, recomp_context* ctx, uint32_t enemy, uint32_t shooter, bool stun) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)(int32_t)enemy; c.r5 = (gpr)(int32_t)shooter;
+    if (stun) api::enemy_electrocute(rdram, &c);
+    else api::enemy_alert(rdram, &c);
+    g_rdram = rdram;
+}
+// An enemy's weight for a pull (1 + its full health / 6 units + its hit radius / 25; a flyer half), and whether it flies
+// (higher than flyer_height above the floor).
+float enemy_mass(uint8_t* rdram, recomp_context* ctx, uint32_t enemy, float flyer_height, bool* flyer) {
+    recomp_context c = *ctx;
+    float mass = 1.0f;
+    *flyer = false;
+    {
+        api::Payload t(&c, 0x18);
+        c.r4 = (gpr)(int32_t)enemy; c.r5 = (gpr)(int32_t)t.addr;
+        api::enemy_traits(rdram, &c);
+        if (c.r2 != 0) {
+            mass = 1.0f + (float)(int32_t)rd32(t.addr) / 256.0f / 6.0f + rdf(t.addr + 8) / 25.0f;
+            *flyer = rdf(t.addr + 16) > flyer_height;
+            if (*flyer) mass *= 0.5f;
+        }
+    }
+    g_rdram = rdram;
+    return mass;
+}
+
 int hero_ammo_of(uint8_t* rdram, recomp_context* ctx, int weapon) {
     recomp_context c = *ctx;
     c.r4 = (gpr)weapon;
