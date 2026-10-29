@@ -25,6 +25,9 @@
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
+#include "ultramodern/config.hpp"
+
+namespace jfg::overlay { float overlay_width(); } // jfg_overlay.cpp
 
 extern "C" int jfg_widescreen_active(void); // jfg_visuals.cpp
 extern "C" void instShowBearBar(uint8_t* rdram, recomp_context* ctx); // overlay 14
@@ -127,6 +130,25 @@ void hud_align_right(bool right) {
 bool hud_in_corners() {
     static const bool env = std::getenv("JFG_HUD_CORNERS") != nullptr;
     return (g.hud_corners || env) && jfg_widescreen_active();
+}
+
+// The single-player HUD's left and right edges in overlay units: the middle 320 (4:3) unless it is in the corners. In
+// the corners, RT64 measures the left and right origins from the HUD ratio's area (Graphics > HUD ratio), not the
+// window: Clamp 16:9 (the default) keeps them to a centred 16:9 strip when the window is wider, Full to the window,
+// Original to the middle 4:3. Overlays drawn to line up with the game's HUD use the same edges (jfg_hud_area).
+void hud_area(float& left, float& right) {
+    const float w = jfg::overlay::overlay_width();
+    float hud = 320.0f;
+    if (hud_in_corners()) {
+        switch (ultramodern::renderer::get_graphics_config().hr_option) {
+            case ultramodern::renderer::HUDRatioMode::Full: hud = w; break;
+            case ultramodern::renderer::HUDRatioMode::Clamp16x9: hud = std::min(w, 240.0f * 16.0f / 9.0f); break;
+            default: hud = 320.0f; break;
+        }
+    }
+    hud = std::max(std::min(hud, w), std::min(320.0f, w));
+    left = (w - hud) / 2.0f;
+    right = left + hud;
 }
 
 // frontSingleInstruments, right after its camStandardOrtho (the target and its box are drawn before and stay put).

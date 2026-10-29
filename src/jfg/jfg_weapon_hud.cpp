@@ -30,7 +30,7 @@ extern "C" void controlGetMaxCharge(uint8_t* rdram, recomp_context* ctx);
 extern "C" void texDPTextureX(uint8_t* rdram, recomp_context* ctx);
 extern "C" void camCopyOrthoMatrix(uint8_t* rdram, recomp_context* ctx);
 extern "C" void mathMtxF2L(uint8_t* rdram, recomp_context* ctx);
-namespace jfg { bool hud_in_corners(); void hud_align_right(bool right); } // jfg_hud_corners.cpp
+namespace jfg { bool hud_in_corners(); void hud_align_right(bool right); void hud_area(float& left, float& right); } // jfg_hud_corners.cpp
 namespace jfg::api { uint32_t gfx_block(uint32_t bytes); } // jfg_api.cpp
 namespace jfg::overlay { float overlay_width(); }        // jfg_overlay.cpp
 
@@ -284,8 +284,9 @@ void jfg_weapon_hud_icons(uint8_t* rdram_, recomp_context* ctx) {
     if (g_icons.empty() && g_discs.empty()) return;
     g_rdram = rdram_;
     const float width = jfg::overlay::overlay_width();
-    const float hud_left = hud_in_corners() ? 0.0f : (width - 320.0f) / 2.0f;
-    const float right_left = hud_in_corners() ? width - 320.0f : -1.0f, middle = width / 2.0f;
+    float hud_left, hud_right; // the HUD area's edges (the HUD ratio's strip in the corners): its pieces line up with them
+    hud_area(hud_left, hud_right);
+    const float right_left = hud_in_corners() ? hud_right - 320.0f : -1.0f, middle = width / 2.0f;
     const gpr s0 = ctx->r4, s1 = ctx->r5;
     if (!g_discs.empty()) draw_discs(rdram_, ctx, hud_left, right_left, middle);
     g_discs.clear();

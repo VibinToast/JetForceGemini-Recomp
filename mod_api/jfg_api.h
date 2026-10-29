@@ -396,8 +396,12 @@ RECOMP_IMPORT("*", void jfg_overlay_text(const JfgOverlayText* text));
 // How wide that text is, in overlay units.
 RECOMP_IMPORT("*", void jfg_overlay_text_width(const JfgOverlayText* text, float* width));
 // 1 while the single-player HUD is at the window's edges (the HUD in Screen Corners option, in widescreen), 0 while
-// it is in the middle 4:3 area: its left edge is then at x (overlay width - 320) / 2 in overlay units, else at 0.
+// it is in the middle 4:3 area.
 RECOMP_IMPORT("*", int jfg_hud_in_corners(void));
+// The single-player HUD's edges in overlay units: out[0] left, out[1] right. Line up with the game's HUD from these,
+// not the overlay's edges: in the corners the HUD keeps to the HUD ratio's area (Graphics > HUD ratio: Clamp 16:9, the
+// default, is a centred 16:9 strip in a wider window), else to the middle 320 units.
+RECOMP_IMPORT("*", void jfg_hud_area(float* out));
 // A weapon's icon (0 the pistol .. 15), the game's own picture (texture packs replace it), centred at x, y in overlay
 // units, scale 1 the size the game's weapon panel shows it (about 30 x 20 units), alpha 0..1. Only during
 // jfg_on_weapon_hud: the port draws it with the game's HUD, so it is under the overlay's shapes.
