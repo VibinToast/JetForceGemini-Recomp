@@ -165,6 +165,25 @@ void make_row(Type& t, uint32_t like_row) {
     t.row_from = like_row;
 }
 
+// A registered type's member's name for kill reports (jfg_on_kill): the type's name after the mod's id, its first
+// letter capital ("jfg_shellback:shellback" -> "Shellback"), in place of its definition's, which is the like type's.
+bool member_name(uint32_t obj, char out[16]) {
+    const int type = valid_ptr(obj) ? type_of_def(rd32(obj + OBJ_DEF)) : -1;
+    if (type < 0) return false;
+    const std::string& name = g_types[type].name;
+    const size_t colon = name.find(':');
+    const std::string own = colon == std::string::npos ? name : name.substr(colon + 1);
+    int n = 0;
+    for (size_t i = 0; i < own.size() && n < 15; i++) {
+        char c = own[i];
+        if (c == '_') continue;
+        if (n == 0 && c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+        out[n++] = c;
+    }
+    out[n] = 0;
+    return n > 0;
+}
+
 // Around a member's SquaddieControl: its type's voices silenced (on), or the like type's put back (off).
 uint8_t g_voice_saved[8];
 uint32_t g_voice_at = 0;

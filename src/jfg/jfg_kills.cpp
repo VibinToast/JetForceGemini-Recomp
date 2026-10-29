@@ -31,6 +31,7 @@
 #include "jfg_port.h"
 
 namespace jfg {
+namespace squad_types { bool member_name(uint32_t obj, char out[16]); } // jfg_squad_types.cpp
 bool drops_active(); // jfg_drops.cpp
 void drops_roll(uint8_t* rdram, recomp_context* ctx, uint32_t victim, uint32_t killer, int killer_kind, bool tribal);
 void register_drop_api();
@@ -86,6 +87,7 @@ uint32_t take_shot(uint32_t victim) {
 // The object's definition name (up to 15 characters), "" when it has none.
 void def_name(uint32_t obj, char out[16]) {
     out[0] = 0;
+    if (squad_types::member_name(obj, out)) return; // a mod's enemy type: its own name, not the like type's
     const uint32_t def = valid_ptr(obj) ? Obj::Def::get(obj) : 0;
     if (!valid_ptr(def)) return;
     for (int i = 0; i < 15; i++) {
