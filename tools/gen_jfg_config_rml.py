@@ -53,7 +53,7 @@ GAMEPLAY = [
     ("range", "refuel_speed", "Jetpack Refuel Speed", (25, 1000, "%"), "How fast a fuel pad fills the jetpack."),
     ("range", "floyd_fuel", "Floyd's Fuel", (100, 300, "%"),
      "How long Floyd's fuel lasts in his missions. 100% is the original game; 300% lasts three times as long."),
-    ("range", "dive_speed", "Vela's Dive Speed", (50, 400, "%"), "How fast Vela swims underwater, in every direction."),
+    # Vela's Dive Speed (dive_speed) is hidden for now: DIVE_SPEED_OPTION in jfg_options.h.
     ("group", None, "Movement (any control layout)", None, None),
     ("range", "move_speed", "Movement Speed", (25, 400, "%"), "How fast the character moves over the ground. The extra distance is collision-checked like normal movement."),
     ("bool", "sprint", "Sprint", None,

@@ -313,7 +313,7 @@ void draw_options() {
             changed |= options_slider("Jetpack refuel speed %", &g.refuel_speed, 25, 1000);
             changed |= options_slider("Floyd's fuel %", &g.floyd_fuel, 100, 300);
             changed |= ImGui::Checkbox("Faster pause menu", &g.fast_pause);
-            changed |= options_slider("Vela's dive speed %", &g.dive_speed, 50, 400);
+            if (DIVE_SPEED_OPTION) changed |= options_slider("Vela's dive speed %", &g.dive_speed, 50, 400);
 
             options_section("Fly camera (F7)");
             if (ImGui::Button(g_fly.active ? "Stop flying (F7)" : "Fly camera (F7)")) g_fly_toggle_request = true;

@@ -13,6 +13,9 @@ constexpr bool FRAME_RATE_OPTION = true;
 // The "Depth fog" option (FogPS.hlsl in RT64) is hidden and off: in testing nothing showed in any level. The renderer
 // pass, the option and its status line are kept for when it is looked at again. Set to true to bring it back.
 constexpr bool DEPTH_FOG_OPTION = false;
+// "Vela's Dive Speed" is hidden (owner, 2026-10-29): she swims at the game's speed (100%), a saved value is ignored.
+// Set to true to bring it back.
+constexpr bool DIVE_SPEED_OPTION = false;
 
 // --- persistent menu state -----------------------------------------------------------------------------------------
 struct State {

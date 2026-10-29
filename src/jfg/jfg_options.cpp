@@ -158,7 +158,7 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "sniper_zoom") == 0) g.sniper_zoom = std::clamp(value, 100, 500);
     else if (std::strcmp(key, "damage_taken") == 0) g.damage_taken = std::clamp(value, 0, 400);
     else if (std::strcmp(key, "unlimited_continues") == 0) g.unlimited_continues = value != 0;
-    else if (std::strcmp(key, "dive_speed") == 0) g.dive_speed = std::clamp(value, 50, 400);
+    else if (std::strcmp(key, "dive_speed") == 0) g.dive_speed = DIVE_SPEED_OPTION ? std::clamp(value, 50, 400) : 100;
     else if (std::strcmp(key, "fly_speed") == 0) g.fly_speed = std::clamp(value, 10, 1000);
     else if (std::strcmp(key, "fly_freeze") == 0) g.fly_freeze = value != 0;
     else if (std::strcmp(key, "fly_hide_hud") == 0) g.fly_hide_hud = value != 0;
