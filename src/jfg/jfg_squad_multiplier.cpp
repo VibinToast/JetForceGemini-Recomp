@@ -19,7 +19,9 @@
 // flags), kind 4 (no members), and sentries unless asked for (they would stand in a clump at one post). An extra member
 // is also not made (counted as made, as a killed one is) when the object list is nearly full (512 objects, unchecked
 // by the game), and one whose object could not be made is counted too, so its squadron still ends and opens its door.
+// One made on top of another member is launched a short way out, so the extras don't stand stacked.
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <vector>
 
@@ -35,6 +37,7 @@ extern "C" void levelObjectFlagSet(uint8_t* rdram, recomp_context* ctx);
 namespace jfg {
 
 uint32_t kills_squaddie(); // jfg_kills.cpp: the member SquaddieControl is updating, else 0
+bool fling_member(uint32_t obj, float vx, float vy, float vz, int calls); // jfg_hero_api.cpp (jfg_enemy_fling)
 
 namespace {
 constexpr uint32_t OVERLAY_3_ROM = 0x01ED54E0, O3_SQUADRON = 0x1A1D8; // the squadron being worked on (its data)
@@ -44,6 +47,11 @@ constexpr uint32_t ENTRY_COUNT = 0x0B, ENTRY_IDLE_BEHAVIOUR = 0x0D, ENTRY_SCALE 
 // The squadron's data.
 constexpr uint32_t SQD_WANTED = 0x01, SQD_CREATED = 0x63, SQD_FLAG_BASE = 0x88;
 constexpr uint32_t SQ_FLAG = 0x57; // a member's kill flag id (u8)
+// An extra member made on top of another (most spawn modes make every member at the squadron's spot) is launched
+// a short way out, each in its own direction (the golden angle by its number), with the game's own launch: track
+// collision, walls stop it, its AI back on when it lands.
+constexpr float CLOSE = 40.0f, SPREAD_SPEED = 9.0f, SPREAD_HOP = 4.0f;
+constexpr int SPREAD_CALLS = 10;
 constexpr int OBJECTS_KEEP_FREE = 64; // of the 512 the object list holds: shots, effects and pickups need room
 
 int g_percent = 100;     // 100..300, from the mod (jfg_squad_multiplier)
@@ -94,14 +102,34 @@ void squad_mult_making(bool on) {
 }
 
 // After it: an extra member that could not be made still counts as made (else its squadron never ends).
+// After it: an extra member that could not be made still counts as made (else its squadron never ends); one made on
+// top of another is spread out.
 void squad_mult_made(uint8_t* rdram_, recomp_context* ctx, uint8_t created_before) {
     g_rdram = rdram_;
     if (!g_making_extra) return;
     g_making_extra = false;
-    if ((uint32_t)ctx->r2 != 0) return;
     const uint32_t base = jfg_overlay_loaded_at(OVERLAY_3_ROM);
     const uint32_t data = base ? rd32(base + O3_SQUADRON) : 0;
-    if (data != 0 && rd8(data + SQD_CREATED) == created_before) wr8(data + SQD_CREATED, (uint8_t)(created_before + 1));
+    if (data == 0) return;
+    const uint32_t obj = (uint32_t)ctx->r2;
+    if (obj == 0) {
+        if (rd8(data + SQD_CREATED) == created_before) wr8(data + SQD_CREATED, (uint8_t)(created_before + 1));
+        return;
+    }
+    const float x = Obj::PosX::get(obj), z = Obj::PosZ::get(obj);
+    bool close = false;
+    int guard = 0;
+    for (uint32_t m = SquadronData::FirstMember::get(data); m != 0 && guard < 256; guard++) {
+        if (m != obj && std::fabs(Obj::PosX::get(m) - x) < CLOSE && std::fabs(Obj::PosZ::get(m) - z) < CLOSE) {
+            close = true;
+            break;
+        }
+        const uint32_t sq = Obj::Data::get(m);
+        m = sq ? SquadMemberData::NextMember::get(sq) : 0;
+    }
+    if (!close) return;
+    const float angle = (float)created_before * 2.39996f;
+    fling_member(obj, std::cos(angle) * SPREAD_SPEED, SPREAD_HOP, std::sin(angle) * SPREAD_SPEED, SPREAD_CALLS);
 }
 
 uint8_t squad_mult_created(uint8_t* rdram_) {

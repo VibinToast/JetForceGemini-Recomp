@@ -1275,21 +1275,27 @@ void enemy_traits(uint8_t* rdram_, recomp_context* ctx) {
 // AI off for `calls` calls (data +0x17) or until it lands. Not for a member with no collision data (definition +0x50),
 // one the mover skips (b25), or one riding something (b9 without byte 3 b4): 0, and the caller moves it if it wants.
 constexpr uint32_t SQ_FLAGS0 = 0x00, SQ_FLAGS1 = 0x01, SQ_FLAGS2 = 0x02, SQ_FLAGS3 = 0x03, SQ_CALLS = 0x17;
+// Also the enemy multiplier's spread (jfg::fling_member, jfg_squad_multiplier.cpp).
+bool fling(uint32_t obj, float vx, float vy, float vz, int calls) {
+    if (!valid_ptr(obj) || Obj::Kind::get(obj) != KIND_SQUAD_MEMBER) return false;
+    const uint32_t sq = Obj::Data::get(obj), def = rd32(obj + 0x40);
+    if (!valid_ptr(sq) || !valid_ptr(def) || rd32(def + 0x50) == 0) return false;
+    if ((rd8(sq + SQ_FLAGS0) & 0x02) || ((rd8(sq + SQ_FLAGS2) & 0x02) && !(rd8(sq + SQ_FLAGS3) & 0x10))) return false;
+    wrf(obj + 0x1C, vx);
+    wrf(obj + 0x20, vy);
+    wrf(obj + 0x24, vz);
+    wr8(sq + SQ_FLAGS1, (uint8_t)(rd8(sq + SQ_FLAGS1) | 0x04));
+    wr8(sq + SQ_CALLS, (uint8_t)std::clamp(calls, 1, 255));
+    wr8(sq + SQ_FLAGS0, (uint8_t)(rd8(sq + SQ_FLAGS0) | 0x10));
+    return true;
+}
+
 void enemy_fling(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t obj = (uint32_t)ctx->r4, f = (uint32_t)ctx->r5;
     ctx->r2 = 0;
-    if (!valid_ptr(obj) || !mod_ptr(f) || Obj::Kind::get(obj) != KIND_SQUAD_MEMBER) return;
-    const uint32_t sq = Obj::Data::get(obj), def = rd32(obj + 0x40);
-    if (!valid_ptr(sq) || !valid_ptr(def) || rd32(def + 0x50) == 0) return;
-    if ((rd8(sq + SQ_FLAGS0) & 0x02) || ((rd8(sq + SQ_FLAGS2) & 0x02) && !(rd8(sq + SQ_FLAGS3) & 0x10))) return;
-    wrf(obj + 0x1C, rdf(f));
-    wrf(obj + 0x20, rdf(f + 4));
-    wrf(obj + 0x24, rdf(f + 8));
-    wr8(sq + SQ_FLAGS1, (uint8_t)(rd8(sq + SQ_FLAGS1) | 0x04));
-    wr8(sq + SQ_CALLS, (uint8_t)std::clamp((int32_t)rd32(f + 12), 1, 255));
-    wr8(sq + SQ_FLAGS0, (uint8_t)(rd8(sq + SQ_FLAGS0) | 0x10));
-    ctx->r2 = 1;
+    if (!mod_ptr(f)) return;
+    ctx->r2 = fling(obj, rdf(f), rdf(f + 4), rdf(f + 8), (int32_t)rd32(f + 12)) ? 1 : 0;
 }
 
 // jfg_enemy_flung(void* enemy): 1 while a squad member is launched (b28: flung by anyone, the game included).
@@ -1682,4 +1688,8 @@ JFG_WRAP(func_8002AA7C_2B67C) {
     g_rdram = rdram;
     const int dealt = (int)(int32_t)ctx->r2;
     if (dealt > 0 && valid_ptr(dmg)) api::note_blast_damage(dmg, dealt);
+}
+
+namespace jfg {
+bool fling_member(uint32_t obj, float vx, float vy, float vz, int calls) { return api::fling(obj, vx, vy, vz, calls); }
 }
