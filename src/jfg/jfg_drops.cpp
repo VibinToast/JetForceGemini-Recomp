@@ -6,7 +6,8 @@
 //   - a drop with JFG_DROP_BIG has twice its chance from a big enemy (hit sphere radius 30 or more, or 10 health units);
 //   - from a squad the enemy multiplier made bigger (jfg_squad_multiplier.cpp), each chance is scaled by its stock size
 //     over its size now, so 3x the enemies give about the same drops in all;
-//   - when the chances add up to more than 100%, they are scaled down to share it.
+//   - when the chances add up to more than 100%, they are scaled down to share it;
+//   - a mod may scale every chance (jfg_drop_rate, 0..300%) and pull drops to the hero (jfg_drop_magnet).
 // The drop that comes up is fired as jfg_on_drop to every mod, with its id: the mod whose drop it is spawns its item.
 #include <algorithm>
 #include <cstdio>
@@ -19,6 +20,7 @@
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_port.h"
+#include "jfg_per_mod.h"
 
 namespace jfg {
 
@@ -38,6 +40,10 @@ struct Drop {
 };
 std::vector<Drop> g_drops;
 uint32_t g_seed = 0x2545F491u;
+PerMod<int> g_rate_requests;     // jfg_drop_rate, percent
+PerMod<float> g_magnet_requests; // jfg_drop_magnet, units
+int g_rate = 100;
+float g_magnet = 0.0f;
 
 float random01() {
     g_seed = g_seed * 1103515245u + 12345u;
@@ -114,7 +120,7 @@ void drops_roll(uint8_t* rdram_, recomp_context* ctx, uint32_t victim, uint32_t 
     for (size_t i = 0; i < g_drops.size(); i++) {
         float c = (float)g_drops[i].chance;
         if (big && (g_drops[i].flags & FLAG_BIG)) c *= 2.0f;
-        chances[i] = c * scale;
+        chances[i] = c * scale * (float)g_rate / 100.0f;
         total += chances[i];
     }
     if (total <= 0.0f) return;
@@ -142,8 +148,28 @@ void drops_roll(uint8_t* rdram_, recomp_context* ctx, uint32_t victim, uint32_t 
     ctx->r4 = a0;
 }
 
+float drop_magnet() { return g_magnet; } // jfg_weapon_ammo.cpp: cells within this pull to the hero
+
+namespace {
+// jfg_drop_rate(int percent): every drop's chance times percent / 100 (0..300). Each mod's request is kept: above 100
+// the largest applies, else the smallest.
+void drop_rate(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
+    g_rate_requests.set(mod_index, std::clamp((int)(int32_t)ctx->r4, 0, 300), 100);
+    const int high = g_rate_requests.max(100);
+    g_rate = high > 100 ? high : g_rate_requests.min(100);
+}
+// jfg_drop_magnet(float reach): drops within reach (units) drift to the hero and are picked up; 0 none. The largest
+// request applies.
+void drop_magnet(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
+    g_magnet_requests.set(mod_index, std::clamp(ctx->f12.fl, 0.0f, 1000.0f), 0.0f);
+    g_magnet = g_magnet_requests.max(0.0f);
+}
+} // namespace
+
 void register_drop_api() {
     recomp::overlays::register_base_export("jfg_drop_register", drop_register);
+    recomp::overlays::register_ext_base_export("jfg_drop_rate", drop_rate);
+    recomp::overlays::register_ext_base_export("jfg_drop_magnet", drop_magnet);
 }
 
 } // namespace jfg

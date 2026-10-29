@@ -442,7 +442,7 @@ typedef struct {
     unsigned int color;
 } JfgHudDisc;
 RECOMP_IMPORT("*", void jfg_hud_disc(const JfgHudDisc* disc));
-// One of the game's texts (front_text[id], in the language shown) into out (size bytes, ended by 0); its length, 0 if
+// One of the game's texts (by its id, in the language shown) into out (size bytes, ended by 0); its length, 0 if
 // none. Weapon w's name is 0x39 + w; jfg_on_hud_message's msg is a text id too.
 RECOMP_IMPORT("*", int jfg_game_text(int id, char* out, int size));
 // The area's Tribals: saved, killed and left (the counts the game's objective panel shows). 0 outside a game.
@@ -751,6 +751,12 @@ RECOMP_IMPORT("*", void jfg_weapon_ammo_sources(int weapon, const JfgAmmoSources
 // may have changed. -1 if the name is empty or 32 drops are registered.
 #define JFG_DROP_BIG 1
 RECOMP_IMPORT("*", int jfg_drop_register(const char* name, int chance, int flags));
+// Every registered drop's chance times percent / 100 (0..300; 100 normal). Each mod's request is kept: above 100 the
+// largest applies, else the smallest. Since version 6.
+RECOMP_IMPORT("*", void jfg_drop_rate(int percent));
+// Mods' drops (weapons' ammo cells) within reach units of the hero drift to it and are picked up; 0 none. The largest
+// request applies. Since version 6.
+RECOMP_IMPORT("*", void jfg_drop_magnet(float reach));
 // More enemies: squads set up from now on (the next level loaded) have percent / 100 times their members, 100 to 300
 // (rounded per squad). flags 1: sentries too (they stand in a clump at their post). Tribals, bosses and big enemies keep
 // their count. The extra members save no kills: killed squads stay killed at any setting, and a level never runs out

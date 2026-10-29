@@ -5,10 +5,11 @@
 #include <string>
 #include <vector>
 
-// A collection of mods: one GitHub repo with a catalog.json. The owner's are built in; each can be turned off.
+// A collection of mods: one GitHub repo with a catalog.json. The owner's are built in; the player can add other
+// people's (removable). Each can be turned off.
 struct JfgStoreSource {
     std::string id, name, url;
-    bool official = false, enabled = true, loaded = false;
+    bool official = false, enabled = true, loaded = false, removable = false;
     int mods = 0;            // in its catalog
     std::string error;       // why its catalog couldn't be read
 };
@@ -16,7 +17,7 @@ struct JfgStoreSource {
 // One mod as the page shows it: the catalog's entry from the highest-priority source, and what is installed.
 struct JfgStoreMod {
     std::string id, name, short_text, description, version, authors, tags, source, source_name, size_text;
-    std::string thumb;                    // its picture's file (the preview: a local file), empty if none
+    std::string thumb;                    // its picture's file (downloaded to the cache), empty if none yet
     std::string installed_version;        // empty if not installed
     bool installed = false, update = false, managed = false; // managed: the store installed it (or it is the catalog's file)
     bool blocked = false;                 // needs a newer port, or a dependency no enabled source has
@@ -26,7 +27,7 @@ struct JfgStoreMod {
 };
 
 struct JfgStoreState {
-    bool preview = false;                 // catalogs from bin/mod_store_preview, not the internet
+    bool preview = false;                 // catalogs from bin/mod_store_preview, not GitHub (JFG_MOD_STORE_PREVIEW=1)
     bool busy = false;
     int percent = 0;
     std::string busy_id, text;            // "Installing Rolling Shellback..." / the last result
@@ -39,6 +40,9 @@ std::vector<JfgStoreSource> jfg_store_sources();
 std::vector<JfgStoreMod> jfg_store_mods();
 JfgStoreState jfg_store_state();
 void jfg_store_set_source_enabled(const std::string& source_id, bool enabled);
+// Adds someone's collection: "owner/repo" or its GitHub address. "" when added (its catalog then loads), else why not.
+std::string jfg_store_add_source(const std::string& text);
+void jfg_store_remove_source(const std::string& source_id); // only one the player added
 // Install or update (with the mod's dependencies first) in the background; remove at once (only mods the store
 // manages). Changes take effect when the game starts.
 void jfg_store_install(const std::string& mod_id);

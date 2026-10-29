@@ -1444,5 +1444,10 @@
   "Keyboard": "Tastiera",
   "PlayStation Controller": "Controller PlayStation",
   "Switch Controller": "Controller Switch"
- }
+ },
+  "Return to Main Menu": "Torna al menu principale",
+  ": back to the game's title screen.": ": torna alla schermata del titolo del gioco.",
+  "Return to the main menu?": "Tornare al menu principale?",
+  "The game goes back to its title screen. Any progress since your last save will be lost.": "Il gioco torna alla schermata del titolo. I progressi dall'ultimo salvataggio andranno persi.",
+  "All ask first. Any progress since your last save will be lost.": "Tutti chiedono prima conferma. I progressi dall'ultimo salvataggio andranno persi."
 }

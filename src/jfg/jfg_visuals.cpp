@@ -196,8 +196,11 @@ void apply_no_lod(recomp_context* ctx) {
             const uint32_t value = f.size == 4 ? rd32(def + f.offset) : rd16(def + f.offset);
             auto put = [&](uint32_t v) { if (f.size == 4) wr32(def + f.offset, v); else wr16(def + f.offset, (uint16_t)v); };
             if (*f.option) {
-                if (value != 0 && f.saved.find(def) == f.saved.end()) {
-                    f.saved[def] = value; put(0);
+                // Any definition with a value again: one loaded anew at an address seen before this level (enemy
+                // definitions are loaded and freed as their squads come and go) has its own value back.
+                if (value != 0) {
+                    if (f.saved.find(def) == f.saved.end()) f.saved[def] = value;
+                    put(0);
                     if (log) std::fprintf(stderr, "[jfg] object %d (definition %08X): field +0x%X was %08X, now 0\n", (int)Obj::Kind::get(obj), def, f.offset, value);
                 }
             }

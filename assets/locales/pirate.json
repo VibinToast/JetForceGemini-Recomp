@@ -952,5 +952,10 @@
   "hint.106.0": "Can I have th' Tri-Rockets?",
   "hint.106.1": "Show me what happened. Blow me down!",
   "hint.106.2": "I'll leave ye t' yer thoughts."
- }
+ },
+  "Return to Main Menu": "Back t' th' Main Menu",
+  ": back to the game's title screen.": ": back t' th' game's title screen, arr.",
+  "Return to the main menu?": "Back t' th' main menu, matey?",
+  "The game goes back to its title screen. Any progress since your last save will be lost.": "Th' game sails back t' its title screen. Any plunder since yer last save be lost t' Davy Jones.",
+  "All ask first. Any progress since your last save will be lost.": "All o' them be askin' first. Any plunder since yer last save be lost."
 }

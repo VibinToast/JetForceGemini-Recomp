@@ -176,6 +176,7 @@ extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
 // wrapped (tools/wrapped_funcs.txt): every call runs these first, then the game's code (<name>_orig), or a mod's patch
 // or hook of it.
 uint32_t kills_set_squaddie(uint32_t obj); // jfg_kills.cpp
+void squad_mult_member_moved(uint8_t* rdram, recomp_context* ctx, uint32_t obj); // jfg_squad_multiplier.cpp
 namespace squad_types { void set_frames(int frames); void voices(uint32_t obj, bool on); } // jfg_squad_types.cpp
 
 // Also tells jfg_kills.cpp which squad member is being updated (a Tribal lost is marked during the update).
@@ -186,9 +187,11 @@ JFG_WRAP(SquaddieControl) {
     jfg::squad_types::set_frames(r); // a mod's squad type tick gets the update rate
     const uint32_t before = jfg::kills_set_squaddie((uint32_t)ctx->r4);
     jfg::squad_types::voices((uint32_t)ctx->r4, true); // a mod's squad type: the like type's voices silenced
+    const uint32_t member = (uint32_t)ctx->r4;
     SquaddieControl_orig(rdram, ctx);
     jfg::squad_types::voices(0, false);
     jfg::kills_set_squaddie(before);
+    jfg::squad_mult_member_moved(rdram, ctx, member); // More Enemies: an extra drone beside its stock one
 }
 
 JFG_WRAP(SquadronControl) {

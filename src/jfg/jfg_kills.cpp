@@ -54,6 +54,7 @@ Shot g_shots[SHOTS];
 int g_next_shot = 0;
 uint32_t g_last_shot_victim = 0; // the squad member shot last (a shuriken's decapitation counts its kill after)
 uint32_t g_squaddie = 0;          // the squad member SquaddieControl is updating
+uint32_t g_blast_shooters[16] = {}; // the squad member whose projectile set off each blast record (explosionAddBlast)
 
 } // namespace
 
@@ -66,14 +67,42 @@ uint32_t kills_set_squaddie(uint32_t obj) {
 
 uint32_t kills_squaddie() { return g_squaddie; } // jfg_squad_multiplier.cpp
 
-// From squadsPlayerShootsSquaddie's wrapper (jfg_squad_cheat.cpp).
-void kills_remember_shot(uint32_t victim, uint32_t shooter) {
-    g_last_shot_victim = victim;
+namespace {
+void remember(uint32_t victim, uint32_t shooter) {
     for (Shot& s : g_shots) {
         if (s.victim == victim) { s.shooter = shooter; return; }
     }
     g_shots[g_next_shot] = { victim, shooter };
     g_next_shot = (g_next_shot + 1) % SHOTS;
+}
+uint32_t shooter_of(uint32_t hit);
+} // namespace
+
+// From squadsPlayerShootsSquaddie's wrapper (jfg_squad_cheat.cpp).
+void kills_remember_shot(uint32_t victim, uint32_t shooter) {
+    g_last_shot_victim = victim;
+    remember(victim, shooter);
+}
+
+// After the game's shot pass (hitUpdate's wrapper, jfg_squad_types.cpp): squadsPlayerShootsSquaddie only records the
+// heroes' shots, so a squad member another one shot (enemies' friendly fire) had no shooter. A shot that crossed a
+// member this pass is in its hit block (+0x3C, with +0x0A bit 0x40; bodies pressing together set bit 0x20 only):
+// when it came from another squad member, that member is its shooter.
+void kills_after_hit_pass() {
+    constexpr int16_t KIND_SQUAD_MEMBER = 0x18;
+    const uint32_t list = rd32(ADDR_ObjList);
+    const int count = (int)rd32(ADDR_ObjListCount);
+    if (!valid_ptr(list) || count <= 0 || count > 4096) return;
+    for (int i = 0; i < count; i++) {
+        const uint32_t obj = rd32(list + 4u * (uint32_t)i);
+        if (!valid_ptr(obj) || Obj::Kind::get(obj) != KIND_SQUAD_MEMBER) continue;
+        const uint32_t dmg = Obj::Damage::get(obj);
+        if (!valid_ptr(dmg) || !(rd16(dmg + 0x0A) & 0x40)) continue;
+        const uint32_t shot = rd32(dmg + 0x3C);
+        if (!valid_ptr(shot)) continue;
+        const uint32_t shooter = shooter_of(shot);
+        if (valid_ptr(shooter) && shooter != obj && Obj::Kind::get(shooter) == KIND_SQUAD_MEMBER) remember(obj, shooter);
+    }
 }
 
 namespace {
@@ -212,9 +241,10 @@ JFG_WRAP(SquaddiePassesAway) {
 }
 
 // mainIncreaseWeaponKills(weapon), called from elsewhere than SquaddiePassesAway: a blast or a projectile finished a
-// squad member (never a Tribal: both callers skip those), the victim in the caller's $s2 and the shooter, when the
-// caller has one, in its $s5, else the hero; or a shuriken took a squad member's head (weapon 9), right after
-// squadsDecapitateSquaddie shot it: the member shot last.
+// squad member (never a Tribal: both callers skip those), the victim in the caller's $s2; or a shuriken took a squad
+// member's head (weapon 9), right after squadsDecapitateSquaddie shot it: the member shot last. The shooter: a
+// blast's (explosionHitTick: $s1 is the blast, explosionAddBlast's owner at +0x20; an enemy's grenade has its
+// thrower or none, never the hero), else a projectile's (hitUpdate's $s5), else the hero.
 JFG_WRAP(mainIncreaseWeaponKills) {
     using namespace jfg;
     const gpr a0 = ctx->r4;
@@ -223,6 +253,17 @@ JFG_WRAP(mainIncreaseWeaponKills) {
     g_rdram = rdram;
     uint32_t victim = (uint32_t)ctx->r18;
     uint32_t killer = (uint32_t)ctx->r21;
+    constexpr uint32_t ADDR_BLASTS = 0x800F6B60, BLAST_SIZE = 0x24, BLASTS = 16, BLAST_OWNER = 0x20;
+    const uint32_t blast = (uint32_t)ctx->r17;
+    const bool from_blast = blast >= ADDR_BLASTS && blast < ADDR_BLASTS + BLAST_SIZE * BLASTS &&
+                            (blast - ADDR_BLASTS) % BLAST_SIZE == 0;
+    if (from_blast && valid_ptr(victim) && Obj::Kind::get(victim) == 0x18) {
+        uint32_t owner = rd32(blast + BLAST_OWNER);
+        if (!valid_ptr(owner)) owner = g_blast_shooters[(blast - ADDR_BLASTS) / BLAST_SIZE]; // an enemy's (explosionAddBlast)
+        take_shot(victim);
+        report_kill(rdram, ctx, victim, valid_ptr(owner) ? shooter_of(owner) : 0u, (int)(int32_t)a0, false, "blast");
+        return;
+    }
     if (!valid_ptr(victim) || Obj::Kind::get(victim) != 0x18) {
         victim = g_last_shot_victim;
         killer = 0;
@@ -238,6 +279,46 @@ JFG_WRAP(mainIncreaseWeaponKills) {
         take_shot(victim);
     }
     report_kill(rdram, ctx, victim, killer, (int)(int32_t)a0, false, "counted");
+}
+
+// explosionAddBlast(x $f12, y $f14, z a2, radius a3, ...; weapon sp+0x18, owner sp+0x1C) fills one of the 16 blast
+// records (D_800F6B60). The game gives an owner only for the heroes' blasts; an enemy's grenade or rocket goes off
+// with none. Its projectile is still in the object list while it explodes: the nearest object at the blast whose
+// shooter is a squad member is noted as that record's thrower, for the kills the blast makes.
+JFG_WRAP(explosionAddBlast) {
+    using namespace jfg;
+    g_rdram = rdram;
+    const float x = ctx->f12.fl, y = ctx->f14.fl;
+    float z;
+    { const uint32_t bits = (uint32_t)ctx->r6; std::memcpy(&z, &bits, 4); }
+    const uint32_t owner = rd32((uint32_t)ctx->r29 + 0x1C);
+    explosionAddBlast_orig(rdram, ctx);
+    g_rdram = rdram;
+    constexpr uint32_t ADDR_BLASTS = 0x800F6B60, BLAST_SIZE = 0x24, BLASTS = 16;
+    int record = -1;
+    for (uint32_t i = 0; i < BLASTS && record < 0; i++) {
+        const uint32_t b = ADDR_BLASTS + i * BLAST_SIZE;
+        if (rdf(b) == x && rdf(b + 4) == y && rdf(b + 8) == z && rd32(b + 0x20) == owner) record = (int)i;
+    }
+    if (record < 0) return;
+    g_blast_shooters[record] = 0;
+    if (valid_ptr(owner)) return;
+    constexpr float REACH = 90.0f;
+    float best = REACH * REACH;
+    const uint32_t list = rd32(ADDR_ObjList);
+    const int count = (int)rd32(ADDR_ObjListCount);
+    if (!valid_ptr(list) || count <= 0 || count > 4096) return;
+    for (int i = 0; i < count; i++) {
+        const uint32_t o = rd32(list + 4u * (uint32_t)i);
+        if (!valid_ptr(o)) continue;
+        const int16_t kind = Obj::Kind::get(o);
+        if (kind == 0x18 || kind == KIND_HERO || kind == KIND_FLOYD) continue;
+        const float dx = Obj::PosX::get(o) - x, dy = Obj::PosY::get(o) - y, dz = Obj::PosZ::get(o) - z;
+        const float d = dx * dx + dy * dy + dz * dz;
+        if (d >= best) continue;
+        const uint32_t s = shooter_of(o);
+        if (valid_ptr(s) && s != o && Obj::Kind::get(s) == 0x18) { best = d; g_blast_shooters[record] = s; }
+    }
 }
 
 // mainSetTribalStatus(tribal, status): status 2 is a Tribal lost. The game counts no kill for it; the Tribal is the

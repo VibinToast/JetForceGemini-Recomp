@@ -23,6 +23,11 @@ public:
         for (const auto& [mod, value] : requests) r = std::max(r, value);
         return r;
     }
+    T min(T neutral) const {
+        T r = neutral;
+        for (const auto& [mod, value] : requests) r = std::min(r, value);
+        return r;
+    }
 
 private:
     std::map<size_t, T> requests;

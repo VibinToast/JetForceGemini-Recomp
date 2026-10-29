@@ -1,7 +1,8 @@
 // Jet Force Gemini port: the launcher's mod store (Get Mods page). The design: Recomp-Docs OFFICIAL_MODS_PLAN.md
 // "Mod Store".
 // - Sources: collections of mods, each one GitHub repo publishing a catalog.json at its latest release; the owner's
-//   are built in, each can be turned off (mod_store.json). The list is in priority order: when two sources list the
+//   are built in, and the player can add other people's by "owner/repo" or address (mod_store.json "added", after
+//   the built-in ones). Each can be turned off (mod_store.json). The list is in priority order: when two sources list the
 //   same mod id, the first one's entry is used and the page says another source has it too.
 // - A catalog lists each mod with its own version and release: name, descriptions, authors, tags, thumbnail, file URL,
 //   size, SHA-256, the port version and mod API it needs, its dependencies.
@@ -10,16 +11,22 @@
 //   old one. The Mods page rescans afterwards; mods take effect when the game starts.
 // - Remove: only mods the store manages: ones it installed (mod_store.json) or whose file is a catalog's own (its hash
 //   matches), never ones a player put in the mods folder by hand. Their settings are kept.
-// - Preview: nothing is published yet, so while bin/mod_store_preview exists (tools/make_mod_store_preview.py) the
-//   catalogs and files are read from it, by the same GitHub URLs the real ones will have, with a pretend download time.
-//   Without it, a source says it isn't published yet.
+// - Online: the page's first showing (and its Refresh) downloads each source's catalog in the background, then the
+//   thumbnails it lacks into bin/mod_store_cache (<source>/<mod id>-<version>.png, kept between runs); the list fills
+//   in as they arrive. Nothing is asked of GitHub while Check for Updates is off (bin/jfg_launcher.txt).
+// - Preview (testing): with JFG_MOD_STORE_PREVIEW=1 and bin/mod_store_preview there (tools/make_mod_store_preview.py),
+//   the catalogs and files are read from that folder instead, by the same GitHub URLs, with a pretend download time.
 #include "jfg_mod_store.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cctype>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <sstream>
@@ -35,10 +42,11 @@ namespace fs = std::filesystem;
 namespace {
 constexpr const char* STATE_FILE = "mod_store.json";
 constexpr const char* PREVIEW_FOLDER = "mod_store_preview";
+constexpr const char* CACHE_FOLDER = "mod_store_cache";
 constexpr const char* GITHUB = "https://github.com/";
 
 struct BuiltIn { const char* id; const char* name; const char* repo; };
-// In priority order. The owner's collections; more are added here (and, later, a reviewed index of others').
+// In priority order. The owner's collections; the ones the player added come after them, in the order added.
 const BuiltIn BUILT_IN[] = {
     { "official", "Official Mods", "VibinToast/JFG-Mods" },
     { "restored", "Restored Content", "VibinToast/JFG-Restored-Content" },
@@ -55,11 +63,16 @@ std::mutex g_mutex; // guards everything below
 std::vector<JfgStoreSource> g_sources;
 std::map<std::string, std::vector<CatalogMod>> g_catalogs; // source id -> its mods
 std::map<std::string, Installed> g_installed;              // mods the store installed
+std::vector<std::string> g_added;                          // the player's added collections ("owner/repo"), in order
 std::vector<JfgStoreMod> g_mods;
 JfgStoreState g_state;
 bool g_rescan = false;                                     // an install finished: rescan on the UI thread
+bool g_fetching = false;                                   // the catalogs and thumbnails are being downloaded
 
-bool preview() { return fs::is_directory(PREVIEW_FOLDER); }
+bool preview() {
+    const char* on = std::getenv("JFG_MOD_STORE_PREVIEW");
+    return on != nullptr && *on != '\0' && *on != '0' && fs::is_directory(PREVIEW_FOLDER);
+}
 
 std::string utf8(const fs::path& p) {
     const std::u8string s = p.u8string();
@@ -135,13 +148,24 @@ fs::path mod_file(const std::string& id) {
     return recomp::mods::get_mods_directory() / (id + ".nrm");
 }
 
+// An added collection's source id (also its cache folder): "gh_<owner>_<repo>", lower case.
+std::string added_id(const std::string& repo) {
+    std::string id = "gh_" + repo;
+    for (char& c : id) c = c == '/' ? '_' : (char)std::tolower((unsigned char)c);
+    return id;
+}
+
 void load_state() {
     g_installed.clear();
+    g_added.clear();
     std::map<std::string, bool> enabled;
     try {
         const nlohmann::json j = nlohmann::json::parse(read_text(STATE_FILE));
         if (j.contains("sources") && j["sources"].is_object()) {
             for (auto& [id, on] : j["sources"].items()) if (on.is_boolean()) enabled[id] = on.get<bool>();
+        }
+        if (j.contains("added") && j["added"].is_array()) {
+            for (const auto& r : j["added"]) if (r.is_string()) g_added.push_back(r.get<std::string>());
         }
         if (j.contains("installed") && j["installed"].is_object()) {
             for (auto& [id, m] : j["installed"].items()) {
@@ -160,28 +184,38 @@ void load_state() {
         s.enabled = enabled.count(b.id) ? enabled[b.id] : true;
         g_sources.push_back(s);
     }
+    for (const std::string& repo : g_added) {
+        JfgStoreSource s;
+        s.id = added_id(repo);
+        s.name = repo; // until its catalog gives its name
+        s.url = std::string(GITHUB) + repo + "/releases/latest/download/catalog.json";
+        s.removable = true;
+        s.enabled = enabled.count(s.id) ? enabled[s.id] : true;
+        g_sources.push_back(s);
+    }
 }
 
 void save_state() {
     nlohmann::json j;
     j["sources"] = nlohmann::json::object();
     for (const JfgStoreSource& s : g_sources) j["sources"][s.id] = s.enabled;
+    j["added"] = g_added;
     j["installed"] = nlohmann::json::object();
     for (const auto& [id, m] : g_installed) j["installed"][id] = { { "source", m.source }, { "version", m.version }, { "sha256", m.sha256 } };
     std::ofstream(STATE_FILE, std::ios::binary) << j.dump(2) << "\n";
 }
 
-void load_catalog(JfgStoreSource& s) {
+// A source's catalog from its text (the preview's file, or the download).
+void parse_catalog(JfgStoreSource& s, const std::string& text) {
     std::vector<CatalogMod>& mods = g_catalogs[s.id];
     mods.clear();
     s.loaded = false;
     s.mods = 0;
     s.error.clear();
-    if (!preview()) { s.error = "Not published yet"; return; }
-    const fs::path file = preview_path(s.url);
-    if (file.empty() || !fs::is_regular_file(file)) { s.error = "Not published yet"; return; }
     try {
-        const nlohmann::json j = nlohmann::json::parse(read_text(file));
+        const nlohmann::json j = nlohmann::json::parse(text);
+        if (s.removable && j.contains("name") && j["name"].is_string() && !j["name"].get<std::string>().empty())
+            s.name = j["name"].get<std::string>(); // an added collection goes by its own name
         for (const auto& m : j.value("mods", nlohmann::json::array())) {
             CatalogMod c;
             c.id = m.value("id", "");
@@ -205,6 +239,60 @@ void load_catalog(JfgStoreSource& s) {
     } catch (...) {
         s.error = "Its catalog could not be read";
     }
+}
+
+// A mod's thumbnail file: the preview's, else its place in the cache (there once downloaded).
+fs::path thumb_file(const std::string& source_id, const CatalogMod& c) {
+    if (c.thumb_url.empty()) return {};
+    if (preview()) return preview_path(c.thumb_url);
+    return fs::path(CACHE_FOLDER) / fs::u8path(source_id) / fs::u8path(c.id + "-" + c.version + ".png");
+}
+
+// url into file, whole: downloaded beside it (.part) and renamed over it once complete.
+bool download(const std::string& url, const fs::path& file, uint64_t size = 0,
+              const std::function<bool(uint64_t, uint64_t)>& progress = nullptr) {
+    std::error_code ec;
+    fs::create_directories(file.parent_path(), ec);
+    const fs::path part = fs::path(file).concat(".part");
+    fs::remove(part, ec);
+    if (jfg_http_download(url, part, size, progress ? progress : [](uint64_t, uint64_t) { return true; }) != 1) {
+        fs::remove(part, ec);
+        return false;
+    }
+    fs::rename(part, file, ec);
+    return !ec;
+}
+
+void build_list();
+
+// The background download of the catalogs, then of the thumbnails not in the cache yet; the list is built again after
+// each catalog and once the thumbnails are in.
+void fetch_worker(std::vector<std::pair<std::string, std::string>> sources) { // id, catalog url
+    for (const auto& [id, url] : sources) {
+        const fs::path file = fs::path(CACHE_FOLDER) / fs::u8path(id) / "catalog.json";
+        const bool ok = download(url, file);
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (JfgStoreSource& s : g_sources) {
+            if (s.id != id) continue;
+            if (ok) parse_catalog(s, read_text(file));
+            else { g_catalogs[id].clear(); s.loaded = false; s.mods = 0; s.error = "Couldn't reach GitHub"; }
+        }
+        build_list();
+    }
+    std::vector<std::pair<std::string, fs::path>> thumbs; // url, file
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (const auto& [id, mods] : g_catalogs) {
+            for (const CatalogMod& c : mods) {
+                const fs::path f = thumb_file(id, c);
+                if (!f.empty() && !fs::is_regular_file(f)) thumbs.push_back({ c.thumb_url, f });
+            }
+        }
+    }
+    for (const auto& [url, f] : thumbs) download(url, f);
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_fetching = false;
+    build_list();
 }
 
 const CatalogMod* find_entry(const std::string& id, std::string* source = nullptr) {
@@ -248,7 +336,7 @@ void build_list() {
             m.source_name = s.name;
             m.size_text = size_text(c.size);
             m.dependencies = c.dependencies;
-            const fs::path thumb = preview_path(c.thumb_url);
+            const fs::path thumb = thumb_file(s.id, c);
             if (!thumb.empty() && fs::is_regular_file(thumb)) m.thumb = utf8(thumb);
             if (auto details = recomp::mods::get_details_for_mod(c.id)) {
                 m.installed = true;
@@ -315,11 +403,21 @@ void install_worker(std::vector<std::string> ids, std::string main_id) {
             c = *e;
         }
         const std::string what = (ids.size() > 1 && ids[k] != main_id ? "Installing " + c.name + " (needed)" : "Installing " + c.name);
-        const fs::path from = preview_path(c.file_url);
-        if (from.empty() || !fs::is_regular_file(from)) { failure = "Could not download " + c.name; break; }
         const fs::path dest = recomp::mods::get_mods_directory() / (c.id + ".nrm");
         const fs::path part = fs::path(dest).concat(".part");
-        {
+        const fs::path from = preview() ? preview_path(c.file_url) : fs::path();
+        if (!preview()) {
+            std::error_code rm;
+            fs::remove(part, rm);
+            const int got = jfg_http_download(c.file_url, part, c.size, [&](uint64_t done, uint64_t total) {
+                set_busy(what + "...", (int)(((double)k + (double)done / std::max<uint64_t>(1, total)) / ids.size() * 100.0));
+                return true;
+            });
+            if (got != 1) failure = "Could not download " + c.name + ": check your connection";
+        } else if (from.empty() || !fs::is_regular_file(from)) {
+            failure = "Could not download " + c.name;
+            break;
+        } else {
             std::ifstream in(from, std::ios::binary);
             std::ofstream out(part, std::ios::binary | std::ios::trunc);
             const uint64_t total = std::max<uint64_t>(1, fs::file_size(from));
@@ -366,10 +464,30 @@ void install_worker(std::vector<std::string> ids, std::string main_id) {
 
 void jfg_store_refresh() {
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (g_state.busy) return;
+    if (g_state.busy || g_fetching) return;
     load_state();
-    for (JfgStoreSource& s : g_sources) load_catalog(s);
+    std::vector<std::pair<std::string, std::string>> fetch;
+    for (JfgStoreSource& s : g_sources) {
+        if (preview()) {
+            const fs::path file = preview_path(s.url);
+            if (!file.empty() && fs::is_regular_file(file)) parse_catalog(s, read_text(file));
+            else s.error = "Not in the preview";
+            continue;
+        }
+        // The catalog read last time shows until the new one arrives.
+        const fs::path cached = fs::path(CACHE_FOLDER) / fs::u8path(s.id) / "catalog.json";
+        if (fs::is_regular_file(cached)) parse_catalog(s, read_text(cached));
+        if (!jfg_launcher_check_updates()) {
+            if (!s.loaded) s.error = "Turn on Check for Updates (General page) to see it";
+            continue;
+        }
+        if (!s.loaded) s.error = "Loading...";
+        fetch.push_back({ s.id, s.url });
+    }
     build_list();
+    if (fetch.empty()) return;
+    g_fetching = true;
+    std::thread(fetch_worker, fetch).detach();
 }
 
 std::vector<JfgStoreSource> jfg_store_sources() {
@@ -390,6 +508,47 @@ JfgStoreState jfg_store_state() {
 void jfg_store_set_source_enabled(const std::string& source_id, bool enabled) {
     std::lock_guard<std::mutex> lock(g_mutex);
     for (JfgStoreSource& s : g_sources) if (s.id == source_id) s.enabled = enabled;
+    save_state();
+    build_list();
+}
+
+std::string jfg_store_add_source(const std::string& text) {
+    // "owner/repo", or the repo's address ("https://github.com/owner/repo/...", with or without "https://").
+    std::string repo = text;
+    repo.erase(0, repo.find_first_not_of(" \t"));
+    repo.erase(repo.find_last_not_of(" \t/") + 1);
+    for (const char* prefix : { "https://", "http://", "www.", "github.com/" }) {
+        if (repo.rfind(prefix, 0) == 0) repo = repo.substr(std::strlen(prefix));
+    }
+    if (const size_t slash = repo.find('/'); slash != std::string::npos) {
+        if (const size_t next = repo.find('/', slash + 1); next != std::string::npos) repo.resize(next); // owner/repo/releases/...
+    }
+    if (repo.size() > 4 && repo.compare(repo.size() - 4, 4, ".git") == 0) repo.resize(repo.size() - 4);
+    const size_t at = repo.find('/');
+    const bool valid = at != std::string::npos && at > 0 && at + 1 < repo.size() &&
+        std::all_of(repo.begin(), repo.end(), [](char c) { return std::isalnum((unsigned char)c) || c == '/' || c == '-' || c == '_' || c == '.'; });
+    if (!valid) return "Type a GitHub repo as owner/repo, or paste its address";
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_state.busy || g_fetching) return "Wait for the store to finish first";
+        for (const BuiltIn& b : BUILT_IN) if (added_id(b.repo) == added_id(repo)) return "That collection is built in already";
+        for (const std::string& r : g_added) if (added_id(r) == added_id(repo)) return "You added that one already";
+        g_added.push_back(repo);
+        save_state();
+    }
+    jfg_store_refresh(); // its catalog loads with the others
+    return "";
+}
+
+void jfg_store_remove_source(const std::string& source_id) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_state.busy || g_fetching) return;
+    const auto it = std::find_if(g_added.begin(), g_added.end(), [&](const std::string& r) { return added_id(r) == source_id; });
+    if (it == g_added.end()) return; // never a built-in one
+    g_added.erase(it);
+    g_catalogs.erase(source_id);
+    g_sources.erase(std::remove_if(g_sources.begin(), g_sources.end(), [&](const JfgStoreSource& s) { return s.id == source_id; }),
+                    g_sources.end());
     save_state();
     build_list();
 }

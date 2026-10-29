@@ -1,5 +1,5 @@
-"""Builds bin/mod_store_preview: the launcher's Get Mods page reads its catalogs and files from there, by the GitHub
-URLs the real collections will have, until they are published (src/jfg/jfg_mod_store.cpp).
+"""Builds bin/mod_store_preview: with JFG_MOD_STORE_PREVIEW=1 the launcher's Get Mods page reads its catalogs and files
+from there instead of GitHub, by the same URLs (src/jfg/jfg_mod_store.cpp), to try catalogs before publishing them.
 
 Each collection is laid out as its GitHub releases would be:
     mod_store_preview/<repo>/latest/catalog.json             (releases/latest/download/catalog.json)
@@ -31,7 +31,7 @@ TAGS = {
     "jfg_weapon_sounds": ["Weapons", "Audio"], "jfg_shellback": ["Enemies"], "jfg_more_enemies": ["Enemies", "Gameplay"],
     "jfg_ammo_ring": ["HUD"], "jfg_health_ring": ["HUD"], "jfg_kill_feed": ["HUD"], "jfg_minimap": ["HUD"],
     "jfg_reticle": ["HUD"], "jfg_blood": ["Visuals"], "jfg_better_floyd": ["Gameplay"], "jfg_dodge": ["Gameplay"],
-    "jfg_aim_toggle": ["Controls"], "jfg_ammo_stays": ["Gameplay"],
+    "jfg_aim_toggle": ["Controls"], "jfg_better_pickups": ["Gameplay"],
     "jfg_restored_content": ["Content"], "jfg_restored_content_test_hub": ["Levels", "Content"],
 }
 
@@ -93,6 +93,8 @@ def main() -> None:
     mods_src = Path(a.mods)
     official = [f for d in sorted(mods_src.glob("jfg_*")) if (d / "mod.toml").is_file()
                 for f in [d / "build" / f"{d.name}.nrm"] if f.is_file()]
+    # The collection's level packs (built by JFG-Studio into bin/mods).
+    official += [f for f in [PORT / "bin" / "mods" / "toast_shellback_levels.nrm"] if f.is_file()]
     restored = [f for f in (PORT / "bin" / "mods").glob("jfg_restored_content*.nrm")]
     OUT.mkdir(parents=True, exist_ok=True)
     collection("JFG-Mods", "Official Mods", official, set(a.bump))
