@@ -13,7 +13,10 @@
 #include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
+#include "jfg_per_mod.h"
 #include "jfg_port.h"
+#include <chrono>
+#include <map>
 
 extern "C" void controlReadJoypad(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackNearestIntersection(uint8_t* rdram, recomp_context* ctx);
@@ -44,7 +47,8 @@ extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
 namespace jfg { bool hud_in_corners(); void hud_area(float& left, float& right); } // jfg_hud_corners.cpp
 namespace jfg { int asset_number(const std::string& ref); } // jfg_assets.cpp
 namespace jfg { void overlay_size_now(float* out); } // jfg_overlay.cpp
-void squad_multiplier_export(uint8_t* rdram, recomp_context* ctx); // jfg_squad_multiplier.cpp
+namespace jfg { void claim_for_mod(uint32_t obj, size_t mod_index); } // jfg_object_claims.cpp
+void squad_multiplier_export(uint8_t* rdram, recomp_context* ctx, size_t mod_index); // jfg_squad_multiplier.cpp
 
 namespace jfg::api {
 // A camera a mod set this tick (jfg_camera_set), applied by the camera step's wrapper.
@@ -632,9 +636,13 @@ void hero_heads(uint8_t* rdram_, recomp_context* ctx) {
 
 // jfg_hud_hide_health(int character, int hide): while hidden, the game's health meter is not drawn for that hero (a
 // mod draws its own).
-void hud_hide_health(uint8_t*, recomp_context* ctx) {
+// Hidden while any mod asks.
+PerMod<bool> g_hide_health_requests[CHARACTERS];
+void hud_hide_health(uint8_t*, recomp_context* ctx, size_t mod_index) {
     const int character = (int)ctx->r4;
-    if (character >= 0 && character < CHARACTERS) g_hide_health[character] = ctx->r5 != 0;
+    if (character < 0 || character >= CHARACTERS) return;
+    g_hide_health_requests[character].set(mod_index, ctx->r5 != 0, false);
+    g_hide_health[character] = g_hide_health_requests[character].any();
 }
 
 // jfg_hud_in_corners(void): 1 while the single-player HUD is at the window's edges (HUD in Screen Corners, in
@@ -656,23 +664,39 @@ std::atomic<uint16_t> g_toggle_latched{ 0 }; // ... and read as held now
 std::atomic<uint16_t> g_toggle_release{ 0 }; // jfg_input_toggle_release: let go at the next poll
 std::atomic<uint16_t> g_blocked{ 0 };        // jfg_input_block: buttons that read as let go
 
+// Each mod's blocked and toggled buttons are kept apart (game thread) and combined for the input thread: a button stays
+// blocked or toggled while any mod asks.
+std::map<size_t, uint16_t> g_mod_blocked, g_mod_toggles;
+uint16_t combined(const std::map<size_t, uint16_t>& masks) {
+    uint16_t all = 0;
+    for (const auto& [mod, mask] : masks) all |= mask;
+    return all;
+}
+
 // jfg_input_block(unsigned int buttons, int on): while on, those N64 buttons read as not pressed (a dodge that may not
 // fire, say).
-void input_block(uint8_t*, recomp_context* ctx) {
+void input_block(uint8_t*, recomp_context* ctx, size_t mod_index) {
     const uint16_t mask = (uint16_t)ctx->r4;
-    if (ctx->r5 != 0) g_blocked.fetch_or(mask);
-    else g_blocked.fetch_and((uint16_t)~mask);
+    uint16_t& mine = g_mod_blocked[mod_index];
+    mine = ctx->r5 != 0 ? (uint16_t)(mine | mask) : (uint16_t)(mine & ~mask);
+    g_blocked.store(combined(g_mod_blocked));
 }
 
 // jfg_input_toggle(unsigned int buttons, int on): those N64 buttons toggle: a press holds them down, the next lets go.
-void input_toggle(uint8_t*, recomp_context* ctx) {
+void input_toggle(uint8_t*, recomp_context* ctx, size_t mod_index) {
     const uint16_t mask = (uint16_t)ctx->r4;
-    if (ctx->r5 != 0) g_toggle_mask.fetch_or(mask);
-    else { g_toggle_mask.fetch_and((uint16_t)~mask); g_toggle_latched.fetch_and((uint16_t)~mask); }
+    uint16_t& mine = g_mod_toggles[mod_index];
+    mine = ctx->r5 != 0 ? (uint16_t)(mine | mask) : (uint16_t)(mine & ~mask);
+    const uint16_t all = combined(g_mod_toggles);
+    g_toggle_mask.store(all);
+    g_toggle_latched.fetch_and(all); // buttons no mod toggles any more are let go
 }
 
-// jfg_input_toggle_release(unsigned int buttons): toggled buttons held now are let go.
-void input_toggle_release(uint8_t*, recomp_context* ctx) { g_toggle_release.fetch_or((uint16_t)ctx->r4); }
+// jfg_input_toggle_release(unsigned int buttons): the mod's toggled buttons held now are let go.
+void input_toggle_release(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const auto it = g_mod_toggles.find(mod_index);
+    if (it != g_mod_toggles.end()) g_toggle_release.fetch_or((uint16_t)(ctx->r4 & it->second));
+}
 
 // jfg_input_toggled(void): the toggled buttons held now.
 void input_toggled(uint8_t*, recomp_context* ctx) { ctx->r2 = g_toggle_latched.load(); }
@@ -914,7 +938,7 @@ void fire_bolt(uint8_t* rdram_, recomp_context* ctx) {
 // JfgPlasma: f32 x, y, z, tx, ty, tz; s32 size (its damage in units of health, 1..15; drawn and sized as the
 // shotgun's 1..4 charge, larger ones as 4); f32 speed (0: it stays where it is); s32 time (1/10 s); owner (whose shot it
 // is: its hits count as that hero's plasma shotgun). Returns the ball, NULL if none was made.
-void fire_plasma(uint8_t* rdram_, recomp_context* ctx) {
+void fire_plasma(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
     g_rdram = rdram_;
     const uint32_t b = (uint32_t)ctx->r4;
     ctx->r2 = 0;
@@ -936,6 +960,7 @@ void fire_plasma(uint8_t* rdram_, recomp_context* ctx) {
     wr32(e + 0x14, rd32(b + 0x24));
     const uint32_t ball = call_game(objSetupObject, ctx, { e, 1 });
     if (valid_ptr(ball)) wr32(ball + 0x3C, 0);
+    claim_for_mod(ball, mod_index); // the calling mod's ball (jfg_object_claim)
     ctx->r2 = (gpr)(int32_t)(valid_ptr(ball) ? ball : 0);
 }
 
@@ -1198,12 +1223,24 @@ void explosion(uint8_t* rdram_, recomp_context* ctx) {
 
 // jfg_camera_shake(s32 magnitude, s32 ms): the first player's view jolts up and down by up to magnitude level units,
 // fading out over ms (camStartShake(0, attack 0, sustain 0, decay s, magnitude), decomp MSR 10a: the game's strong hits
-// use 15-25 over 2-4 s). A new call replaces the running shake; 0 stops it; a level change ends it.
+// use 15-25 over 2-4 s). A new call replaces the running shake unless that one is still stronger (as it fades out),
+// so a light thump from one mod doesn't cut a big shake from another short; 0 stops it; a level change ends it.
+std::chrono::steady_clock::time_point g_shake_start;
+float g_shake_magnitude = 0.0f, g_shake_seconds = 0.0f;
 void camera_shake(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     if (rd32(ADDR_mainGameMode) != 0) return;
     const int magnitude = std::clamp((int)(int32_t)ctx->r4, 0, 100);
     const float seconds = std::clamp((int)(int32_t)ctx->r5, 0, 10000) / 1000.0f;
+    const auto now = std::chrono::steady_clock::now();
+    if (magnitude > 0 && g_shake_seconds > 0.0f) {
+        const float elapsed = std::chrono::duration<float>(now - g_shake_start).count();
+        const float left = g_shake_magnitude * std::max(0.0f, 1.0f - elapsed / g_shake_seconds);
+        if (left > (float)magnitude) return;
+    }
+    g_shake_start = now;
+    g_shake_magnitude = (float)magnitude;
+    g_shake_seconds = seconds;
     // o32: the first argument is an int, so the floats go in a1..a3 and magnitude on the stack.
     call_game(camStartShake, ctx, { 0, float_bits(0.0f), float_bits(0.0f), float_bits(seconds), (uint32_t)magnitude });
 }
@@ -1394,11 +1431,16 @@ int g_weapon_steps = 0;
 void queue_weapon_step(int direction) { g_weapon_steps += direction; }
 
 // jfg_camera_set_distance(float scale): the port's dual-stick camera stands scale times as far out (on top of the
-// player's Camera Distance option); 1 = as usual. Kept until set again.
+// player's Camera Distance option); 1 = as usual. Kept until set again. Each mod's request is kept: the camera stands
+// as far out as the farthest asks, else as near as the nearest asks.
 float g_camera_distance = 1.0f;
-void camera_set_distance(uint8_t*, recomp_context* ctx) {
-    const float scale = ctx->f12.fl;
-    g_camera_distance = (scale > 0.1f && scale < 10.0f) ? scale : 1.0f;
+PerMod<float> g_camera_distance_out, g_camera_distance_in;
+void camera_set_distance(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const float scale = (ctx->f12.fl > 0.1f && ctx->f12.fl < 10.0f) ? ctx->f12.fl : 1.0f;
+    g_camera_distance_out.set(mod_index, scale > 1.0f ? scale : 1.0f, 1.0f);
+    g_camera_distance_in.set(mod_index, scale < 1.0f ? 1.0f / scale : 1.0f, 1.0f);
+    g_camera_distance = g_camera_distance_out.any() ? g_camera_distance_out.max(1.0f)
+                                                    : 1.0f / g_camera_distance_in.max(1.0f);
 }
 
 bool hero_mod_controlled(int character) {
@@ -1425,18 +1467,18 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_enemy_type", enemy_type);
     recomp::overlays::register_base_export("jfg_enemies_near", enemies_near);
     recomp::overlays::register_base_export("jfg_object_blast_damage", object_blast_damage);
-    recomp::overlays::register_base_export("jfg_hud_hide_health", hud_hide_health);
+    recomp::overlays::register_ext_base_export("jfg_hud_hide_health", hud_hide_health);
     recomp::overlays::register_base_export("jfg_hud_in_corners", hud_in_corners_export);
     recomp::overlays::register_base_export("jfg_hud_area", hud_area_export);
     recomp::overlays::register_base_export("jfg_hero_heads", hero_heads);
     recomp::overlays::register_base_export("jfg_hero_game_control", hero_game_control);
     recomp::overlays::register_base_export("jfg_hero_select_weapon", hero_select_weapon);
     recomp::overlays::register_base_export("jfg_controls_get", controls_get);
-    recomp::overlays::register_base_export("jfg_camera_set_distance", camera_set_distance);
-    recomp::overlays::register_base_export("jfg_input_toggle", input_toggle);
-    recomp::overlays::register_base_export("jfg_input_toggle_release", input_toggle_release);
+    recomp::overlays::register_ext_base_export("jfg_camera_set_distance", camera_set_distance);
+    recomp::overlays::register_ext_base_export("jfg_input_toggle", input_toggle);
+    recomp::overlays::register_ext_base_export("jfg_input_toggle_release", input_toggle_release);
     recomp::overlays::register_base_export("jfg_input_toggled", input_toggled);
-    recomp::overlays::register_base_export("jfg_input_block", input_block);
+    recomp::overlays::register_ext_base_export("jfg_input_block", input_block);
     recomp::overlays::register_base_export("jfg_hero_get", hero_get);
     recomp::overlays::register_base_export("jfg_hero_state", hero_state);
     recomp::overlays::register_base_export("jfg_hero_weapon", hero_weapon);
@@ -1455,7 +1497,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_hero_hit", hero_hit);
     recomp::overlays::register_base_export("jfg_floyd_get", floyd_get);
     recomp::overlays::register_base_export("jfg_fire_bolt", fire_bolt);
-    recomp::overlays::register_base_export("jfg_fire_plasma", fire_plasma);
+    recomp::overlays::register_ext_base_export("jfg_fire_plasma", fire_plasma);
     recomp::overlays::register_base_export("jfg_level_ray", level_ray);
     recomp::overlays::register_base_export("jfg_line_of_sight", line_of_sight);
     recomp::overlays::register_base_export("jfg_enemy_alert", enemy_alert);
@@ -1478,7 +1520,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_enemy_traits", enemy_traits);
     recomp::overlays::register_base_export("jfg_enemy_fling", enemy_fling);
     recomp::overlays::register_base_export("jfg_enemy_flung", enemy_flung);
-    recomp::overlays::register_base_export("jfg_squad_multiplier", squad_multiplier_export);
+    recomp::overlays::register_ext_base_export("jfg_squad_multiplier", squad_multiplier_export);
 }
 
 } // namespace jfg::api

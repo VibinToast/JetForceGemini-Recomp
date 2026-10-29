@@ -29,6 +29,7 @@
 //   put back after, so stock members of the like type keep theirs.
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -68,6 +69,7 @@ constexpr int KEEP_VOICES = 1, KEEP_BODY_PARTS = 2;
 
 struct Type {
     std::string name, def_name; // "mod:type", "mod:objdef_x"
+    size_t mod_index = SIZE_MAX; // the mod that registered it: only it gets the type's jfg_on_squad_tick
     int def_index = -2;         // the definition's number this start (-2 not looked up yet)
     uint32_t def_ptr = 0;       // where objGetObjdef has it loaded this level
     int flags = 0;
@@ -219,7 +221,8 @@ JFG_WRAP(BTSBStandardFire) {
         wr32(p.addr + 0x0C, (uint32_t)g_frames);
         wr32(p.addr + 0x10, 0);
         g_tick_member = obj;
-        api::fire(rdram, ctx, api::Event::SquadTick, (int32_t)p.addr);
+        if (g_types[type].mod_index != SIZE_MAX) api::fire_for_mod(rdram, ctx, api::Event::SquadTick, g_types[type].mod_index, (int32_t)p.addr);
+        else api::fire(rdram, ctx, api::Event::SquadTick, (int32_t)p.addr);
         g_tick_member = 0;
         g_rdram = rdram;
         run_stock = (int32_t)rd32(p.addr + 0x10);
@@ -322,7 +325,7 @@ JFG_WRAP(hitUpdate) {
 namespace {
 // jfg_squad_type_register(const JfgSquadTypeDef* def) -> its type number, or -1. JfgSquadTypeDef: { const char* name,
 // *def_name; s32 flags, head, head_offset[3], lean[3], lean_weight[3], aim; } (-1 joints keep the like type's).
-void api_squad_type_register(uint8_t* rdram_, recomp_context* ctx) {
+void api_squad_type_register(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
     g_rdram = rdram_;
     const uint32_t d = (uint32_t)ctx->r4;
     ctx->r2 = (gpr)(int32_t)-1;
@@ -335,6 +338,7 @@ void api_squad_type_register(uint8_t* rdram_, recomp_context* ctx) {
     }
     Type t;
     t.name = name;
+    t.mod_index = mod_index;
     t.def_name = def;
     t.flags = (int32_t)rd32(d + 0x08);
     t.head = (int32_t)rd32(d + 0x0C);
@@ -479,7 +483,7 @@ void api_hero_shot(uint8_t* rdram_, recomp_context* ctx) {
 
 namespace jfg {
 void register_squad_type_api() {
-    recomp::overlays::register_base_export("jfg_squad_type_register", api_squad_type_register);
+    recomp::overlays::register_ext_base_export("jfg_squad_type_register", api_squad_type_register);
     recomp::overlays::register_base_export("jfg_squad_set_mission", api_squad_set_mission);
     recomp::overlays::register_base_export("jfg_squad_clear_mission", api_squad_clear_mission);
     recomp::overlays::register_base_export("jfg_object_anim_set", api_object_anim_set);

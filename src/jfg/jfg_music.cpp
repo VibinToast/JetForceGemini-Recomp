@@ -483,14 +483,21 @@ void sound_stop(uint8_t*, recomp_context* ctx) {
     stop_voice((uint32_t)ctx->r4);
 }
 
+// Whether a replacement is the mod's own (its sounds are "<mod id>:<name>"): only the mod that replaced an id may turn
+// the replacement off or swap its sound.
+bool replacement_owned(const Replacement& r, size_t mod_index) {
+    const std::string prefix = recomp::mods::get_mod_id(mod_index) + ":";
+    return r.sound && r.sound->key.compare(0, prefix.size(), prefix) == 0;
+}
+
 // jfg_sound_replace_enable(int id, int on): a replacement (jfg_sounds.json "replace") on or off while the game runs; off,
 // the game's own sound plays again (its volume given back next tick) and the stand-in's voices stop. 1 if the id is
-// replaced, else 0.
-void sound_replace_enable(uint8_t*, recomp_context* ctx) {
+// replaced by this mod, else 0.
+void sound_replace_enable(uint8_t*, recomp_context* ctx, size_t mod_index) {
     const uint32_t id = (uint32_t)ctx->r4 & 0xFFFF;
     const bool on = ctx->r5 != 0;
     const auto it = g_replace.find(id);
-    if (it == g_replace.end()) { ctx->r2 = 0; return; }
+    if (it == g_replace.end() || !replacement_owned(it->second, mod_index)) { ctx->r2 = 0; return; }
     if (it->second.enabled && !on) {
         for (size_t i = 0; i < g_tracked.size();) {
             if (g_tracked[i].id != id) { i++; continue; }
@@ -505,12 +512,12 @@ void sound_replace_enable(uint8_t*, recomp_context* ctx) {
 
 // jfg_sound_replace_use(int id, const char* name, float volume): another of the mod's sounds stands in for a replaced id
 // from its next play on (one game sound shared by two weapons, told apart by the weapon in hand). 1 if done, else 0 (not
-// replaced, or no such sound in the mod). Voices already playing carry on.
+// replaced by this mod, or no such sound in the mod). Voices already playing carry on.
 void sound_replace_use(uint8_t* rdram, recomp_context* ctx, size_t mod_index) {
     const uint32_t id = (uint32_t)ctx->r4 & 0xFFFF;
     const ModSound* snd = find_sound(mod_index, _arg_string<1>(rdram, ctx));
     const auto it = g_replace.find(id);
-    if (it == g_replace.end() || !snd) { ctx->r2 = 0; return; }
+    if (it == g_replace.end() || !snd || !replacement_owned(it->second, mod_index)) { ctx->r2 = 0; return; }
     it->second.sound = snd;
     it->second.volume = std::max(0.0f, float_arg(ctx, 2));
     ctx->r2 = 1;
@@ -635,7 +642,7 @@ extern "C" void jfg_register_music_mods(void) {
     recomp::overlays::register_ext_base_export("jfg_sound_loop", sound_loop);
     recomp::overlays::register_base_export("jfg_sound_set", sound_set);
     recomp::overlays::register_base_export("jfg_sound_stop", sound_stop);
-    recomp::overlays::register_base_export("jfg_sound_replace_enable", sound_replace_enable);
+    recomp::overlays::register_ext_base_export("jfg_sound_replace_enable", sound_replace_enable);
     recomp::overlays::register_ext_base_export("jfg_sound_replace_use", sound_replace_use);
 }
 

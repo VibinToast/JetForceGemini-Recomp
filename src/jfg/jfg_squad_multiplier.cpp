@@ -28,6 +28,7 @@
 #include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
+#include "jfg_per_mod.h"
 #include "jfg_port.h"
 
 extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
@@ -237,8 +238,12 @@ float squad_mult_drop_scale(uint32_t member) {
 } // namespace jfg
 
 // jfg_squad_multiplier(int percent, int flags): squads made from now on (the next level loaded) have percent / 100
-// times their members (100..300); flags 1: sentries too.
-void squad_multiplier_export(uint8_t* rdram_, recomp_context* ctx) {
-    g_percent = std::clamp((int)(int32_t)ctx->r4, 100, 300);
-    g_sentries = ((int32_t)ctx->r5 & 1) != 0;
+// times their members (100..300); flags 1: sentries too. Each mod's request is kept: the largest applies, and
+// sentries are multiplied when any mod asks.
+namespace { PerMod<int> g_percent_requests; PerMod<bool> g_sentry_requests; }
+void squad_multiplier_export(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
+    g_percent_requests.set(mod_index, std::clamp((int)(int32_t)ctx->r4, 100, 300), 100);
+    g_sentry_requests.set(mod_index, ((int32_t)ctx->r5 & 1) != 0 && (int32_t)ctx->r4 > 100, false);
+    g_percent = g_percent_requests.max(100);
+    g_sentries = g_sentry_requests.any();
 }

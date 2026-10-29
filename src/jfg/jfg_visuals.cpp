@@ -13,6 +13,7 @@
 #include "jfg_api.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
+#include "jfg_per_mod.h"
 #include "jfg_port.h"
 #include "jfg_rt64.h"
 
@@ -92,8 +93,12 @@ constexpr uint32_t ADDR_cooperativeGame = 0x800A4FC8; // u8
 static bool g_hide_floyd = false; // jfg_floyd_hide
 extern "C" bool jfg_floyd_hide_on(void) { return g_hide_floyd; }
 
-// jfg_floyd_hide(int on) (mod API).
-extern "C" void jfg_api_floyd_hide(uint8_t*, recomp_context* ctx) { g_hide_floyd = ctx->r4 != 0; }
+// jfg_floyd_hide(int on) (mod API): hidden while any mod asks.
+static jfg::PerMod<bool> g_hide_floyd_requests;
+extern "C" void jfg_api_floyd_hide(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    g_hide_floyd_requests.set(mod_index, ctx->r4 != 0, false);
+    g_hide_floyd = g_hide_floyd_requests.any();
+}
 
 static bool floyd_hidden(uint32_t obj) {
     if (!g_hide_floyd || g_floyd_kind < 0 || !valid_ptr(obj) || Obj::Kind::get(obj) != g_floyd_kind) return false;

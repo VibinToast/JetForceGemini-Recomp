@@ -106,6 +106,8 @@ bool listened(Event event);
 // nothing listens.
 void fire(uint8_t* rdram, recomp_context* ctx, Event event, int32_t arg0 = 0, int32_t arg1 = 0, int32_t arg2 = 0,
           int32_t arg3 = 0);
+// The event for one mod only (its callbacks; no internal handlers): a resource that mod registered.
+void fire_for_mod(uint8_t* rdram, recomp_context* ctx, Event event, size_t mod_index, int32_t arg0 = 0);
 // Registers the events and helpers with the runtime; once, before mods load (jfg_register_mod_exports).
 void register_api();
 

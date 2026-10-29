@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "librecomp/mods.hpp"
+#include "jfg_per_mod.h"
 #include "librecomp/overlays.hpp"
 #include "jfg_api.h"
 #include "jfg_fields.h"
@@ -24,6 +25,7 @@ namespace jfg::overlay { void register_api(); void frame_done(); } // jfg_overla
 namespace jfg { void register_weapon_hud_api(); }                 // jfg_weapon_hud.cpp
 namespace jfg { void register_weapon_registry_api(); }            // jfg_weapon_registry.cpp
 namespace jfg { void register_kill_api(); }                       // jfg_kills.cpp
+namespace jfg { void register_claim_api(); }                      // jfg_object_claims.cpp
 namespace jfg { void register_squad_type_api(); }                 // jfg_squad_types.cpp
 extern "C" void jfg_squad_types_level_change(uint8_t* rdram, recomp_context* ctx); // jfg_squad_types.cpp
 
@@ -66,8 +68,13 @@ void get_tick_scale(uint8_t* rdram_, recomp_context* ctx) {
 }
 
 // jfg_aim_lock(int on): 0 = the reticle no longer jumps onto an enemy it passes over (hitPlayerAimCheck's wrapper).
+// Off while any mod asks.
 bool g_aim_lock = true;
-void aim_lock(uint8_t*, recomp_context* ctx) { g_aim_lock = ctx->r4 != 0; }
+jfg::PerMod<bool> g_aim_lock_off;
+void aim_lock(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    g_aim_lock_off.set(mod_index, ctx->r4 == 0, false);
+    g_aim_lock = !g_aim_lock_off.any();
+}
 
 // jfg_gfx_alloc(unsigned int size): a block for a mod's graphics data (textures, display lists, vertices) in the
 // free 4 MB at 0x80800000 (docs/MEMORY.md): below the 16 MB line, so the renderer reads it, unlike mod memory. Zeroed,
@@ -90,20 +97,21 @@ void gfx_alloc(uint8_t* rdram_, recomp_context* ctx) {
 
 // jfg_object_tint(void* object, unsigned int rgba): the object drawn tinted that colour, alpha its strength (0 none),
 // through the fog colour as the game flashes the enemy it targets (objPrintModelObject); kept until set again.
+// One tint per object and mod: a mod clearing its tint leaves the others' (the one set last shows). All go at a
+// level change, so a reused object address starts untinted.
 struct Tint {
     uint32_t object, rgba;
+    size_t mod;
 };
 std::vector<Tint> g_tints;
-void object_tint(uint8_t*, recomp_context* ctx) {
+constexpr size_t MAX_TINTS = 256;
+void object_tint(uint8_t*, recomp_context* ctx, size_t mod_index) {
     const uint32_t object = (uint32_t)ctx->r4, rgba = (uint32_t)ctx->r5;
-    auto it = std::find_if(g_tints.begin(), g_tints.end(), [&](const Tint& t) { return t.object == object; });
-    if (it != g_tints.end()) {
-        if ((rgba & 0xFF) == 0) g_tints.erase(it);
-        else it->rgba = rgba;
-    } else if ((rgba & 0xFF) != 0 && object != 0 && g_tints.size() < 64) {
-        g_tints.push_back({ object, rgba });
-    }
+    auto it = std::find_if(g_tints.begin(), g_tints.end(), [&](const Tint& t) { return t.object == object && t.mod == mod_index; });
+    if (it != g_tints.end()) g_tints.erase(it);
+    if ((rgba & 0xFF) != 0 && object != 0 && g_tints.size() < MAX_TINTS) g_tints.push_back({ object, rgba, mod_index });
 }
+void tints_level_change(uint8_t*, recomp_context*) { g_tints.clear(); }
 
 void get_level(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
@@ -170,6 +178,16 @@ void fire(uint8_t* rdram_, recomp_context* ctx, Event event, int32_t arg0, int32
     *ctx = saved;
 }
 
+void fire_for_mod(uint8_t* rdram_, recomp_context* ctx, Event event, size_t mod_index, int32_t arg0) {
+    g_fired[(size_t)event].fetch_add(1, std::memory_order_relaxed);
+    if (!recomp::mods::event_has_callbacks((size_t)event)) return;
+    g_ran[(size_t)event].fetch_add(1, std::memory_order_relaxed);
+    const recomp_context saved = *ctx;
+    ctx->r4 = (gpr)arg0;
+    recomp_trigger_event_for_mod(rdram_, ctx, (uint32_t)event, mod_index);
+    *ctx = saved;
+}
+
 const char* event_name(Event event) {
     return g_event_names[(size_t)event];
 }
@@ -201,6 +219,7 @@ void register_api() {
     // mod listening, the frequent events (object draw, sound) cost nothing.
     add_internal(Event::LevelChange, jfg_change_level_log); // JFG_DEBUG_STATS log (jfg_diagnostics.cpp)
     add_internal(Event::LevelChange, jfg_squad_types_level_change); // mods' squad types: definitions reload
+    add_internal(Event::LevelChange, tints_level_change); // mods' tints (jfg_object_tint) go
     add_internal(Event::BossFightControl, jfg_boss_tick);   // boss-fight control layout (jfg_controls.cpp)
     // Blood stays and Body parts stay, for a mod (jfg_blood_keep, jfg_limbs_keep; jfg_gore.cpp).
     add_internal(Event::LevelChange, jfg_gore_level_change, [] { return jfg_gore_keep_blood(); }); // kept splats go
@@ -217,15 +236,16 @@ void register_api() {
     recomp::overlays::register_base_export("jfg_get_language", get_language);
     jfg::register_world_api(); // planets and galaxies (jfg_worldmap.cpp)
     jfg::register_blood_api(); // blood colours, rainbow, Blood stays, Body parts stay (jfg_gore.cpp)
-    recomp::overlays::register_base_export("jfg_floyd_hide", jfg_api_floyd_hide); // Hide Floyd (jfg_visuals.cpp)
+    recomp::overlays::register_ext_base_export("jfg_floyd_hide", jfg_api_floyd_hide); // Hide Floyd (jfg_visuals.cpp)
     recomp::overlays::register_base_export("jfg_floyd_light", jfg_api_floyd_light); // his lights' frame (jfg_visuals.cpp)
-    recomp::overlays::register_base_export("jfg_aim_lock", aim_lock);
-    recomp::overlays::register_base_export("jfg_object_tint", object_tint);
+    recomp::overlays::register_ext_base_export("jfg_aim_lock", aim_lock);
+    recomp::overlays::register_ext_base_export("jfg_object_tint", object_tint);
     recomp::overlays::register_base_export("jfg_gfx_alloc", gfx_alloc);
     jfg::overlay::register_api(); // pictures and shapes over the game at the window's resolution (jfg_overlay.cpp)
     jfg::register_weapon_hud_api(); // the weapon panel's icons, the game's texts, Tribal counts (jfg_weapon_hud.cpp)
     jfg::register_weapon_registry_api(); // modded weapons on slot 15 (jfg_weapon_registry.cpp)
     jfg::register_kill_api();            // kills credited to mods' weapons (jfg_kills.cpp)
+    jfg::register_claim_api();           // objects mods claim as their own (jfg_object_claims.cpp)
     jfg::register_squad_type_api();      // new squad enemy types run by mods (jfg_squad_types.cpp)
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }

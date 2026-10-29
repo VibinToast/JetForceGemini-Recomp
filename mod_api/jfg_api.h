@@ -198,7 +198,7 @@ RECOMP_IMPORT("*", int jfg_enemies_near(const JfgNear* query, JfgEnemy* out, int
 RECOMP_IMPORT("*", int jfg_object_blast_damage(void* object));
 
 // While hidden, the game's health meter is not drawn for that hero (0 Vela, 1 Juno, 2 Lupus): a mod that keeps its
-// own health for a hero draws its own (jfg_on_draw_hud).
+// own health for a hero draws its own (jfg_on_draw_hud). Hidden while any mod asks.
 RECOMP_IMPORT("*", void jfg_hud_hide_health(int character, int hide));
 
 // The heads the first player has collected as a hero (0 Vela, 1 Juno, 2 Lupus): tribal 1 the tribals', 0 the others'.
@@ -213,8 +213,9 @@ RECOMP_IMPORT("*", int jfg_hero_heads(int character, int tribal));
 // "0xFA": { "sound": "<name>", "loop": true, "volume": 0.8 } } by the game's sound id (JFG_DEBUG_SOUNDS=1 logs every id
 // played). The game's sound is muted and the mod's plays in its place. A one-shot plays out; a "loop" (for the game's
 // looping sounds) stops when the game stops its own. "stopped_by": [ "0xE1" ] ends it when one of those ids plays (a
-// charge cut off by its shot). The first enabled mod to replace an id has it. jfg_sound_replace_enable turns one
-// replacement off (the game's own sound back) and on again while the game runs; 1 if the id is replaced.
+// charge cut off by its shot). The first enabled mod to replace an id has it. jfg_sound_replace_enable turns one of
+// the mod's own replacements off (the game's own sound back) and on again while the game runs; 1 if the id is
+// replaced by this mod (another mod's replacement can't be turned off or swapped).
 // jfg_sound_replace_use puts another of the mod's sounds (and volume) in for a replaced id from its next play on: one
 // game sound shared by two weapons, told apart by jfg_hero_weapon. 1 if done, 0 if not replaced or no such sound.
 RECOMP_IMPORT("*", int jfg_sound_replace_enable(int id, int on));
@@ -265,7 +266,8 @@ typedef struct {
 RECOMP_IMPORT("*", void jfg_controls_get(JfgControls* out));
 
 // The port's dual-stick camera stands scale times as far out as usual (on top of the player's Camera Distance option):
-// a hero of another size, say. 1 = as usual. Kept until set again.
+// a hero of another size, say. 1 = as usual. Kept until set again. Each mod's request is kept: the camera stands as
+// far out as the farthest asks, else as near as the nearest; 1 takes the mod's request back.
 RECOMP_IMPORT("*", void jfg_camera_set_distance(float scale));
 
 // --- helpers (since version 5) -------------------------------------------------------------------------------------
@@ -276,7 +278,8 @@ RECOMP_IMPORT("*", void jfg_camera_set_distance(float scale));
 // a mod to fill and hand out. Sets index's colour, 0xRRGGBB each; the tables are drawn at different strengths (the
 // game's red is 0x500000 for drops, 0xA00000 for hits). 0xFFFFFFFF = the game's own colour. Kept until set again.
 RECOMP_IMPORT("*", void jfg_blood_set_color(int index, unsigned int drops, unsigned int hits));
-// The game's rainbow blood (a cheat): each drop takes a random colour index (hit sprites keep theirs).
+// The game's rainbow blood (a cheat): each drop takes a random colour index (hit sprites keep theirs). On while any
+// mod asks; the same for jfg_limbs_keep and jfg_floyd_hide, and jfg_blood_keep keeps the most splats any mod asks for.
 RECOMP_IMPORT("*", void jfg_blood_set_rainbow(int on));
 // Blood stays: splats no longer fade, up to that many (64..4096; once reached, the oldest make room); 0 = the game's
 // own. A level change clears them. Kept until set again.
@@ -288,13 +291,14 @@ RECOMP_IMPORT("*", void jfg_floyd_hide(int on));
 
 // The reticle: 0 = it no longer jumps onto an enemy the aim passes over (nor shows a lock); shots still go where it
 // points, and homing weapons still lock on. 1 = the game's own. Kept until set again. To draw a reticle of your own,
-// cancel the game's in jfg_on_reticle_draw and draw yours there (JfgReticle.gfx).
+// cancel the game's in jfg_on_reticle_draw and draw yours there (JfgReticle.gfx). Off while any mod asks.
 RECOMP_IMPORT("*", void jfg_aim_lock(int on));
 
 // Toggled buttons: while on, each press of those N64 buttons (libultra's, as in JfgInput) holds them down until the
 // next press, for the first player (on any controls: pad, dual stick, mouse and keyboard; after Swap Triggers).
 RECOMP_IMPORT("*", void jfg_input_toggle(unsigned int buttons, int on));
-// Lets go of those toggled buttons now (a death, a level change).
+// Each mod's toggled and blocked buttons are kept apart: a button toggles (or reads as let go) while any mod asks.
+// Lets go of those toggled buttons now (a death, a level change): the mod's own toggled buttons only.
 RECOMP_IMPORT("*", void jfg_input_toggle_release(unsigned int buttons));
 // The toggled buttons held now.
 RECOMP_IMPORT("*", unsigned int jfg_input_toggled(void));
@@ -344,7 +348,8 @@ RECOMP_IMPORT("*", int jfg_hero_move(void* hero, int move));
 #define JFG_SPEAK_HIT  3
 RECOMP_IMPORT("*", void jfg_hero_speak(void* hero, int type));
 // The object drawn tinted rgba's colour (0xRRGGBBAA), the alpha its strength (0 removes it), as the game flashes the
-// enemy it targets; kept until set again.
+// enemy it targets; kept until set again or a level change. Each mod has its own tint on an object (removing yours
+// leaves another mod's); the one set last shows.
 RECOMP_IMPORT("*", void jfg_object_tint(void* object, unsigned int rgba));
 // Memory for a mod's graphics data (textures, display lists, vertices) that the renderer can read: a mod's own memory
 // is above what it reads. size bytes, zeroed, 16-byte aligned, kept for the whole run (allocate once); NULL when the
@@ -465,6 +470,13 @@ typedef struct {
     void* owner;
 } JfgPlasma;
 RECOMP_IMPORT("*", void* jfg_fire_plasma(const JfgPlasma* plasma));
+// Objects a mod drives as its own (a plasma ball it bounces or pulls, a grenade it takes as its weapon's): claim one
+// before changing it, and leave alone those another mod has. jfg_object_claim: 1 if it is now (or already was) yours, 0
+// if another mod has it. jfg_object_claimed: 0 no mod's, 1 yours, 2 another mod's. A claim goes when you unclaim it,
+// when the object is freed and at a level change. Balls a mod makes with jfg_fire_plasma are already its own.
+RECOMP_IMPORT("*", int jfg_object_claim(void* obj));
+RECOMP_IMPORT("*", int jfg_object_claimed(void* obj));
+RECOMP_IMPORT("*", void jfg_object_unclaim(void* obj));
 // The first point of the level (walls, floors, ceilings: the track, as shots test their flight) on the line from a to
 // b (x, y, z each): 1 if there is one, with out = its x, y, z and the surface's normal (nx, ny, nz, facing a); 0 if the
 // line is clear. Since version 5.
@@ -585,8 +597,8 @@ typedef struct {
 } JfgExplosion;
 RECOMP_IMPORT("*", void jfg_explosion(const JfgExplosion* explosion));
 // The first player's view jolts up and down by up to magnitude level units, fading out over ms milliseconds (the
-// game's strong hits: 15-25 over 2-4 s; 5-8 a light thump). A new call replaces the running shake, 0 stops it, a level
-// change ends it. It shakes whichever camera is on: the game's, the port's dual-stick and aiming views, and a mod's own
+// game's strong hits: 15-25 over 2-4 s; 5-8 a light thump). A new call replaces the running shake unless that one is
+// still stronger as it fades (a light thump doesn't cut a big shake short), 0 stops it, a level change ends it. It shakes whichever camera is on: the game's, the port's dual-stick and aiming views, and a mod's own
 // (jfg_camera_set). Since version 6.
 RECOMP_IMPORT("*", void jfg_camera_shake(int magnitude, int ms));
 // Damage only, no look: strongest at the middle, less out to the radius, fading over the seconds; damage 256 a unit
@@ -842,7 +854,8 @@ typedef struct {
 
 // jfg_on_squad_tick: a member of a registered type, at the point of its update where the game runs its type's own
 // routine (before steering and the move). data is its squad control data (object +0x68), frames the update rate of
-// this call (squad members move once per call). Set run_stock to 1 to run the like type's routine after yours.
+// this call (squad members move once per call). Set run_stock to 1 to run the like type's routine after yours. Only the
+// mod that registered the type gets its members' ticks.
 typedef struct {
     int type;
     void* member;

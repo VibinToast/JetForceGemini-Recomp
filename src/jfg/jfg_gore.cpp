@@ -46,6 +46,7 @@
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
+#include "jfg_per_mod.h"
 #include "jfg_port.h"
 
 extern "C" void bloodSpurtAdd_orig(uint8_t* rdram, recomp_context* ctx);
@@ -382,30 +383,37 @@ void blood_set_color(uint8_t*, recomp_context* ctx) {
     g_colors_dirty = true;
 }
 
+// Each mod's request is kept (jfg_per_mod.h): rainbow and body parts while any mod asks, the most splats asked for.
+PerMod<bool> g_rainbow_requests, g_limb_requests;
+PerMod<int> g_splat_requests;
+
 // jfg_blood_set_rainbow(int on): the game's rainbow blood (its cheat): every drop takes a random colour index.
-void blood_set_rainbow(uint8_t* rdram_, recomp_context* ctx) {
+void blood_set_rainbow(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
     g_rdram = rdram_;
-    wr8(ADDR_rainbowblood, ctx->r4 != 0 ? 1 : 0);
+    g_rainbow_requests.set(mod_index, ctx->r4 != 0, false);
+    wr8(ADDR_rainbowblood, g_rainbow_requests.any() ? 1 : 0);
 }
 
 // jfg_blood_keep(int splats): Blood stays with that many splats (64..4096), 0 = the game's own (they fade).
-void blood_keep(uint8_t*, recomp_context* ctx) {
+void blood_keep(uint8_t*, recomp_context* ctx, size_t mod_index) {
     const int splats = (int)ctx->r4;
-    g_keep_splats = splats <= 0 ? 0 : std::clamp(splats, BLOOD_ENTRIES, 4096);
+    g_splat_requests.set(mod_index, splats <= 0 ? 0 : std::clamp(splats, BLOOD_ENTRIES, 4096), 0);
+    g_keep_splats = g_splat_requests.max(0);
     if (g_keep_splats == 0) g_kept_splats.clear();
 }
 
 // jfg_limbs_keep(int on): Body parts stay (the newest LIMBS_KEPT).
-void limbs_keep(uint8_t*, recomp_context* ctx) {
-    g_keep_limbs = ctx->r4 != 0;
+void limbs_keep(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    g_limb_requests.set(mod_index, ctx->r4 != 0, false);
+    g_keep_limbs = g_limb_requests.any();
 }
 } // namespace
 
 void register_blood_api() {
     recomp::overlays::register_base_export("jfg_blood_set_color", blood_set_color);
-    recomp::overlays::register_base_export("jfg_blood_set_rainbow", blood_set_rainbow);
-    recomp::overlays::register_base_export("jfg_blood_keep", blood_keep);
-    recomp::overlays::register_base_export("jfg_limbs_keep", limbs_keep);
+    recomp::overlays::register_ext_base_export("jfg_blood_set_rainbow", blood_set_rainbow);
+    recomp::overlays::register_ext_base_export("jfg_blood_keep", blood_keep);
+    recomp::overlays::register_ext_base_export("jfg_limbs_keep", limbs_keep);
 }
 
 // bloodSpurtAdd's wrapper (jfg_api.cpp), before the game's own drop: (amount - 100) percent extra drops with the same
