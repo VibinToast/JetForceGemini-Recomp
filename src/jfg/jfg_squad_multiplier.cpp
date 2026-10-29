@@ -34,6 +34,7 @@
 extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
 extern "C" void squadsIsTribal(uint8_t* rdram, recomp_context* ctx);
 extern "C" void levelObjectFlagSet(uint8_t* rdram, recomp_context* ctx);
+extern "C" void BaddyTypeToIndex(uint8_t* rdram, recomp_context* ctx);
 
 namespace jfg {
 
@@ -56,11 +57,13 @@ constexpr int SPREAD_CALLS = 10;
 constexpr int OBJECTS_KEEP_FREE = 64; // of the 512 the object list holds: shots, effects and pickups need room
 
 int g_percent = 100;     // 100..300, from the mod (jfg_squad_multiplier)
+int g_flyer_percent = 100; // the same for flying squads (drones, flying insects): extra flyers drift where you can't reach
 bool g_sentries = false; // multiply sentries too
 
 struct Squadron {
     uint32_t data;  // the squadron's data
     int stock;      // its list entry's count
+    int percent;    // its multiplier (flyers have their own)
     int wanted;     // the count it was given (stock until squadsInitialiseAfterObjects)
 };
 std::vector<Squadron> g_squadrons; // this level's multiplied squadrons
@@ -84,6 +87,18 @@ bool tribal(uint8_t* rdram_, recomp_context* ctx, uint16_t type) {
     c.r4 = type;
     squadsIsTribal(rdram_, &c);
     return (uint32_t)c.r2 != 0;
+}
+
+// A flying squad (decomp MSR 13g): its members' baddy row (BaddyDataArray, 0x80 bytes a row, loaded at boot) moves
+// them by type +0x2B, and only type 1 has gravity and lands; 0, 4, 5 and 6 seek their formation height. Turrets are 1.
+constexpr uint32_t ADDR_BaddyDataArray = 0x800A38E0, ROW_SIZE = 0x80, ROW_MOVEMENT = 0x2B;
+bool flying(uint8_t* rdram_, recomp_context* ctx, uint16_t type) {
+    recomp_context c = *ctx;
+    c.r4 = type;
+    BaddyTypeToIndex(rdram_, &c);
+    const int row = (int32_t)c.r2;
+    const uint32_t rows = rd32(ADDR_BaddyDataArray);
+    return row >= 0 && valid_ptr(rows) && rd8(rows + (uint32_t)row * ROW_SIZE + ROW_MOVEMENT) != 1;
 }
 
 bool multiplied(uint8_t* rdram_, recomp_context* ctx, uint32_t entry) {
@@ -164,9 +179,11 @@ JFG_WRAP(SquadronInit) {
         if (g_after_objects) wr8(data + SQD_WANTED, (uint8_t)s->wanted);
         return;
     }
-    if (g_percent <= 100 || g_after_objects || !multiplied(rdram, ctx, entry)) return;
+    if ((g_percent <= 100 && g_flyer_percent <= 100) || g_after_objects || !multiplied(rdram, ctx, entry)) return;
+    const int percent = flying(rdram, ctx, rd16(entry + ENTRY_TYPE)) ? g_flyer_percent : g_percent;
+    if (percent <= 100) return;
     const int stock = rd8(entry + ENTRY_COUNT);
-    g_squadrons.push_back({ data, stock, stock });
+    g_squadrons.push_back({ data, stock, percent, stock });
 }
 
 // After the flags are reserved and the door-at-load test ran: the extra members, for the stock members not killed.
@@ -186,7 +203,7 @@ JFG_WRAP(squadsInitialiseAfterObjects) {
                 if ((uint32_t)c.r2 != 0) alive--;
             }
         }
-        const int add = (alive * g_percent + 50) / 100 - alive;
+        const int add = (alive * s.percent + 50) / 100 - alive;
         s.wanted = std::min(255, s.stock + std::max(0, add));
         wr8(s.data + SQD_WANTED, (uint8_t)s.wanted);
         extras += s.wanted - s.stock;
@@ -237,13 +254,15 @@ float squad_mult_drop_scale(uint32_t member) {
 }
 } // namespace jfg
 
-// jfg_squad_multiplier(int percent, int flags): squads made from now on (the next level loaded) have percent / 100
-// times their members (100..300); flags 1: sentries too. Each mod's request is kept: the largest applies, and
-// sentries are multiplied when any mod asks.
-namespace { PerMod<int> g_percent_requests; PerMod<bool> g_sentry_requests; }
+// jfg_squad_multiplier(int percent, int flags, int flyer_percent): squads made from now on (the next level loaded)
+// have percent / 100 times their members (100..300), flying squads flyer_percent / 100; flags 1: sentries too. Each
+// mod's request is kept: the largest applies, and sentries are multiplied when any mod asks.
+namespace { PerMod<int> g_percent_requests, g_flyer_requests; PerMod<bool> g_sentry_requests; }
 void squad_multiplier_export(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
     g_percent_requests.set(mod_index, std::clamp((int)(int32_t)ctx->r4, 100, 300), 100);
+    g_flyer_requests.set(mod_index, std::clamp((int)(int32_t)ctx->r6, 100, 300), 100);
     g_sentry_requests.set(mod_index, ((int32_t)ctx->r5 & 1) != 0 && (int32_t)ctx->r4 > 100, false);
     g_percent = g_percent_requests.max(100);
+    g_flyer_percent = g_flyer_requests.max(100);
     g_sentries = g_sentry_requests.any();
 }

@@ -755,7 +755,9 @@ RECOMP_IMPORT("*", int jfg_drop_register(const char* name, int chance, int flags
 // (rounded per squad). flags 1: sentries too (they stand in a clump at their post). Tribals, bosses and big enemies keep
 // their count. The extra members save no kills: killed squads stay killed at any setting, and a level never runs out
 // of kill flags. They are made for the stock members still alive, and not when the level's object list is nearly full.
-RECOMP_IMPORT("*", void jfg_squad_multiplier(int percent, int flags));
+// Flying squads (drones, flying insects: their members don't land) take flyer_percent instead; extra flyers spread
+// along their formation, which can put them where the hero can't reach.
+RECOMP_IMPORT("*", void jfg_squad_multiplier(int percent, int flags, int flyer_percent));
 // Where a point of the level (x, y, z) shows on screen this frame, in the overlay's units (jfg_overlay_size): out[0]
 // x, out[1] y, out[2] its distance in front of the camera, out[3] overlay units per level unit there (to size a
 // picture drawn at it). 1 if it is in front of the camera, else 0. Overlay pictures cover the game: to hide one behind
