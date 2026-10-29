@@ -176,8 +176,9 @@ extern "C" void jfg_mods_alias_overlays(void) {
     jfg::jfg_log_line("jfg_mods.log", line);
 }
 
-// Where each code mod's code and data went this run: logged, and kept for the crash report (jfg_mod_at), which names the
-// mod an address in mod memory belongs to and the address in its own link map (build/mod.map).
+// Where each code mod's code and data went this run: logged, and kept for the crash report (jfg_mods_at). A crash's game
+// callstack holds a mod function's address as linked (every mod links at the same base, 0x81000000), not where it was
+// loaded, so an address names the mods whose linked image covers it: look it up in each one's build/mod.map.
 namespace {
 struct ModRange { char id[64]; uint32_t start, size, link; };
 ModRange g_mod_ranges[256];
@@ -200,15 +201,17 @@ void jfg_note_code_mods() {
     }
 }
 
-extern "C" const char* jfg_mod_at(uint32_t address, uint32_t* link_address) {
+extern "C" int jfg_mods_at(uint32_t address, char* out, int out_size) {
+    int n = 0, used = 0;
+    if (out_size > 0) out[0] = 0;
     for (int i = 0; i < g_mod_range_count; i++) {
         const ModRange& m = g_mod_ranges[i];
-        if (address >= m.start && address < m.start + m.size) {
-            if (link_address != nullptr) *link_address = address - m.start + m.link;
-            return m.id;
-        }
+        if (address < m.link || address >= m.link + m.size) continue;
+        const int w = std::snprintf(out + used, out_size > used ? (size_t)(out_size - used) : 0, "%s%s", n ? ", " : "", m.id);
+        if (w > 0 && used + w < out_size) used += w;
+        n++;
     }
-    return nullptr;
+    return n;
 }
 
 // Calls from one overlay into another go through the game's lazy linker, TrapDanglingJump, which finds the call site
