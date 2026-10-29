@@ -231,52 +231,6 @@ JFG_WRAP(levelObjectFlagSet) {
     levelObjectFlagSet_orig(rdram, ctx);
 }
 
-// squadsGetFormationPosition(squadron, slot, *x, *y, *z): where a member heads when it isn't on a mission. An extra
-// member's slot is past the formation the level was laid out for, which put flyers (drones over a forest) inside
-// trees and walls. An extra takes a stock member's slot (its slot modulo the stock count) and stands a little apart
-// from it, its own way (the golden angle by its slot), only as far as the level's surfaces allow along that line
-// (trackNearestIntersection, the crosshair's test).
-namespace {
-constexpr float APART = 45.0f, WALL_GAP = 30.0f;
-// How far from a toward b (horizontal, up to len) before a level surface, less WALL_GAP; len if clear.
-float clear_reach(recomp_context* ctx, float ax, float ay, float az, float dx, float dz, float len) {
-    const uint32_t buf = ((uint32_t)ctx->r29 - 0x80u) & ~0x7u; // in the gap call_game leaves below $sp
-    const float reach = len + WALL_GAP;
-    wrf(buf + 0, ax); wrf(buf + 4, ay); wrf(buf + 8, az);
-    wrf(buf + 12, ax + dx * reach); wrf(buf + 16, ay); wrf(buf + 20, az + dz * reach);
-    const recomp_context saved = *ctx;
-    const bool hit = (call_game(trackNearestIntersection, ctx, { 0u, buf, buf + 12, buf + 24, 0u, 0u }) & 0xFF) != 0;
-    *ctx = saved;
-    if (!hit) return len;
-    const float hx = rdf(buf + 28) - ax, hz = rdf(buf + 36) - az;
-    const float d = std::sqrt(hx * hx + hz * hz);
-    return std::isfinite(d) ? std::clamp(d - WALL_GAP, 0.0f, len) : 0.0f;
-}
-} // namespace
-
-JFG_WRAP(squadsGetFormationPosition) {
-    g_rdram = rdram;
-    const uint32_t squadron = (uint32_t)ctx->r4;
-    const int slot = (int)(ctx->r5 & 0xFF);
-    const Squadron* s = valid_ptr(squadron) && !g_squadrons.empty() ? find(Obj::Data::get(squadron)) : nullptr;
-    if (s == nullptr || s->stock <= 0 || slot < s->stock) {
-        squadsGetFormationPosition_orig(rdram, ctx);
-        return;
-    }
-    const uint32_t px = (uint32_t)ctx->r6, py = (uint32_t)ctx->r7, pz = rd32((uint32_t)ctx->r29 + 0x10);
-    ctx->r5 = (gpr)(slot % s->stock);
-    squadsGetFormationPosition_orig(rdram, ctx);
-    g_rdram = rdram;
-    if (!valid_ptr(px) || !valid_ptr(py) || !valid_ptr(pz)) return;
-    const gpr result = ctx->r2;
-    const float bx = rdf(px), by = rdf(py), bz = rdf(pz);
-    const float angle = (float)slot * 2.39996f, dx = std::cos(angle), dz = std::sin(angle);
-    const float reach = clear_reach(ctx, bx, by, bz, dx, dz, APART * (float)(slot / s->stock));
-    wrf(px, bx + dx * reach);
-    wrf(pz, bz + dz * reach);
-    ctx->r2 = result;
-}
-
 // An extra member dying leaves the flags alone.
 JFG_WRAP(levelSetObjectFlag) {
     g_rdram = rdram;
