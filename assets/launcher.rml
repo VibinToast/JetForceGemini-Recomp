@@ -298,6 +298,63 @@
 			#rl_page_controls .config-option__list input:first-of-type { nav-left: #tab_jfg_controls; }
 			#rl_page_graphics .config-option__list input:first-of-type { nav-left: #tab_jfg_graphics; }
 			#rl_page_textures .config-option__list input:first-of-type { nav-left: #tab_jfg_textures; }
+			/* Get Mods (the mod store, src/jfg/jfg_mod_store.cpp): the filters and sources across the top, the cards on the left,
+			   the chosen mod's details on the right. */
+			.st-top { display: block; flex: 0 0 auto; }
+			.st-preview { display: block; margin-bottom: 12dp; padding: 8dp 14dp; border-left: 4dp #FFB21A; background-color: rgba(255, 178, 26, 0.10);
+				font-family: "JetBrains Mono"; font-size: 15dp; line-height: 21dp; color: #FFB21A; }
+			.st-row { display: flex; flex-direction: row; align-items: center; margin-bottom: 10dp; }
+			.st-label { display: block; margin-right: 12dp; font-family: "JFG Black"; font-size: 15dp; color: #8199BF; text-transform: uppercase; }
+			.st-spacer { flex: 1 1 auto; }
+			.st-chip { display: block; margin-right: 8dp; padding: 7dp 14dp; border-width: 2dp; border-color: #1F3D73; background-color: #050B1C; color: #8199BF;
+				font-family: "JetBrains Mono"; font-weight: bold; font-size: 15dp; letter-spacing: 0.5dp; cursor: pointer;
+				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
+			.st-chip.st-on { border-color: #3CC8FF; color: #3CC8FF; background-color: rgba(60, 200, 255, 0.10); }
+			.st-chip:hover, .st-chip:focus { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; }
+			.st-chip--update.st-has { border-color: #FFB21A; color: #FFB21A; }
+			.st-source { display: flex; flex-direction: row; align-items: center; margin-right: 8dp; padding: 6dp 12dp; border-width: 2dp; border-color: #1F3D73;
+				background-color: #050B1C; color: #8199BF; font-family: "JetBrains Mono"; font-weight: bold; font-size: 14dp; cursor: pointer;
+				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
+			.st-source.st-on { border-color: #3CC8FF; color: #E8F3FF; }
+			.st-source:hover, .st-source:focus { border-color: #FFB21A; }
+			.st-dot { display: block; width: 10dp; height: 10dp; margin-right: 8dp; border-radius: 5dp; background-color: #1F3D73; }
+			.st-source.st-on .st-dot { background-color: #3CF07A; }
+			.st-source-status { display: block; margin-left: 10dp; font-weight: normal; color: #8199BF; }
+			.st-body { display: flex; flex-direction: row; flex: 1 1 auto; min-height: 0dp; }
+			.st-list { display: block; flex: 1 1 58%; overflow-y: auto; padding-right: 10dp; }
+			.st-card { display: flex; flex-direction: row; align-items: center; width: 100%; box-sizing: border-box; margin-bottom: 8dp; padding: 8dp 10dp;
+				border-width: 2dp; border-color: #1F3D73; background-color: rgba(3, 8, 22, 0.78); text-align: left; cursor: pointer;
+				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: #st_act; }
+			.st-card:hover { border-color: #3CC8FF; }
+			.st-card:focus { border-color: #FFB21A; }
+			.st-card.st-selected { border-color: #3CC8FF; background-color: rgba(60, 200, 255, 0.12); }
+			.st-thumb { flex: 0 0 auto; width: 56dp; height: 56dp; margin-right: 14dp; background-color: rgba(3, 8, 22, 0.9); }
+			.st-card-text { display: block; flex: 1 1 auto; }
+			.st-card-name { display: block; font-family: "JetBrains Mono"; font-weight: bold; font-size: 18dp; line-height: 23dp; color: #E8F3FF; }
+			.st-card-short { display: block; margin-top: 3dp; font-family: "JetBrains Mono"; font-size: 14dp; line-height: 19dp; color: #8199BF; }
+			.st-card-meta { display: block; margin-top: 4dp; font-family: "JetBrains Mono"; font-size: 13dp; line-height: 17dp; color: #3CC8FF; }
+			.st-card-meta.st-blocked { color: #FF6B5E; }
+			.st-badges { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; margin-left: 10dp; }
+			.st-badge { display: block; margin-bottom: 5dp; padding: 2dp 8dp; border-width: 2dp; border-color: #3CF07A; color: #3CF07A;
+				font-family: "JetBrains Mono"; font-weight: bold; font-size: 12dp; line-height: 16dp; }
+			.st-badge--update { border-color: #FFB21A; background-color: #FFB21A; color: #050B1C; }
+			.st-badge--busy { border-color: #3CC8FF; color: #3CC8FF; }
+			.st-tag { display: block; font-family: "JetBrains Mono"; font-size: 12dp; line-height: 16dp; color: #8199BF; text-transform: uppercase; }
+			.st-empty { display: block; padding: 30dp; font-family: "JetBrains Mono"; font-size: 17dp; color: #8199BF; }
+			.st-detail { display: block; flex: 1 1 42%; margin-left: 12dp; padding: 20dp 22dp; overflow-y: auto;
+				border-width: 2dp; border-color: #1F3D73; background-color: rgba(3, 8, 22, 0.78); }
+			.st-detail-thumb { display: block; width: 112dp; height: 112dp; margin-bottom: 16dp; }
+			.st-detail-name { display: block; font-family: "JFG Black"; font-size: 24dp; line-height: 28dp; color: #FFB21A; }
+			.st-detail-meta { display: block; margin: 8dp 0dp 14dp; font-family: "JetBrains Mono"; font-size: 14dp; line-height: 20dp; color: #3CC8FF; }
+			.st-detail-desc { display: block; font-family: "JetBrains Mono"; font-size: 16dp; line-height: 25dp; color: #E8F3FF; }
+			.st-detail-deps { display: block; margin-top: 12dp; font-family: "JetBrains Mono"; font-size: 14dp; line-height: 20dp; color: #FFB21A; }
+			.st-detail-note { display: block; margin-top: 12dp; padding-left: 10dp; border-left: 3dp #3CC8FF; font-family: "JetBrains Mono"; font-size: 14dp; line-height: 20dp; color: #8199BF; }
+			.st-actions { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; margin-top: 8dp; }
+			.st-state { display: block; margin: 20dp 0dp 4dp; font-family: "JetBrains Mono"; font-weight: bold; font-size: 16dp; color: #3CF07A; }
+			.st-state.st-blocked { color: #FF6B5E; }
+			.st-progress { display: block; margin-top: 20dp; }
+			.st-progress-text { display: block; margin-bottom: 8dp; font-family: "JetBrains Mono"; font-size: 15dp; color: #E8F3FF; }
+			.st-result { display: block; margin-top: 12dp; font-family: "JetBrains Mono"; font-size: 14dp; line-height: 20dp; color: #8199BF; }
 		</style>
 	</head>
 	<body>
@@ -333,9 +390,11 @@
 								data-event-focus="set_page('textures')" style="nav-up: #tab_jfg_graphics; nav-down: #tab_mods;"
 								data-style-nav-right="!official_shown ? '#jfg_pack_0' : (official_busy ? '#rl_official_cancel' : '#rl_official_info')">Texture Packs</button></div>
 							<div class="rl-btn-shadow"><button id="tab_mods" class="rl-btn" data-class-rl-active="page == 'mods'"
-								data-event-focus="set_page('mods')" style="nav-up: #tab_jfg_textures; nav-down: #nav_about; nav-right: auto;">Mods</button></div>
+								data-event-focus="set_page('mods')" style="nav-up: #tab_jfg_textures; nav-down: #tab_store; nav-right: auto;">Mods</button></div>
+							<div class="rl-btn-shadow"><button id="tab_store" class="rl-btn" data-class-rl-active="page == 'store'"
+								data-event-focus="set_page('store')" style="nav-up: #tab_mods; nav-down: #nav_about; nav-right: #st_filter_all;">Get Mods</button></div>
 							<div class="rl-btn-shadow"><button id="nav_about" class="rl-btn" data-class-rl-active="page == 'about'"
-								data-event-focus="set_page('about')" style="nav-up: #tab_mods; nav-down: #nav_exit;">About</button></div>
+								data-event-focus="set_page('about')" style="nav-up: #tab_store; nav-down: #nav_exit;">About</button></div>
 							<div class="rl-separator"></div>
 							<div class="rl-btn-shadow"><button id="nav_exit" class="rl-btn rl-btn--exit" onclick="exit_game"
 								style="nav-up: #nav_about; nav-down: #nav_play;">Exit</button></div>
@@ -475,6 +534,63 @@
 								<!-- data-visible, not data-if: the mod menu (ui_mod_menu.cpp) must not be destroyed and made again -->
 								<div class="rl-page rl-page-mods" id="rl_page_mods" data-visible="page == 'mods'">
 									<div class="rl-tpl"><template src="config-menu__mods"/></div>
+								</div>
+
+								<!-- Get Mods: the mod store (src/jfg/jfg_mod_store.cpp; Recomp-Docs OFFICIAL_MODS_PLAN.md "Mod Store") -->
+								<div class="rl-page" id="rl_page_store" data-if="page == 'store'">
+									<div class="st-top">
+										<div class="st-preview" data-if="store_preview">Preview: nothing is published yet. These collections are read from bin/mod_store_preview, as they will be from GitHub.</div>
+										<div class="st-row">
+											<button class="st-chip" id="st_filter_all" data-class-st-on="store_filter == 'all'" data-event-click="store_set_filter('all')" style="nav-left: #tab_store; nav-up: none;">All {{store_count_all}}</button>
+											<button class="st-chip" id="st_filter_installed" data-class-st-on="store_filter == 'installed'" data-event-click="store_set_filter('installed')" style="nav-up: none;">Installed {{store_count_installed}}</button>
+											<button class="st-chip st-chip--update" id="st_filter_updates" data-class-st-on="store_filter == 'updates'" data-class-st-has="store_count_updates &gt; 0" data-event-click="store_set_filter('updates')" style="nav-up: none;">Updates {{store_count_updates}}</button>
+											<div class="st-spacer"></div>
+											<button class="st-chip" id="st_reload" data-event-click="store_reload()" style="nav-up: none; nav-right: none;">Refresh</button>
+										</div>
+										<div class="st-row">
+											<div class="st-label">Sources</div>
+											<button class="st-source" data-for="src : store_sources" data-attr-id="'st_source_' + it_index" data-class-st-on="src.enabled"
+												data-event-click="store_toggle_source(src.id)"><div class="st-dot"></div>{{src.name}}<div class="st-source-status">{{src.status}}</div></button>
+										</div>
+									</div>
+									<div class="st-body">
+										<div class="st-list">
+											<button class="st-card" data-for="r : store_rows" data-attr-id="'st_mod_' + it_index" data-class-st-selected="r.selected"
+												data-event-click="store_select(r.id)" data-style-nav-left="'#tab_store'">
+												<div class="st-thumb" data-style-decorator="r.thumb != '' ? 'image(' + r.thumb + ' contain)' : 'none'"></div>
+												<div class="st-card-text">
+													<div class="st-card-name">{{r.name}}</div>
+													<div class="st-card-short">{{r.short_text}}</div>
+													<div class="st-card-meta" data-class-st-blocked="r.blocked">{{r.status}}  -  {{r.source_name}}</div>
+												</div>
+												<div class="st-badges">
+													<div class="st-badge st-badge--busy" data-if="r.busy">INSTALLING</div>
+													<div class="st-badge st-badge--update" data-if="r.update &amp;&amp; !r.busy">UPDATE</div>
+													<div class="st-badge" data-if="r.installed &amp;&amp; !r.update &amp;&amp; !r.busy">INSTALLED</div>
+													<div class="st-tag">{{r.tags}}</div>
+												</div>
+											</button>
+											<div class="st-empty" data-if="store_rows.size == 0">Nothing here. Turn a source on, or pick another filter.</div>
+										</div>
+										<div class="st-detail" data-if="store_sel_name != ''">
+											<div class="st-detail-thumb" data-if="store_sel_thumb != ''" data-style-decorator="store_sel_thumb != '' ? 'image(' + store_sel_thumb + ' contain)' : 'none'"></div>
+											<div class="st-detail-name">{{store_sel_name}}</div>
+											<div class="st-detail-meta">{{store_sel_meta}}</div>
+											<div class="st-detail-desc">{{store_sel_desc}}</div>
+											<div class="st-detail-deps" data-if="store_sel_deps != ''">{{store_sel_deps}}</div>
+											<div class="st-detail-note" data-if="store_sel_note != ''">{{store_sel_note}}</div>
+											<div class="st-progress" data-if="store_busy">
+												<div class="st-progress-text">{{store_text}}</div>
+												<div class="rl-official-bar"><div class="rl-progress-bar" data-style-width="store_percent + '%'"></div></div>
+											</div>
+											<div class="st-actions" data-if="!store_busy">
+												<div class="rl-action-shadow" data-if="store_sel_can_act"><button id="st_act" class="rl-action" data-event-click="store_install()" style="nav-left: auto;">{{store_sel_action}}</button></div>
+												<div class="st-state" data-class-st-blocked="store_sel_blocked" data-if="!store_sel_can_act">{{store_sel_action}}</div>
+												<div class="rl-action-shadow" data-if="store_sel_can_remove"><button id="st_remove" class="rl-action rl-action--outline" data-event-click="store_remove()">Remove</button></div>
+											</div>
+											<div class="st-result" data-if="!store_busy &amp;&amp; store_text != ''">{{store_text}}</div>
+										</div>
+									</div>
 								</div>
 
 								<!-- About -->
