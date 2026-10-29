@@ -5,10 +5,11 @@
 #include <string>
 #include <vector>
 
-// A collection of mods: one GitHub repo with a catalog.json. The owner's are built in; each can be turned off.
+// A collection of mods: one GitHub repo with a catalog.json. The owner's are built in; the player can add other
+// people's (removable). Each can be turned off.
 struct JfgStoreSource {
     std::string id, name, url;
-    bool official = false, enabled = true, loaded = false;
+    bool official = false, enabled = true, loaded = false, removable = false;
     int mods = 0;            // in its catalog
     std::string error;       // why its catalog couldn't be read
 };
@@ -39,6 +40,9 @@ std::vector<JfgStoreSource> jfg_store_sources();
 std::vector<JfgStoreMod> jfg_store_mods();
 JfgStoreState jfg_store_state();
 void jfg_store_set_source_enabled(const std::string& source_id, bool enabled);
+// Adds someone's collection: "owner/repo" or its GitHub address. "" when added (its catalog then loads), else why not.
+std::string jfg_store_add_source(const std::string& text);
+void jfg_store_remove_source(const std::string& source_id); // only one the player added
 // Install or update (with the mod's dependencies first) in the background; remove at once (only mods the store
 // manages). Changes take effect when the game starts.
 void jfg_store_install(const std::string& mod_id);

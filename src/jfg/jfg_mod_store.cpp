@@ -1,7 +1,8 @@
 // Jet Force Gemini port: the launcher's mod store (Get Mods page). The design: Recomp-Docs OFFICIAL_MODS_PLAN.md
 // "Mod Store".
 // - Sources: collections of mods, each one GitHub repo publishing a catalog.json at its latest release; the owner's
-//   are built in, each can be turned off (mod_store.json). The list is in priority order: when two sources list the
+//   are built in, and the player can add other people's by "owner/repo" or address (mod_store.json "added", after
+//   the built-in ones). Each can be turned off (mod_store.json). The list is in priority order: when two sources list the
 //   same mod id, the first one's entry is used and the page says another source has it too.
 // - A catalog lists each mod with its own version and release: name, descriptions, authors, tags, thumbnail, file URL,
 //   size, SHA-256, the port version and mod API it needs, its dependencies.
@@ -20,7 +21,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -43,7 +46,7 @@ constexpr const char* CACHE_FOLDER = "mod_store_cache";
 constexpr const char* GITHUB = "https://github.com/";
 
 struct BuiltIn { const char* id; const char* name; const char* repo; };
-// In priority order. The owner's collections; more are added here (and, later, a reviewed index of others').
+// In priority order. The owner's collections; the ones the player added come after them, in the order added.
 const BuiltIn BUILT_IN[] = {
     { "official", "Official Mods", "VibinToast/JFG-Mods" },
     { "restored", "Restored Content", "VibinToast/JFG-Restored-Content" },
@@ -60,6 +63,7 @@ std::mutex g_mutex; // guards everything below
 std::vector<JfgStoreSource> g_sources;
 std::map<std::string, std::vector<CatalogMod>> g_catalogs; // source id -> its mods
 std::map<std::string, Installed> g_installed;              // mods the store installed
+std::vector<std::string> g_added;                          // the player's added collections ("owner/repo"), in order
 std::vector<JfgStoreMod> g_mods;
 JfgStoreState g_state;
 bool g_rescan = false;                                     // an install finished: rescan on the UI thread
@@ -144,13 +148,24 @@ fs::path mod_file(const std::string& id) {
     return recomp::mods::get_mods_directory() / (id + ".nrm");
 }
 
+// An added collection's source id (also its cache folder): "gh_<owner>_<repo>", lower case.
+std::string added_id(const std::string& repo) {
+    std::string id = "gh_" + repo;
+    for (char& c : id) c = c == '/' ? '_' : (char)std::tolower((unsigned char)c);
+    return id;
+}
+
 void load_state() {
     g_installed.clear();
+    g_added.clear();
     std::map<std::string, bool> enabled;
     try {
         const nlohmann::json j = nlohmann::json::parse(read_text(STATE_FILE));
         if (j.contains("sources") && j["sources"].is_object()) {
             for (auto& [id, on] : j["sources"].items()) if (on.is_boolean()) enabled[id] = on.get<bool>();
+        }
+        if (j.contains("added") && j["added"].is_array()) {
+            for (const auto& r : j["added"]) if (r.is_string()) g_added.push_back(r.get<std::string>());
         }
         if (j.contains("installed") && j["installed"].is_object()) {
             for (auto& [id, m] : j["installed"].items()) {
@@ -169,12 +184,22 @@ void load_state() {
         s.enabled = enabled.count(b.id) ? enabled[b.id] : true;
         g_sources.push_back(s);
     }
+    for (const std::string& repo : g_added) {
+        JfgStoreSource s;
+        s.id = added_id(repo);
+        s.name = repo; // until its catalog gives its name
+        s.url = std::string(GITHUB) + repo + "/releases/latest/download/catalog.json";
+        s.removable = true;
+        s.enabled = enabled.count(s.id) ? enabled[s.id] : true;
+        g_sources.push_back(s);
+    }
 }
 
 void save_state() {
     nlohmann::json j;
     j["sources"] = nlohmann::json::object();
     for (const JfgStoreSource& s : g_sources) j["sources"][s.id] = s.enabled;
+    j["added"] = g_added;
     j["installed"] = nlohmann::json::object();
     for (const auto& [id, m] : g_installed) j["installed"][id] = { { "source", m.source }, { "version", m.version }, { "sha256", m.sha256 } };
     std::ofstream(STATE_FILE, std::ios::binary) << j.dump(2) << "\n";
@@ -189,6 +214,8 @@ void parse_catalog(JfgStoreSource& s, const std::string& text) {
     s.error.clear();
     try {
         const nlohmann::json j = nlohmann::json::parse(text);
+        if (s.removable && j.contains("name") && j["name"].is_string() && !j["name"].get<std::string>().empty())
+            s.name = j["name"].get<std::string>(); // an added collection goes by its own name
         for (const auto& m : j.value("mods", nlohmann::json::array())) {
             CatalogMod c;
             c.id = m.value("id", "");
@@ -481,6 +508,47 @@ JfgStoreState jfg_store_state() {
 void jfg_store_set_source_enabled(const std::string& source_id, bool enabled) {
     std::lock_guard<std::mutex> lock(g_mutex);
     for (JfgStoreSource& s : g_sources) if (s.id == source_id) s.enabled = enabled;
+    save_state();
+    build_list();
+}
+
+std::string jfg_store_add_source(const std::string& text) {
+    // "owner/repo", or the repo's address ("https://github.com/owner/repo/...", with or without "https://").
+    std::string repo = text;
+    repo.erase(0, repo.find_first_not_of(" \t"));
+    repo.erase(repo.find_last_not_of(" \t/") + 1);
+    for (const char* prefix : { "https://", "http://", "www.", "github.com/" }) {
+        if (repo.rfind(prefix, 0) == 0) repo = repo.substr(std::strlen(prefix));
+    }
+    if (const size_t slash = repo.find('/'); slash != std::string::npos) {
+        if (const size_t next = repo.find('/', slash + 1); next != std::string::npos) repo.resize(next); // owner/repo/releases/...
+    }
+    if (repo.size() > 4 && repo.compare(repo.size() - 4, 4, ".git") == 0) repo.resize(repo.size() - 4);
+    const size_t at = repo.find('/');
+    const bool valid = at != std::string::npos && at > 0 && at + 1 < repo.size() &&
+        std::all_of(repo.begin(), repo.end(), [](char c) { return std::isalnum((unsigned char)c) || c == '/' || c == '-' || c == '_' || c == '.'; });
+    if (!valid) return "Type a GitHub repo as owner/repo, or paste its address";
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_state.busy || g_fetching) return "Wait for the store to finish first";
+        for (const BuiltIn& b : BUILT_IN) if (added_id(b.repo) == added_id(repo)) return "That collection is built in already";
+        for (const std::string& r : g_added) if (added_id(r) == added_id(repo)) return "You added that one already";
+        g_added.push_back(repo);
+        save_state();
+    }
+    jfg_store_refresh(); // its catalog loads with the others
+    return "";
+}
+
+void jfg_store_remove_source(const std::string& source_id) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_state.busy || g_fetching) return;
+    const auto it = std::find_if(g_added.begin(), g_added.end(), [&](const std::string& r) { return added_id(r) == source_id; });
+    if (it == g_added.end()) return; // never a built-in one
+    g_added.erase(it);
+    g_catalogs.erase(source_id);
+    g_sources.erase(std::remove_if(g_sources.begin(), g_sources.end(), [&](const JfgStoreSource& s) { return s.id == source_id; }),
+                    g_sources.end());
     save_state();
     build_list();
 }

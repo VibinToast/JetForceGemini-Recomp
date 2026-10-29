@@ -237,7 +237,7 @@ struct StoreRow {
     Rml::String id, name, short_text, version, source_name, tags, size_text, thumb, status, action;
     bool installed = false, update = false, managed = false, blocked = false, busy = false, selected = false;
 };
-struct StoreSourceRow { Rml::String id, name, status; bool enabled = true, official = false; };
+struct StoreSourceRow { Rml::String id, name, status; bool enabled = true, official = false, removable = false; };
 struct StoreTagRow { Rml::String name; int count = 0; };
 static std::vector<StoreRow> store_rows;
 static std::vector<StoreSourceRow> store_sources;
@@ -247,6 +247,8 @@ static Rml::String store_tag;
 // The Sources pop-up (its button: "Sources 2/2", the switched-on ones of all).
 static bool store_sources_dialog = false;
 static int store_sources_on = 0;
+// Its Add box (someone else's collection, "owner/repo" or its address) and why the last Add failed.
+static Rml::String store_add_text, store_add_msg;
 static Rml::String store_filter = "all", store_selected;
 static Rml::String store_text, store_sel_name, store_sel_desc, store_sel_meta, store_sel_deps, store_sel_note, store_sel_thumb;
 static Rml::String store_sel_action;
@@ -347,7 +349,7 @@ static void refresh_store_rows() {
     for (const JfgStoreSource& src : jfg_store_sources()) {
         store_sources_on += src.enabled ? 1 : 0;
         StoreSourceRow r;
-        r.id = src.id; r.name = src.name; r.enabled = src.enabled; r.official = src.official;
+        r.id = src.id; r.name = src.name; r.enabled = src.enabled; r.official = src.official; r.removable = src.removable;
         r.status = !src.enabled ? "Off" : src.loaded ? std::to_string(src.mods) + " mods" : src.error;
         store_sources.push_back(r);
     }
@@ -844,6 +846,7 @@ public:
             src.RegisterMember("status", &StoreSourceRow::status);
             src.RegisterMember("enabled", &StoreSourceRow::enabled);
             src.RegisterMember("official", &StoreSourceRow::official);
+            src.RegisterMember("removable", &StoreSourceRow::removable);
         }
         constructor.RegisterArray<std::vector<StoreSourceRow>>();
         if (auto tag = constructor.RegisterStruct<StoreTagRow>()) {
@@ -855,6 +858,26 @@ public:
         constructor.Bind("store_tag", &store_tag);
         constructor.Bind("store_sources_dialog", &store_sources_dialog);
         constructor.Bind("store_sources_on", &store_sources_on);
+        constructor.Bind("store_add_text", &store_add_text);
+        constructor.Bind("store_add_msg", &store_add_msg);
+        // Add: the box's collection joins the sources (its catalog loads in the background); the box empties.
+        constructor.BindEventCallback("store_add_source", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            const std::string error = jfg_store_add_source(store_add_text);
+            store_add_msg = error;
+            if (error.empty()) store_add_text.clear();
+            model_handle.DirtyVariable("store_add_text");
+            model_handle.DirtyVariable("store_add_msg");
+            refresh_store_rows();
+        });
+        // Remove (an added collection only): its mods stay installed, but no longer show or update here.
+        constructor.BindEventCallback("store_remove_source", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+            if (args.empty()) return;
+            jfg_store_remove_source(args[0].Get<Rml::String>());
+            store_add_msg.clear();
+            model_handle.DirtyVariable("store_add_msg");
+            refresh_store_rows();
+            focus_soon("st_add_text");
+        });
         constructor.BindEventCallback("store_set_tag", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
             store_tag = args.empty() ? Rml::String() : args[0].Get<Rml::String>();
             refresh_store_rows();
@@ -862,7 +885,9 @@ public:
         // Sources: a pop-up of the collections, each switched on or off; Close (or Esc / B) goes back to its button.
         constructor.BindEventCallback("store_sources_open", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
             store_sources_dialog = true;
+            store_add_msg.clear();
             model_handle.DirtyVariable("store_sources_dialog");
+            model_handle.DirtyVariable("store_add_msg");
             focus_soon("st_source_0");
         });
         constructor.BindEventCallback("store_sources_close", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {

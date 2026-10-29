@@ -322,7 +322,19 @@
 			.st-source.st-on .st-check-mark { display: block; }
 			.st-source-name { display: block; white-space: nowrap; }
 			.st-source-status { display: block; margin-left: auto; padding-left: 10dp; white-space: nowrap; font-weight: normal; color: #8199BF; }
-			.st-sources-shadow { top: 150dp; bottom: 150dp; left: 300dp; right: 300dp; }
+			.st-sources-shadow { top: 110dp; bottom: 110dp; left: 260dp; right: 260dp; }
+			.st-source-row { display: flex; flex-direction: row; align-items: center; margin-bottom: 10dp; }
+			.st-source-row .st-source { flex: 1 1 auto; width: auto; margin-bottom: 0dp; }
+			.st-source-x { margin: 0dp 0dp 0dp 10dp; padding: 16dp 16dp; }
+			.st-add { display: block; margin-top: 18dp; padding-top: 14dp; border-top: 2dp #1F3D73; }
+			.st-add-title { display: block; margin-bottom: 10dp; font-family: "JFG Black"; font-size: 18dp; color: #8199BF; text-transform: uppercase; }
+			.st-add-row { display: flex; flex-direction: row; align-items: center; }
+			.st-add-text { display: block; flex: 1 1 auto; height: 50dp; box-sizing: border-box; margin-right: 10dp; padding: 12dp 14dp; border-width: 2dp; border-color: #1F3D73;
+				background-color: #050B1C; color: #E8F3FF; font-family: "JetBrains Mono"; font-size: 19dp; focus: auto; tab-index: auto; }
+			.st-add-text:focus, .st-add-text:hover { border-color: #FFB21A; }
+			.st-add-row .st-chip { margin-right: 0dp; padding: 13dp 22dp; }
+			.st-add-msg { display: block; margin-top: 10dp; font-family: "JetBrains Mono"; font-size: 17dp; color: #FFB21A; }
+			.st-add-note { display: block; margin-top: 10dp; font-family: "JetBrains Mono"; font-size: 16dp; line-height: 23dp; color: #8199BF; }
 			.st-sources-list { position: absolute; top: 104dp; left: 28dp; right: 28dp; bottom: 100dp; overflow-y: auto; }
 			.st-row--tags { flex-wrap: wrap; margin-bottom: 4dp; }
 			.st-row--tags .st-label { margin-bottom: 6dp; }
@@ -684,14 +696,31 @@
 					<div class="rl-modal-title">Sources</div>
 					<div class="rl-modal-sub">The collections Get Mods lists. Turn one off to hide its mods.</div>
 					<div class="st-sources-list">
-						<button class="st-source" data-for="src : store_sources" data-attr-id="'st_source_' + it_index" data-class-st-on="src.enabled"
-							data-event-click="store_toggle_source(src.id)" style="nav-left: none; nav-right: none;"
-							data-style-nav-up="it_index == 0 ? 'none' : 'auto'" data-style-nav-down="it_index == store_sources.size - 1 ? '#st_sources_close' : 'auto'">
-							<div class="st-check"><div class="st-check-mark"></div></div><div class="st-source-name">{{src.name}}</div><div class="st-source-status">{{src.status}}</div></button>
+						<div class="st-source-row" data-for="src : store_sources">
+							<button class="st-source" data-attr-id="'st_source_' + it_index" data-class-st-on="src.enabled"
+								data-event-click="store_toggle_source(src.id)" style="nav-left: none;"
+								data-style-nav-right="src.removable ? '#st_source_x_' + it_index : 'none'"
+								data-style-nav-up="it_index == 0 ? 'none' : '#st_source_' + (it_index - 1)"
+								data-style-nav-down="it_index == store_sources.size - 1 ? '#st_add_text' : '#st_source_' + (it_index + 1)">
+								<div class="st-check"><div class="st-check-mark"></div></div><div class="st-source-name">{{src.name}}</div><div class="st-source-status">{{src.status}}</div></button>
+							<button class="st-chip st-source-x" data-if="src.removable" data-attr-id="'st_source_x_' + it_index" data-event-click="store_remove_source(src.id)"
+								data-style-nav-left="'#st_source_' + it_index" style="nav-right: none; nav-up: none; nav-down: none;">Remove</button>
+						</div>
+						<!-- Someone else's collection: a GitHub repo publishing a catalog.json, as the official ones do -->
+						<div class="st-add">
+							<div class="st-add-title">Add a collection</div>
+							<div class="st-add-row">
+								<input type="text" id="st_add_text" class="st-add-text" data-value="store_add_text" maxlength="200"
+									data-style-nav-up="store_sources.size == 0 ? 'none' : '#st_source_' + (store_sources.size - 1)" style="nav-left: none; nav-right: #st_add_btn; nav-down: #st_sources_close;"/>
+								<button id="st_add_btn" class="st-chip" data-event-click="store_add_source()" style="nav-left: #st_add_text; nav-right: none; nav-down: #st_sources_close;"
+									data-style-nav-up="store_sources.size == 0 ? 'none' : '#st_source_' + (store_sources.size - 1)">Add</button>
+							</div>
+							<div class="st-add-msg" data-if="store_add_msg != ''">{{store_add_msg}}</div>
+							<div class="st-add-note">Its GitHub repo as owner/repo, or its address. Mods from other people aren't checked by the official collections: they run in the game, so add only ones you trust.</div>
+						</div>
 					</div>
 					<div class="rl-modal-buttons">
-						<div class="rl-action-shadow"><button id="st_sources_close" class="rl-action" data-event-click="store_sources_close()" style="nav-down: none; nav-left: none; nav-right: none;"
-							data-style-nav-up="'#st_source_' + (store_sources.size - 1)">Close</button></div>
+						<div class="rl-action-shadow"><button id="st_sources_close" class="rl-action" data-event-click="store_sources_close()" style="nav-down: none; nav-left: none; nav-right: none; nav-up: #st_add_text;">Close</button></div>
 					</div>
 				</div></div></div>
 				<div class="rl-scanlines"></div>
