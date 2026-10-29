@@ -1,10 +1,12 @@
-![Recomp Banner](images/jfg-logo-recomp-transparent.png)
+![Jet Force Gemini: Recompiled](images/jfg-logo-recompiled-transparent.png)
 
 A native 100% playable PC port of Jet Force Gemini (N64, US) for Windows and Linux, made by static recompilation. No emulator:
 the game's code is translated from your ROM and compiled for your PC.
 
 **Current Progress:** Quality of Life features, and mod support (new planets, levels, enemies, music, scripts and
 weapons: see [Modding](#modding) and the [Roadmap](ROADMAP.md)).
+
+[![Roadmap: 1.0 Liftoff, 1.1 Launcher and 1.2 Quality of Life are released; 1.3 Mods is in progress; 1.4 High Fidelity is next](images/roadmap.svg)](ROADMAP.md)
 
 **No game code or assets are included.** You need your own ROM.
 
@@ -186,7 +188,7 @@ commit here.
 
 ## AI disclosure
 
-This project is AI-assisted (Claude) and directed by a software developer who reviews the modding API and some of the port's own code. This dev (hello 🙂) has limited knowledge of recompiled MIPS game code and the low-level patches so these are tested and checked by hand.
+This project is AI-assisted and directed by a software developer who reviews the output and tests it by hand.
 
 ## Legal
 
