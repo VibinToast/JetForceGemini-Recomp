@@ -26,6 +26,7 @@
 #include "jfg_api.h"
 #include "jfg_hooks.h"
 #include "jfg_prelink.h"
+void jfg_note_code_mods(); // below: logs where the code mods went
 
 namespace jfg {
 void jfg_log_line(const char* file, const char* text); // jfg_diagnostics.cpp
@@ -173,6 +174,42 @@ extern "C" void jfg_mods_alias_overlays(void) {
     std::snprintf(line, sizeof line, "mods: %d functions of %d overlays callable at their private addresses", funcs,
                   sections);
     jfg::jfg_log_line("jfg_mods.log", line);
+    jfg_note_code_mods();
+}
+
+// Where each code mod's code and data went this run: logged, and kept for the crash report (jfg_mod_at), which names the
+// mod an address in mod memory belongs to and the address in its own link map (build/mod.map).
+namespace {
+struct ModRange { char id[64]; uint32_t start, size, link; };
+ModRange g_mod_ranges[256];
+int g_mod_range_count = 0;
+} // namespace
+
+void jfg_note_code_mods() {
+    g_mod_range_count = 0;
+    for (const recomp::mods::CodeModRange& r : recomp::mods::get_code_mod_ranges()) {
+        if (g_mod_range_count >= (int)(sizeof(g_mod_ranges) / sizeof(g_mod_ranges[0]))) break;
+        ModRange& m = g_mod_ranges[g_mod_range_count++];
+        std::snprintf(m.id, sizeof m.id, "%s", r.mod_id.c_str());
+        m.start = r.start;
+        m.size = r.size;
+        m.link = r.link_base;
+        char line[160];
+        std::snprintf(line, sizeof line, "mods: %s at 0x%08X-0x%08X (linked at 0x%08X)", m.id, m.start, m.start + m.size,
+                      m.link);
+        jfg::jfg_log_line("jfg_mods.log", line);
+    }
+}
+
+extern "C" const char* jfg_mod_at(uint32_t address, uint32_t* link_address) {
+    for (int i = 0; i < g_mod_range_count; i++) {
+        const ModRange& m = g_mod_ranges[i];
+        if (address >= m.start && address < m.start + m.size) {
+            if (link_address != nullptr) *link_address = address - m.start + m.link;
+            return m.id;
+        }
+    }
+    return nullptr;
 }
 
 // Calls from one overlay into another go through the game's lazy linker, TrapDanglingJump, which finds the call site

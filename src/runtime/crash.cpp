@@ -77,14 +77,21 @@ static void crash_printf(const CrashPrintContext* context, const char *format, .
     va_end(args);
 }
 
+extern "C" const char* jfg_mod_at(uint32_t address, uint32_t* link_address); // jfg_mods.cpp
+
 static void dump_game_callstack(const CrashPrintContext* log_context) {
     if (!game_func_stack.empty()) {
         crash_printf(log_context, "**** GAME CALLSTACK START ****\n");
 
         while (!game_func_stack.empty()) {
             GameFunc& func = game_func_stack.top();
+            uint32_t link = 0;
+            const char* mod = jfg_mod_at((uint32_t)func.address, &link); // JFG PORT: a mod's code: which, and where in its map
             if (func.name != nullptr) {
                 crash_printf(log_context, "0x%08" PRIx32 " %s\n", (uint32_t)func.address, func.name);
+            } else if (mod != nullptr) {
+                crash_printf(log_context, "0x%08" PRIx32 " in mod %s (0x%08" PRIx32 " in its build/mod.map)\n",
+                             (uint32_t)func.address, mod, link);
             } else {
                 crash_printf(log_context, "0x%08" PRIx32 "\n", (uint32_t)func.address);
             }
