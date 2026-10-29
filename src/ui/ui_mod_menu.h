@@ -29,7 +29,9 @@ private:
     Element *body_container = nullptr;
     Label *name_label = nullptr;
     Label *meta_label = nullptr; // JFG PORT: version and authors, as the texture packs' cards
+    Element *side_container = nullptr; // JFG PORT: the status tag and the mod's tags under it, as Get Mods' cards
     Label *status_tag = nullptr; // JFG PORT
+    Label *tags_label = nullptr; // JFG PORT: the manifest's tags (HUD, WEAPONS...)
     modui::Status status = modui::Status::Off;
     float scale = 1.0f;
     Style checked_style;

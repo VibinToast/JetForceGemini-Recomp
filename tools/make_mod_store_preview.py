@@ -24,6 +24,7 @@ MODS_SRC = Path.home() / "Documents/Decomps/N64/JetForceGemini/Mods"  # the offi
 OUT = PORT / "bin" / "mod_store_preview"
 OWNER = "VibinToast"
 
+# Tags for mods whose files have none in their mod.json yet (built before mod.toml had tags).
 TAGS = {
     "jfg_singularity": ["Weapons"], "jfg_concussion_cannon": ["Weapons"], "jfg_plasma_vortex": ["Weapons"],
     "jfg_plasma_ricochet": ["Weapons"], "jfg_better_flamethrower": ["Weapons"], "jfg_better_shocker": ["Weapons"],
@@ -66,7 +67,7 @@ def collection(repo: str, name: str, nrm_files, bumped) -> None:
             "description": " ".join(manifest.get("description", "").split()),
             "version": version,
             "authors": manifest.get("authors") or [],
-            "tags": TAGS.get(mod_id, []),
+            "tags": manifest.get("tags") or TAGS.get(mod_id, []),  # the mod.toml's tags; TAGS for files built without
             "file": base + f"{mod_id}.nrm",
             "size": nrm.stat().st_size,
             "sha256": hashlib.sha256(nrm.read_bytes()).hexdigest(),

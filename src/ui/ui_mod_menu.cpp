@@ -7,6 +7,7 @@
 
 #include "librecomp/mods.hpp"
 
+#include <cctype>
 #include <string>
 
 #ifdef WIN32
@@ -32,7 +33,8 @@ const std::string mod_tab_id = "#tab_mods"; // JFG PORT: the launcher's Mods but
 
 static void mark_other_mod_menus_dirty(ModMenu* changed);
 
-// JFG PORT: a card like the texture packs': thumbnail, name, version and authors, and a tag saying whether it is on.
+// JFG PORT: a card like the texture packs': thumbnail, name, version and authors, and a tag saying whether it is on
+// with the mod's own tags (its manifest's "tags": HUD, Weapons...) under it, as on the launcher's Get Mods page.
 ModEntryView::ModEntryView(Element *parent) : Element(parent, Events(EventType::Update)) {
     ContextId context = get_current_context();
 
@@ -69,7 +71,15 @@ ModEntryView::ModEntryView(Element *parent) : Element(parent, Events(EventType::
             meta_label = context.create_element<Label>(body_container, LabelStyle::Small);
         } // body_container
 
-        status_tag = context.create_element<Label>(this, LabelStyle::Annotation);
+        side_container = context.create_element<Element>(this);
+        side_container->set_display(Display::Flex);
+        side_container->set_flex_direction(FlexDirection::Column);
+        side_container->set_align_items(AlignItems::FlexEnd);
+        side_container->set_flex(0.0f, 0.0f);
+        {
+            status_tag = context.create_element<Label>(side_container, LabelStyle::Annotation);
+            tags_label = context.create_element<Label>(side_container, LabelStyle::Small);
+        } // side_container
     } // this
 
     add_style(&checked_style, checked_state);
@@ -93,7 +103,9 @@ void ModEntryView::set_scale(float scale, float radius) {
     modui::set_text(name_label, scale, 29.0f, 36.0f, 700, modui::text, 1.0f);
     modui::set_text(meta_label, scale, 23.0f, 29.0f, 400, modui::dim);
     meta_label->set_margin_top(6.0f * scale);
-    status_tag->set_margin_left(12.0f * scale);
+    side_container->set_margin_left(12.0f * scale);
+    modui::set_text(tags_label, scale, 17.0f, 22.0f, 400, modui::dim, 1.0f);
+    tags_label->set_margin_top(8.0f * scale);
     set_mod_status(status);
 }
 
@@ -106,6 +118,13 @@ void ModEntryView::set_mod_details(const recomp::mods::ModDetails &details) {
         first = false;
     }
     meta_label->set_text(meta);
+    std::string tags;
+    for (const std::string& tag : details.tags) {
+        tags += (tags.empty() ? "" : ", ") + tag;
+    }
+    for (char& c : tags) c = (char)std::toupper((unsigned char)c);
+    tags_label->set_text(tags);
+    tags_label->set_display(tags.empty() ? Display::None : Display::Block);
 }
 
 void ModEntryView::set_mod_thumbnail(const std::string &thumbnail) {
