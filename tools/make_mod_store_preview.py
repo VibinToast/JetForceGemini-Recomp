@@ -31,7 +31,7 @@ TAGS = {
     "jfg_weapon_sounds": ["Weapons", "Audio"], "jfg_shellback": ["Enemies"], "jfg_more_enemies": ["Enemies", "Gameplay"],
     "jfg_ammo_ring": ["HUD"], "jfg_health_ring": ["HUD"], "jfg_kill_feed": ["HUD"], "jfg_minimap": ["HUD"],
     "jfg_reticle": ["HUD"], "jfg_blood": ["Visuals"], "jfg_better_floyd": ["Gameplay"], "jfg_dodge": ["Gameplay"],
-    "jfg_aim_toggle": ["Controls"], "jfg_ammo_stays": ["Gameplay"],
+    "jfg_aim_toggle": ["Controls"], "jfg_better_pickups": ["Gameplay"],
     "jfg_restored_content": ["Content"], "jfg_restored_content_test_hub": ["Levels", "Content"],
 }
 
