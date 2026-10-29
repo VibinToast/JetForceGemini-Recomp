@@ -35,6 +35,7 @@ extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
 extern "C" void squadsIsTribal(uint8_t* rdram, recomp_context* ctx);
 extern "C" void levelObjectFlagSet(uint8_t* rdram, recomp_context* ctx);
 extern "C" void BaddyTypeToIndex(uint8_t* rdram, recomp_context* ctx);
+extern "C" void trackGetBlock(uint8_t* rdram, recomp_context* ctx);
 
 namespace jfg {
 
@@ -65,7 +66,24 @@ struct Squadron {
     int stock;      // its list entry's count
     int percent;    // its multiplier (flyers have their own)
     int wanted;     // the count it was given (stock until squadsInitialiseAfterObjects)
+    bool flyers;    // a flying squad (its extras keep near the stock members' places)
+    bool drones;    // of drones (posted at sniper points too): its extras fly beside a stock drone
 };
+
+// An extra drone flying beside a stock one (its anchor), side -1 left / 1 right times how many places out.
+struct Wingman {
+    uint32_t obj, anchor;
+    int side;
+};
+std::vector<Wingman> g_wingmen;
+
+// The drone member types (decomp MSR 13g: the flying rows of movement type 5 and 6 that are drones).
+bool drone_type(uint16_t type) {
+    switch (type) {
+    case 0x2B: case 0x2D: case 0x54: case 0x149: case 0x150: case 0x151: case 0x152: case 0x153: return true;
+    default: return false;
+    }
+}
 std::vector<Squadron> g_squadrons; // this level's multiplied squadrons
 bool g_after_objects = false;      // squadsInitialiseAfterObjects has run for this level
 int g_making = 0;                  // inside func_overlay_3_00014694
@@ -133,6 +151,28 @@ void squad_mult_made(uint8_t* rdram_, recomp_context* ctx, uint8_t created_befor
         return;
     }
     const float x = Obj::PosX::get(obj), z = Obj::PosZ::get(obj);
+    // A drone squad's extra flies beside a stock drone: the one with the fewest beside it so far.
+    if (const Squadron* s = find(data); s != nullptr && s->drones) {
+        uint32_t best = 0;
+        int best_count = 1 << 30;
+        int guard = 0;
+        for (uint32_t m = SquadronData::FirstMember::get(data); m != 0 && guard < 256; guard++) {
+            bool extra = m == obj;
+            for (const Wingman& w : g_wingmen) extra |= w.obj == m;
+            if (!extra) {
+                int n = 0;
+                for (const Wingman& w : g_wingmen) n += w.anchor == m;
+                if (n < best_count) { best_count = n; best = m; }
+            }
+            const uint32_t sq = Obj::Data::get(m);
+            m = sq ? SquadMemberData::NextMember::get(sq) : 0;
+        }
+        if (best != 0) {
+            const int side = (best_count % 2 == 0 ? 1 : -1) * (best_count / 2 + 1);
+            g_wingmen.push_back({ obj, best, side });
+            return;
+        }
+    }
     bool close = false;
     int guard = 0;
     for (uint32_t m = SquadronData::FirstMember::get(data); m != 0 && guard < 256; guard++) {
@@ -163,6 +203,7 @@ using namespace jfg;
 JFG_WRAP(squadsInitialiseBeforeObjects) {
     g_rdram = rdram;
     g_squadrons.clear();
+    g_wingmen.clear();
     g_after_objects = false;
     squadsInitialiseBeforeObjects_orig(rdram, ctx);
 }
@@ -180,10 +221,11 @@ JFG_WRAP(SquadronInit) {
         return;
     }
     if ((g_percent <= 100 && g_flyer_percent <= 100) || g_after_objects || !multiplied(rdram, ctx, entry)) return;
-    const int percent = flying(rdram, ctx, rd16(entry + ENTRY_TYPE)) ? g_flyer_percent : g_percent;
+    const bool flyers = flying(rdram, ctx, rd16(entry + ENTRY_TYPE));
+    const int percent = flyers ? g_flyer_percent : g_percent;
     if (percent <= 100) return;
     const int stock = rd8(entry + ENTRY_COUNT);
-    g_squadrons.push_back({ data, stock, percent, stock });
+    g_squadrons.push_back({ data, stock, percent, stock, flyers, flyers && drone_type(rd16(entry + ENTRY_TYPE)) });
 }
 
 // After the flags are reserved and the door-at-load test ran: the extra members, for the stock members not killed.
@@ -229,6 +271,92 @@ JFG_WRAP(levelObjectFlagSet) {
         }
     }
     levelObjectFlagSet_orig(rdram, ctx);
+}
+
+namespace jfg {
+namespace {
+constexpr float APART = 45.0f, WALL_GAP = 30.0f, WING = 70.0f;
+// How far from (ax, ay, az) along (dx, dz) (horizontal, up to len) before a level surface, less WALL_GAP; len if clear.
+// trackNearestIntersection is the crosshair's test of the level.
+float clear_reach(recomp_context* ctx, float ax, float ay, float az, float dx, float dz, float len) {
+    if (len <= 0.0f) return 0.0f;
+    const uint32_t buf = ((uint32_t)ctx->r29 - 0x80u) & ~0x7u; // in the gap call_game leaves below $sp
+    const float reach = len + WALL_GAP;
+    wrf(buf + 0, ax); wrf(buf + 4, ay); wrf(buf + 8, az);
+    wrf(buf + 12, ax + dx * reach); wrf(buf + 16, ay); wrf(buf + 20, az + dz * reach);
+    const recomp_context saved = *ctx;
+    const bool hit = (call_game(trackNearestIntersection, ctx, { 0u, buf, buf + 12, buf + 24, 0u, 0u }) & 0xFF) != 0;
+    *ctx = saved;
+    if (!hit) return len;
+    const float hx = rdf(buf + 28) - ax, hz = rdf(buf + 36) - az;
+    const float d = std::sqrt(hx * hx + hz * hz);
+    return std::isfinite(d) ? std::clamp(d - WALL_GAP, 0.0f, len) : 0.0f;
+}
+
+bool in_rdram(uint32_t p) { return p >= 0x80000000u && p < 0x80800000u && (p & 3) == 0; }
+} // namespace
+
+// After a squad member's SquaddieControl (jfg_frame_rate.cpp): an extra drone is put beside its stock drone, to its
+// left or right as that one faces (Obj yaw: forward sin/cos, so its right is (cos, -sin)), at its height, only as far
+// as the level lets it (and its track segment found again, as for anything the port moves). The stock drone gone
+// or dead, the extra is on its own.
+void squad_mult_member_moved(uint8_t* rdram_, recomp_context* ctx, uint32_t obj) {
+    if (g_wingmen.empty()) return;
+    g_rdram = rdram_;
+    for (size_t i = 0; i < g_wingmen.size(); i++) {
+        Wingman& w = g_wingmen[i];
+        if (w.obj != obj) continue;
+        const uint32_t a = w.anchor;
+        const uint32_t hit = valid_ptr(a) && Obj::Kind::get(a) == 0x18 ? Obj::Damage::get(a) : 0;
+        const bool alive = valid_ptr(obj) && Obj::Kind::get(obj) == 0x18 && valid_ptr(hit) && (int16_t)rd16(hit + 0x06) >= 0x100;
+        if (!alive) { g_wingmen.erase(g_wingmen.begin() + (long)i); return; }
+        const float yaw = (float)Obj::Yaw::get(a) * (6.2831853f / 65536.0f);
+        float rx = std::cos(yaw), rz = -std::sin(yaw);
+        if (w.side < 0) { rx = -rx; rz = -rz; }
+        const float ax = Obj::PosX::get(a), ay = Obj::PosY::get(a), az = Obj::PosZ::get(a);
+        const float reach = clear_reach(ctx, ax, ay, az, rx, rz, WING * (float)std::abs(w.side));
+        Obj::PosX::set(obj, ax + rx * reach);
+        Obj::PosY::set(obj, ay);
+        Obj::PosZ::set(obj, az + rz * reach);
+        const recomp_context saved = *ctx;
+        ctx->f12.u32l = rd32(obj + 0x0C);
+        ctx->f14.u32l = rd32(obj + 0x10);
+        const int32_t block = (int32_t)call_game(trackGetBlock, ctx, { 0u, 0u, rd32(obj + 0x14) });
+        *ctx = saved;
+        if (block >= 0) Obj::Segment::set(obj, (int16_t)block);
+        return;
+    }
+}
+} // namespace jfg
+
+// squadsGetFormationPosition(squadron, slot, *x, *y, *z): where a member heads when it isn't on a mission. A flying
+// squad's extra member has a slot past the formation the level was laid out for, which put flyers inside trees and
+// walls. Such an extra (slot from the stock count up to the count wanted; the squadron's own calls use other slots)
+// takes a stock member's slot and stands a little apart from it, its own way (the golden angle by its slot), only as
+// far as the level allows. Walkers keep the game's slots (their squads run about through them).
+JFG_WRAP(squadsGetFormationPosition) {
+    g_rdram = rdram;
+    const uint32_t squadron = (uint32_t)ctx->r4;
+    const int slot = (int)(ctx->r5 & 0xFF);
+    const Squadron* s = !g_squadrons.empty() && valid_ptr(squadron) ? find(Obj::Data::get(squadron)) : nullptr;
+    const uint32_t px = (uint32_t)ctx->r6, py = (uint32_t)ctx->r7;
+    const uint32_t pz = in_rdram((uint32_t)ctx->r29 + 0x10) ? rd32((uint32_t)ctx->r29 + 0x10) : 0;
+    if (s == nullptr || !s->flyers || s->stock <= 0 || slot < s->stock || slot >= s->wanted ||
+        !in_rdram(px) || !in_rdram(py) || !in_rdram(pz)) {
+        squadsGetFormationPosition_orig(rdram, ctx);
+        return;
+    }
+    ctx->r5 = (gpr)(slot % s->stock);
+    squadsGetFormationPosition_orig(rdram, ctx);
+    g_rdram = rdram;
+    const gpr result = ctx->r2;
+    const float bx = rdf(px), by = rdf(py), bz = rdf(pz);
+    if (!std::isfinite(bx) || !std::isfinite(by) || !std::isfinite(bz)) return;
+    const float angle = (float)slot * 2.39996f, dx = std::cos(angle), dz = std::sin(angle);
+    const float reach = clear_reach(ctx, bx, by, bz, dx, dz, APART * (float)(slot / s->stock));
+    wrf(px, bx + dx * reach);
+    wrf(pz, bz + dz * reach);
+    ctx->r2 = result;
 }
 
 // An extra member dying leaves the flags alone.
