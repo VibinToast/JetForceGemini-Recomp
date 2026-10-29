@@ -97,6 +97,7 @@ romCopy
 mmFree
 func_overlay_3_000148C0_1EE9DA0
 func_overlay_3_00014694_1EE9B74
+squadsGetFormationPosition
 controlPlatform
 objSetupObject
 objGetObjdef
