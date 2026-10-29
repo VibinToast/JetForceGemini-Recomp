@@ -237,7 +237,7 @@ struct StoreRow {
     Rml::String id, name, short_text, version, source_name, tags, size_text, thumb, status, action;
     bool installed = false, update = false, managed = false, blocked = false, busy = false, selected = false;
 };
-struct StoreSourceRow { Rml::String id, name, status; bool enabled = true, official = false, removable = false; };
+struct StoreSourceRow { Rml::String id, name, status, page; bool enabled = true, official = false, removable = false; };
 struct StoreTagRow { Rml::String name; int count = 0; };
 static std::vector<StoreRow> store_rows;
 static std::vector<StoreSourceRow> store_sources;
@@ -350,6 +350,8 @@ static void refresh_store_rows() {
         store_sources_on += src.enabled ? 1 : 0;
         StoreSourceRow r;
         r.id = src.id; r.name = src.name; r.enabled = src.enabled; r.official = src.official; r.removable = src.removable;
+        // Its repo's page (Page, after the prompt every link gets): the catalog's address without its release part.
+        r.page = src.url.substr(0, src.url.find("/releases/"));
         r.status = !src.enabled ? "Off" : src.loaded ? std::to_string(src.mods) + " mods" : src.error;
         store_sources.push_back(r);
     }
@@ -847,6 +849,7 @@ public:
             src.RegisterMember("enabled", &StoreSourceRow::enabled);
             src.RegisterMember("official", &StoreSourceRow::official);
             src.RegisterMember("removable", &StoreSourceRow::removable);
+            src.RegisterMember("page", &StoreSourceRow::page);
         }
         constructor.RegisterArray<std::vector<StoreSourceRow>>();
         if (auto tag = constructor.RegisterStruct<StoreTagRow>()) {

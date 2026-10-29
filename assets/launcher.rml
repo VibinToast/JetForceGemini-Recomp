@@ -694,17 +694,20 @@
 				<!-- Get Mods' sources: each collection switched on or off (src/jfg/jfg_mod_store.cpp) -->
 				<div class="rl-modal" data-class-rl-on="store_sources_dialog"><div class="rl-modal-shadow st-sources-shadow"><div class="rl-modal-box">
 					<div class="rl-modal-title">Sources</div>
-					<div class="rl-modal-sub">The collections Get Mods lists. Turn one off to hide its mods.</div>
+					<div class="rl-modal-sub">The collections Get Mods lists. Turn one off to hide its mods; Page opens its GitHub page.</div>
 					<div class="st-sources-list">
 						<div class="st-source-row" data-for="src : store_sources">
 							<button class="st-source" data-attr-id="'st_source_' + it_index" data-class-st-on="src.enabled"
 								data-event-click="store_toggle_source(src.id)" style="nav-left: none;"
-								data-style-nav-right="src.removable ? '#st_source_x_' + it_index : 'none'"
+								data-style-nav-right="'#st_source_web_' + it_index"
 								data-style-nav-up="it_index == 0 ? 'none' : '#st_source_' + (it_index - 1)"
 								data-style-nav-down="it_index == store_sources.size - 1 ? '#st_add_text' : '#st_source_' + (it_index + 1)">
 								<div class="st-check"><div class="st-check-mark"></div></div><div class="st-source-name">{{src.name}}</div><div class="st-source-status">{{src.status}}</div></button>
+							<button class="st-chip st-source-x" data-attr-id="'st_source_web_' + it_index" data-event-click="open_url(src.page)"
+								data-style-nav-left="'#st_source_' + it_index" data-style-nav-right="src.removable ? '#st_source_x_' + it_index : 'none'"
+								style="nav-up: none; nav-down: none;">Page</button>
 							<button class="st-chip st-source-x" data-if="src.removable" data-attr-id="'st_source_x_' + it_index" data-event-click="store_remove_source(src.id)"
-								data-style-nav-left="'#st_source_' + it_index" style="nav-right: none; nav-up: none; nav-down: none;">Remove</button>
+								data-style-nav-left="'#st_source_web_' + it_index" style="nav-right: none; nav-up: none; nav-down: none;">Remove</button>
 						</div>
 						<!-- Someone else's collection: a GitHub repo publishing a catalog.json, as the official ones do -->
 						<div class="st-add">
