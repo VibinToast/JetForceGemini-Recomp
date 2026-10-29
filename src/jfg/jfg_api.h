@@ -40,6 +40,7 @@ enum class Event : uint32_t {
     Kill,             // jfg_on_kill(JfgKill* kill), since version 5
     WeaponFire,       // jfg_on_weapon_fire(JfgWeaponFire* fire), since version 6
     SquadTick,        // jfg_on_squad_tick(JfgSquadTick* tick), since version 6
+    Drop,             // jfg_on_drop(JfgDrop* drop), since version 6
     Count
 };
 

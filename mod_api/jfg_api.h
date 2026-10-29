@@ -632,6 +632,15 @@ RECOMP_IMPORT("*", int jfg_enemy_fling(void* enemy, const JfgFling* f));
 // 1 while a squad member is flung (by jfg_enemy_fling, another mod or the game). A mod that drives its own enemy's
 // velocity leaves it alone meanwhile, so the throw isn't undone.
 RECOMP_IMPORT("*", int jfg_enemy_flung(void* enemy));
+// Item drops from enemies, shared by all mods: register a drop with its chance per kill (0..100) instead of rolling on
+// jfg_on_kill, and spawn your item in jfg_on_drop when its id is yours. The port rolls once per kill, so a kill drops
+// at most one mod's item: only enemies the heroes or Floyd killed (no Tribals); JFG_DROP_BIG doubles the chance from a
+// big enemy (hit sphere radius 30 or more, or 10 health units); squads made bigger by jfg_squad_multiplier drop as
+// often in all as at their normal size; when the chances add up to more than 100% they are scaled down to share it.
+// Registering the same name again changes its chance and flags and returns the same id: call it whenever your option
+// may have changed. -1 if the name is empty or 32 drops are registered.
+#define JFG_DROP_BIG 1
+RECOMP_IMPORT("*", int jfg_drop_register(const char* name, int chance, int flags));
 // More enemies: squads set up from now on (the next level loaded) have percent / 100 times their members, 100 to 300
 // (rounded per squad). flags 1: sentries too (they stand in a clump at their post). Tribals, bosses and big enemies keep
 // their count. The extra members save no kills: killed squads stay killed at any setting, and a level never runs out
@@ -820,6 +829,17 @@ typedef struct {
 // Its type number (the same again for a name registered before), -1 if the definition is bad.
 RECOMP_IMPORT("*", int jfg_squad_type_register(const JfgSquadTypeDef* def));
 
+// jfg_on_drop: a kill's shared drop came up (jfg_drop_register). id: the drop's (spawn your item only when it is
+// yours); victim, killer and killer_kind as in jfg_on_kill; x, y, z where the victim died; big: 1 from a big enemy.
+typedef struct {
+    int id;
+    void* victim;
+    void* killer;
+    int killer_kind;
+    float x, y, z;
+    int big;
+} JfgDrop;
+
 // jfg_on_squad_tick: a member of a registered type, at the point of its update where the game runs its type's own
 // routine (before steering and the move). data is its squad control data (object +0x68), frames the update rate of
 // this call (squad members move once per call). Set run_stock to 1 to run the like type's routine after yours.
@@ -932,5 +952,7 @@ RECOMP_IMPORT("*", int jfg_hero_shot(const JfgHeroShot* shot));
 //     The first player's hero is about to fire a shot (or release a throw), before the game makes it.
 // jfg_on_squad_tick(JfgSquadTick* tick)
 //     A member of a squad type a mod registered is updated (jfg_squad_type_register).
+// jfg_on_drop(JfgDrop* drop)
+//     A kill dropped one of the registered drops (jfg_drop_register), after jfg_on_kill.
 
 #endif

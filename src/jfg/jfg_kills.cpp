@@ -31,6 +31,10 @@
 #include "jfg_port.h"
 
 namespace jfg {
+bool drops_active(); // jfg_drops.cpp
+void drops_roll(uint8_t* rdram, recomp_context* ctx, uint32_t victim, uint32_t killer, int killer_kind, bool tribal);
+void register_drop_api();
+
 namespace {
 constexpr int16_t KIND_HERO = 1, KIND_FLOYD = 2;
 constexpr int KILLER_NONE = -1, KILLER_FLOYD = 3, KILLER_OBJECT = 4;
@@ -131,7 +135,7 @@ uint32_t current_hero(recomp_context* ctx) {
 void report_kill(uint8_t* rdram, recomp_context* ctx, uint32_t victim, uint32_t killer, int weapon, bool tribal,
                  const char* where) {
     g_rdram = rdram;
-    if (!valid_ptr(victim) || (!api::listened(api::Event::Kill) && !debug_kills())) return;
+    if (!valid_ptr(victim) || (!api::listened(api::Event::Kill) && !debug_kills() && !drops_active())) return;
     if (auto c = g_credits.find(victim); c != g_credits.end()) {
         if (std::chrono::steady_clock::now() <= c->second.until) {
             weapon = c->second.weapon;
@@ -155,7 +159,10 @@ void report_kill(uint8_t* rdram, recomp_context* ctx, uint32_t victim, uint32_t 
                      where, victim, Obj::Kind::get(victim), vname, weapon, tribal ? 1 : 0, killer,
                      valid_ptr(killer) ? Obj::Kind::get(killer) : -1, kname, killer_kind);
     }
-    if (!api::listened(api::Event::Kill)) return;
+    if (!api::listened(api::Event::Kill)) {
+        drops_roll(rdram, ctx, victim, killer, killer_kind, tribal);
+        return;
+    }
     const gpr a0 = ctx->r4;
     {
         api::Payload p(ctx, 0x38);
@@ -172,6 +179,7 @@ void report_kill(uint8_t* rdram, recomp_context* ctx, uint32_t victim, uint32_t 
         api::fire(rdram, ctx, api::Event::Kill, (int32_t)p.addr);
     }
     ctx->r4 = a0;
+    drops_roll(rdram, ctx, victim, killer, killer_kind, tribal); // mods' item drops (jfg_drops.cpp)
 }
 } // namespace
 } // namespace jfg
@@ -274,5 +282,6 @@ void weapon_credit(uint8_t* rdram_, recomp_context* ctx) {
 namespace jfg {
 void register_kill_api() {
     recomp::overlays::register_base_export("jfg_weapon_credit", weapon_credit);
+    register_drop_api();
 }
 } // namespace jfg

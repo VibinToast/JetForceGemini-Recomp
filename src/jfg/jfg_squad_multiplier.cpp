@@ -226,6 +226,16 @@ JFG_WRAP(levelSetObjectFlag) {
     levelSetObjectFlag_orig(rdram, ctx);
 }
 
+namespace jfg {
+// For the drop pool (jfg_drops.cpp): a member of a multiplied squadron drops its stock size / its size now as often.
+float squad_mult_drop_scale(uint32_t member) {
+    const uint32_t sq = valid_ptr(member) ? Obj::Data::get(member) : 0;
+    const uint32_t squadron = valid_ptr(sq) ? SquadMemberData::Squadron::get(sq) : 0;
+    const Squadron* s = valid_ptr(squadron) ? find(Obj::Data::get(squadron)) : nullptr;
+    return s && s->wanted > s->stock ? (float)s->stock / (float)s->wanted : 1.0f;
+}
+} // namespace jfg
+
 // jfg_squad_multiplier(int percent, int flags): squads made from now on (the next level loaded) have percent / 100
 // times their members (100..300); flags 1: sentries too.
 void squad_multiplier_export(uint8_t* rdram_, recomp_context* ctx) {
