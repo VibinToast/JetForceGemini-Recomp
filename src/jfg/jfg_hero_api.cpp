@@ -44,6 +44,7 @@ extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
 namespace jfg { bool hud_in_corners(); void hud_area(float& left, float& right); } // jfg_hud_corners.cpp
 namespace jfg { int asset_number(const std::string& ref); } // jfg_assets.cpp
 namespace jfg { void overlay_size_now(float* out); } // jfg_overlay.cpp
+void squad_multiplier_export(uint8_t* rdram, recomp_context* ctx); // jfg_squad_multiplier.cpp
 
 namespace jfg::api {
 // A camera a mod set this tick (jfg_camera_set), applied by the camera step's wrapper.
@@ -1471,6 +1472,7 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_enemy_traits", enemy_traits);
     recomp::overlays::register_base_export("jfg_enemy_fling", enemy_fling);
     recomp::overlays::register_base_export("jfg_enemy_flung", enemy_flung);
+    recomp::overlays::register_base_export("jfg_squad_multiplier", squad_multiplier_export);
 }
 
 } // namespace jfg::api

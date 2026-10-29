@@ -632,6 +632,11 @@ RECOMP_IMPORT("*", int jfg_enemy_fling(void* enemy, const JfgFling* f));
 // 1 while a squad member is flung (by jfg_enemy_fling, another mod or the game). A mod that drives its own enemy's
 // velocity leaves it alone meanwhile, so the throw isn't undone.
 RECOMP_IMPORT("*", int jfg_enemy_flung(void* enemy));
+// More enemies: squads set up from now on (the next level loaded) have percent / 100 times their members, 100 to 300
+// (rounded per squad). flags 1: sentries too (they stand in a clump at their post). Tribals, bosses and big enemies keep
+// their count. The extra members save no kills: killed squads stay killed at any setting, and a level never runs out
+// of kill flags. They are made for the stock members still alive, and not when the level's object list is nearly full.
+RECOMP_IMPORT("*", void jfg_squad_multiplier(int percent, int flags));
 // Where a point of the level (x, y, z) shows on screen this frame, in the overlay's units (jfg_overlay_size): out[0]
 // x, out[1] y, out[2] its distance in front of the camera, out[3] overlay units per level unit there (to size a
 // picture drawn at it). 1 if it is in front of the camera, else 0. Overlay pictures cover the game: to hide one behind

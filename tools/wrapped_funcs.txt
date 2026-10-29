@@ -230,3 +230,10 @@ hitVectorCheck
 hitUpdate
 GetBaddyData
 func_overlay_3_0000D360_1EE2840
+
+# Mod API: more enemies per squad (jfg_squad_multiplier, jfg_squad_multiplier.cpp, decomp MSR 13)
+squadsInitialiseBeforeObjects
+SquadronInit
+squadsInitialiseAfterObjects
+levelObjectFlagSet
+levelSetObjectFlag

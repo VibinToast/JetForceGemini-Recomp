@@ -59,6 +59,8 @@ uint32_t kills_set_squaddie(uint32_t obj) {
     return before;
 }
 
+uint32_t kills_squaddie() { return g_squaddie; } // jfg_squad_multiplier.cpp
+
 // From squadsPlayerShootsSquaddie's wrapper (jfg_squad_cheat.cpp).
 void kills_remember_shot(uint32_t victim, uint32_t shooter) {
     g_last_shot_victim = victim;
