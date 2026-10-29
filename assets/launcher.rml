@@ -312,15 +312,15 @@
 			.st-chip.st-on { border-color: #3CC8FF; color: #3CC8FF; background-color: rgba(60, 200, 255, 0.10); }
 			.st-chip:hover, .st-chip:focus { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; }
 			.st-chip--update.st-has { border-color: #FFB21A; color: #FFB21A; }
-			.st-source { display: flex; flex-direction: row; align-items: center; margin-right: 8dp; padding: 8dp 14dp; border-width: 2dp; border-color: #1F3D73;
+			.st-source { display: flex; flex-direction: row; align-items: center; box-sizing: border-box; width: 310dp; height: 44dp; margin-right: 8dp; padding: 0dp 14dp; white-space: nowrap; border-width: 2dp; border-color: #1F3D73;
 				background-color: #050B1C; color: #8199BF; font-family: "JetBrains Mono"; font-weight: bold; font-size: 17dp; cursor: pointer;
 				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
 			.st-source.st-on { border-color: #3CC8FF; color: #E8F3FF; }
 			.st-source:hover, .st-source:focus { border-color: #FFB21A; }
 			.st-dot { display: block; width: 12dp; height: 12dp; margin-right: 10dp; border-radius: 6dp; background-color: #1F3D73; }
 			.st-source.st-on .st-dot { background-color: #3CF07A; }
-			.st-source-name { display: block; }
-			.st-source-status { display: block; margin-left: 10dp; font-weight: normal; color: #8199BF; }
+			.st-source-name { display: block; white-space: nowrap; }
+			.st-source-status { display: block; margin-left: auto; padding-left: 10dp; white-space: nowrap; font-weight: normal; color: #8199BF; }
 			.st-body { display: flex; flex-direction: row; flex: 1 1 auto; min-height: 0dp; }
 			.st-list { display: block; flex: 1 1 58%; overflow-y: auto; padding-right: 10dp; }
 			.st-card { display: flex; flex-direction: row; align-items: center; width: 100%; box-sizing: border-box; margin-bottom: 8dp; padding: 10dp 12dp;
