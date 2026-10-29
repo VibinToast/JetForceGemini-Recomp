@@ -457,7 +457,7 @@ extern "C" int jfg_floyd_roll_before(uint8_t* rdram_, recomp_context* ctx) {
 // pitch go into his data, and its bank onto the eased roll (dAngle's result, which the game stores).
 extern "C" void jfg_floyd_roll_after(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    constexpr int PITCH_LIMIT = 0x4000, ROLL_LIMIT = 520 * 20; // the game's own limits (full stick: rate 520)
+    constexpr int PITCH_LIMIT = 0x4000, ROLL_LIMIT = 424 * 20; // the game's own limits (full stick: turn rate 424)
     const uint32_t data = g_sidekick_data;
     if (!jfg_floyd_mouse_active()) { g_bank = 0.0f; g_pitch_data = 0; return; }
     const int frames = g_sidekick_frames;
