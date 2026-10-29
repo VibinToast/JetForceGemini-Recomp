@@ -319,6 +319,7 @@
 			.st-source:hover, .st-source:focus { border-color: #FFB21A; }
 			.st-dot { display: block; width: 10dp; height: 10dp; margin-right: 8dp; border-radius: 5dp; background-color: #1F3D73; }
 			.st-source.st-on .st-dot { background-color: #3CF07A; }
+			.st-source-name { display: block; }
 			.st-source-status { display: block; margin-left: 10dp; font-weight: normal; color: #8199BF; }
 			.st-body { display: flex; flex-direction: row; flex: 1 1 auto; min-height: 0dp; }
 			.st-list { display: block; flex: 1 1 58%; overflow-y: auto; padding-right: 10dp; }
@@ -350,7 +351,7 @@
 			.st-detail-deps { display: block; margin-top: 12dp; font-family: "JetBrains Mono"; font-size: 14dp; line-height: 20dp; color: #FFB21A; }
 			.st-detail-note { display: block; margin-top: 12dp; padding-left: 10dp; border-left: 3dp #3CC8FF; font-family: "JetBrains Mono"; font-size: 14dp; line-height: 20dp; color: #8199BF; }
 			.st-actions { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; margin-top: 8dp; }
-			.st-state { display: block; margin: 20dp 0dp 4dp; font-family: "JetBrains Mono"; font-weight: bold; font-size: 16dp; color: #3CF07A; }
+			.st-state { display: block; margin: 20dp 28dp 4dp 0dp; font-family: "JetBrains Mono"; font-weight: bold; font-size: 16dp; color: #3CF07A; }
 			.st-state.st-blocked { color: #FF6B5E; }
 			.st-progress { display: block; margin-top: 20dp; }
 			.st-progress-text { display: block; margin-bottom: 8dp; font-family: "JetBrains Mono"; font-size: 15dp; color: #E8F3FF; }
@@ -550,7 +551,7 @@
 										<div class="st-row">
 											<div class="st-label">Sources</div>
 											<button class="st-source" data-for="src : store_sources" data-attr-id="'st_source_' + it_index" data-class-st-on="src.enabled"
-												data-event-click="store_toggle_source(src.id)"><div class="st-dot"></div>{{src.name}}<div class="st-source-status">{{src.status}}</div></button>
+												data-event-click="store_toggle_source(src.id)"><div class="st-dot"></div><div class="st-source-name">{{src.name}}</div><div class="st-source-status">{{src.status}}</div></button>
 										</div>
 									</div>
 									<div class="st-body">
