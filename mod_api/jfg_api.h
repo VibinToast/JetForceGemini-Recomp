@@ -644,6 +644,33 @@ RECOMP_IMPORT("*", int jfg_enemy_fling(void* enemy, const JfgFling* f));
 // 1 while a squad member is flung (by jfg_enemy_fling, another mod or the game). A mod that drives its own enemy's
 // velocity leaves it alone meanwhile, so the throw isn't undone.
 RECOMP_IMPORT("*", int jfg_enemy_flung(void* enemy));
+// Ammo for a mod's weapon, run by the port (the same for every weapon; call again whenever your options may have
+// changed, each tick is fine; zeros turn a source off). Ammo is given as jfg_hero_give_weapon gives it: the weapon too
+// if the hero hasn't it, never past its capacity (jfg_hero_give_weapon(id, n) is also the way to add n yourself).
+// - Drops: cell (the pack's object type, "mod:objtype_x"; NULL for none) may drop where an enemy dies, drop_chance
+//   percent a kill, from the shared drop pool (jfg_drop_register: one drop a kill across mods, twice the chance from a
+//   big enemy). It appears cell_height above where the enemy died, at cell_scale, and hovers (cell_flags
+//   JFG_CELL_FALLS: it falls and bounces by the game's physics); it spins, and walking into it gives cell_ammo with
+//   the game's pick-up sound. It blinks out after 30 seconds.
+// - Refill: picking up refill_from's ammo or the weapon itself (a stock weapon, 0..14; -1 none) gives refill_ammo.
+// - Pickups: pickup_share percent of the level's pickups of pickup_from (stock, -1 none) give your weapon instead
+//   (their model stays); with several weapons sharing one stock weapon's pickups, a pickup becomes at most one.
+// - Recharge: one comes back every recharge_ticks (1/60 s; 0 none) while the hero has fewer than its capacity.
+#define JFG_CELL_FALLS 1
+typedef struct {
+    const char* cell;
+    int drop_chance;
+    int cell_ammo;
+    float cell_scale;
+    float cell_height;
+    int cell_flags;
+    int refill_from;
+    int refill_ammo;
+    int pickup_from;
+    int pickup_share;
+    int recharge_ticks;
+} JfgAmmoSources;
+RECOMP_IMPORT("*", void jfg_weapon_ammo_sources(int weapon, const JfgAmmoSources* sources));
 // Item drops from enemies, shared by all mods: register a drop with its chance per kill (0..100) instead of rolling on
 // jfg_on_kill, and spawn your item in jfg_on_drop when its id is yours. The port rolls once per kill, so a kill drops
 // at most one mod's item: only enemies the heroes or Floyd killed (no Tribals); JFG_DROP_BIG doubles the chance from a

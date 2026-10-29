@@ -935,6 +935,40 @@ void api_weapon_pickup_get(uint8_t* rdram_, recomp_context* ctx) {
 }
 } // namespace
 
+namespace jfg::weapons {
+// For the port's own users (jfg_weapon_ammo.cpp): the exports, called from C++.
+void give(uint8_t* rdram, recomp_context* ctx, int id, int ammo) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)id;
+    c.r5 = (gpr)ammo;
+    api_hero_give_weapon(rdram, &c);
+}
+bool owned(uint8_t* rdram, recomp_context* ctx, int id) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)id;
+    api_hero_has_weapon(rdram, &c);
+    return c.r2 != 0;
+}
+int capacity(int id) {
+    if (id >= 0 && id < STOCK) return (int16_t)rd16(ADDR_weaponTable + WeaponDef::Size * (uint32_t)id + ROW_MAX_AMMO);
+    const Weapon* w = weapon_of(id);
+    if (w == nullptr) return 0;
+    return w->max_ammo >= 0 ? w->max_ammo : (int16_t)rd16(ADDR_weaponTable + WeaponDef::Size * (uint32_t)w->row_from + ROW_MAX_AMMO);
+}
+int pickup_get(uint8_t* rdram, recomp_context* ctx, uint32_t obj) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)(int32_t)obj;
+    api_weapon_pickup_get(rdram, &c);
+    return (int)(int32_t)c.r2;
+}
+void pickup_set(uint8_t* rdram, recomp_context* ctx, uint32_t obj, int id) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)(int32_t)obj;
+    c.r5 = (gpr)id;
+    api_weapon_pickup_set(rdram, &c);
+}
+} // namespace jfg::weapons
+
 namespace jfg {
 void register_weapon_registry_api() {
     recomp::overlays::register_base_export("jfg_weapon_register", api_weapon_register);

@@ -50,6 +50,15 @@ void claim_for_mod(uint32_t obj, size_t mod_index) {
     if (valid_ptr(obj)) g_claims[obj] = mod_index;
 }
 
+// Whether a claimed object is still there (not freed since it was claimed).
+bool claim_alive(uint32_t obj) {
+    return g_claims.count(obj) != 0;
+}
+
+void unclaim(uint32_t obj) {
+    g_claims.erase(obj);
+}
+
 // After objDoFrees: claims on freed objects go.
 void claims_after_frees(uint8_t* rdram_) {
     if (g_claims.empty()) return;

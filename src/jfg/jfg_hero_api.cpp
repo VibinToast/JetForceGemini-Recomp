@@ -1734,4 +1734,57 @@ JFG_WRAP(func_8002AA7C_2B67C) {
 
 namespace jfg {
 bool fling_member(uint32_t obj, float vx, float vy, float vz, int calls) { return api::fling(obj, vx, vy, vz, calls); }
+
+// For the port's own users of these helpers (jfg_weapon_ammo.cpp): the exports, called from C++.
+uint32_t spawn_object(uint8_t* rdram, recomp_context* ctx, int id, float x, float y, float z, float vx, float vy,
+                      float vz, uint16_t yaw) {
+    recomp_context c = *ctx;
+    uint32_t obj = 0;
+    {
+        api::Payload p(&c, 0x20);
+        wr32(p.addr + 0, (uint32_t)id);
+        wrf(p.addr + 4, x); wrf(p.addr + 8, y); wrf(p.addr + 12, z);
+        wrf(p.addr + 16, vx); wrf(p.addr + 20, vy); wrf(p.addr + 24, vz);
+        wr32(p.addr + 28, yaw);
+        c.r4 = (gpr)(int32_t)p.addr;
+        api::spawn(rdram, &c);
+        obj = (uint32_t)c.r2;
+    }
+    g_rdram = rdram;
+    return obj;
+}
+void free_object(uint8_t* rdram, recomp_context* ctx, uint32_t obj) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)(int32_t)obj;
+    api::object_free(rdram, &c);
+    g_rdram = rdram;
+}
+void set_object_scale(uint32_t obj, float scale) {
+    if (valid_ptr(obj)) wrf(obj + api::OBJ_SCALE, scale);
+}
+void play_flat_sound(uint8_t* rdram, recomp_context* ctx, int id) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)id;
+    api::game_sound_flat(rdram, &c);
+    g_rdram = rdram;
+}
+uint32_t first_hero(uint8_t* rdram, recomp_context* ctx) {
+    recomp_context c = *ctx;
+    api::hero_get(rdram, &c);
+    g_rdram = rdram;
+    return (uint32_t)c.r2;
+}
+bool game_is_paused(uint8_t* rdram, recomp_context* ctx) {
+    recomp_context c = *ctx;
+    api::game_paused(rdram, &c);
+    g_rdram = rdram;
+    return c.r2 != 0;
+}
+int hero_ammo_of(uint8_t* rdram, recomp_context* ctx, int weapon) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)weapon;
+    api::hero_ammo(rdram, &c);
+    g_rdram = rdram;
+    return (int)(int32_t)c.r2;
+}
 }

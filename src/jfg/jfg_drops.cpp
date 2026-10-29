@@ -86,6 +86,20 @@ void drop_register(uint8_t* rdram_, recomp_context* ctx) {
 }
 } // namespace
 
+// From C++ (jfg_weapon_ammo.cpp): as jfg_drop_register.
+int drop_register_named(const std::string& name, int chance, int flags) {
+    chance = std::clamp(chance, 0, 100);
+    for (size_t i = 0; i < g_drops.size(); i++) {
+        if (g_drops[i].name != name) continue;
+        g_drops[i].chance = chance;
+        g_drops[i].flags = flags;
+        return (int)i;
+    }
+    if ((int)g_drops.size() >= MAX_DROPS) return -1;
+    g_drops.push_back({ name, chance, flags });
+    return (int)g_drops.size() - 1;
+}
+
 bool drops_active() {
     return api::listened(api::Event::Drop) && !g_drops.empty();
 }
