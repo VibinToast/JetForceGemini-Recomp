@@ -12,8 +12,31 @@ extern const std::string mod_tab_id;
 
 // JFG PORT: the mod menu's look, shared with ui_mod_menu.cpp.
 namespace modui {
+    bool is_switch_option(const recomp::mods::ConfigOption& option) {
+        if (option.id != "enabled" || option.type != recomp::mods::ConfigOptionType::Enum) return false;
+        const auto& e = std::get<recomp::mods::ConfigOptionEnum>(option.variant);
+        return e.options.size() == 2;
+    }
+
+    bool has_switch(const std::string& mod_id) {
+        const recomp::mods::ConfigSchema& schema = recomp::mods::get_mod_config_schema(mod_id);
+        const auto it = schema.options_by_id.find("enabled");
+        return it != schema.options_by_id.end() && is_switch_option(schema.options[it->second]);
+    }
+
+    static bool switched_off(const std::string& mod_id) {
+        if (!has_switch(mod_id)) return false;
+        const recomp::mods::ConfigValueVariant v = recomp::mods::get_mod_config_value(mod_id, "enabled");
+        return std::holds_alternative<uint32_t>(v) && std::get<uint32_t>(v) == 0;
+    }
+
+    bool can_toggle(const recomp::mods::ModDetails& details) {
+        if (details.runtime_toggleable || !ultramodern::is_game_started()) return true;
+        return has_switch(details.mod_id) && recomp::mods::is_mod_enabled(details.mod_id); // loaded, with a switch
+    }
+
     Status status_of(const std::string& mod_id) {
-        if (recomp::mods::is_mod_enabled(mod_id)) return Status::On;
+        if (recomp::mods::is_mod_enabled(mod_id)) return switched_off(mod_id) ? Status::Off : Status::On;
         if (recomp::mods::is_mod_auto_enabled(mod_id)) return Status::Required;
         return Status::Off;
     }
@@ -192,6 +215,11 @@ ModDetailsPanel::ModDetailsPanel(Element *parent) : Element(parent) {
     buttons_container->set_border_top_color(modui::edge);
     buttons_container->set_background_color(modui::panel);
     {
+        // JFG PORT: Configure first, so it is one step right of the mod's card; the On/Off toggle after it.
+        configure_button = context.create_element<Button>(buttons_container, "Configure", recompui::ButtonStyle::Secondary);
+        configure_button->add_pressed_callback([this](){ configure_button_pressed(); });
+        configure_button->set_nav_manual(NavDirection::Up, mod_tab_id);
+
         enable_container = context.create_element<Container>(buttons_container, FlexDirection::Row, JustifyContent::FlexStart);
         enable_container->set_align_items(AlignItems::Center);
         enable_container->set_flex(1.0f, 1.0f);
@@ -210,10 +238,6 @@ ModDetailsPanel::ModDetailsPanel(Element *parent) : Element(parent) {
                 enable_label = context.create_element<Label>(enable_text, LabelStyle::Small);
             }
         }
-
-        configure_button = context.create_element<Button>(buttons_container, "Configure", recompui::ButtonStyle::Secondary);
-        configure_button->add_pressed_callback([this](){ configure_button_pressed(); });
-        configure_button->set_nav_manual(NavDirection::Up, mod_tab_id);
     }
     set_scale(1.0f, 8.0f);
     clear_mod_navigation();
@@ -288,13 +312,15 @@ void ModDetailsPanel::set_mod_details(const recomp::mods::ModDetails& details, c
     enable_toggle->set_enabled(toggle_enabled);
     configure_button->set_enabled(configure_enabled);
     (void)toggle_label_visible; // the note under On/Off says why, see refresh_status
-    toggle_locked_by_game = !cur_details.runtime_toggleable && ultramodern::is_game_started();
+    toggle_locked_by_game = !modui::can_toggle(cur_details);
 
-    if (configure_enabled) {
-        enable_toggle->set_nav(NavDirection::Right, configure_button);
+    // JFG PORT: Configure, then the toggle, left to right.
+    enable_toggle->set_nav_none(NavDirection::Right);
+    if (toggle_enabled) {
+        configure_button->set_nav(NavDirection::Right, enable_toggle);
     }
     else {
-        enable_toggle->set_nav_none(NavDirection::Right);
+        configure_button->set_nav_none(NavDirection::Right);
     }
 
     refresh_status();
@@ -331,7 +357,23 @@ void ModDetailsPanel::refresh_status() {
     enable_label->set_text(note);
     enable_label->set_display(note.empty() ? Display::None : Display::Block);
 
-    build_dependencies();
+    request_dependencies();
+}
+
+// JFG PORT: the dependency rows are made again at the next UI update, not now: selecting a mod often comes from an event
+// of one of those rows (a click on it, or the focus leaving it for the mod's card), and deleting the row while the event
+// is still being handled crashed the menu.
+void ModDetailsPanel::request_dependencies() {
+    if (get_current_context() == ContextId::null()) { build_dependencies(); return; } // no update to wait for
+    dependencies_pending = true;
+    queue_update();
+}
+
+void ModDetailsPanel::process_event(const Event &e) {
+    if (e.type == EventType::Update && dependencies_pending) {
+        dependencies_pending = false;
+        build_dependencies();
+    }
 }
 
 void ModDetailsPanel::add_section_title(const std::string &text) {
@@ -395,7 +437,7 @@ void ModDetailsPanel::build_dependencies() {
 // JFG PORT: the dependency rows sit between the description and the toggle: up from the toggle (or Configure) reaches
 // the last, down from the last returns, and left goes back to the selected mod's card.
 void ModDetailsPanel::apply_dependency_navigation() {
-    Element* below = enable_toggle->is_enabled() ? static_cast<Element*>(enable_toggle) : static_cast<Element*>(configure_button);
+    Element* below = configure_button->is_enabled() ? static_cast<Element*>(configure_button) : static_cast<Element*>(enable_toggle);
     for (size_t i = 0; i < dependency_rows.size(); i++) {
         ModDependencyRow* row = dependency_rows[i];
         if (i > 0) row->set_nav(NavDirection::Up, dependency_rows[i - 1]);
@@ -426,13 +468,13 @@ void ModDetailsPanel::set_mod_configure_pressed_callback(std::function<void()> c
 void ModDetailsPanel::setup_mod_navigation(Element* nav_target) {
     list_nav_target = nav_target;
     apply_dependency_navigation();
-    enable_toggle->set_nav(NavDirection::Left, nav_target);
+    configure_button->set_nav(NavDirection::Left, nav_target);
 
-    if (enable_toggle->is_enabled()) {
-        configure_button->set_nav(NavDirection::Left, enable_toggle);
+    if (configure_button->is_enabled()) {
+        enable_toggle->set_nav(NavDirection::Left, configure_button);
     }
     else {
-        configure_button->set_nav(NavDirection::Left, nav_target);
+        enable_toggle->set_nav(NavDirection::Left, nav_target);
     }
 }
 

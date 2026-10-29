@@ -311,6 +311,7 @@ using PosX  = Field<float, 0x0C>;
 using PosY  = Field<float, 0x10>;
 using PosZ  = Field<float, 0x14>;
 using Fov   = Field<float, 0x2C>;
+constexpr uint32_t SHAKE = 0x30; // f32 x, y, z: the shake camTick adds to the view (camStartShake)
 constexpr uint32_t Size = 0x4C;
 }
 

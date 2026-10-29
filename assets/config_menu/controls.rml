@@ -5,12 +5,21 @@
         <form class="config__form" data-attr-cur-input="cur_input_row" data-attr-cur-binding-slot="active_binding_slot">
             <div class="config__header">
                 <div class="config__header-left">
+                    <!-- JFG PORT: this page opens from Customize Buttons on the Controls page / tab; this goes back (as B does). -->
+                    <button
+                        class="button"
+                        id="jfg_bindings_back"
+                        data-event-click="jfg_bindings_back"
+                        style="margin: 0dp 16dp 0dp 0dp; nav-down: #input_row_button_0_0; nav-up: #tab_jfg_controls; nav-left: #tab_jfg_controls; nav-right: #cont_kb_toggle"
+                    >
+                        <div class="button__label" style="white-space: nowrap;">Back to Controls</div>
+                    </button>
                     <button
                         class="toggle"
                         id="cont_kb_toggle"
                         data-class-toggle--checked="input_device_is_keyboard"
                         onclick="toggle_input_device"
-                        style="nav-down: #input_row_button_0_0; nav-up: #tab_controls"
+                        style="nav-down: #input_row_button_0_0; nav-up: #tab_jfg_controls; nav-left: #jfg_bindings_back"
                     >
                         <div class="toggle__border" />
                         <div class="toggle__floater" />

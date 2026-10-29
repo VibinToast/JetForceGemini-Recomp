@@ -564,6 +564,14 @@ namespace recompui {
         set_property(Rml::PropertyId::RowGap, Rml::Property(size, to_rml(unit)));
     }
 
+    void Style::set_flex_wrap(bool wrap) {
+        set_property(Rml::PropertyId::FlexWrap, Rml::Property(wrap ? Rml::Style::FlexWrap::Wrap : Rml::Style::FlexWrap::Nowrap));
+    }
+
+    void Style::set_align_self_start() {
+        set_property(Rml::PropertyId::AlignSelf, Rml::Property(Rml::Style::AlignSelf::FlexStart));
+    }
+
     void Style::set_column_gap(float size, Unit unit) {
         set_property(Rml::PropertyId::ColumnGap, Rml::Property(size, to_rml(unit)));
     }

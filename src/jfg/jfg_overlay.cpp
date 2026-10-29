@@ -1,0 +1,404 @@
+// Jet Force Gemini port: the mod overlay (mod_api/jfg_api.h, "overlay"): pictures, polygons and circles a mod sends
+// each frame, drawn by the port over the game at the window's own resolution, anti-aliased (ImGui draw lists, on every
+// presented frame by the render hook, src/debug_ui/backend.cpp), rather than on the game's pixels.
+//
+// Places are in overlay units: the game's picture is 240 high and as wide as it is shown (320 in 4:3, about 427 in
+// 16:9; jfg_overlay_size). What mods send while the game draws a frame (from its game tick or jfg_on_draw_hud) is shown
+// from the end of that frame (prnBorder) until the next; shapes stop being shown a quarter of a second after the game
+// last drew a frame with them (menus, the title screen). Pictures are kept by id until replaced: RGBA, up to
+// 1024 x 1024, uploaded once as ImGui textures (both of the port's renderer backends update them). Text is drawn with
+// the port's fonts (jfg_overlay_font.cpp): each string becomes a picture at the window's pixel size, kept while it is
+// drawn and dropped a second after it last was.
+#include <algorithm>
+#include <cmath>
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <map>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "imgui/imgui.h"
+#include "librecomp/overlays.hpp"
+#include "jfg_api.h"
+#include "jfg_game.h"
+#include "jfg_rt64.h"
+
+namespace jfg {
+void overlay_set_image(int id, int w, int h, std::vector<uint32_t> pixels);
+void overlay_draw(int id, float x, float y, float w, float h, uint32_t tint);
+}
+
+namespace jfg::overlay {
+// The overlay's width in its units (240 high, as wide as the game's picture is shown).
+float overlay_width() {
+    const RT64JfgPresentInfo& info = rt64_jfg_present_info;
+    if (info.viewHeight > 0.0f && info.viewWidth > 0.0f) return 240.0f * info.viewWidth / info.viewHeight;
+    return 320.0f;
+}
+
+float text_width(int font, const std::string& text, float size);                               // jfg_overlay_font.cpp
+bool text_picture(int font, const std::string& text, int size, std::vector<uint32_t>& pixels, int& w, int& h);
+
+namespace {
+constexpr float HEIGHT = 240.0f;
+constexpr int MAX_IMAGE = 1024;
+constexpr size_t MAX_SHAPES = 4096, MAX_POINTS = 512;
+constexpr auto STALE = std::chrono::milliseconds(250);
+
+enum class Kind : uint8_t { Image, Polygon, Circle, Text };
+struct Shape {
+    Kind kind;
+    int64_t image = 0; // an image key (image_key)
+    uint32_t fill = 0, line = 0; // 0xRRGGBBAA
+    float thickness = 0.0f;
+    float x = 0, y = 0, w = 0, h = 0, r = 0;
+    std::vector<ImVec2> points;
+    int font = 0, align = 0;  // text: 0 left, 1 centre, 2 right of x
+    std::string text;
+};
+
+// A string drawn as a picture: by font, pixel size and text.
+struct TextPicture {
+    ImTextureData* tex = nullptr;
+    int w = 0, h = 0;
+    uint64_t used = 0;  // the build it was last drawn in
+};
+std::unordered_map<std::string, TextPicture> g_text_pictures; // under g_mutex
+uint64_t g_builds = 0;
+constexpr uint64_t TEXT_KEEP = 60;  // builds a string's picture is kept after it was last drawn
+constexpr int TEXT_PAD = 2;         // jfg_overlay_font.cpp's border round a picture, in pixels
+
+struct Image {
+    int w = 0, h = 0;
+    std::vector<uint32_t> pixels; // RGBA, as ImGui stores it
+    bool changed = false;
+    ImTextureData* tex = nullptr;
+};
+
+std::mutex g_mutex;
+std::vector<Shape> g_building;  // game thread
+std::vector<Shape> g_shown;     // under g_mutex
+std::chrono::steady_clock::time_point g_shown_at;
+// Pictures by key: a mod's ids are its own (the mod's index in the high word), so two mods can use the same numbers;
+// the port's own (overlay_set_image) have 0 there.
+std::map<int64_t, Image> g_images;  // under g_mutex
+int64_t image_key(size_t mod_index, int id) { return ((int64_t)(mod_index + 1) << 32) | (uint32_t)id; }
+std::vector<ImTextureData*> g_retired; // textures replaced by a new size, destroyed by the backend first
+
+ImU32 to_im(uint32_t rgba) {
+    return IM_COL32(rgba >> 24, (rgba >> 16) & 0xFF, (rgba >> 8) & 0xFF, rgba & 0xFF);
+}
+
+float rdf(uint32_t a) {
+    const uint32_t v = rd32(a);
+    float f;
+    std::memcpy(&f, &v, 4);
+    return f;
+}
+
+void add(Shape&& s) {
+    if (g_building.size() < MAX_SHAPES) g_building.push_back(std::move(s));
+}
+
+// --- the exports ---------------------------------------------------------------------------------------------------
+// jfg_overlay_size(float* out): out[0] the overlay's width, out[1] its height (240).
+void overlay_size(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t out = (uint32_t)ctx->r4;
+    const float w = overlay_width();
+    uint32_t bits;
+    std::memcpy(&bits, &w, 4);
+    wr32(out, bits);
+    const float h = HEIGHT;
+    std::memcpy(&bits, &h, 4);
+    wr32(out + 4, bits);
+}
+
+void set_image(int64_t key, int w, int h, std::vector<uint32_t> pixels);
+
+// jfg_overlay_image(int id, int w, int h, const unsigned int* rgba): picture id (the mod's own numbers), w x h words
+// 0xRRGGBBAA.
+void overlay_image(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
+    g_rdram = rdram_;
+    const int id = (int)ctx->r4, w = (int)ctx->r5, h = (int)ctx->r6;
+    const uint32_t src = (uint32_t)ctx->r7;
+    if (w <= 0 || h <= 0 || w > MAX_IMAGE || h > MAX_IMAGE || src == 0) return;
+    std::vector<uint32_t> pixels((size_t)w * h);
+    for (size_t i = 0; i < pixels.size(); i++) pixels[i] = rd32(src + (uint32_t)i * 4);
+    set_image(image_key(mod_index, id), w, h, std::move(pixels));
+}
+
+void set_image(int64_t key, int w, int h, std::vector<uint32_t> pixels) {
+    if (w <= 0 || h <= 0 || w > MAX_IMAGE || h > MAX_IMAGE || pixels.size() != (size_t)w * h) return;
+    for (uint32_t& c : pixels) {
+        // ImGui's RGBA32 is bytes R, G, B, A in memory: on a little-endian host, A << 24 | B << 16 | G << 8 | R.
+        c = (c >> 24) | ((c >> 8) & 0xFF00) | ((c << 8) & 0xFF0000) | (c << 24);
+    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    Image& img = g_images[key];
+    if (img.tex != nullptr && (img.w != w || img.h != h)) {
+        img.tex->SetStatus(ImTextureStatus_WantDestroy);
+        img.tex->UnusedFrames = 8; // the backends destroy a texture once no frame in flight uses it
+        g_retired.push_back(img.tex);
+        img.tex = nullptr;
+    }
+    img.w = w;
+    img.h = h;
+    img.pixels = std::move(pixels);
+    img.changed = true;
+}
+} // namespace
+} // namespace jfg::overlay
+
+// A picture for the overlay from the port's own code: w x h words 0xRRGGBBAA (the same as jfg_overlay_image).
+void jfg::overlay_set_image(int id, int w, int h, std::vector<uint32_t> pixels) {
+    jfg::overlay::set_image((int64_t)(uint32_t)id, w, h, std::move(pixels));
+}
+
+// Draws one this frame, in overlay units (as jfg_overlay_draw_image).
+void jfg::overlay_draw(int id, float x, float y, float w, float h, uint32_t tint) {
+    using namespace jfg::overlay;
+    Shape s{ Kind::Image };
+    s.x = x; s.y = y; s.w = w; s.h = h;
+    s.fill = tint;
+    s.image = (int64_t)(uint32_t)id;
+    add(std::move(s));
+}
+
+namespace jfg::overlay {
+namespace {
+// jfg_overlay_draw_image(const JfgOverlayImage* image): { float x, y, w, h; unsigned int tint; int id; }
+void overlay_draw_image(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
+    g_rdram = rdram_;
+    const uint32_t p = (uint32_t)ctx->r4;
+    if (p == 0) return;
+    Shape s{ Kind::Image };
+    s.x = rdf(p); s.y = rdf(p + 4); s.w = rdf(p + 8); s.h = rdf(p + 12);
+    s.fill = rd32(p + 16);
+    s.image = image_key(mod_index, (int)rd32(p + 20));
+    add(std::move(s));
+}
+
+// jfg_overlay_polygon(const JfgOverlayPolygon* polygon): { const float* xy; int count; unsigned int fill, line;
+// float thickness; } A polygon (sides not crossing), filled and/or outlined.
+void overlay_polygon(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t p = (uint32_t)ctx->r4;
+    if (p == 0) return;
+    const uint32_t xy = rd32(p);
+    const int n = (int)rd32(p + 4);
+    if (xy == 0 || n < 2 || n > (int)MAX_POINTS) return;
+    Shape s{ Kind::Polygon };
+    s.fill = rd32(p + 8);
+    s.line = rd32(p + 12);
+    s.thickness = rdf(p + 16);
+    for (int i = 0; i < n; i++) s.points.emplace_back(rdf(xy + i * 8), rdf(xy + i * 8 + 4));
+    add(std::move(s));
+}
+
+// jfg_overlay_circle(const JfgOverlayCircle* circle): { float x, y, radius; unsigned int fill, line; float thickness; }
+void overlay_circle(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t p = (uint32_t)ctx->r4;
+    if (p == 0) return;
+    Shape s{ Kind::Circle };
+    s.x = rdf(p); s.y = rdf(p + 4); s.r = rdf(p + 8);
+    s.fill = rd32(p + 12);
+    s.line = rd32(p + 16);
+    s.thickness = rdf(p + 20);
+    add(std::move(s));
+}
+
+// JfgOverlayText: { float x, y, size; unsigned int color; int align; int font; const char* text; }
+std::string read_text(uint32_t p) {
+    std::string out;
+    for (uint32_t i = 0; i < 255; i++) {
+        const char c = (char)rd8(p + i);
+        if (c == 0) break;
+        out += c;
+    }
+    return out;
+}
+
+Shape text_shape(uint32_t p) {
+    Shape s{ Kind::Text };
+    s.x = rdf(p); s.y = rdf(p + 4); s.h = rdf(p + 8);
+    s.fill = rd32(p + 12);
+    s.align = (int)rd32(p + 16);
+    s.font = (int)rd32(p + 20);
+    const uint32_t text = rd32(p + 24);
+    if (text != 0) s.text = read_text(text);
+    return s;
+}
+
+// jfg_overlay_text(const JfgOverlayText* text): a line of text, size units high, its top at y.
+void overlay_text(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t p = (uint32_t)ctx->r4;
+    if (p == 0) return;
+    Shape s = text_shape(p);
+    if (s.text.empty() || s.h <= 0.0f) return;
+    add(std::move(s));
+}
+
+// jfg_overlay_text_width(const JfgOverlayText* text, float* width): how wide the text is, in overlay units.
+void overlay_text_width(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t p = (uint32_t)ctx->r4, out = (uint32_t)ctx->r5;
+    if (p == 0 || out == 0) return;
+    const Shape s = text_shape(p);
+    const float w = text_width(s.font, s.text, s.h);
+    uint32_t bits;
+    std::memcpy(&bits, &w, 4);
+    wr32(out, bits);
+}
+
+ImTextureData* g_white = nullptr; // a white texture: shapes take its colour (the list's own texture)
+std::atomic<bool> g_menu_shown{ false };
+} // namespace
+
+// The settings menu or a prompt is open: the overlay is left out, so it never covers it (F10's tools bar leaves it
+// up). The game draws on behind the menu, so what mods send keeps coming.
+void set_menu_shown(bool shown) { g_menu_shown.store(shown, std::memory_order_relaxed); }
+
+// The game finished a frame: what was sent for it is shown from now on.
+void frame_done() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_shown.swap(g_building);
+    g_building.clear();
+    g_shown_at = std::chrono::steady_clock::now();
+}
+
+void register_api() {
+    recomp::overlays::register_base_export("jfg_overlay_size", overlay_size);
+    recomp::overlays::register_ext_base_export("jfg_overlay_image", overlay_image);
+    recomp::overlays::register_ext_base_export("jfg_overlay_draw_image", overlay_draw_image);
+    recomp::overlays::register_base_export("jfg_overlay_polygon", overlay_polygon);
+    recomp::overlays::register_base_export("jfg_overlay_circle", overlay_circle);
+    recomp::overlays::register_base_export("jfg_overlay_text", overlay_text);
+    recomp::overlays::register_base_export("jfg_overlay_text_width", overlay_text_width);
+}
+
+// Present thread (render hook): the overlay in window pixels into list, the textures to create or update into
+// textures. False if there is nothing to draw.
+bool build(ImDrawList* list, ImVector<ImTextureData*>& textures) {
+    const RT64JfgPresentInfo& info = rt64_jfg_present_info;
+    if (info.fbWidth == 0 || info.viewWidth <= 0.0f || info.viewHeight <= 0.0f) return false;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_builds++;
+    // Strings not drawn for a while: their pictures go.
+    for (auto it = g_text_pictures.begin(); it != g_text_pictures.end();) {
+        if (g_builds - it->second.used <= TEXT_KEEP) { ++it; continue; }
+        it->second.tex->SetStatus(ImTextureStatus_WantDestroy);
+        it->second.tex->UnusedFrames = 8;
+        g_retired.push_back(it->second.tex);
+        it = g_text_pictures.erase(it);
+    }
+    for (ImTextureData* t : g_retired) textures.push_back(t);
+    g_retired.erase(std::remove_if(g_retired.begin(), g_retired.end(), [](ImTextureData* t) {
+        if (t->Status != ImTextureStatus_Destroyed) return false;
+        IM_DELETE(t);
+        return true;
+    }), g_retired.end());
+    if (g_shown.empty() || g_menu_shown.load(std::memory_order_relaxed) ||
+        std::chrono::steady_clock::now() - g_shown_at > STALE) return !textures.empty();
+    if (g_white == nullptr) {
+        g_white = IM_NEW(ImTextureData)();
+        g_white->Create(ImTextureFormat_RGBA32, 4, 4);
+        std::memset(g_white->GetPixels(), 0xFF, (size_t)g_white->GetSizeInBytes());
+    }
+    textures.push_back(g_white);
+    for (auto& [id, img] : g_images) {
+        if (!img.changed) {
+            if (img.tex != nullptr) textures.push_back(img.tex);
+            continue;
+        }
+        if (img.tex == nullptr) {
+            img.tex = IM_NEW(ImTextureData)();
+            img.tex->Create(ImTextureFormat_RGBA32, img.w, img.h);
+        } else if (img.tex->Status == ImTextureStatus_OK) {
+            img.tex->UpdateRect = ImTextureRect{ 0, 0, (unsigned short)img.w, (unsigned short)img.h };
+            img.tex->Updates.resize(0);
+            img.tex->Updates.push_back(img.tex->UpdateRect);
+            img.tex->SetStatus(ImTextureStatus_WantUpdates);
+        }
+        std::memcpy(img.tex->GetPixels(), img.pixels.data(), img.pixels.size() * 4);
+        img.changed = false;
+        textures.push_back(img.tex);
+    }
+    const float scale = info.viewHeight / HEIGHT;
+    auto at = [&](float x, float y) { return ImVec2(info.viewX + x * scale, info.viewY + y * scale); };
+    list->_FringeScale = 1.0f;
+    list->_InvFringeScale = 1.0f;
+    list->Flags = ImDrawListFlags_AntiAliasedLines | ImDrawListFlags_AntiAliasedFill;
+    list->PushTexture(g_white->GetTexRef());
+    for (const Shape& s : g_shown) {
+        switch (s.kind) {
+        case Kind::Image: {
+            auto it = g_images.find(s.image);
+            if (it == g_images.end() || it->second.tex == nullptr) break;
+            list->AddImage(it->second.tex->GetTexRef(), at(s.x, s.y), at(s.x + s.w, s.y + s.h), ImVec2(0, 0), ImVec2(1, 1), to_im(s.fill));
+            break;
+        }
+        case Kind::Polygon: {
+            std::vector<ImVec2> pts;
+            for (const ImVec2& p : s.points) pts.push_back(at(p.x, p.y));
+            if (s.fill & 0xFF) list->AddConcavePolyFilled(pts.data(), (int)pts.size(), to_im(s.fill)); // convex or not
+            if ((s.line & 0xFF) && s.thickness > 0.0f) list->AddPolyline(pts.data(), (int)pts.size(), to_im(s.line), ImDrawFlags_Closed, s.thickness * scale);
+            break;
+        }
+        case Kind::Text: {
+            const int px = (int)std::lround(s.h * scale);
+            if (px < 4 || px > 512) break;
+            const std::string key = std::to_string(s.font) + "|" + std::to_string(px) + "|" + s.text;
+            auto it = g_text_pictures.find(key);
+            if (it == g_text_pictures.end()) {
+                std::vector<uint32_t> pixels;
+                int w = 0, h = 0;
+                if (!text_picture(s.font, s.text, px, pixels, w, h)) break;
+                TextPicture tp;
+                tp.tex = IM_NEW(ImTextureData)();
+                tp.tex->Create(ImTextureFormat_RGBA32, w, h);
+                std::memcpy(tp.tex->GetPixels(), pixels.data(), pixels.size() * 4);
+                tp.w = w;
+                tp.h = h;
+                it = g_text_pictures.emplace(key, tp).first;
+            }
+            TextPicture& tp = it->second;
+            tp.used = g_builds;
+            const float content = (float)(tp.w - TEXT_PAD * 2);
+            const ImVec2 a = at(s.x, s.y);
+            const float left = std::round(a.x - content * (s.align == 1 ? 0.5f : s.align == 2 ? 1.0f : 0.0f)) - TEXT_PAD;
+            const float top = std::round(a.y) - TEXT_PAD;
+            list->AddImage(tp.tex->GetTexRef(), ImVec2(left, top), ImVec2(left + tp.w, top + tp.h), ImVec2(0, 0), ImVec2(1, 1), to_im(s.fill));
+            break;
+        }
+        case Kind::Circle: {
+            const ImVec2 c = at(s.x, s.y);
+            const float r = s.r * scale;
+            const int seg = std::clamp((int)(r * 1.5f), 12, 64);
+            if (s.fill & 0xFF) list->AddCircleFilled(c, r, to_im(s.fill), seg);
+            if ((s.line & 0xFF) && s.thickness > 0.0f) list->AddCircle(c, r, to_im(s.line), seg, s.thickness * scale);
+            break;
+        }
+        }
+    }
+    list->PopTexture();
+    for (auto& [key, tp] : g_text_pictures) textures.push_back(tp.tex);
+    return true;
+}
+
+} // namespace jfg::overlay
+
+namespace jfg {
+// The overlay's width and height (240), for the port's own helpers (jfg_world_to_screen).
+void overlay_size_now(float* out) {
+    out[0] = jfg::overlay::overlay_width();
+    out[1] = 240.0f;
+}
+} // namespace jfg

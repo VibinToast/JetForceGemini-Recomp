@@ -8,6 +8,7 @@ squadsModuleTick
 
 # Mod API events (jfg_api.cpp)
 mainChangeLevel
+hitPlayerAimCheck
 girlBossControl
 boyBossControl
 dogBossControl
@@ -115,6 +116,7 @@ __scHandleRetrace
 frontPlayerTarget
 camSetFOV
 refuelControl
+frontMenuFrameTick
 objTvTimes
 func_overlay_15_00004658_1F17FD8
 func_overlay_16_00004440_1F22458
@@ -202,3 +204,36 @@ instQueueMsg
 
 # Mod API: the blast damage each object takes (jfg_object_blast_damage, jfg_hero_api.cpp)
 func_8002AA7C_2B67C
+# Mod API: jfg_on_kill, every squad member's death and who shot it last (jfg_kills.cpp)
+SquaddiePassesAway
+mainIncreaseWeaponKills
+mainSetTribalStatus
+# Mod sound replacement: placed stand-ins stop with the game's (jfg_music.cpp)
+amSndStopXYZ
+# Floyd's lights' frame for mods (jfg_visuals.cpp)
+func_800319C0_325C0
+# Weapon registry: modded weapons on slot 15 (jfg_weapon_registry.cpp)
+controlSelectNextWeapon
+controlSelectPreviousWeapon
+weaponPickupControl
+func_overlay_18_00001218_1F30BF0
+func_overlay_18_00001294_1F30C6C
+
+# The held model of a modded weapon (jfg_weapon_registry.cpp, decomp MSR 10e)
+func_8000BE5C_CA5C
+func_80007C68_8868
+objMakeGunMtx
+
+# New squad enemy types run by mods (jfg_squad_types.cpp, decomp MSR 12)
+BTSBStandardFire
+hitVectorCheck
+hitUpdate
+GetBaddyData
+func_overlay_3_0000D360_1EE2840
+
+# Mod API: more enemies per squad (jfg_squad_multiplier, jfg_squad_multiplier.cpp, decomp MSR 13)
+squadsInitialiseBeforeObjects
+SquadronInit
+squadsInitialiseAfterObjects
+levelObjectFlagSet
+levelSetObjectFlag

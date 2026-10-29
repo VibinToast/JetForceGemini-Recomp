@@ -13,6 +13,7 @@
 #include "jfg_api.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
+#include "jfg_per_mod.h"
 #include "jfg_port.h"
 #include "jfg_rt64.h"
 
@@ -76,7 +77,8 @@ extern "C" uint32_t jfg_hit_flash(uint32_t color) {
     return 0xFF0000FFu | (gb << 16) | (gb << 8);
 }
 
-// "Hide Floyd". sidekickControl(obj, ...) updates Floyd; its entry notes his object kind (behaviorId, +0x48), and
+// Hide Floyd, for a mod (jfg_floyd_hide, API version 5; the Better Floyd mod's option since 2026-10-27, before that the
+// port's). sidekickControl(obj, ...) updates Floyd; its entry notes his object kind (behaviorId, +0x48), and
 // objPrintObject(dList, mtx, vtx, obj) draws nothing for an object of that kind while the option is on. His shadow is
 // made in shadowGenerate, from the object's shadow data (+0x50): the loop skips an object without any. His sounds
 // (among them a looping one, 0x138, whose volume the code works out each tick) are all started by sidekickControl
@@ -88,9 +90,48 @@ static uint32_t g_floyd_obj = 0; // his object as last seen by sidekickControl
 static bool g_floyd_muted = false;
 constexpr uint32_t ADDR_cooperativeGame = 0x800A4FC8; // u8
 
+static bool g_hide_floyd = false; // jfg_floyd_hide
+extern "C" bool jfg_floyd_hide_on(void) { return g_hide_floyd; }
+
+// jfg_floyd_hide(int on) (mod API): hidden while any mod asks.
+static jfg::PerMod<bool> g_hide_floyd_requests;
+extern "C" void jfg_api_floyd_hide(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    g_hide_floyd_requests.set(mod_index, ctx->r4 != 0, false);
+    g_hide_floyd = g_hide_floyd_requests.any();
+}
+
 static bool floyd_hidden(uint32_t obj) {
-    if (!g.hide_floyd || g_floyd_kind < 0 || !valid_ptr(obj) || Obj::Kind::get(obj) != g_floyd_kind) return false;
+    if (!g_hide_floyd || g_floyd_kind < 0 || !valid_ptr(obj) || Obj::Kind::get(obj) != g_floyd_kind) return false;
     return rd8(ADDR_robotMission) == 0 && rd8(ADDR_cooperativeGame) == 0;
+}
+
+// Floyd's lights, for a mod (jfg_floyd_light, API version 5). func_800319C0_325C0(obj, sidekick, player, updateRate), each
+// tick he follows a hero, picks the texture frame of his light parts (his model's parts of type 3: model = *(obj + 0x6C),
+// part count u8 at *(model + 0) + 0x2C, parts 8 bytes each from *(model + 0x74), u32 type at +4, u16 frame << 8 at +0):
+// 3 (dark) as a rule, 1 (blue) when his +0x54 value is under 0.6, and 0 (red) every other 32 ticks while the hero's aim is locked on an enemy
+// (player + 0x540 & 0xF: the enemy warning, with its beep in controlUpdatePlayerAim). A mod's frame replaces his
+// usual one after the game's code; the enemy warning keeps the game's.
+static int g_floyd_light = -1; // -1: the game's own
+
+// jfg_floyd_light(int frame) (mod API).
+extern "C" void jfg_api_floyd_light(uint8_t*, recomp_context* ctx) {
+    const int frame = (int)(int32_t)ctx->r4;
+    g_floyd_light = frame >= 0 && frame <= 255 ? frame : -1;
+}
+
+JFG_WRAP(func_800319C0_325C0) {
+    const uint32_t obj = (uint32_t)ctx->r4, player = (uint32_t)ctx->r6;
+    func_800319C0_325C0_orig(rdram, ctx);
+    if (g_floyd_light < 0 || !valid_ptr(obj) || !valid_ptr(player) || (rd16(player + 0x540) & 0xF) != 0) return;
+    const uint32_t models = rd32(obj + 0x6C);
+    const uint32_t model = valid_ptr(models) ? rd32(models) : 0;
+    if (!valid_ptr(model)) return;
+    const uint32_t header = rd32(model), parts = rd32(model + 0x74);
+    if (!valid_ptr(header) || !valid_ptr(parts)) return;
+    const int count = rd8(header + 0x2C);
+    for (int i = 0; i < count; i++) {
+        if ((rd32(parts + i * 8 + 4) & 0xFF) == 3) wr16(parts + i * 8, (uint16_t)(g_floyd_light << 8));
+    }
 }
 
 extern "C" void jfg_floyd_seen(uint8_t* rdram_, recomp_context* ctx) {
@@ -224,26 +265,30 @@ int fog_distance_to_position(float d) {
 
 std::atomic<int> g_level_fog_near{ -1 }, g_level_fog_far{ -1 }; // the level's fog positions last sent (F9 status line)
 
-extern "C" void jfg_game_fog(uint8_t* rdram, uint32_t sp) {
-    g_rdram = rdram;
-    const int near_pos = (int16_t)rd16(sp + 0x3E), far_pos = (int16_t)rd16(sp + 0x3C);
-    g_level_fog_near.store(near_pos, std::memory_order_relaxed);
-    g_level_fog_far.store(far_pos, std::memory_order_relaxed);
-    const bool level_fog = near_pos < FOG_POSITION_FAR;
-    rt64_jfg_fog_blocked.store(level_fog ? 1 : 0, std::memory_order_relaxed);
-    if (!level_fog) return;
+// The fog options (No level fog, Level fog distance) applied to the level's fog positions.
+extern "C" void jfg_level_fog_options(int& near_pos, int& far_pos) {
+    if (near_pos >= FOG_POSITION_FAR) return;
     if (g.no_level_fog) {
-        wr16(sp + 0x3E, (uint16_t)FOG_OFF_NEAR);
-        wr16(sp + 0x3C, (uint16_t)FOG_OFF_FAR);
+        near_pos = FOG_OFF_NEAR;
+        far_pos = FOG_OFF_FAR;
         return;
     }
     if (g.level_fog_distance == 100) return;
     // Scaled as distances from the camera, so 200% puts the fog twice as far away.
     const float scale = (float)g.level_fog_distance / 100.0f;
-    int new_far = far_pos >= FOG_POSITION_FAR ? far_pos : std::min(fog_distance_to_position(fog_position_to_distance(far_pos) * scale), FOG_OFF_FAR);
-    int new_near = std::min(fog_distance_to_position(fog_position_to_distance(near_pos) * scale), new_far - 5);
-    wr16(sp + 0x3E, (uint16_t)(int16_t)new_near);
-    wr16(sp + 0x3C, (uint16_t)(int16_t)new_far);
+    far_pos = far_pos >= FOG_POSITION_FAR ? far_pos : std::min(fog_distance_to_position(fog_position_to_distance(far_pos) * scale), FOG_OFF_FAR);
+    near_pos = std::min(fog_distance_to_position(fog_position_to_distance(near_pos) * scale), far_pos - 5);
+}
+
+extern "C" void jfg_game_fog(uint8_t* rdram, uint32_t sp) {
+    g_rdram = rdram;
+    int near_pos = (int16_t)rd16(sp + 0x3E), far_pos = (int16_t)rd16(sp + 0x3C);
+    g_level_fog_near.store(near_pos, std::memory_order_relaxed);
+    g_level_fog_far.store(far_pos, std::memory_order_relaxed);
+    rt64_jfg_fog_blocked.store(near_pos < FOG_POSITION_FAR ? 1 : 0, std::memory_order_relaxed);
+    jfg_level_fog_options(near_pos, far_pos);
+    wr16(sp + 0x3E, (uint16_t)(int16_t)near_pos);
+    wr16(sp + 0x3C, (uint16_t)(int16_t)far_pos);
 }
 
 // The depth fog's status line in the F9 menu: the level's own fog, and what the renderer did over the last half second.

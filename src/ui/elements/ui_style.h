@@ -91,6 +91,8 @@ namespace recompui {
         void set_gap(float size, Unit unit = Unit::Dp);
         void set_row_gap(float size, Unit unit = Unit::Dp);
         void set_column_gap(float size, Unit unit = Unit::Dp);
+        void set_flex_wrap(bool wrap);   // JFG PORT
+        void set_align_self_start();     // JFG PORT: align-self: flex-start
         void set_drag(Drag drag);
         void set_tab_index(TabIndex focus);
         void set_font_family(std::string_view family);
