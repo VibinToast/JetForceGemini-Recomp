@@ -1,8 +1,10 @@
 // Jet Force Gemini port: ammo for mods' weapons (mod API jfg_weapon_ammo_sources). The game has no ammo for a weapon a
 // mod adds, so the mod names where more comes from and the port runs it, the same way for every weapon:
 // - Drops: a cell (the pack's object type) may drop where an enemy dies, as one of the shared drop pool's drops
-//   (jfg_drops.cpp: one roll per kill across all mods). It hovers, or falls and bounces by the game's physics; it spins,
-//   and walking into it gives its ammo (the game's pick-up sound). It blinks out after a while.
+//   (jfg_drops.cpp: one roll per kill across all mods). It falls to the floor under it (the level's, as the
+//   crosshair tests it) and rests with its middle cell_height above it, so one from a flyer comes down where the hero
+//   can reach it; it spins, and walking into it gives its ammo (the game's pick-up sound). It blinks out after a
+//   while. A pickup magnet (jfg_drop_magnet) draws cells within its reach to the hero.
 // - Refill: picking up a stock weapon's ammo, or the weapon itself, gives some too (the pick-up's HUD message).
 // - Pickups: a share of the level's pickups of a stock weapon give the mod's weapon instead (their model stays). The
 //   share is counted as pickups appear, so it holds over a level; when several weapons share the same stock weapon's
@@ -45,6 +47,7 @@ void claim_for_mod(uint32_t obj, size_t mod_index);
 bool claim_alive(uint32_t obj);
 void unclaim(uint32_t obj);
 int drop_register_named(const std::string& name, int chance, int flags);
+float drop_magnet(); // jfg_drops.cpp
 int asset_number(const std::string& ref); // jfg_assets.cpp
 
 namespace {
@@ -54,7 +57,8 @@ constexpr int MSG_NAME = 0x39, MSG_AMMO = 0x48, MSG_CLIP = 0x57, MSG_FULL = 0x66
 constexpr int MAX_CELLS = 24, MAX_SEEN = 96, SCAN_TICKS = 60;
 constexpr int CELL_LIFE = 30 * 60, CELL_BLINK = 5 * 60, CELL_SPIN = 1500;
 constexpr float CELL_REACH = 38.0f;
-constexpr int CELL_FALLS = 1; // JfgAmmoSources.cell_flags
+constexpr int CELL_FALLS = 1; // JfgAmmoSources.cell_flags: every cell falls now; the flag is kept for mods
+constexpr float CELL_GRAVITY = 0.45f, CELL_FALL_MAX = 9.0f, MAGNET_SPEED = 7.0f; // units a 1/60 s tick
 constexpr int DROP_BIG = 1;   // as JFG_DROP_BIG
 constexpr size_t PORT_CLAIM = SIZE_MAX - 1; // the claims of the port's own cells
 
@@ -77,7 +81,22 @@ struct Cell {
     uint32_t obj;
     int source, age;
     float scale;
+    float rest;      // the y it rests at (the floor under it + cell_height), NAN when no floor was found
+    float vy;        // falling speed
 };
+
+// The floor under (x, y, z): the first level surface on a line straight down (trackNearestIntersection, the crosshair's
+// test of the level), NAN if none within 4000.
+float floor_under(recomp_context* ctx, float x, float y, float z) {
+    const uint32_t buf = ((uint32_t)ctx->r29 - 0x80u) & ~0x7u; // in the gap call_game leaves below $sp
+    wrf(buf + 0, x); wrf(buf + 4, y + 10.0f); wrf(buf + 8, z);
+    wrf(buf + 12, x); wrf(buf + 16, y - 4000.0f); wrf(buf + 20, z);
+    const recomp_context saved = *ctx;
+    const bool hit = (call_game(trackNearestIntersection, ctx, { 0u, buf, buf + 12, buf + 24, 0u, 0u }) & 0xFF) != 0;
+    *ctx = saved;
+    const float fy = rdf(buf + 32);
+    return hit && std::isfinite(fy) ? fy : NAN;
+}
 std::vector<Cell> g_cells;
 std::vector<uint32_t> g_seen_pickups;
 int g_scan_wait = 0;
@@ -143,14 +162,15 @@ void on_drop(uint8_t* rdram_, recomp_context* ctx) {
         if (s.drop_id != id || s.cell.empty() || s.drop_chance <= 0) continue;
         if (s.cell_type == -2) s.cell_type = asset_number(s.cell);
         if (s.cell_type < 0 || (int)g_cells.size() >= MAX_CELLS) return;
-        const bool falls = (s.cell_flags & CELL_FALLS) != 0;
-        const float vx = falls ? (float)(rnd(200) - 100) / 100.0f : 0.0f, vz = falls ? (float)(rnd(200) - 100) / 100.0f : 0.0f;
-        const uint32_t cell = spawn_object(rdram_, ctx, s.cell_type, rdf(d + 0x10), rdf(d + 0x14) + s.cell_height,
-                                           rdf(d + 0x18), vx, falls ? 3.0f : 0.0f, vz, (uint16_t)rnd(0x10000));
+        // Made still (no game physics: it would rest the cell's middle on the floor, half in it); the port drops it.
+        const float x = rdf(d + 0x10), y = rdf(d + 0x14) + s.cell_height, z = rdf(d + 0x18);
+        const uint32_t cell = spawn_object(rdram_, ctx, s.cell_type, x, y, z, 0.0f, 0.0f, 0.0f, (uint16_t)rnd(0x10000));
         if (!valid_ptr(cell)) return;
         set_object_scale(cell, s.cell_scale);
         claim_for_mod(cell, PORT_CLAIM);
-        g_cells.push_back({ cell, (int)(&s - g_sources.data()), 0, s.cell_scale });
+        const float floor = floor_under(ctx, x, y, z);
+        const float rest = std::isfinite(floor) ? std::min(y, floor + s.cell_height) : NAN;
+        g_cells.push_back({ cell, (int)(&s - g_sources.data()), 0, s.cell_scale, rest, 0.0f });
         return;
     }
 }
@@ -175,6 +195,24 @@ void tick_cells(uint8_t* rdram_, recomp_context* ctx, uint32_t hero, int frames)
         if (!gone) {
             c.age += frames;
             Obj::Yaw::set(c.obj, (uint16_t)(Obj::Yaw::get(c.obj) + CELL_SPIN * frames));
+            // Falling to its resting height.
+            if (std::isfinite(c.rest) && Obj::PosY::get(c.obj) > c.rest) {
+                c.vy = std::min(CELL_FALL_MAX, c.vy + CELL_GRAVITY * (float)frames);
+                Obj::PosY::set(c.obj, std::max(c.rest, Obj::PosY::get(c.obj) - c.vy * (float)frames));
+            }
+            // The pickup magnet: within its reach the cell drifts to the hero's middle.
+            if (const float reach = drop_magnet(); reach > 0.0f) {
+                const float mx = Obj::PosX::get(hero) - Obj::PosX::get(c.obj), my = Obj::PosY::get(hero) + 30.0f - Obj::PosY::get(c.obj),
+                            mz = Obj::PosZ::get(hero) - Obj::PosZ::get(c.obj);
+                const float md = std::sqrt(mx * mx + my * my + mz * mz);
+                if (md < reach && md > 1.0f) {
+                    const float step = std::min(md, MAGNET_SPEED * (float)frames) / md;
+                    Obj::PosX::set(c.obj, Obj::PosX::get(c.obj) + mx * step);
+                    Obj::PosY::set(c.obj, Obj::PosY::get(c.obj) + my * step);
+                    Obj::PosZ::set(c.obj, Obj::PosZ::get(c.obj) + mz * step);
+                    c.rest = NAN; // drawn in: no more falling
+                }
+            }
             const float dx = Obj::PosX::get(c.obj) - Obj::PosX::get(hero), dy = Obj::PosY::get(c.obj) - Obj::PosY::get(hero),
                         dz = Obj::PosZ::get(c.obj) - Obj::PosZ::get(hero);
             const Source& s = g_sources[(size_t)c.source];
