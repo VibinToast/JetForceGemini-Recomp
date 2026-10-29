@@ -509,6 +509,7 @@ static void mantis_rock_failed(uint8_t* rdram, recomp_context* ctx) {
 // overlay: with D_800A0898 set, an object body the region has no room for comes from the main heap (megabytes free).
 // It is on for every setup here.
 constexpr uint32_t ADDR_objRegionOverflow = 0x800A0898; // s8, objSetObjRegionOverflow
+namespace jfg { void object_events_made(uint8_t* rdram, uint32_t obj); } // jfg_object_events.cpp
 
 JFG_WRAP(objSetupObject) {
     jfg::g_rdram = rdram;
@@ -533,6 +534,7 @@ JFG_WRAP(objSetupObject) {
     jfg::g_obj_step_nest = nest;
     jfg::g_rdram = rdram;
     jfg::wr8(ADDR_objRegionOverflow, overflow);
+    jfg::object_events_made(rdram, (uint32_t)ctx->r2); // mods watching its kind (jfg_object_watch)
     if (weapon && (uint32_t)ctx->r2 == 0) fire_weapon_failed(rdram, ctx, member);
     if (last_rock && (uint32_t)ctx->r2 == 0) mantis_rock_failed(rdram, ctx);
 }

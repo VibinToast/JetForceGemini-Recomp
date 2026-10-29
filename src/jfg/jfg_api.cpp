@@ -27,6 +27,7 @@ namespace jfg { void register_weapon_registry_api(); }            // jfg_weapon_
 namespace jfg { void register_kill_api(); }                       // jfg_kills.cpp
 namespace jfg { void register_claim_api(); }                      // jfg_object_claims.cpp
 namespace jfg { void register_weapon_ammo_api(); }                // jfg_weapon_ammo.cpp
+namespace jfg { void register_object_events_api(); }              // jfg_object_events.cpp
 namespace jfg { void register_squad_type_api(); }                 // jfg_squad_types.cpp
 extern "C" void jfg_squad_types_level_change(uint8_t* rdram, recomp_context* ctx); // jfg_squad_types.cpp
 
@@ -39,6 +40,7 @@ const char* const g_event_names[] = {
     "jfg_on_language_change", "jfg_on_map_open", "jfg_on_galaxy_change", "jfg_on_planet_select", "jfg_on_hero_control",
     "jfg_on_object_draw_gfx", "jfg_on_draw_hud", "jfg_on_hud_message", "jfg_on_reticle_draw",
     "jfg_on_health_draw", "jfg_on_weapon_hud", "jfg_on_kill", "jfg_on_weapon_fire", "jfg_on_squad_tick", "jfg_on_drop",
+    "jfg_on_object_spawn", "jfg_on_object_free",
     nullptr
 };
 static_assert(sizeof(g_event_names) / sizeof(g_event_names[0]) == (size_t)Event::Count + 1);
@@ -179,12 +181,13 @@ void fire(uint8_t* rdram_, recomp_context* ctx, Event event, int32_t arg0, int32
     *ctx = saved;
 }
 
-void fire_for_mod(uint8_t* rdram_, recomp_context* ctx, Event event, size_t mod_index, int32_t arg0) {
+void fire_for_mod(uint8_t* rdram_, recomp_context* ctx, Event event, size_t mod_index, int32_t arg0, int32_t arg1) {
     g_fired[(size_t)event].fetch_add(1, std::memory_order_relaxed);
     if (!recomp::mods::event_has_callbacks((size_t)event)) return;
     g_ran[(size_t)event].fetch_add(1, std::memory_order_relaxed);
     const recomp_context saved = *ctx;
     ctx->r4 = (gpr)arg0;
+    ctx->r5 = (gpr)arg1;
     recomp_trigger_event_for_mod(rdram_, ctx, (uint32_t)event, mod_index);
     *ctx = saved;
 }
@@ -248,6 +251,7 @@ void register_api() {
     jfg::register_kill_api();            // kills credited to mods' weapons (jfg_kills.cpp)
     jfg::register_claim_api();           // objects mods claim as their own (jfg_object_claims.cpp)
     jfg::register_weapon_ammo_api();     // mods' weapons' ammo sources (jfg_weapon_ammo.cpp)
+    jfg::register_object_events_api();   // objects made and freed, for mods watching their kind
     jfg::register_squad_type_api();      // new squad enemy types run by mods (jfg_squad_types.cpp)
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }

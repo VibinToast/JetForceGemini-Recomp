@@ -475,6 +475,9 @@ RECOMP_IMPORT("*", void* jfg_fire_plasma(const JfgPlasma* plasma));
 // if another mod has it. jfg_object_claimed: 0 no mod's, 1 yours, 2 another mod's. A claim goes when you unclaim it,
 // when the object is freed and at a level change. Balls a mod makes with jfg_fire_plasma are already its own.
 RECOMP_IMPORT("*", int jfg_object_claim(void* obj));
+// Objects coming and going: while on, the mod gets jfg_on_object_spawn and jfg_on_object_free for objects of that kind
+// (JFG_KIND_*), instead of scanning for them each tick. Only the mods watching a kind are told.
+RECOMP_IMPORT("*", void jfg_object_watch(int kind, int on));
 RECOMP_IMPORT("*", int jfg_object_claimed(void* obj));
 RECOMP_IMPORT("*", void jfg_object_unclaim(void* obj));
 // The first point of the level (walls, floors, ceilings: the track, as shots test their flight) on the line from a to
@@ -994,5 +997,12 @@ RECOMP_IMPORT("*", int jfg_hero_shot(const JfgHeroShot* shot));
 //     A member of a squad type a mod registered is updated (jfg_squad_type_register).
 // jfg_on_drop(JfgDrop* drop)
 //     A kill dropped one of the registered drops (jfg_drop_register), after jfg_on_kill.
+// jfg_on_object_spawn(void* obj, int kind)
+//     An object of a kind the mod watches (jfg_object_watch) was made: told at the start of the next game tick,
+//     before jfg_on_game_tick.
+// jfg_on_object_free(void* obj, int kind)
+//     A watched object was freed: told at the start of the next tick, before spawns; don't read it any more (its
+//     address may already be a new object's). One made and freed between two ticks is never told. At a level change
+//     every object goes without these events.
 
 #endif

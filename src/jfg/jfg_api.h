@@ -41,6 +41,8 @@ enum class Event : uint32_t {
     WeaponFire,       // jfg_on_weapon_fire(JfgWeaponFire* fire), since version 6
     SquadTick,        // jfg_on_squad_tick(JfgSquadTick* tick), since version 6
     Drop,             // jfg_on_drop(JfgDrop* drop), since version 6
+    ObjectSpawn,      // jfg_on_object_spawn(Object* obj, int kind), since version 6
+    ObjectFree,       // jfg_on_object_free(Object* obj, int kind), since version 6
     Count
 };
 
@@ -107,7 +109,7 @@ bool listened(Event event);
 void fire(uint8_t* rdram, recomp_context* ctx, Event event, int32_t arg0 = 0, int32_t arg1 = 0, int32_t arg2 = 0,
           int32_t arg3 = 0);
 // The event for one mod only (its callbacks; no internal handlers): a resource that mod registered.
-void fire_for_mod(uint8_t* rdram, recomp_context* ctx, Event event, size_t mod_index, int32_t arg0 = 0);
+void fire_for_mod(uint8_t* rdram, recomp_context* ctx, Event event, size_t mod_index, int32_t arg0 = 0, int32_t arg1 = 0);
 // Registers the events and helpers with the runtime; once, before mods load (jfg_register_mod_exports).
 void register_api();
 

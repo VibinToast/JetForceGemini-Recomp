@@ -812,11 +812,12 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
 
 // FlowerBoltControl(obj, frames): the slug boss's homing bolts (overlay 149) apply a turn limit, steering smoothing and
 // speed growth per call, so at 60 fps they homed and sped up about twice as hard. They run with the squad cadence.
-namespace jfg { void claims_after_frees(uint8_t* rdram); } // jfg_object_claims.cpp
+namespace jfg { void claims_after_frees(uint8_t* rdram); void object_events_after_frees(uint8_t* rdram); } // jfg_object_claims.cpp, jfg_object_events.cpp
 JFG_WRAP(objDoFrees) {
     jfg::jfg_squad_count_repair(rdram);
     objDoFrees_orig(rdram, ctx);
     jfg::claims_after_frees(rdram); // mods' claims on the freed objects go
+    jfg::object_events_after_frees(rdram); // and mods watching them are told (next tick)
 }
 
 JFG_WRAP(FlowerBoltControl) {
