@@ -12,6 +12,7 @@
 #include <chrono>
 #include <fstream>
 #include <iterator>
+#include <algorithm>
 #include <map>
 
 static std::string version_string;
@@ -237,8 +238,15 @@ struct StoreRow {
     bool installed = false, update = false, managed = false, blocked = false, busy = false, selected = false;
 };
 struct StoreSourceRow { Rml::String id, name, status; bool enabled = true, official = false; };
+struct StoreTagRow { Rml::String name; int count = 0; };
 static std::vector<StoreRow> store_rows;
 static std::vector<StoreSourceRow> store_sources;
+// The tags of every listed mod, with how many have each (the Tags row's filters); "" in store_tag: all of them.
+static std::vector<StoreTagRow> store_tags;
+static Rml::String store_tag;
+// The Sources pop-up (its button: "Sources 2/2", the switched-on ones of all).
+static bool store_sources_dialog = false;
+static int store_sources_on = 0;
 static Rml::String store_filter = "all", store_selected;
 static Rml::String store_text, store_sel_name, store_sel_desc, store_sel_meta, store_sel_deps, store_sel_note, store_sel_thumb;
 static Rml::String store_sel_action;
@@ -263,6 +271,23 @@ static void refresh_store_rows() {
     store_count_all = (int)mods.size();
     store_count_installed = store_count_updates = 0;
     const JfgStoreMod* sel = nullptr;
+    // A mod's tags come joined ("Weapons, Audio").
+    auto tags_of = [](const std::string& joined) {
+        std::vector<std::string> out;
+        size_t at = 0;
+        while (at < joined.size()) {
+            size_t end = joined.find(", ", at);
+            if (end == std::string::npos) end = joined.size();
+            if (end > at) out.push_back(joined.substr(at, end - at));
+            at = end + 2;
+        }
+        return out;
+    };
+    std::map<std::string, int> tag_counts;
+    for (const JfgStoreMod& m : mods) for (const std::string& t : tags_of(m.tags)) tag_counts[t]++;
+    if (!store_tag.empty() && tag_counts.find(store_tag) == tag_counts.end()) store_tag.clear(); // its mods are gone
+    store_tags.clear();
+    for (const auto& [name, count] : tag_counts) store_tags.push_back({ name, count });
     for (const JfgStoreMod& m : mods) {
         store_count_installed += m.installed ? 1 : 0;
         store_count_updates += m.update ? 1 : 0;
@@ -270,6 +295,10 @@ static void refresh_store_rows() {
         if (m.id == store_selected) sel = &m;
         if (store_filter == "installed" && !m.installed) continue;
         if (store_filter == "updates" && !m.update) continue;
+        if (!store_tag.empty()) {
+            const std::vector<std::string> tags = tags_of(m.tags);
+            if (std::find(tags.begin(), tags.end(), std::string(store_tag)) == tags.end()) continue;
+        }
         StoreRow r;
         r.id = m.id; r.name = m.name; r.short_text = m.short_text; r.version = m.version;
         r.source_name = m.source_name; r.tags = m.tags; r.size_text = m.size_text;
@@ -314,7 +343,9 @@ static void refresh_store_rows() {
     }
     store_right = store_busy ? "none" : store_sel_can_act ? "#st_act" : store_sel_can_remove ? "#st_remove" : "none";
     store_sources.clear();
+    store_sources_on = 0;
     for (const JfgStoreSource& src : jfg_store_sources()) {
+        store_sources_on += src.enabled ? 1 : 0;
         StoreSourceRow r;
         r.id = src.id; r.name = src.name; r.enabled = src.enabled; r.official = src.official;
         r.status = !src.enabled ? "Off" : src.loaded ? std::to_string(src.mods) + " mods" : src.error;
@@ -324,7 +355,7 @@ static void refresh_store_rows() {
                            "store_filter", "store_sel_name", "store_sel_desc", "store_sel_meta", "store_sel_deps", "store_sel_note",
                            "store_sel_thumb", "store_sel_action", "store_sel_can_act", "store_sel_can_remove", "store_sel_blocked",
                            "store_count_all", "store_count_installed", "store_count_updates", "store_selected", "store_sel_card",
-                           "store_right" })
+                           "store_right", "store_tags", "store_tag", "store_sources_on" })
         model_handle.DirtyVariable(v);
 }
 
@@ -346,7 +377,7 @@ static void set_launcher_page(const std::string& page) {
 // ---- controller (ui_state.cpp, while the launcher is shown; D-pad / left stick / A / Select already work as keys) ------
 // LB / RB: the page before / after in the sidebar (focusing its button opens the page), wrapping round.
 void jfg_launcher_step_page(int dir) {
-    if (update_dialog || changelog_dialog) return;
+    if (update_dialog || changelog_dialog || store_sources_dialog) return;
     Rml::ElementDocument* doc = launcher_document();
     if (doc == nullptr) return;
     constexpr int n = (int)(sizeof(LAUNCHER_PAGES) / sizeof(LAUNCHER_PAGES[0]));
@@ -365,7 +396,7 @@ void jfg_launcher_show_bindings(bool open) {
 
 // Start: the Play page, on its Start button (or Browse while no ROM is loaded).
 void jfg_launcher_start_pressed() {
-    if (update_dialog || changelog_dialog) return;
+    if (update_dialog || changelog_dialog || store_sources_dialog) return;
     Rml::ElementDocument* doc = launcher_document();
     if (doc == nullptr) return;
     if (Rml::Element* button = doc->GetElementById("nav_play")) button->Focus(true);
@@ -656,6 +687,12 @@ public:
                     close_changelog_dialog();
                     return;
                 }
+                if (store_sources_dialog) {
+                    store_sources_dialog = false;
+                    model_handle.DirtyVariable("store_sources_dialog");
+                    focus_soon("st_sources");
+                    return;
+                }
                 if (update_dialog) { // Esc / Back is "Later" (not while it is installing)
                     close_update_dialog();
                     return;
@@ -809,6 +846,30 @@ public:
             src.RegisterMember("official", &StoreSourceRow::official);
         }
         constructor.RegisterArray<std::vector<StoreSourceRow>>();
+        if (auto tag = constructor.RegisterStruct<StoreTagRow>()) {
+            tag.RegisterMember("name", &StoreTagRow::name);
+            tag.RegisterMember("count", &StoreTagRow::count);
+        }
+        constructor.RegisterArray<std::vector<StoreTagRow>>();
+        constructor.Bind("store_tags", &store_tags);
+        constructor.Bind("store_tag", &store_tag);
+        constructor.Bind("store_sources_dialog", &store_sources_dialog);
+        constructor.Bind("store_sources_on", &store_sources_on);
+        constructor.BindEventCallback("store_set_tag", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+            store_tag = args.empty() ? Rml::String() : args[0].Get<Rml::String>();
+            refresh_store_rows();
+        });
+        // Sources: a pop-up of the collections, each switched on or off; Close (or Esc / B) goes back to its button.
+        constructor.BindEventCallback("store_sources_open", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            store_sources_dialog = true;
+            model_handle.DirtyVariable("store_sources_dialog");
+            focus_soon("st_source_0");
+        });
+        constructor.BindEventCallback("store_sources_close", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            store_sources_dialog = false;
+            model_handle.DirtyVariable("store_sources_dialog");
+            focus_soon("st_sources");
+        });
         constructor.Bind("store_rows", &store_rows);
         constructor.Bind("store_sources", &store_sources);
         constructor.Bind("store_filter", &store_filter);

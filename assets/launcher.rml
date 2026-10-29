@@ -312,15 +312,23 @@
 			.st-chip.st-on { border-color: #3CC8FF; color: #3CC8FF; background-color: rgba(60, 200, 255, 0.10); }
 			.st-chip:hover, .st-chip:focus { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; }
 			.st-chip--update.st-has { border-color: #FFB21A; color: #FFB21A; }
-			.st-source { display: flex; flex-direction: row; align-items: center; box-sizing: border-box; width: 310dp; height: 44dp; margin-right: 8dp; padding: 0dp 14dp; white-space: nowrap; border-width: 2dp; border-color: #1F3D73;
-				background-color: #050B1C; color: #8199BF; font-family: "JetBrains Mono"; font-weight: bold; font-size: 17dp; cursor: pointer;
-				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
-			.st-source.st-on { border-color: #3CC8FF; color: #E8F3FF; }
+			.st-source { display: flex; flex-direction: row; align-items: center; box-sizing: border-box; width: 100%; height: 58dp; margin-bottom: 10dp; padding: 0dp 16dp; white-space: nowrap;
+				border-width: 2dp; border-color: #1F3D73; background-color: #050B1C; color: #8199BF; font-family: "JetBrains Mono"; font-weight: bold; font-size: 19dp; cursor: pointer;
+				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: none; nav-right: none; }
+			.st-source.st-on { color: #E8F3FF; }
 			.st-source:hover, .st-source:focus { border-color: #FFB21A; }
-			.st-dot { display: block; width: 12dp; height: 12dp; margin-right: 10dp; border-radius: 6dp; background-color: #1F3D73; }
-			.st-source.st-on .st-dot { background-color: #3CF07A; }
+			.st-check { display: block; flex: 0 0 auto; width: 26dp; height: 26dp; margin-right: 16dp; box-sizing: border-box; padding: 5dp; border-width: 3dp; border-color: #3CC8FF; }
+			.st-check-mark { display: none; width: 100%; height: 100%; background-color: #3CC8FF; }
+			.st-source.st-on .st-check-mark { display: block; }
 			.st-source-name { display: block; white-space: nowrap; }
 			.st-source-status { display: block; margin-left: auto; padding-left: 10dp; white-space: nowrap; font-weight: normal; color: #8199BF; }
+			.st-sources-shadow { top: 150dp; bottom: 150dp; left: 300dp; right: 300dp; }
+			.st-sources-list { position: absolute; top: 104dp; left: 28dp; right: 28dp; bottom: 100dp; overflow-y: auto; }
+			.st-row--tags { flex-wrap: wrap; margin-bottom: 4dp; }
+			.st-row--tags .st-label { margin-bottom: 6dp; }
+			.st-chip--tag { margin-bottom: 6dp; padding: 6dp 12dp; font-size: 16dp; }
+			.st-tag-count { margin-left: 8dp; font-weight: normal; color: #8199BF; }
+			.st-chip--tag:hover .st-tag-count, .st-chip--tag:focus .st-tag-count { color: #050B1C; }
 			.st-body { display: flex; flex-direction: row; flex: 1 1 auto; min-height: 0dp; }
 			.st-list { display: block; flex: 1 1 58%; overflow-y: auto; padding-right: 10dp; }
 			.st-card { display: flex; flex-direction: row; align-items: center; width: 100%; box-sizing: border-box; margin-bottom: 8dp; padding: 10dp 12dp;
@@ -542,25 +550,25 @@
 									<div class="st-top">
 										<div class="st-preview" data-if="store_preview">Preview: nothing is published yet. These collections are read from bin/mod_store_preview, as they will be from GitHub.</div>
 										<div class="st-row">
-											<button class="st-chip" id="st_filter_all" data-class-st-on="store_filter == 'all'" data-event-click="store_set_filter('all')" style="nav-left: #tab_store; nav-up: none; nav-down: #st_source_0;">All {{store_count_all}}</button>
-											<button class="st-chip" id="st_filter_installed" data-class-st-on="store_filter == 'installed'" data-event-click="store_set_filter('installed')" style="nav-up: none; nav-down: #st_source_0;">Installed {{store_count_installed}}</button>
-											<button class="st-chip st-chip--update" id="st_filter_updates" data-class-st-on="store_filter == 'updates'" data-class-st-has="store_count_updates &gt; 0" data-event-click="store_set_filter('updates')" style="nav-up: none; nav-down: #st_source_0;">Updates {{store_count_updates}}</button>
+											<button class="st-chip" id="st_filter_all" data-class-st-on="store_filter == 'all'" data-event-click="store_set_filter('all')" style="nav-left: #tab_store; nav-up: none; nav-down: #st_tag_all;">All {{store_count_all}}</button>
+											<button class="st-chip" id="st_filter_installed" data-class-st-on="store_filter == 'installed'" data-event-click="store_set_filter('installed')" style="nav-up: none; nav-down: #st_tag_all;">Installed {{store_count_installed}}</button>
+											<button class="st-chip st-chip--update" id="st_filter_updates" data-class-st-on="store_filter == 'updates'" data-class-st-has="store_count_updates &gt; 0" data-event-click="store_set_filter('updates')" style="nav-up: none; nav-down: #st_tag_all;">Updates {{store_count_updates}}</button>
 											<div class="st-spacer"></div>
-											<button class="st-chip" id="st_reload" data-event-click="store_reload()" style="nav-up: none; nav-right: none; nav-down: #st_source_0;">Refresh</button>
+											<button class="st-chip" id="st_sources" data-event-click="store_sources_open()" style="nav-up: none; nav-down: #st_tag_all;">Sources {{store_sources_on}}/{{store_sources.size}}</button>
+											<button class="st-chip" id="st_reload" data-event-click="store_reload()" style="nav-up: none; nav-right: none; nav-down: #st_tag_all;">Refresh</button>
 										</div>
-										<div class="st-row">
-											<div class="st-label">Sources</div>
-											<button class="st-source" data-for="src : store_sources" data-attr-id="'st_source_' + it_index" data-class-st-on="src.enabled"
-												data-event-click="store_toggle_source(src.id)" style="nav-up: #st_filter_all;"
-												data-style-nav-left="it_index == 0 ? '#tab_store' : 'auto'" data-style-nav-right="it_index == store_sources.size - 1 ? 'none' : 'auto'"
-												data-style-nav-down="store_rows.size &gt; 0 ? '#st_mod_0' : 'none'"><div class="st-dot"></div><div class="st-source-name">{{src.name}}</div><div class="st-source-status">{{src.status}}</div></button>
+										<div class="st-row st-row--tags">
+											<div class="st-label">Tags</div>
+											<button class="st-chip st-chip--tag" id="st_tag_all" data-class-st-on="store_tag == ''" data-event-click="store_set_tag('')" style="nav-left: #tab_store;">All</button>
+											<button class="st-chip st-chip--tag" data-for="tag : store_tags" data-attr-id="'st_tag_' + it_index" data-class-st-on="store_tag == tag.name"
+												data-event-click="store_set_tag(tag.name)" data-style-nav-right="it_index == store_tags.size - 1 ? 'none' : 'auto'">{{tag.name}}<span class="st-tag-count">{{tag.count}}</span></button>
 										</div>
 									</div>
 									<div class="st-body">
 										<div class="st-list">
 											<button class="st-card" data-for="r : store_rows" data-attr-id="'st_mod_' + it_index" data-class-st-selected="r.selected"
 												data-event-click="store_select(r.id)" data-event-focus="store_focus(r.id)" data-style-nav-left="'#tab_store'" data-style-nav-right="store_right"
-												data-style-nav-up="it_index == 0 ? '#st_source_0' : 'auto'" data-style-nav-down="it_index == store_rows.size - 1 ? 'none' : 'auto'">
+												data-style-nav-up="it_index == 0 ? '#st_tag_all' : 'auto'" data-style-nav-down="it_index == store_rows.size - 1 ? 'none' : 'auto'">
 												<div class="st-thumb" data-style-decorator="r.thumb != '' ? 'image(' + r.thumb + ' contain)' : 'none'"></div>
 												<div class="st-card-text">
 													<div class="st-card-name">{{r.name}}</div>
@@ -669,6 +677,21 @@
 					<div class="rl-modal-notes rl-modal-notes--tall" id="rl_changelog_notes" data-rml="changelog_text"></div>
 					<div class="rl-modal-buttons">
 						<div class="rl-action-shadow"><button id="rl_changelog_close" class="rl-action" data-event-click="changelog_close()" style="nav-up: none; nav-down: none; nav-left: none; nav-right: none;">Close</button></div>
+					</div>
+				</div></div></div>
+				<!-- Get Mods' sources: each collection switched on or off (src/jfg/jfg_mod_store.cpp) -->
+				<div class="rl-modal" data-class-rl-on="store_sources_dialog"><div class="rl-modal-shadow st-sources-shadow"><div class="rl-modal-box">
+					<div class="rl-modal-title">Sources</div>
+					<div class="rl-modal-sub">The collections Get Mods lists. Turn one off to hide its mods.</div>
+					<div class="st-sources-list">
+						<button class="st-source" data-for="src : store_sources" data-attr-id="'st_source_' + it_index" data-class-st-on="src.enabled"
+							data-event-click="store_toggle_source(src.id)" style="nav-left: none; nav-right: none;"
+							data-style-nav-up="it_index == 0 ? 'none' : 'auto'" data-style-nav-down="it_index == store_sources.size - 1 ? '#st_sources_close' : 'auto'">
+							<div class="st-check"><div class="st-check-mark"></div></div><div class="st-source-name">{{src.name}}</div><div class="st-source-status">{{src.status}}</div></button>
+					</div>
+					<div class="rl-modal-buttons">
+						<div class="rl-action-shadow"><button id="st_sources_close" class="rl-action" data-event-click="store_sources_close()" style="nav-down: none; nav-left: none; nav-right: none;"
+							data-style-nav-up="'#st_source_' + (store_sources.size - 1)">Close</button></div>
 					</div>
 				</div></div></div>
 				<div class="rl-scanlines"></div>
