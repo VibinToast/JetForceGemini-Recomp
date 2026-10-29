@@ -28,6 +28,7 @@ namespace jfg { void register_kill_api(); }                       // jfg_kills.c
 namespace jfg { void register_claim_api(); }                      // jfg_object_claims.cpp
 namespace jfg { void register_weapon_ammo_api(); }                // jfg_weapon_ammo.cpp
 namespace jfg { void register_object_events_api(); }              // jfg_object_events.cpp
+namespace jfg { void register_fx_api(); }                         // jfg_fx.cpp
 namespace jfg { void register_squad_type_api(); }                 // jfg_squad_types.cpp
 extern "C" void jfg_squad_types_level_change(uint8_t* rdram, recomp_context* ctx); // jfg_squad_types.cpp
 
@@ -252,6 +253,7 @@ void register_api() {
     jfg::register_claim_api();           // objects mods claim as their own (jfg_object_claims.cpp)
     jfg::register_weapon_ammo_api();     // mods' weapons' ammo sources (jfg_weapon_ammo.cpp)
     jfg::register_object_events_api();   // objects made and freed, for mods watching their kind
+    jfg::register_fx_api();              // short-lived effects the port runs for mods (jfg_fx.cpp)
     jfg::register_squad_type_api();      // new squad enemy types run by mods (jfg_squad_types.cpp)
     register_hero_api();       // heroes, input, level collision, damage (jfg_hero_api.cpp)
 }

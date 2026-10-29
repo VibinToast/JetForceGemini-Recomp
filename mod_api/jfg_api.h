@@ -475,6 +475,26 @@ RECOMP_IMPORT("*", void* jfg_fire_plasma(const JfgPlasma* plasma));
 // if another mod has it. jfg_object_claimed: 0 no mod's, 1 yours, 2 another mod's. A claim goes when you unclaim it,
 // when the object is freed and at a level change. Balls a mod makes with jfg_fire_plasma are already its own.
 RECOMP_IMPORT("*", int jfg_object_claim(void* obj));
+// A short-lived effect (a dust puff, a spark, an impact flash, a shock wave: one of the pack's object types) the port
+// runs to its end: spawned at x, y, z turned to yaw, moved vx, vy, vz level units a tick (1/60 s; no collision) with
+// keep of its speed kept each tick (1 or 0: all), scaled from scale_from to scale_to over its ticks (ease_out 1: fast
+// at first), and freed when they are up (or at a level change). opacity (0..255; 0 leaves it) is for the fading kinds
+// (behaviour 0x7E, which are not drawn until it is set): from fade_from of its life (0..1; 1 never) it fades to
+// nothing. The effect's object, or NULL. jfg_object_set_opacity sets a fading kind's opacity (others are left).
+typedef struct {
+    const char* type;
+    float x, y, z;
+    int yaw;
+    float vx, vy, vz;
+    float keep;
+    int ticks;
+    float scale_from, scale_to;
+    int ease_out;
+    int opacity;
+    float fade_from;
+} JfgFx;
+RECOMP_IMPORT("*", void* jfg_fx_spawn(const JfgFx* fx));
+RECOMP_IMPORT("*", void jfg_object_set_opacity(void* obj, int opacity));
 // Objects coming and going: while on, the mod gets jfg_on_object_spawn and jfg_on_object_free for objects of that kind
 // (JFG_KIND_*), instead of scanning for them each tick. Only the mods watching a kind are told.
 RECOMP_IMPORT("*", void jfg_object_watch(int kind, int on));
