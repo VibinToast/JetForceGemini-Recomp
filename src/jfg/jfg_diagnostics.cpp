@@ -102,7 +102,7 @@ extern "C" int jfg_squaddie_init_ok(uint8_t* rdram_, recomp_context* ctx) {
         char line[200];
         std::snprintf(line, sizeof(line), "reused squad member came back with no object (level %d, %d bytes of heap free); left out",
             (int)(int16_t)rd16(ADDR_currentLevel), (int)rd32(ADDR_FreeRAM));
-        jfg_log_line("jfg_memory.log", line);
+        jfg::jfg_log_line("jfg_memory.log", line);
     }
     ctx->r2 = 0; // what it returns to the callers that use it
     return 0;
@@ -182,7 +182,7 @@ extern "C" void jfg_squads_check_enemy(uint8_t* rdram_, recomp_context* ctx) {
         char line[256];
         std::snprintf(line, sizeof(line), "squad list: %s 0x%08X (squadron %d of %d, link %d, level %d); that chain skipped",
             what, value, squadron, count, link, (int)(int16_t)rd16(ADDR_currentLevel));
-        jfg_log_line("jfg_memory.log", line);
+        jfg::jfg_log_line("jfg_memory.log", line);
     };
     for (int i = count - 1; i >= 0; i--) {
         const uint32_t node = rd32(list + 4u * (uint32_t)i);
@@ -258,7 +258,7 @@ static int bats_link_ok(uint32_t ptr, int which, int link) {
         std::snprintf(line, sizeof(line), "bats' squeak: %s 0x%08X at link %d (level %d); no bat picked",
             link >= 256 ? "chain too long at" : (which == 0 ? "bad member object" : "bad member data"), ptr, link,
             (int)(int16_t)rd16(ADDR_currentLevel));
-        jfg_log_line("jfg_memory.log", line);
+        jfg::jfg_log_line("jfg_memory.log", line);
     }
     return 0;
 }
@@ -507,14 +507,27 @@ static void mantis_rock_failed(uint8_t* rdram, recomp_context* ctx) {
 // and effects, and then objSetupObject returns NULL; some of the game's callers write to the object without checking
 // (flamethrowerUpdate's flame: crash 2026-10-28 in level 37). The game has a fallback for that, used briefly by one
 // overlay: with D_800A0898 set, an object body the region has no room for comes from the main heap (megabytes free).
-// It is on for every setup here.
+// It is on for every setup here while both object lists have room: the region's 512 allocations were also what kept
+// the lists inside their blocks (ObjList 512, NoAddObjList 64; objSetupObject adds without a check), and past them a
+// big fight (a grenade through a crowd of More Enemies) wrote over the heap and froze the game (2026-10-28).
 constexpr uint32_t ADDR_objRegionOverflow = 0x800A0898; // s8, objSetObjRegionOverflow
+constexpr int OBJ_LIST_ROOM = 512 - 24, NO_ADD_LIST_ROOM = 64 - 8;
 namespace jfg { void object_events_made(uint8_t* rdram, uint32_t obj); } // jfg_object_events.cpp
 
 JFG_WRAP(objSetupObject) {
     jfg::g_rdram = rdram;
     const uint8_t overflow = jfg::rd8(ADDR_objRegionOverflow);
-    jfg::wr8(ADDR_objRegionOverflow, 1);
+    const bool room = (int32_t)jfg::rd32(jfg::ADDR_ObjListCount) < OBJ_LIST_ROOM &&
+                      (int32_t)jfg::rd32(jfg::ADDR_NoAddObjListCount) < NO_ADD_LIST_ROOM;
+    jfg::wr8(ADDR_objRegionOverflow, room ? 1 : overflow);
+    static int full_logged = 0;
+    if (!room && full_logged < 20) {
+        full_logged++;
+        char line[160];
+        std::snprintf(line, sizeof(line), "object lists nearly full (level %d, %d objects, %d not listed): new objects only from the object region",
+            (int)(int16_t)jfg::rd16(jfg::ADDR_currentLevel), (int)jfg::rd32(jfg::ADDR_ObjListCount), (int)jfg::rd32(jfg::ADDR_NoAddObjListCount));
+        jfg::jfg_log_line("jfg_memory.log", line);
+    }
     const bool fire = g_fire.direct(ctx);
     if (fire && g_fire_member != 0) { // squadsFireWeapon's shot after a failed weapon object
         jfg::wr8(ADDR_objRegionOverflow, overflow);
