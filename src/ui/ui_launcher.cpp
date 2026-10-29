@@ -242,6 +242,9 @@ static std::vector<StoreSourceRow> store_sources;
 static Rml::String store_filter = "all", store_selected;
 static Rml::String store_text, store_sel_name, store_sel_desc, store_sel_meta, store_sel_deps, store_sel_note, store_sel_thumb;
 static Rml::String store_sel_action;
+// For the controller: the selected mod's card ("#st_mod_<n>", or the first card when the filter hides it) and what is
+// right of the cards (Install / Update, else Remove, else nothing).
+static Rml::String store_sel_card = "#st_mod_0", store_right = "none";
 static bool store_busy = false, store_preview = false, store_loaded = false, store_sel_can_act = false, store_sel_can_remove = false;
 static bool store_sel_blocked = false;
 static int store_percent = 0, store_serial = -1, store_count_all = 0, store_count_installed = 0, store_count_updates = 0;
@@ -256,6 +259,7 @@ static void refresh_store_rows() {
     store_preview = state.preview;
     const std::vector<JfgStoreMod> mods = jfg_store_mods();
     store_rows.clear();
+    store_sel_card = "#st_mod_0";
     store_count_all = (int)mods.size();
     store_count_installed = store_count_updates = 0;
     const JfgStoreMod* sel = nullptr;
@@ -286,6 +290,7 @@ static void refresh_store_rows() {
         else if (m.installed) r.status = "Installed " + m.installed_version;
         else r.status = "Version " + m.version + "  -  " + m.size_text;
         r.action = m.blocked ? "Unavailable" : m.update ? "Update" : m.installed ? "Installed" : "Install";
+        if (r.selected) store_sel_card = "#st_mod_" + std::to_string(store_rows.size());
         store_rows.push_back(r);
     }
     if (sel != nullptr) {
@@ -307,6 +312,7 @@ static void refresh_store_rows() {
         store_sel_action = sel->blocked ? sel->blocked_reason : sel->update ? "Update to " + sel->version : sel->installed ? "Installed" : "Install";
         store_sel_can_remove = sel->installed && sel->managed;
     }
+    store_right = store_busy ? "none" : store_sel_can_act ? "#st_act" : store_sel_can_remove ? "#st_remove" : "none";
     store_sources.clear();
     for (const JfgStoreSource& src : jfg_store_sources()) {
         StoreSourceRow r;
@@ -317,7 +323,8 @@ static void refresh_store_rows() {
     for (const char* v : { "store_rows", "store_sources", "store_busy", "store_percent", "store_text", "store_preview",
                            "store_filter", "store_sel_name", "store_sel_desc", "store_sel_meta", "store_sel_deps", "store_sel_note",
                            "store_sel_thumb", "store_sel_action", "store_sel_can_act", "store_sel_can_remove", "store_sel_blocked",
-                           "store_count_all", "store_count_installed", "store_count_updates", "store_selected" })
+                           "store_count_all", "store_count_installed", "store_count_updates", "store_selected", "store_sel_card",
+                           "store_right" })
         model_handle.DirtyVariable(v);
 }
 
@@ -387,6 +394,12 @@ void jfg_launcher_scroll(float pixels) {
     else {
         Rml::Element* page = doc->GetElementById("rl_page_" + launcher_page);
         if (page == nullptr) return;
+        // Get Mods: the D-pad moves through the cards (they scroll to it), so the stick reads the chosen mod's details.
+        if (Rml::Element* detail = launcher_page == "store" ? doc->GetElementById("st_detail") : nullptr;
+            detail != nullptr && detail->GetScrollHeight() > detail->GetClientHeight() + 1.0f) {
+            detail->SetScrollTop(detail->GetScrollTop() + pixels);
+            return;
+        }
         // Only when the focus is inside the page (not in the sidebar): the nearest scrolling box between it and the page.
         bool in_page = false;
         for (Rml::Element* e = doc->GetFocusLeafNode(); e != nullptr && !in_page; e = e->GetParentNode()) in_page = e == page;
@@ -654,6 +667,10 @@ public:
                 Rml::Element* target = event.GetTargetElement();
                 Rml::ElementDocument* doc = target ? target->GetOwnerDocument() : nullptr;
                 if (doc == nullptr) return;
+                // Get Mods: from Install / Remove back to the mod's card first.
+                if (launcher_page == "store" && (target->GetId() == "st_act" || target->GetId() == "st_remove")) {
+                    if (Rml::Element* card = doc->GetElementById(store_sel_card.substr(1))) { card->Focus(true); return; }
+                }
                 if (Rml::Element* button = doc->GetElementById(launcher_page_info().nav_id)) button->Focus(true);
             }
         );
@@ -813,23 +830,47 @@ public:
         constructor.Bind("store_count_all", &store_count_all);
         constructor.Bind("store_count_installed", &store_count_installed);
         constructor.Bind("store_count_updates", &store_count_updates);
+        constructor.Bind("store_sel_card", &store_sel_card);
+        constructor.Bind("store_right", &store_right);
         constructor.BindEventCallback("store_set_filter", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
             if (!args.empty()) { store_filter = args[0].Get<Rml::String>(); refresh_store_rows(); }
         });
+        // A card that gets the focus (D-pad, stick) is the chosen mod, and scrolls into view.
+        constructor.BindEventCallback("store_focus", [](Rml::DataModelHandle, Rml::Event& event, const Rml::VariantList& args) {
+            if (args.empty()) return;
+            if (Rml::Element* card = event.GetTargetElement())
+                card->ScrollIntoView(Rml::ScrollIntoViewOptions(Rml::ScrollAlignment::Nearest, Rml::ScrollAlignment::Nearest));
+            if (store_selected == args[0].Get<Rml::String>()) return;
+            store_selected = args[0].Get<Rml::String>();
+            refresh_store_rows();
+            if (Rml::Element* detail = event.GetTargetElement()->GetOwnerDocument()->GetElementById("st_detail")) detail->SetScrollTop(0.0f);
+        });
+        // A card clicked: chosen; pressed with A (the controller in use): on to its Install / Update / Remove.
         constructor.BindEventCallback("store_select", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
-            if (!args.empty()) { store_selected = args[0].Get<Rml::String>(); refresh_store_rows(); }
+            if (args.empty()) return;
+            store_selected = args[0].Get<Rml::String>();
+            refresh_store_rows();
+            if (recompui::get_cont_active() && store_right != "none") focus_soon(std::string(store_right.substr(1)));
         });
         constructor.BindEventCallback("store_install", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
             const std::string id = args.empty() ? std::string(store_selected) : std::string(args[0].Get<Rml::String>());
-            if (!id.empty()) { store_selected = id; jfg_store_install(id); refresh_store_rows(); }
+            if (!id.empty()) { store_selected = id; jfg_store_install(id); refresh_store_rows(); focus_soon(std::string(store_sel_card.substr(1))); }
         });
         constructor.BindEventCallback("store_remove", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
-            if (!store_selected.empty()) { jfg_store_remove(store_selected); refresh_store_rows(); }
+            if (!store_selected.empty()) {
+                jfg_store_remove(store_selected);
+                refresh_store_rows();
+                focus_soon(std::string((store_right != "none" ? store_right : store_sel_card).substr(1)));
+            }
         });
         constructor.BindEventCallback("store_toggle_source", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
             if (args.empty()) return;
             const std::string id = args[0].Get<Rml::String>();
-            for (const StoreSourceRow& r : store_sources) if (r.id == id) jfg_store_set_source_enabled(id, !r.enabled);
+            for (size_t i = 0; i < store_sources.size(); i++) {
+                if (store_sources[i].id != id) continue;
+                jfg_store_set_source_enabled(id, !store_sources[i].enabled);
+                focus_soon("st_source_" + std::to_string(i)); // stays on the switch while the list is made again
+            }
             refresh_store_rows();
         });
         constructor.BindEventCallback("store_reload", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {

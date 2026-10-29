@@ -325,7 +325,7 @@
 			.st-list { display: block; flex: 1 1 58%; overflow-y: auto; padding-right: 10dp; }
 			.st-card { display: flex; flex-direction: row; align-items: center; width: 100%; box-sizing: border-box; margin-bottom: 8dp; padding: 10dp 12dp;
 				border-width: 2dp; border-color: #1F3D73; background-color: rgba(3, 8, 22, 0.78); text-align: left; cursor: pointer;
-				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: #st_act; }
+				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
 			.st-card:hover { border-color: #3CC8FF; }
 			.st-card:focus { border-color: #FFB21A; }
 			.st-card.st-selected { border-color: #3CC8FF; background-color: rgba(60, 200, 255, 0.12); }
@@ -542,22 +542,25 @@
 									<div class="st-top">
 										<div class="st-preview" data-if="store_preview">Preview: nothing is published yet. These collections are read from bin/mod_store_preview, as they will be from GitHub.</div>
 										<div class="st-row">
-											<button class="st-chip" id="st_filter_all" data-class-st-on="store_filter == 'all'" data-event-click="store_set_filter('all')" style="nav-left: #tab_store; nav-up: none;">All {{store_count_all}}</button>
-											<button class="st-chip" id="st_filter_installed" data-class-st-on="store_filter == 'installed'" data-event-click="store_set_filter('installed')" style="nav-up: none;">Installed {{store_count_installed}}</button>
-											<button class="st-chip st-chip--update" id="st_filter_updates" data-class-st-on="store_filter == 'updates'" data-class-st-has="store_count_updates &gt; 0" data-event-click="store_set_filter('updates')" style="nav-up: none;">Updates {{store_count_updates}}</button>
+											<button class="st-chip" id="st_filter_all" data-class-st-on="store_filter == 'all'" data-event-click="store_set_filter('all')" style="nav-left: #tab_store; nav-up: none; nav-down: #st_source_0;">All {{store_count_all}}</button>
+											<button class="st-chip" id="st_filter_installed" data-class-st-on="store_filter == 'installed'" data-event-click="store_set_filter('installed')" style="nav-up: none; nav-down: #st_source_0;">Installed {{store_count_installed}}</button>
+											<button class="st-chip st-chip--update" id="st_filter_updates" data-class-st-on="store_filter == 'updates'" data-class-st-has="store_count_updates &gt; 0" data-event-click="store_set_filter('updates')" style="nav-up: none; nav-down: #st_source_0;">Updates {{store_count_updates}}</button>
 											<div class="st-spacer"></div>
-											<button class="st-chip" id="st_reload" data-event-click="store_reload()" style="nav-up: none; nav-right: none;">Refresh</button>
+											<button class="st-chip" id="st_reload" data-event-click="store_reload()" style="nav-up: none; nav-right: none; nav-down: #st_source_0;">Refresh</button>
 										</div>
 										<div class="st-row">
 											<div class="st-label">Sources</div>
 											<button class="st-source" data-for="src : store_sources" data-attr-id="'st_source_' + it_index" data-class-st-on="src.enabled"
-												data-event-click="store_toggle_source(src.id)"><div class="st-dot"></div><div class="st-source-name">{{src.name}}</div><div class="st-source-status">{{src.status}}</div></button>
+												data-event-click="store_toggle_source(src.id)" style="nav-up: #st_filter_all;"
+												data-style-nav-left="it_index == 0 ? '#tab_store' : 'auto'" data-style-nav-right="it_index == store_sources.size - 1 ? 'none' : 'auto'"
+												data-style-nav-down="store_rows.size &gt; 0 ? '#st_mod_0' : 'none'"><div class="st-dot"></div><div class="st-source-name">{{src.name}}</div><div class="st-source-status">{{src.status}}</div></button>
 										</div>
 									</div>
 									<div class="st-body">
 										<div class="st-list">
 											<button class="st-card" data-for="r : store_rows" data-attr-id="'st_mod_' + it_index" data-class-st-selected="r.selected"
-												data-event-click="store_select(r.id)" data-style-nav-left="'#tab_store'">
+												data-event-click="store_select(r.id)" data-event-focus="store_focus(r.id)" data-style-nav-left="'#tab_store'" data-style-nav-right="store_right"
+												data-style-nav-up="it_index == 0 ? '#st_source_0' : 'auto'" data-style-nav-down="it_index == store_rows.size - 1 ? 'none' : 'auto'">
 												<div class="st-thumb" data-style-decorator="r.thumb != '' ? 'image(' + r.thumb + ' contain)' : 'none'"></div>
 												<div class="st-card-text">
 													<div class="st-card-name">{{r.name}}</div>
@@ -573,7 +576,7 @@
 											</button>
 											<div class="st-empty" data-if="store_rows.size == 0">Nothing here. Turn a source on, or pick another filter.</div>
 										</div>
-										<div class="st-detail" data-if="store_sel_name != ''">
+										<div class="st-detail" id="st_detail" data-if="store_sel_name != ''">
 											<div class="st-detail-thumb" data-if="store_sel_thumb != ''" data-style-decorator="store_sel_thumb != '' ? 'image(' + store_sel_thumb + ' contain)' : 'none'"></div>
 											<div class="st-detail-name">{{store_sel_name}}</div>
 											<div class="st-detail-meta">{{store_sel_meta}}</div>
@@ -585,9 +588,11 @@
 												<div class="rl-official-bar"><div class="rl-progress-bar" data-style-width="store_percent + '%'"></div></div>
 											</div>
 											<div class="st-actions" data-if="!store_busy">
-												<div class="rl-action-shadow" data-if="store_sel_can_act"><button id="st_act" class="rl-action" data-event-click="store_install()" style="nav-left: auto;">{{store_sel_action}}</button></div>
+												<div class="rl-action-shadow" data-if="store_sel_can_act"><button id="st_act" class="rl-action" data-event-click="store_install()" style="nav-up: none; nav-down: none;" data-style-nav-left="store_sel_card"
+													data-style-nav-right="store_sel_can_remove ? '#st_remove' : 'none'">{{store_sel_action}}</button></div>
 												<div class="st-state" data-class-st-blocked="store_sel_blocked" data-if="!store_sel_can_act">{{store_sel_action}}</div>
-												<div class="rl-action-shadow" data-if="store_sel_can_remove"><button id="st_remove" class="rl-action rl-action--outline" data-event-click="store_remove()">Remove</button></div>
+												<div class="rl-action-shadow" data-if="store_sel_can_remove"><button id="st_remove" class="rl-action rl-action--outline" data-event-click="store_remove()" style="nav-up: none; nav-down: none; nav-right: none;"
+													data-style-nav-left="store_sel_can_act ? '#st_act' : store_sel_card">Remove</button></div>
 											</div>
 											<div class="st-result" data-if="!store_busy &amp;&amp; store_text != ''">{{store_text}}</div>
 										</div>
