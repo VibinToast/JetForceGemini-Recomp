@@ -174,16 +174,11 @@
 						</tab>
 						<panel class="config">
 							<form class="config__form">
-								<!-- One column in the middle of the page: the three buttons, then what each does. -->
-								<div style="display: block; width: 640dp; margin: 48dp auto 0dp;">
-									<button class="button" id="jfg_quit_title" style="display: block; width: 100%; margin: 0dp 0dp 24dp; text-align: center; nav-up: #tab_jfg_quit; nav-down: #jfg_quit_launcher; nav-left: #tab_jfg_quit; nav-right: none;" onclick="open_return_to_title_prompt:jfg_quit_title">Return to Main Menu</button>
-									<button class="button" id="jfg_quit_launcher" style="display: block; width: 100%; margin: 0dp 0dp 24dp; text-align: center; nav-up: #jfg_quit_title; nav-down: #jfg_quit_game; nav-left: #tab_jfg_quit; nav-right: none;" onclick="open_return_to_launcher_prompt:jfg_quit_launcher">Return to Launcher</button>
-									<button class="button" id="jfg_quit_game" style="display: block; width: 100%; margin: 0dp 0dp 40dp; text-align: center; nav-up: #jfg_quit_launcher; nav-down: none; nav-left: #tab_jfg_quit; nav-right: none;" onclick="open_quit_game_prompt:jfg_quit_game">Quit Game</button>
-									<div class="jfg-desc"><div class="jfg-desc__card"><div class="jfg-desc__title">Quit</div>
-										<p><b>Return to Main Menu</b>: back to the game's title screen.</p>
-										<p><b>Return to Launcher</b>: the game restarts on the launcher.</p>
-										<p><b>Quit Game</b>: closes the game.</p>
-										<p>All ask first. Any progress since your last save will be lost.</p></div></div>
+								<!-- The three buttons in the middle of the page (each asks first: their prompts say what is lost). -->
+								<div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%;">
+									<button class="button" id="jfg_quit_title" style="display: block; width: 640dp; margin: 0dp 0dp 24dp; text-align: center; nav-up: #tab_jfg_quit; nav-down: #jfg_quit_launcher; nav-left: #tab_jfg_quit; nav-right: none;" onclick="open_return_to_title_prompt:jfg_quit_title">Return to Main Menu</button>
+									<button class="button" id="jfg_quit_launcher" style="display: block; width: 640dp; margin: 0dp 0dp 24dp; text-align: center; nav-up: #jfg_quit_title; nav-down: #jfg_quit_game; nav-left: #tab_jfg_quit; nav-right: none;" onclick="open_return_to_launcher_prompt:jfg_quit_launcher">Return to Launcher</button>
+									<button class="button" id="jfg_quit_game" style="display: block; width: 640dp; margin: 0dp; text-align: center; nav-up: #jfg_quit_launcher; nav-down: none; nav-left: #tab_jfg_quit; nav-right: none;" onclick="open_quit_game_prompt:jfg_quit_game">Quit Game</button>
 								</div>
 							</form>
 						</panel>
