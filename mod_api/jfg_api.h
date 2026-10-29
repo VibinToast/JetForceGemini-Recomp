@@ -442,7 +442,7 @@ typedef struct {
     unsigned int color;
 } JfgHudDisc;
 RECOMP_IMPORT("*", void jfg_hud_disc(const JfgHudDisc* disc));
-// One of the game's texts (front_text[id], in the language shown) into out (size bytes, ended by 0); its length, 0 if
+// One of the game's texts (by its id, in the language shown) into out (size bytes, ended by 0); its length, 0 if
 // none. Weapon w's name is 0x39 + w; jfg_on_hud_message's msg is a text id too.
 RECOMP_IMPORT("*", int jfg_game_text(int id, char* out, int size));
 // The area's Tribals: saved, killed and left (the counts the game's objective panel shows). 0 outside a game.
