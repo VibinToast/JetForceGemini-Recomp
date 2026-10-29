@@ -310,6 +310,8 @@ JFG_WRAP(hitVectorCheck) {
 }
 
 // The shot pass: armour off again afterwards (blasts skip armoured spheres too), and the shots it stopped counted.
+namespace jfg { void kills_after_hit_pass(); } // jfg_kills.cpp: enemies' shots at each other
+
 JFG_WRAP(hitUpdate) {
     g_rdram = rdram;
     for (Armoured& a : g_armoured) {
@@ -319,6 +321,7 @@ JFG_WRAP(hitUpdate) {
     }
     hitUpdate_orig(rdram, ctx);
     g_rdram = rdram;
+    jfg::kills_after_hit_pass();
     for (const HeroHit& h : g_hero_hits) {
         if (!valid_ptr(h.hit) || !valid_ptr(h.sphere)) continue;
         wr16(h.sphere + SPH_FLAGSA, (uint16_t)(rd16(h.sphere + SPH_FLAGSA) | 0x40));

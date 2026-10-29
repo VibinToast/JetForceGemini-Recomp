@@ -66,14 +66,42 @@ uint32_t kills_set_squaddie(uint32_t obj) {
 
 uint32_t kills_squaddie() { return g_squaddie; } // jfg_squad_multiplier.cpp
 
-// From squadsPlayerShootsSquaddie's wrapper (jfg_squad_cheat.cpp).
-void kills_remember_shot(uint32_t victim, uint32_t shooter) {
-    g_last_shot_victim = victim;
+namespace {
+void remember(uint32_t victim, uint32_t shooter) {
     for (Shot& s : g_shots) {
         if (s.victim == victim) { s.shooter = shooter; return; }
     }
     g_shots[g_next_shot] = { victim, shooter };
     g_next_shot = (g_next_shot + 1) % SHOTS;
+}
+uint32_t shooter_of(uint32_t hit);
+} // namespace
+
+// From squadsPlayerShootsSquaddie's wrapper (jfg_squad_cheat.cpp).
+void kills_remember_shot(uint32_t victim, uint32_t shooter) {
+    g_last_shot_victim = victim;
+    remember(victim, shooter);
+}
+
+// After the game's shot pass (hitUpdate's wrapper, jfg_squad_types.cpp): squadsPlayerShootsSquaddie only records the
+// heroes' shots, so a squad member another one shot (enemies' friendly fire) had no shooter. A shot that crossed a
+// member this pass is in its hit block (+0x3C, with +0x0A bit 0x40; bodies pressing together set bit 0x20 only):
+// when it came from another squad member, that member is its shooter.
+void kills_after_hit_pass() {
+    constexpr int16_t KIND_SQUAD_MEMBER = 0x18;
+    const uint32_t list = rd32(ADDR_ObjList);
+    const int count = (int)rd32(ADDR_ObjListCount);
+    if (!valid_ptr(list) || count <= 0 || count > 4096) return;
+    for (int i = 0; i < count; i++) {
+        const uint32_t obj = rd32(list + 4u * (uint32_t)i);
+        if (!valid_ptr(obj) || Obj::Kind::get(obj) != KIND_SQUAD_MEMBER) continue;
+        const uint32_t dmg = Obj::Damage::get(obj);
+        if (!valid_ptr(dmg) || !(rd16(dmg + 0x0A) & 0x40)) continue;
+        const uint32_t shot = rd32(dmg + 0x3C);
+        if (!valid_ptr(shot)) continue;
+        const uint32_t shooter = shooter_of(shot);
+        if (valid_ptr(shooter) && shooter != obj && Obj::Kind::get(shooter) == KIND_SQUAD_MEMBER) remember(obj, shooter);
+    }
 }
 
 namespace {
