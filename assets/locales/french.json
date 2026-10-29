@@ -1526,5 +1526,10 @@
   "Keyboard": "Clavier",
   "PlayStation Controller": "Manette PlayStation",
   "Switch Controller": "Manette Switch"
- }
+ },
+  "Return to Main Menu": "Retour au menu principal",
+  ": back to the game's title screen.": " : retour à l'écran titre du jeu.",
+  "Return to the main menu?": "Revenir au menu principal ?",
+  "The game goes back to its title screen. Any progress since your last save will be lost.": "Le jeu revient à son écran titre. Toute progression depuis votre dernière sauvegarde sera perdue.",
+  "All ask first. Any progress since your last save will be lost.": "Tous demandent d'abord confirmation. Toute progression depuis votre dernière sauvegarde sera perdue."
 }

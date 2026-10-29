@@ -25461,5 +25461,10 @@
   "Keyboard": "キーボード",
   "PlayStation Controller": "PlayStation コントローラー",
   "Switch Controller": "Switch コントローラー"
- }
+ },
+  "Return to Main Menu": "メインメニューに戻る",
+  ": back to the game's title screen.": "：ゲームのタイトル画面に戻ります。",
+  "Return to the main menu?": "メインメニューに戻りますか？",
+  "The game goes back to its title screen. Any progress since your last save will be lost.": "ゲームはタイトル画面に戻ります。最後にセーブしてからの進行状況は失われます。",
+  "All ask first. Any progress since your last save will be lost.": "どれも確認してから実行します。最後にセーブしてからの進行状況は失われます。"
 }
