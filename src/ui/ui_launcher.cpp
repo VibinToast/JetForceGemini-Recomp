@@ -51,13 +51,13 @@ struct LauncherPageInfo { const char* id; const char* title; const char* subtitl
 static const LauncherPageInfo LAUNCHER_PAGES[] = {
     { "play", "Play", "Load your ROM, then jump in.", "nav_play" },
     { "profiles", "Profiles", "Whole sets of settings: the original game, Modern, Modern and Balanced, Extreme or your own.", "tab_jfg_profiles" },
-    { "general", "General", "Volume, the settings menu, what is shown on screen and the fly camera.", "tab_jfg_general" },
+    { "general", "General", "Volume, the settings menu and what is shown on screen.", "tab_jfg_general" },
     { "gameplay", "Gameplay", "Saving, gore, player tweaks and movement.", "tab_jfg_gameplay" },
     { "controls", "Controls", "Players, quick setup, camera and aiming, sticks and rumble, mouse and keyboard, and your buttons.", "tab_jfg_controls" },
     // Not in the sidebar: Customize Buttons on the Controls page opens it (jfg_launcher_show_bindings), and its sidebar
     // button is Controls'.
     { "bindings", "Customize Buttons", "Button bindings for the controller and the keyboard.", "tab_jfg_controls" },
-    { "graphics", "Graphics", "Window, resolution, frame rate, widescreen and effects.", "tab_jfg_graphics" },
+    { "graphics", "Graphics", "Window, resolution, frame rate, widescreen, effects and advanced options.", "tab_jfg_graphics" },
     { "textures", "Texture Packs", "Pick a texture pack from the texture_packs folder, and dump the game's textures to make your own.", "tab_jfg_textures" },
     { "mods", "Mods", "Turn mods on and off, set their order and options, and install new ones.", "tab_mods" },
     { "store", "Get Mods", "Mods from VibinToast's collections: install, update and remove them.", "tab_store" },

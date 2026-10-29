@@ -64,9 +64,9 @@ body:
     attributes:
       label: Settings
       description: >-
-        The ones that could matter: profile, Game Frame Rate, Frame Interpolation (Graphics tab), widescreen,
+        The ones that could matter: profile, Display Frame Rate and Game Frame Rate (Graphics tab), widescreen,
         anti-aliasing (MSAA), texture pack, mouse and keyboard or controller.
-      placeholder: "Modern profile, Game Frame Rate 60, Frame Interpolation 120, widescreen on, MSAA off, 1K HD pack"
+      placeholder: "Modern profile, Display Frame Rate 120, Game Frame Rate 60, widescreen on, MSAA off, 1K HD pack"
 
   - type: textarea
     id: logs

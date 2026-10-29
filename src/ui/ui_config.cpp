@@ -1585,7 +1585,19 @@ public:
             });
             jfg_controls_model_handle = constructor.GetModelHandle();
         }
-        jfg_graphics_model_handle = make_jfg_options_model(context, "jfg_graphics_model", jfg_graphics_keys);
+        {
+            Rml::DataModelConstructor constructor = context->CreateDataModel("jfg_graphics_model");
+            if (!constructor) throw std::runtime_error("Failed to make RmlUi data model for the Graphics tab");
+            bind_config_list_events(constructor);
+            bind_jfg_keys(constructor, jfg_graphics_keys);
+            // Show Advanced Options: not saved, so the section is closed again at each start (the options in it are).
+            static bool show_advanced = false;
+            constructor.BindFunc("show_advanced",
+                [](Rml::Variant& out) { out = show_advanced ? 1 : 0; },
+                [](const Rml::Variant& in) { show_advanced = in.Get<int>() != 0; jfg_config_menu_refresh(); });
+            constructor.BindFunc("advanced_hidden", [](Rml::Variant& out) { out = !show_advanced; });
+            jfg_graphics_model_handle = constructor.GetModelHandle();
+        }
         {
             Rml::DataModelConstructor constructor = context->CreateDataModel("jfg_textures_model");
             if (!constructor) throw std::runtime_error("Failed to make RmlUi data model for the Textures tab");

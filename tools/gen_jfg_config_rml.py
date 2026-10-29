@@ -8,7 +8,7 @@ import html, os
 # (kind, key, title, extra, help). kind: group | bool | range (extra = (min, max, suffix)) | choice (extra = [(value, label)])
 # Keys are the port's options (jfg::settings) except the ones in UPSTREAM_KEYS (ui_config.cpp: volume, controller and
 # window settings of the recomp itself), which the port's tabs show too so that each setting is in one place.
-# General: volume, the menu, what is shown on screen and the fly camera. A note about F9 follows the options.
+# General: volume, the menu and what is shown on screen. A note about F9 follows the options.
 GENERAL = [
     ("group", None, "Sound", None, None),
     ("range", "main_volume", "Master Volume", (0, 100, "%"), "The volume of all of the game's sound."),
@@ -22,11 +22,6 @@ GENERAL = [
     ("bool", "show_level", "Show Level", None, "The level number and name in the top right corner."),
     ("bool", "show_pack", "Show Texture Pack", None, "The texture pack in use in the top right corner."),
     ("bool", "save_notification", "Show Save Notification", None, "\"Game saved\" shows briefly in the bottom right corner after an auto save."),
-    ("group", None, "Fly Camera (F7)", None, None),
-    ("range", "fly_speed", "Fly Speed", (10, 1000, "%"),
-     "F7 (or F10 > Tools) flies a free camera for screenshots: WASD / left stick move where it looks, mouse / right stick look, Space / A up, Ctrl / B down, holding fire flies faster. F7 again ends it."),
-    ("bool", "fly_freeze", "Freeze While Flying", None, "The game stands still while the fly camera is on (enemies, effects and the level stop as when paused)."),
-    ("bool", "fly_hide_hud", "Hide HUD While Flying", None, "The health meter and the rest of the HUD are hidden while the fly camera is on."),
     ("group", None, "Launcher", None, None),
     ("bool", "skip_launcher", "Skip the Launcher", None,
      "<b>On</b>: the game starts straight away with your ROM, without the launcher. In the game, the launcher button next to Quit in this menu still takes you back to it. Saved in jfg_launcher.txt next to the game."),
@@ -85,12 +80,6 @@ CONTROLS = [
     ("range", "camera_speed_v", "Camera Up/Down", (10, 400, "%"), "Dual stick: how fast the right stick moves the camera up and down."),
     ("range", "camera_distance", "Camera Distance", (50, 250, "%"), "Dual stick: how far back the camera is from the character, as a share of the game's own distance. Lower is closer."),
     ("bool", "camera_collision", "Camera Collision", None, "Dual stick: the camera stays inside the level (the game's own wall check) instead of going through walls."),
-    ("bool", "aim_shoulder", "Over-the-Shoulder Aiming", None, "While aiming, the view is from over the character's right shoulder. With the dual stick this sets the aiming view's sliders below to a fixed shoulder view (greyed out); off, they are yours to set."),
-    ("range", "aim_drag_margin", "Aim Drag Margin", (0, 50, "%"), "Dual stick, aiming: how far the character may step aside from the middle of the screen before the camera follows, as a share of half the screen's width. 0 keeps the camera on the character. Fixed while Over-the-Shoulder Aiming is on."),
-    ("range", "aim_drag_return", "Aim Drag Return Speed", (0, 400, "%"), "Dual stick, aiming: how fast the camera keeps coming back onto the character, moving or not. 100% takes about a third of a second; 0 leaves it where it is. Fixed while Over-the-Shoulder Aiming is on."),
-    ("range", "aim_offset_x", "Aim Offset Left/Right", (-50, 50, ""), "Dual stick, aiming: the point the camera turns round moves this far to the right of the character (negative: left), so the view can look past a shoulder. Fixed while Over-the-Shoulder Aiming is on."),
-    ("range", "aim_offset_y", "Aim Offset Up/Down", (-50, 50, ""), "Dual stick, aiming: the point the camera turns round moves this far up from the middle of the character (negative: down). Fixed while Over-the-Shoulder Aiming is on."),
-    ("range", "aim_offset_z", "Aim Zoom", (0, 300, ""), "Dual stick, aiming: the camera moves this much closer in. Fixed while Over-the-Shoulder Aiming is on."),
     ("bool", "aim_centered", "Keep the Reticle Centered", None,
      "While aiming, the view turns as soon as the stick moves and the reticle stays in the middle (instead of the reticle first travelling to the edge of a box and drifting back)."),
     ("bool", "aim_jump", "Jump While Aiming", None,
@@ -169,7 +158,12 @@ CONTROLS_DESC = "\n".join(
 
 # Groups shown only while a data expression is false, with their options (a wrapper with data-if; Up/Down go past them
 # while hidden, as past locked rows).
-GROUP_HIDDEN_BY = {"Mouse & Keyboard": "mk_hidden"}
+ADVANCED_GROUPS = ("Experimental", "Fly Camera (F7)", "Aiming View")
+GROUP_HIDDEN_BY = {"Mouse & Keyboard": "mk_hidden", **{g: "advanced_hidden" for g in ADVANCED_GROUPS}}
+# Rows bound to the tab's own data model (ui_config.cpp) instead of a saved option: left out of the option key lists.
+UI_ONLY_KEYS = ("show_advanced",)
+# Options on other tabs that Keep My Controls keeps with the Controls tab's (the aiming view, under Advanced Options).
+KEEP_WITH_CONTROLS = ("aim_shoulder", "aim_drag_margin", "aim_drag_return", "aim_offset_x", "aim_offset_y", "aim_offset_z")
 
 GRAPHICS = [
     ("group", None, "Window", None, None),
@@ -182,12 +176,11 @@ GRAPHICS = [
     ("choice", "msaa_option", "Anti-Aliasing (MSAA)", [(0, "None"), (1, "2x"), (2, "4x")],
      "Multisample anti-aliasing: smoother edges at the cost of rendering performance. Not available if your graphics card does not support programmable sample positions (needed to avoid rendering glitches)."),
     ("group", None, "Frame Rate", None, None),
-    ("choice", "frame_rate", "Game Frame Rate", [(0, "30 (Original)"), (1, "60 (Experimental)")],
-     "How many times a second the game itself updates: movement, aiming, enemies. <b>30 (Original)</b>: like the N64 (it drops to 20 when busy). <b>60</b>: the quickest response; game speed stays the same. 60 is experimental: some enemies and bosses can behave differently than at 30. Choose <b>30</b> for the original game."),
-    ("choice", "smooth_motion", "Frame Interpolation", [(0, "Off"), (60, "60"), (90, "90"), (120, "120"), (144, "144"), (240, "240"), (1, "Monitor")],
-     "How many frames a second you see: the renderer adds in-between frames to the game's own, with either <b>Game Frame Rate</b>. <b>Monitor</b>: up to your monitor's refresh rate; never more than it. Movement looks smoother, with a little more delay; rain and a few effects still move at the game's rate. A lower setting takes less from the graphics card."),
+    # Saved as smooth_motion (its name before 1.3, "Frame Interpolation"), so saved settings and profiles keep it.
+    ("choice", "smooth_motion", "Display Frame Rate", [(0, "Off"), (60, "60"), (90, "90"), (120, "120"), (144, "144"), (240, "240"), (1, "Monitor")],
+     "How many frames a second you see. Above the game's own, the renderer adds in-between frames: movement looks smoother, with a little more delay, but the game itself runs no faster. <b>Monitor</b>: up to your monitor's refresh rate; never more than it. Rain and a few effects still move at the game's rate. A lower setting takes less from the graphics card."),
     ("bool", "smooth_shadows", "Smooth Shadows", None,
-     "With <b>Frame Interpolation</b>, character shadows move with the in-between frames instead of at the game's rate, so they no longer trail behind the character."),
+     "With <b>Display Frame Rate</b>, character shadows move with the in-between frames instead of at the game's rate, so they no longer trail behind the character."),
     ("group", None, "Picture", None, None),
     ("bool", "widescreen", "Widescreen", None, "During gameplay the 3D view fills the window; the HUD stays in the middle. Things at the far left and right may appear late."),
     ("bool", "hud_corners", "HUD in Screen Corners", None, "With <b>Widescreen</b>, the HUD moves from the middle out to the left and right edges of the window."),
@@ -222,6 +215,26 @@ GRAPHICS = [
      "How far away the levels' own fog is. Some levels use it to hide where the scenery stops being drawn, so moving it back can show things appearing in the distance."),
     ("bool", "no_level_fog", "No Level Fog", None, "Turns the levels' own fog off. Things in the distance may be seen appearing."),
     # Depth fog (depth_fog, fog_start, fog_end, fog_density, fog_color) is hidden for now: DEPTH_FOG_OPTION in jfg_options.h.
+    # Advanced Options: settings for experts, hidden until Show Advanced Options is on (ADVANCED_GROUPS). The switch
+    # itself is not saved (UI_ONLY_KEYS): the section is closed again at each start.
+    ("group", None, "Advanced Options", None, None),
+    ("bool", "show_advanced", "Show Advanced Options", None,
+     "Settings most players can leave as they are: the game's own update rate (60 is experimental), the fly camera (F7) and the aiming view's sliders. <b>On</b> shows them below."),
+    ("group", None, "Experimental", None, None),
+    ("choice", "frame_rate", "Game Frame Rate", [(0, "30 (Original)"), (1, "60 (Experimental)")],
+     "How many times a second the game itself updates: movement, aiming, enemies. <b>30 (Original)</b>: like the N64 (it drops to 20 when busy). <b>60</b>: the quickest response; game speed stays the same. 60 is experimental: some enemies and bosses can behave differently than at 30. Choose <b>30</b> for the original game."),
+    ("group", None, "Fly Camera (F7)", None, None),
+    ("range", "fly_speed", "Fly Speed", (10, 1000, "%"),
+     "F7 (or F10 > Tools) flies a free camera for screenshots: WASD / left stick move where it looks, mouse / right stick look, Space / A up, Ctrl / B down, holding fire flies faster. F7 again ends it."),
+    ("bool", "fly_freeze", "Freeze While Flying", None, "The game stands still while the fly camera is on (enemies, effects and the level stop as when paused)."),
+    ("bool", "fly_hide_hud", "Hide HUD While Flying", None, "The health meter and the rest of the HUD are hidden while the fly camera is on."),
+    ("group", None, "Aiming View", None, None),
+    ("bool", "aim_shoulder", "Over-the-Shoulder Aiming", None, "While aiming, the view is from over the character's right shoulder. With the dual stick this sets the aiming view's sliders below to a fixed shoulder view (greyed out); off, they are yours to set."),
+    ("range", "aim_drag_margin", "Aim Drag Margin", (0, 50, "%"), "Dual stick, aiming: how far the character may step aside from the middle of the screen before the camera follows, as a share of half the screen's width. 0 keeps the camera on the character. Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_drag_return", "Aim Drag Return Speed", (0, 400, "%"), "Dual stick, aiming: how fast the camera keeps coming back onto the character, moving or not. 100% takes about a third of a second; 0 leaves it where it is. Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_offset_x", "Aim Offset Left/Right", (-50, 50, ""), "Dual stick, aiming: the point the camera turns round moves this far to the right of the character (negative: left), so the view can look past a shoulder. Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_offset_y", "Aim Offset Up/Down", (-50, 50, ""), "Dual stick, aiming: the point the camera turns round moves this far up from the middle of the character (negative: down). Fixed while Over-the-Shoulder Aiming is on."),
+    ("range", "aim_offset_z", "Aim Zoom", (0, 300, ""), "Dual stick, aiming: the camera moves this much closer in. Fixed while Over-the-Shoulder Aiming is on."),
 ]
 
 # The Textures tab: the texture pack list (TEXTURE_PACKS) comes first, then these.
@@ -250,13 +263,16 @@ def option_markup(items, first_nav_up):
     # tab; None leaves it automatic), the last row's Down goes nowhere.
     # A locked row (LOCKED_BY) can't take the focus, so while its lock is on, Up/Down jump over the locked rows next to it
     # (a data-style-nav-* attribute, see nav_locked, in place of the fixed property).
-    # Rows of a hidden group (GROUP_HIDDEN_BY) are skipped like locked ones while hidden.
+    # Rows of a hidden group (GROUP_HIDDEN_BY) are skipped like locked ones while hidden: from outside the hidden groups
+    # all of their rows at once (locked ones among them too), inside them only the locked rows.
     hidden_by, group_hide = {}, None
     for kind, key, title, _, _ in items:
         if kind == "group": group_hide = GROUP_HIDDEN_BY.get(title)
         elif group_hide: hidden_by[key] = group_hide
     rows = [row_ids(kind, key, extra) for kind, key, _, extra, _ in items if kind != "group"]
-    locks = [LOCKED_BY.get(key) or hidden_by.get(key) for kind, key, _, _, _ in items if kind != "group"]
+    keys = [key for kind, key, _, _, _ in items if kind != "group"]
+    hides = [hidden_by.get(key) for key in keys]
+    locked = [LOCKED_BY.get(key) for key in keys]
     def target(row, column):
         return "#" + row[min(column, len(row) - 1)]
     def neighbour(i, step, column):
@@ -266,9 +282,13 @@ def option_markup(items, first_nav_up):
     def past_lock(i, step, column):
         """(lock, where to go while it is on) when the next row that way is locked; None otherwise."""
         j = i + step
-        if not (0 <= j < len(rows)) or locks[j] is None or locks[j] == locks[i]: return None
-        lock = locks[j]
-        while 0 <= j < len(rows) and locks[j] == lock: j += step
+        if not (0 <= j < len(rows)): return None
+        if hides[j] is not None and hides[j] != hides[i]:
+            lock, same = hides[j], lambda j: hides[j] == lock
+        elif locked[j] is not None and locked[j] != locked[i]:
+            lock, same = locked[j], lambda j: locked[j] == lock and hides[j] == hides[i]
+        else: return None
+        while 0 <= j < len(rows) and same(j): j += step
         return lock, neighbour(j - step, step, column) or "auto"
     def nav_style(i, column):
         up = None if past_lock(i, -1, column) else neighbour(i, -1, column)
@@ -509,8 +529,11 @@ def main():
     with open(os.path.join(root, "src", "jfg", "jfg_config_keys.inc"), "w", newline="\n") as f:
         f.write("// Generated by tools/gen_jfg_config_rml.py: the option keys each port tab of the config menu binds.\n")
         for name, items, _, _ in OPTION_TABS:
-            keys = [k for kind, k, *_ in items if kind != "group"]
+            keys = [k for kind, k, *_ in items if kind != "group" and k not in UI_ONLY_KEYS]
             f.write(f"static const char* const {name}_keys[] = {{ " + ", ".join(f'"{k}"' for k in keys) + " };\n")
+        # The options Keep My Controls keeps (jfg_profiles.cpp): the Controls tab's, and KEEP_WITH_CONTROLS.
+        keys = [k for kind, k, *_ in CONTROLS if kind != "group"] + list(KEEP_WITH_CONTROLS)
+        f.write("static const char* const jfg_keep_controls_keys[] = { " + ", ".join(f'"{k}"' for k in keys) + " };\n")
         # The element Down on a tab goes to (the options are in a scrolling box; see ConfigTabsetListener): the first
         # option, or on the Textures tab the first texture pack button.
         f.write("struct JfgTabFirst { const char* tab; const char* first; };\n")
@@ -525,7 +548,7 @@ def main():
         f.write("static const JfgOptionTitle jfg_option_titles[] = {\n")
         for _, items, _, _ in OPTION_TABS:
             for kind, key, title, extra, _ in items:
-                if kind == "group": continue
+                if kind == "group" or key in UI_ONLY_KEYS: continue
                 suffix = extra[2] if kind == "range" else ""
                 choices = "|".join(f"{v}:{label}" for v, label in extra) if kind == "choice" else ""
                 f.write(f'    {{ "{key}", "{title}", \'{kind[0]}\', "{suffix}", "{choices}" }},\n')

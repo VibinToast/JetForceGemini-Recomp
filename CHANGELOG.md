@@ -3,6 +3,12 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
+## Unreleased
+
+### Changes
+
+- Simpler Graphics tab: Frame Interpolation is now called Display Frame Rate (your setting is kept). Game Frame Rate, the fly camera (F7) and the over-the-shoulder aiming sliders are under Advanced Options at the bottom of the Graphics tab; turn on Show Advanced Options to see them.
+
 ## v1.2.4 (2026-10-25)
 
 ### Fixes

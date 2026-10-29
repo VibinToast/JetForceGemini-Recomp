@@ -149,7 +149,7 @@ Please include:
 - **Where.** The level and roughly where in it (turn on **Show Level** in the settings menu's **General** tab to put
   the level number on screen), or the menu or cutscene.
 - **Your setup.** Windows, Linux or Steam Deck, your GPU, and your monitor's refresh rate.
-- **Your settings**, if they could matter: the profile, **Game Frame Rate**, **Frame Interpolation** (Graphics tab),
+- **Your settings**, if they could matter: the profile, **Display Frame Rate** and **Game Frame Rate** (Graphics tab),
   widescreen, and the texture pack, if any.
 - **A screenshot or video**, for anything visual.
 - **Logs**, if the game crashed or stopped with an error: `crash.log`, `jfg_error.log` and `jfg_memory.log`,
