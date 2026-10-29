@@ -548,7 +548,7 @@
 								<!-- Get Mods: the mod store (src/jfg/jfg_mod_store.cpp; Recomp-Docs OFFICIAL_MODS_PLAN.md "Mod Store") -->
 								<div class="rl-page" id="rl_page_store" data-if="page == 'store'">
 									<div class="st-top">
-										<div class="st-preview" data-if="store_preview">Preview: nothing is published yet. These collections are read from bin/mod_store_preview, as they will be from GitHub.</div>
+										<div class="st-preview" data-if="store_preview">Preview: these collections are read from bin/mod_store_preview (JFG_MOD_STORE_PREVIEW), not GitHub.</div>
 										<div class="st-row">
 											<button class="st-chip" id="st_filter_all" data-class-st-on="store_filter == 'all'" data-event-click="store_set_filter('all')" style="nav-left: #tab_store; nav-up: none; nav-down: #st_tag_all;">All {{store_count_all}}</button>
 											<button class="st-chip" id="st_filter_installed" data-class-st-on="store_filter == 'installed'" data-event-click="store_set_filter('installed')" style="nav-up: none; nav-down: #st_tag_all;">Installed {{store_count_installed}}</button>

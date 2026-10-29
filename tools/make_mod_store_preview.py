@@ -1,5 +1,5 @@
-"""Builds bin/mod_store_preview: the launcher's Get Mods page reads its catalogs and files from there, by the GitHub
-URLs the real collections will have, until they are published (src/jfg/jfg_mod_store.cpp).
+"""Builds bin/mod_store_preview: with JFG_MOD_STORE_PREVIEW=1 the launcher's Get Mods page reads its catalogs and files
+from there instead of GitHub, by the same URLs (src/jfg/jfg_mod_store.cpp), to try catalogs before publishing them.
 
 Each collection is laid out as its GitHub releases would be:
     mod_store_preview/<repo>/latest/catalog.json             (releases/latest/download/catalog.json)

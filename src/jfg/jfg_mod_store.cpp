@@ -10,16 +10,20 @@
 //   old one. The Mods page rescans afterwards; mods take effect when the game starts.
 // - Remove: only mods the store manages: ones it installed (mod_store.json) or whose file is a catalog's own (its hash
 //   matches), never ones a player put in the mods folder by hand. Their settings are kept.
-// - Preview: nothing is published yet, so while bin/mod_store_preview exists (tools/make_mod_store_preview.py) the
-//   catalogs and files are read from it, by the same GitHub URLs the real ones will have, with a pretend download time.
-//   Without it, a source says it isn't published yet.
+// - Online: the page's first showing (and its Refresh) downloads each source's catalog in the background, then the
+//   thumbnails it lacks into bin/mod_store_cache (<source>/<mod id>-<version>.png, kept between runs); the list fills
+//   in as they arrive. Nothing is asked of GitHub while Check for Updates is off (bin/jfg_launcher.txt).
+// - Preview (testing): with JFG_MOD_STORE_PREVIEW=1 and bin/mod_store_preview there (tools/make_mod_store_preview.py),
+//   the catalogs and files are read from that folder instead, by the same GitHub URLs, with a pretend download time.
 #include "jfg_mod_store.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <sstream>
@@ -35,6 +39,7 @@ namespace fs = std::filesystem;
 namespace {
 constexpr const char* STATE_FILE = "mod_store.json";
 constexpr const char* PREVIEW_FOLDER = "mod_store_preview";
+constexpr const char* CACHE_FOLDER = "mod_store_cache";
 constexpr const char* GITHUB = "https://github.com/";
 
 struct BuiltIn { const char* id; const char* name; const char* repo; };
@@ -58,8 +63,12 @@ std::map<std::string, Installed> g_installed;              // mods the store ins
 std::vector<JfgStoreMod> g_mods;
 JfgStoreState g_state;
 bool g_rescan = false;                                     // an install finished: rescan on the UI thread
+bool g_fetching = false;                                   // the catalogs and thumbnails are being downloaded
 
-bool preview() { return fs::is_directory(PREVIEW_FOLDER); }
+bool preview() {
+    const char* on = std::getenv("JFG_MOD_STORE_PREVIEW");
+    return on != nullptr && *on != '\0' && *on != '0' && fs::is_directory(PREVIEW_FOLDER);
+}
 
 std::string utf8(const fs::path& p) {
     const std::u8string s = p.u8string();
@@ -171,17 +180,15 @@ void save_state() {
     std::ofstream(STATE_FILE, std::ios::binary) << j.dump(2) << "\n";
 }
 
-void load_catalog(JfgStoreSource& s) {
+// A source's catalog from its text (the preview's file, or the download).
+void parse_catalog(JfgStoreSource& s, const std::string& text) {
     std::vector<CatalogMod>& mods = g_catalogs[s.id];
     mods.clear();
     s.loaded = false;
     s.mods = 0;
     s.error.clear();
-    if (!preview()) { s.error = "Not published yet"; return; }
-    const fs::path file = preview_path(s.url);
-    if (file.empty() || !fs::is_regular_file(file)) { s.error = "Not published yet"; return; }
     try {
-        const nlohmann::json j = nlohmann::json::parse(read_text(file));
+        const nlohmann::json j = nlohmann::json::parse(text);
         for (const auto& m : j.value("mods", nlohmann::json::array())) {
             CatalogMod c;
             c.id = m.value("id", "");
@@ -205,6 +212,60 @@ void load_catalog(JfgStoreSource& s) {
     } catch (...) {
         s.error = "Its catalog could not be read";
     }
+}
+
+// A mod's thumbnail file: the preview's, else its place in the cache (there once downloaded).
+fs::path thumb_file(const std::string& source_id, const CatalogMod& c) {
+    if (c.thumb_url.empty()) return {};
+    if (preview()) return preview_path(c.thumb_url);
+    return fs::path(CACHE_FOLDER) / fs::u8path(source_id) / fs::u8path(c.id + "-" + c.version + ".png");
+}
+
+// url into file, whole: downloaded beside it (.part) and renamed over it once complete.
+bool download(const std::string& url, const fs::path& file, uint64_t size = 0,
+              const std::function<bool(uint64_t, uint64_t)>& progress = nullptr) {
+    std::error_code ec;
+    fs::create_directories(file.parent_path(), ec);
+    const fs::path part = fs::path(file).concat(".part");
+    fs::remove(part, ec);
+    if (jfg_http_download(url, part, size, progress ? progress : [](uint64_t, uint64_t) { return true; }) != 1) {
+        fs::remove(part, ec);
+        return false;
+    }
+    fs::rename(part, file, ec);
+    return !ec;
+}
+
+void build_list();
+
+// The background download of the catalogs, then of the thumbnails not in the cache yet; the list is built again after
+// each catalog and once the thumbnails are in.
+void fetch_worker(std::vector<std::pair<std::string, std::string>> sources) { // id, catalog url
+    for (const auto& [id, url] : sources) {
+        const fs::path file = fs::path(CACHE_FOLDER) / fs::u8path(id) / "catalog.json";
+        const bool ok = download(url, file);
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (JfgStoreSource& s : g_sources) {
+            if (s.id != id) continue;
+            if (ok) parse_catalog(s, read_text(file));
+            else { g_catalogs[id].clear(); s.loaded = false; s.mods = 0; s.error = "Couldn't reach GitHub"; }
+        }
+        build_list();
+    }
+    std::vector<std::pair<std::string, fs::path>> thumbs; // url, file
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (const auto& [id, mods] : g_catalogs) {
+            for (const CatalogMod& c : mods) {
+                const fs::path f = thumb_file(id, c);
+                if (!f.empty() && !fs::is_regular_file(f)) thumbs.push_back({ c.thumb_url, f });
+            }
+        }
+    }
+    for (const auto& [url, f] : thumbs) download(url, f);
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_fetching = false;
+    build_list();
 }
 
 const CatalogMod* find_entry(const std::string& id, std::string* source = nullptr) {
@@ -248,7 +309,7 @@ void build_list() {
             m.source_name = s.name;
             m.size_text = size_text(c.size);
             m.dependencies = c.dependencies;
-            const fs::path thumb = preview_path(c.thumb_url);
+            const fs::path thumb = thumb_file(s.id, c);
             if (!thumb.empty() && fs::is_regular_file(thumb)) m.thumb = utf8(thumb);
             if (auto details = recomp::mods::get_details_for_mod(c.id)) {
                 m.installed = true;
@@ -315,11 +376,21 @@ void install_worker(std::vector<std::string> ids, std::string main_id) {
             c = *e;
         }
         const std::string what = (ids.size() > 1 && ids[k] != main_id ? "Installing " + c.name + " (needed)" : "Installing " + c.name);
-        const fs::path from = preview_path(c.file_url);
-        if (from.empty() || !fs::is_regular_file(from)) { failure = "Could not download " + c.name; break; }
         const fs::path dest = recomp::mods::get_mods_directory() / (c.id + ".nrm");
         const fs::path part = fs::path(dest).concat(".part");
-        {
+        const fs::path from = preview() ? preview_path(c.file_url) : fs::path();
+        if (!preview()) {
+            std::error_code rm;
+            fs::remove(part, rm);
+            const int got = jfg_http_download(c.file_url, part, c.size, [&](uint64_t done, uint64_t total) {
+                set_busy(what + "...", (int)(((double)k + (double)done / std::max<uint64_t>(1, total)) / ids.size() * 100.0));
+                return true;
+            });
+            if (got != 1) failure = "Could not download " + c.name + ": check your connection";
+        } else if (from.empty() || !fs::is_regular_file(from)) {
+            failure = "Could not download " + c.name;
+            break;
+        } else {
             std::ifstream in(from, std::ios::binary);
             std::ofstream out(part, std::ios::binary | std::ios::trunc);
             const uint64_t total = std::max<uint64_t>(1, fs::file_size(from));
@@ -366,10 +437,30 @@ void install_worker(std::vector<std::string> ids, std::string main_id) {
 
 void jfg_store_refresh() {
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (g_state.busy) return;
+    if (g_state.busy || g_fetching) return;
     load_state();
-    for (JfgStoreSource& s : g_sources) load_catalog(s);
+    std::vector<std::pair<std::string, std::string>> fetch;
+    for (JfgStoreSource& s : g_sources) {
+        if (preview()) {
+            const fs::path file = preview_path(s.url);
+            if (!file.empty() && fs::is_regular_file(file)) parse_catalog(s, read_text(file));
+            else s.error = "Not in the preview";
+            continue;
+        }
+        // The catalog read last time shows until the new one arrives.
+        const fs::path cached = fs::path(CACHE_FOLDER) / fs::u8path(s.id) / "catalog.json";
+        if (fs::is_regular_file(cached)) parse_catalog(s, read_text(cached));
+        if (!jfg_launcher_check_updates()) {
+            if (!s.loaded) s.error = "Turn on Check for Updates (General page) to see it";
+            continue;
+        }
+        if (!s.loaded) s.error = "Loading...";
+        fetch.push_back({ s.id, s.url });
+    }
     build_list();
+    if (fetch.empty()) return;
+    g_fetching = true;
+    std::thread(fetch_worker, fetch).detach();
 }
 
 std::vector<JfgStoreSource> jfg_store_sources() {

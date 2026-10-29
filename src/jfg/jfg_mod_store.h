@@ -16,7 +16,7 @@ struct JfgStoreSource {
 // One mod as the page shows it: the catalog's entry from the highest-priority source, and what is installed.
 struct JfgStoreMod {
     std::string id, name, short_text, description, version, authors, tags, source, source_name, size_text;
-    std::string thumb;                    // its picture's file (the preview: a local file), empty if none
+    std::string thumb;                    // its picture's file (downloaded to the cache), empty if none yet
     std::string installed_version;        // empty if not installed
     bool installed = false, update = false, managed = false; // managed: the store installed it (or it is the catalog's file)
     bool blocked = false;                 // needs a newer port, or a dependency no enabled source has
@@ -26,7 +26,7 @@ struct JfgStoreMod {
 };
 
 struct JfgStoreState {
-    bool preview = false;                 // catalogs from bin/mod_store_preview, not the internet
+    bool preview = false;                 // catalogs from bin/mod_store_preview, not GitHub (JFG_MOD_STORE_PREVIEW=1)
     bool busy = false;
     int percent = 0;
     std::string busy_id, text;            // "Installing Rolling Shellback..." / the last result
