@@ -503,9 +503,23 @@ static void mantis_rock_failed(uint8_t* rdram, recomp_context* ctx) {
 }
 
 // objSetupObject and its steps (see jfg_objsetup_enter).
+// The object region (100 KB, 512 allocations, objInitObjects) fills up in busy levels, more so with mods' extra enemies
+// and effects, and then objSetupObject returns NULL; some of the game's callers write to the object without checking
+// (flamethrowerUpdate's flame: crash 2026-10-28 in level 37). The game has a fallback for that, used briefly by one
+// overlay: with D_800A0898 set, an object body the region has no room for comes from the main heap (megabytes free).
+// It is on for every setup here.
+constexpr uint32_t ADDR_objRegionOverflow = 0x800A0898; // s8, objSetObjRegionOverflow
+
 JFG_WRAP(objSetupObject) {
+    jfg::g_rdram = rdram;
+    const uint8_t overflow = jfg::rd8(ADDR_objRegionOverflow);
+    jfg::wr8(ADDR_objRegionOverflow, 1);
     const bool fire = g_fire.direct(ctx);
-    if (fire && g_fire_member != 0) { ctx->r2 = 0; return; } // squadsFireWeapon's shot after a failed weapon object
+    if (fire && g_fire_member != 0) { // squadsFireWeapon's shot after a failed weapon object
+        jfg::wr8(ADDR_objRegionOverflow, overflow);
+        ctx->r2 = 0;
+        return;
+    }
     const bool weapon = fire && (uint32_t)ctx->r4 == (uint32_t)(g_fire.sp + 0x174);
     const uint32_t member = (uint32_t)ctx->r12;
     const bool last_rock = g_mantis.direct(ctx) && (uint32_t)ctx->r4 == (uint32_t)(g_mantis.sp + 0x68) && (uint32_t)ctx->r6 == 0;
@@ -517,6 +531,8 @@ JFG_WRAP(objSetupObject) {
     const int type = (d >= 0 && d < jfg::OBJ_DEPTH && jfg::g_obj_setup[d].typed) ? jfg::g_obj_setup[d].type : -1;
     jfg_objsetup_exit(rdram, ctx, type);
     jfg::g_obj_step_nest = nest;
+    jfg::g_rdram = rdram;
+    jfg::wr8(ADDR_objRegionOverflow, overflow);
     if (weapon && (uint32_t)ctx->r2 == 0) fire_weapon_failed(rdram, ctx, member);
     if (last_rock && (uint32_t)ctx->r2 == 0) mantis_rock_failed(rdram, ctx);
 }
