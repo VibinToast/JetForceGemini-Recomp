@@ -190,9 +190,10 @@ bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progre
 }
 #else
 // Linux / others: curl, when it is installed. Only the release list is read here; installing is Windows only.
+// -L follows GitHub's redirect if the repository is renamed (WinHTTP above follows it by default).
 bool http_get(const std::string& url, const Sink& sink, const ProgressFn&) {
     if (url.rfind("https://", 0) != 0 || url.find('\'') != std::string::npos) return false;
-    const std::string command = "curl -fsS -m 8 -H 'Accept: application/vnd.github+json' '" + url + "' 2>/dev/null";
+    const std::string command = "curl -fsSL --proto-redir =https -m 8 -H 'Accept: application/vnd.github+json' '" + url + "' 2>/dev/null";
     FILE* pipe = popen(command.c_str(), "r");
     if (pipe == nullptr) return false;
     char buffer[4096];
