@@ -93,6 +93,8 @@ def main() -> None:
     mods_src = Path(a.mods)
     official = [f for d in sorted(mods_src.glob("jfg_*")) if (d / "mod.toml").is_file()
                 for f in [d / "build" / f"{d.name}.nrm"] if f.is_file()]
+    # The collection's level packs (built by JFG-Studio into bin/mods).
+    official += [f for f in [PORT / "bin" / "mods" / "toast_shellback_levels.nrm"] if f.is_file()]
     restored = [f for f in (PORT / "bin" / "mods").glob("jfg_restored_content*.nrm")]
     OUT.mkdir(parents=True, exist_ok=True)
     collection("JFG-Mods", "Official Mods", official, set(a.bump))
