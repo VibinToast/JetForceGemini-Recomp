@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <map>
 #include <random>
 #include <unordered_map>
 
@@ -370,6 +371,26 @@ extern "C" uint32_t jfg_blood_source(float x, float y, float z, int color, int* 
 }
 
 namespace {
+// jfg_blood_color_alloc(int nth) -> the calling mod's nth colour index of its own (0 its first), out of the four the
+// game never asks for (3, 5, 6, 7); the same mod and nth always get the same one; -1 when none is left.
+constexpr int FREE_COLORS[4] = { 3, 5, 6, 7 };
+std::map<std::pair<size_t, int>, int> g_color_owners; // (mod, nth) -> index
+void blood_color_alloc(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const int nth = (int32_t)ctx->r4;
+    ctx->r2 = (gpr)(int32_t)-1;
+    if (nth < 0 || nth > 3) return;
+    const auto key = std::make_pair(mod_index, nth);
+    if (auto it = g_color_owners.find(key); it != g_color_owners.end()) { ctx->r2 = (gpr)it->second; return; }
+    for (int index : FREE_COLORS) {
+        bool taken = false;
+        for (const auto& owner : g_color_owners) taken = taken || owner.second == index;
+        if (taken) continue;
+        g_color_owners[key] = index;
+        ctx->r2 = (gpr)index;
+        return;
+    }
+}
+
 // jfg_blood_set_color(int index, unsigned int drops, unsigned int hits): colour index 0..7 for drops and splats, and
 // for hit sprites, 0xRRGGBB each; 0xFFFFFFFF = the game's own.
 void blood_set_color(uint8_t*, recomp_context* ctx) {
@@ -411,6 +432,7 @@ void limbs_keep(uint8_t*, recomp_context* ctx, size_t mod_index) {
 
 void register_blood_api() {
     recomp::overlays::register_base_export("jfg_blood_set_color", blood_set_color);
+    recomp::overlays::register_ext_base_export("jfg_blood_color_alloc", blood_color_alloc);
     recomp::overlays::register_ext_base_export("jfg_blood_set_rainbow", blood_set_rainbow);
     recomp::overlays::register_ext_base_export("jfg_blood_keep", blood_keep);
     recomp::overlays::register_ext_base_export("jfg_limbs_keep", limbs_keep);

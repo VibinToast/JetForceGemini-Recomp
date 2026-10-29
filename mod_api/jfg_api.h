@@ -275,9 +275,12 @@ RECOMP_IMPORT("*", void jfg_camera_set_distance(float scale));
 // Blood colours. Blood takes its colour from an index (0..7, JfgBloodSpurt.color, JfgBloodHit.color) into two tables,
 // one for drops and splats and one for hit sprites. The game uses 0 (red: heroes, Floyd, Tribals), 1 (green: ground
 // insects, most bosses), 2 (black: flyers, drones, turrets) and 4 (lime: the final boss); 3, 5, 6 and 7 are free for
-// a mod to fill and hand out. Sets index's colour, 0xRRGGBB each; the tables are drawn at different strengths (the
+// mods: take one with jfg_blood_color_alloc, fill it and hand it out. Sets index's colour, 0xRRGGBB each; the tables are drawn at different strengths (the
 // game's red is 0x500000 for drops, 0xA00000 for hits). 0xFFFFFFFF = the game's own colour. Kept until set again.
 RECOMP_IMPORT("*", void jfg_blood_set_color(int index, unsigned int drops, unsigned int hits));
+// A colour index of the mod's own, so mods never fill the same one: the mod's nth (0 its first, up to 3); the same nth
+// always gives the same index; -1 when the four free ones are taken. Since version 6.
+RECOMP_IMPORT("*", int jfg_blood_color_alloc(int nth));
 // The game's rainbow blood (a cheat): each drop takes a random colour index (hit sprites keep theirs). On while any
 // mod asks; the same for jfg_limbs_keep and jfg_floyd_hide, and jfg_blood_keep keeps the most splats any mod asks for.
 RECOMP_IMPORT("*", void jfg_blood_set_rainbow(int on));
@@ -342,6 +345,18 @@ RECOMP_IMPORT("*", int jfg_hero_roll(void* hero, int right));
 #define JFG_MOVE_RUN   0x01
 #define JFG_MOVE_STAND 0x10
 RECOMP_IMPORT("*", int jfg_hero_move(void* hero, int move));
+// The hero's aim: yaw and pitch (0x10000 a turn, pitch positive up), aiming (the aim view), pitched (aiming or with a
+// target: then the pitch counts, else the game's shots go level), dir the unit direction (pitched, else level). 1, or
+// 0 if it is not a hero. Since version 6.
+typedef struct {
+    int yaw, pitch;
+    int aiming, pitched;
+    float dir[3];
+} JfgAim;
+RECOMP_IMPORT("*", int jfg_hero_aim(void* hero, JfgAim* out));
+// Where the hero's gun barrel is (x, y, z), as the game keeps it for its own shots: 1, or 0 when it isn't kept (the aim
+// view draws no gun): start shots a little ahead of the hero then. Since version 6.
+RECOMP_IMPORT("*", int jfg_hero_barrel(void* hero, float* out));
 // The hero's own voice (Juno's, Vela's or Lupus's, as the game picks them): 0 the jump, 1 the landing, 3 being hit.
 #define JFG_SPEAK_JUMP 0
 #define JFG_SPEAK_LAND 1
@@ -407,6 +422,10 @@ RECOMP_IMPORT("*", int jfg_hud_in_corners(void));
 // not the overlay's edges: in the corners the HUD keeps to the HUD ratio's area (Graphics > HUD ratio: Clamp 16:9, the
 // default, is a centred 16:9 strip in a wider window), else to the middle 320 units.
 RECOMP_IMPORT("*", void jfg_hud_area(float* out));
+// The screen corner (0 top left, 1 top right, 2 bottom left, 3 bottom right) for the mod's HUD piece: the one it wants
+// unless another mod's piece is there, else the next free one round the screen. Ask each frame you draw: a mod holds
+// its corner while it keeps asking. Since version 6.
+RECOMP_IMPORT("*", int jfg_hud_corner(int wanted));
 // A weapon's icon (0 the pistol .. 15), the game's own picture (texture packs replace it), centred at x, y in overlay
 // units, scale 1 the size the game's weapon panel shows it (about 30 x 20 units), alpha 0..1. Only during
 // jfg_on_weapon_hud: the port draws it with the game's HUD, so it is under the overlay's shapes.
@@ -741,7 +760,7 @@ RECOMP_IMPORT("*", void jfg_squad_multiplier(int percent, int flags));
 // x, out[1] y, out[2] its distance in front of the camera, out[3] overlay units per level unit there (to size a
 // picture drawn at it). 1 if it is in front of the camera, else 0. Overlay pictures cover the game: to hide one behind
 // a wall, test the line from the camera (jfg_camera_get) with jfg_level_ray. Picture ids (jfg_overlay_image) are
-// shared by all mods: use numbers of your own (a few high bits from your mod's name).
+// each mod's own: any numbers, they never clash with another mod's.
 RECOMP_IMPORT("*", int jfg_world_to_screen(const float* world, float* out));
 
 // --- event data ---------------------------------------------------------------------------------------------------

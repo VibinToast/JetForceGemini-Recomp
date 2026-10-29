@@ -658,6 +658,29 @@ void hud_area_export(uint8_t* rdram_, recomp_context* ctx) {
     wrf(out, left);
     wrf(out + 4, right);
 }
+// jfg_hud_corner(int wanted) -> the screen corner (0 top left, 1 top right, 2 bottom left, 3 bottom right) the calling
+// mod's HUD piece goes in: the one it wants unless another mod holds it, else the next free one round the screen.
+// A mod holds its corner while it keeps asking (each frame it draws); one not asked for in a second is free again.
+struct CornerHold { size_t mod; std::chrono::steady_clock::time_point at; };
+std::map<int, CornerHold> g_corners;
+void hud_corner(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const int wanted = (int)ctx->r4 & 3;
+    const auto now = std::chrono::steady_clock::now();
+    for (auto it = g_corners.begin(); it != g_corners.end();) {
+        it = (now - it->second.at > std::chrono::seconds(1) || it->second.mod == mod_index) ? g_corners.erase(it) : std::next(it);
+    }
+    static const int round_screen[4] = { 0, 1, 3, 2 }; // clockwise: top left, top right, bottom right, bottom left
+    int at = 0;
+    while (round_screen[at] != wanted) at++;
+    int corner = wanted;
+    for (int k = 0; k < 4; k++) {
+        const int c = round_screen[(at + k) % 4];
+        if (!g_corners.count(c)) { corner = c; break; }
+    }
+    g_corners[corner] = { mod_index, now };
+    ctx->r2 = (gpr)corner;
+}
+
 // --- toggled buttons (input thread) --------------------------------------------------------------------------------
 std::atomic<uint16_t> g_toggle_mask{ 0 };    // jfg_input_toggle: buttons that toggle
 std::atomic<uint16_t> g_toggle_latched{ 0 }; // ... and read as held now
@@ -707,6 +730,50 @@ void hero_get(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     const uint32_t obj = rd32(ADDR_mainGameMode) == 0 ? player_object(ctx) : 0;
     ctx->r2 = (gpr)(int32_t)(hero_data(obj) != 0 ? obj : 0);
+}
+
+// jfg_hero_aim(void* hero, JfgAim* out): { s32 yaw, pitch (0x10000 a turn, pitch positive up); s32 aiming (the aim
+// view), pitched (aiming or with a target: the pitch counts, else the game's shots go level); f32 dir[3] (unit, with
+// the pitch when pitched, else level) } from the hero's control data (+0x1CA yaw, +0x1CC pitch, +0x568 state 5 / 11
+// aiming, +0xFC target; decomp: grenadeInit, func_800386B0). 1, or 0 if it is not a hero.
+bool mod_ptr(uint32_t p); // below
+constexpr uint32_t AIM_YAW = 0x1CA, AIM_PITCH = 0x1CC, AIM_STATE = 0x568, AIM_TARGET = 0xFC, AIM_BARREL = 0x544;
+void hero_aim(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t data = hero_data((uint32_t)ctx->r4), out = (uint32_t)ctx->r5;
+    ctx->r2 = 0;
+    if (data == 0 || !mod_ptr(out)) return;
+    const uint16_t yaw = rd16(data + AIM_YAW), pitch_raw = rd16(data + AIM_PITCH);
+    const uint8_t state = rd8(data + AIM_STATE);
+    const bool aiming = state == 5 || state == 11, pitched = aiming || rd32(data + AIM_TARGET) != 0;
+    const uint16_t pitch = pitched ? pitch_raw : 0;
+    constexpr float TO_RAD = 3.14159265f / 32768.0f;
+    const float y = (float)(int16_t)yaw * TO_RAD, pt = (float)(int16_t)pitch * TO_RAD;
+    wr32(out + 0x00, yaw);
+    wr32(out + 0x04, (uint32_t)(int32_t)(int16_t)pitch_raw);
+    wr32(out + 0x08, aiming ? 1u : 0u);
+    wr32(out + 0x0C, pitched ? 1u : 0u);
+    wrf(out + 0x10, -std::sin(y) * std::cos(pt));
+    wrf(out + 0x14, std::sin(pt));
+    wrf(out + 0x18, -std::cos(y) * std::cos(pt));
+    ctx->r2 = 1;
+}
+
+// jfg_hero_barrel(void* hero, float* out): where the gun's barrel is in the world as the game keeps it (control data
+// +0x544: the held model's barrel point turned by the hand joint), x, y, z. 1, or 0 when it isn't kept (the aim view
+// draws no gun) or isn't near the hero.
+void hero_barrel(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t hero = (uint32_t)ctx->r4, data = hero_data(hero), out = (uint32_t)ctx->r5;
+    ctx->r2 = 0;
+    if (data == 0 || !mod_ptr(out)) return;
+    const uint8_t state = rd8(data + AIM_STATE);
+    if (state == 5 || state == 11) return;
+    const float bx = rdf(data + AIM_BARREL), by = rdf(data + AIM_BARREL + 4), bz = rdf(data + AIM_BARREL + 8);
+    const float dx = bx - Obj::PosX::get(hero), dy = by - Obj::PosY::get(hero), dz = bz - Obj::PosZ::get(hero);
+    if (dx * dx + dy * dy + dz * dz >= 150.0f * 150.0f) return;
+    wrf(out, bx); wrf(out + 4, by); wrf(out + 8, bz);
+    ctx->r2 = 1;
 }
 
 // jfg_hero_state(void* hero): the hero's state (low 4 bits), -1 if it is not a hero.
@@ -1470,6 +1537,7 @@ void register_hero_api() {
     recomp::overlays::register_ext_base_export("jfg_hud_hide_health", hud_hide_health);
     recomp::overlays::register_base_export("jfg_hud_in_corners", hud_in_corners_export);
     recomp::overlays::register_base_export("jfg_hud_area", hud_area_export);
+    recomp::overlays::register_ext_base_export("jfg_hud_corner", hud_corner);
     recomp::overlays::register_base_export("jfg_hero_heads", hero_heads);
     recomp::overlays::register_base_export("jfg_hero_game_control", hero_game_control);
     recomp::overlays::register_base_export("jfg_hero_select_weapon", hero_select_weapon);
@@ -1481,6 +1549,8 @@ void register_hero_api() {
     recomp::overlays::register_ext_base_export("jfg_input_block", input_block);
     recomp::overlays::register_base_export("jfg_hero_get", hero_get);
     recomp::overlays::register_base_export("jfg_hero_state", hero_state);
+    recomp::overlays::register_base_export("jfg_hero_aim", hero_aim);
+    recomp::overlays::register_base_export("jfg_hero_barrel", hero_barrel);
     recomp::overlays::register_base_export("jfg_hero_weapon", hero_weapon);
     recomp::overlays::register_base_export("jfg_hero_ammo", hero_ammo);
     recomp::overlays::register_base_export("jfg_game_paused", game_paused);

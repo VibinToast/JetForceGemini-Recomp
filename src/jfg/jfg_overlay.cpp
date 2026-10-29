@@ -53,7 +53,7 @@ constexpr auto STALE = std::chrono::milliseconds(250);
 enum class Kind : uint8_t { Image, Polygon, Circle, Text };
 struct Shape {
     Kind kind;
-    int image = 0;
+    int64_t image = 0; // an image key (image_key)
     uint32_t fill = 0, line = 0; // 0xRRGGBBAA
     float thickness = 0.0f;
     float x = 0, y = 0, w = 0, h = 0, r = 0;
@@ -84,7 +84,10 @@ std::mutex g_mutex;
 std::vector<Shape> g_building;  // game thread
 std::vector<Shape> g_shown;     // under g_mutex
 std::chrono::steady_clock::time_point g_shown_at;
-std::map<int, Image> g_images;  // under g_mutex
+// Pictures by key: a mod's ids are its own (the mod's index in the high word), so two mods can use the same numbers;
+// the port's own (overlay_set_image) have 0 there.
+std::map<int64_t, Image> g_images;  // under g_mutex
+int64_t image_key(size_t mod_index, int id) { return ((int64_t)(mod_index + 1) << 32) | (uint32_t)id; }
 std::vector<ImTextureData*> g_retired; // textures replaced by a new size, destroyed by the backend first
 
 ImU32 to_im(uint32_t rgba) {
@@ -116,29 +119,28 @@ void overlay_size(uint8_t* rdram_, recomp_context* ctx) {
     wr32(out + 4, bits);
 }
 
-// jfg_overlay_image(int id, int w, int h, const unsigned int* rgba): picture id, w x h words 0xRRGGBBAA.
-void overlay_image(uint8_t* rdram_, recomp_context* ctx) {
+void set_image(int64_t key, int w, int h, std::vector<uint32_t> pixels);
+
+// jfg_overlay_image(int id, int w, int h, const unsigned int* rgba): picture id (the mod's own numbers), w x h words
+// 0xRRGGBBAA.
+void overlay_image(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
     g_rdram = rdram_;
     const int id = (int)ctx->r4, w = (int)ctx->r5, h = (int)ctx->r6;
     const uint32_t src = (uint32_t)ctx->r7;
     if (w <= 0 || h <= 0 || w > MAX_IMAGE || h > MAX_IMAGE || src == 0) return;
     std::vector<uint32_t> pixels((size_t)w * h);
     for (size_t i = 0; i < pixels.size(); i++) pixels[i] = rd32(src + (uint32_t)i * 4);
-    jfg::overlay_set_image(id, w, h, std::move(pixels));
+    set_image(image_key(mod_index, id), w, h, std::move(pixels));
 }
-} // namespace
-} // namespace jfg::overlay
 
-// A picture for the overlay from the port's own code: w x h words 0xRRGGBBAA (the same as jfg_overlay_image).
-void jfg::overlay_set_image(int id, int w, int h, std::vector<uint32_t> pixels) {
-    using namespace jfg::overlay;
+void set_image(int64_t key, int w, int h, std::vector<uint32_t> pixels) {
     if (w <= 0 || h <= 0 || w > MAX_IMAGE || h > MAX_IMAGE || pixels.size() != (size_t)w * h) return;
     for (uint32_t& c : pixels) {
         // ImGui's RGBA32 is bytes R, G, B, A in memory: on a little-endian host, A << 24 | B << 16 | G << 8 | R.
         c = (c >> 24) | ((c >> 8) & 0xFF00) | ((c << 8) & 0xFF0000) | (c << 24);
     }
     std::lock_guard<std::mutex> lock(g_mutex);
-    Image& img = g_images[id];
+    Image& img = g_images[key];
     if (img.tex != nullptr && (img.w != w || img.h != h)) {
         img.tex->SetStatus(ImTextureStatus_WantDestroy);
         img.tex->UnusedFrames = 8; // the backends destroy a texture once no frame in flight uses it
@@ -150,6 +152,13 @@ void jfg::overlay_set_image(int id, int w, int h, std::vector<uint32_t> pixels) 
     img.pixels = std::move(pixels);
     img.changed = true;
 }
+} // namespace
+} // namespace jfg::overlay
+
+// A picture for the overlay from the port's own code: w x h words 0xRRGGBBAA (the same as jfg_overlay_image).
+void jfg::overlay_set_image(int id, int w, int h, std::vector<uint32_t> pixels) {
+    jfg::overlay::set_image((int64_t)(uint32_t)id, w, h, std::move(pixels));
+}
 
 // Draws one this frame, in overlay units (as jfg_overlay_draw_image).
 void jfg::overlay_draw(int id, float x, float y, float w, float h, uint32_t tint) {
@@ -157,21 +166,21 @@ void jfg::overlay_draw(int id, float x, float y, float w, float h, uint32_t tint
     Shape s{ Kind::Image };
     s.x = x; s.y = y; s.w = w; s.h = h;
     s.fill = tint;
-    s.image = id;
+    s.image = (int64_t)(uint32_t)id;
     add(std::move(s));
 }
 
 namespace jfg::overlay {
 namespace {
 // jfg_overlay_draw_image(const JfgOverlayImage* image): { float x, y, w, h; unsigned int tint; int id; }
-void overlay_draw_image(uint8_t* rdram_, recomp_context* ctx) {
+void overlay_draw_image(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
     g_rdram = rdram_;
     const uint32_t p = (uint32_t)ctx->r4;
     if (p == 0) return;
     Shape s{ Kind::Image };
     s.x = rdf(p); s.y = rdf(p + 4); s.w = rdf(p + 8); s.h = rdf(p + 12);
     s.fill = rd32(p + 16);
-    s.image = (int)rd32(p + 20);
+    s.image = image_key(mod_index, (int)rd32(p + 20));
     add(std::move(s));
 }
 
@@ -267,8 +276,8 @@ void frame_done() {
 
 void register_api() {
     recomp::overlays::register_base_export("jfg_overlay_size", overlay_size);
-    recomp::overlays::register_base_export("jfg_overlay_image", overlay_image);
-    recomp::overlays::register_base_export("jfg_overlay_draw_image", overlay_draw_image);
+    recomp::overlays::register_ext_base_export("jfg_overlay_image", overlay_image);
+    recomp::overlays::register_ext_base_export("jfg_overlay_draw_image", overlay_draw_image);
     recomp::overlays::register_base_export("jfg_overlay_polygon", overlay_polygon);
     recomp::overlays::register_base_export("jfg_overlay_circle", overlay_circle);
     recomp::overlays::register_base_export("jfg_overlay_text", overlay_text);
