@@ -8,7 +8,8 @@
 //   size, SHA-256, the port version and mod API it needs, its dependencies.
 // - Install / update: the mod's dependencies first, then the mod; each file is downloaded next to its place in the mods
 //   folder (<id>.nrm.part), checked against the catalog's SHA-256 (a mismatch installs nothing), then renamed over the
-//   old one. The Mods page rescans afterwards; mods take effect when the game starts.
+//   old one. The Mods page rescans afterwards; mods take effect when the game starts. A scan leaves every mod's file
+//   open and Windows won't replace or delete an open file, so the mods are closed first (with_mods_closed).
 // - Remove: only mods the store manages: ones it installed (mod_store.json) or whose file is a catalog's own (its hash
 //   matches), never ones a player put in the mods folder by hand. Their settings are kept.
 // - Online: the page's first showing (and its Refresh) downloads each source's catalog in the background, then the
@@ -265,6 +266,19 @@ bool download(const std::string& url, const fs::path& file, uint64_t size = 0,
 
 void build_list();
 
+// change (replacing or deleting mod files) with the mods closed; the caller has them scanned again. Only the launcher
+// has this page, and mods load when the game starts, so nothing else is using them. A few tries: a virus scanner can
+// hold a file for a moment, and a rescan on the UI thread can open them again.
+void with_mods_closed(const std::function<void(std::error_code&)>& change, std::error_code& ec) {
+    for (int attempt = 0; attempt < 10; attempt++) {
+        if (attempt > 0) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        recomp::mods::close_mods();
+        ec.clear();
+        change(ec);
+        if (!ec) return;
+    }
+}
+
 // The background download of the catalogs, then of the thumbnails not in the cache yet; the list is built again after
 // each catalog and once the thumbnails are in.
 void fetch_worker(std::vector<std::pair<std::string, std::string>> sources) { // id, catalog url
@@ -445,8 +459,14 @@ void install_worker(std::vector<std::string> ids, std::string main_id) {
         if (!failure.empty()) { fs::remove(part, ec); break; }
         // Over the old file: its mod's id may have another file name (installed by hand).
         const fs::path old = mod_file(c.id);
-        if (!old.empty() && old != dest) fs::remove(old, ec);
-        fs::rename(part, dest, ec);
+        with_mods_closed([&](std::error_code& change_ec) {
+            if (!old.empty() && old != dest) fs::remove(old, change_ec);
+            if (!change_ec) fs::rename(part, dest, change_ec);
+        }, ec);
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            g_rescan = true; // the mods are closed: open them again at once, not after the whole plan
+        }
         if (ec) { failure = "Could not replace " + utf8(dest.filename()) + ": " + ec.message(); fs::remove(part, ec); break; }
         std::lock_guard<std::mutex> lock(g_mutex);
         g_installed[c.id] = { source, c.version, c.sha256 };
@@ -569,6 +589,8 @@ void jfg_store_install(const std::string& mod_id) {
     std::thread(install_worker, ids, mod_id).detach();
 }
 
+namespace recompui { void update_mod_list(bool scan_mods); } // ui_mod_menu.cpp
+
 void jfg_store_remove(const std::string& mod_id) {
     std::string text;
     {
@@ -576,19 +598,21 @@ void jfg_store_remove(const std::string& mod_id) {
         if (g_state.busy) return;
         const auto m = std::find_if(g_mods.begin(), g_mods.end(), [&](const JfgStoreMod& x) { return x.id == mod_id; });
         if (m == g_mods.end() || !m->managed) return; // never a mod the player put there by hand
+        const fs::path file = mod_file(mod_id); // asked before closing: a closed mod has no file name
         std::error_code ec;
-        fs::remove(mod_file(mod_id), ec);
-        g_installed.erase(mod_id);
-        save_state();
+        with_mods_closed([&](std::error_code& change_ec) { fs::remove(file, change_ec); }, ec);
+        if (!ec) {
+            g_installed.erase(mod_id);
+            save_state();
+        }
         text = ec ? "Could not remove it: " + ec.message() : m->name + " removed. Its settings are kept.";
     }
     recomp::mods::scan_mods();
+    recompui::update_mod_list(false); // the Mods page drops it
     std::lock_guard<std::mutex> lock(g_mutex);
     g_state.text = text;
     build_list();
 }
-
-namespace recompui { void update_mod_list(bool scan_mods); } // ui_mod_menu.cpp
 
 void jfg_store_tick() {
     bool rescan = false;
