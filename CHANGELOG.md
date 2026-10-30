@@ -8,6 +8,7 @@ are written here by hand and become that version's notes when it is released.
 ### Changes
 
 - Auto Save no longer saves during boss fights; a save that comes due waits for the next level.
+- Keep the Reticle Centered off now works with a controller while Mouse and Keyboard Controls are on, in boss fights too; the mouse still turns the view directly.
 
 ## v1.3.0 (2026-10-30)
 
