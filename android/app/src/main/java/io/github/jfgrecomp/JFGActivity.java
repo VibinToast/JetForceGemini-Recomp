@@ -172,6 +172,12 @@ public class JFGActivity extends SDLActivity {
                          OutputStream out = new FileOutputStream(target)) {
                         copyStream(in, out);
                     }
+                    // ROM managers (RomM, for example) often hand out a zip; the game wants the ROM itself.
+                    File rom = request == REQUEST_OPEN_FILE ? extractZippedRom(target, importDir) : null;
+                    if (rom != null) {
+                        target.delete();
+                        target = rom;
+                    }
                     paths.add(target.getAbsolutePath());
                 } catch (Exception e) {
                     Log.e(TAG, "Copying " + uri + " failed", e);
@@ -179,6 +185,35 @@ public class JFGActivity extends SDLActivity {
             }
             reportResult(request, paths);
         }, "JFG file import").start();
+    }
+
+    /**
+     * If file is a zip with an N64 ROM in it (.z64, .n64 or .v64), extracts the first such ROM next to it and returns
+     * it; otherwise returns null and leaves the file alone (mods and texture packs are zips too, without a ROM). The
+     * game handles byte-swapped .n64/.v64 dumps itself.
+     */
+    private static File extractZippedRom(File file, File directory) {
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(file)) {
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                java.util.zip.ZipEntry entry = entries.nextElement();
+                String name = entry.getName();
+                String lower = name.toLowerCase(java.util.Locale.ROOT);
+                if (entry.isDirectory() || !(lower.endsWith(".z64") || lower.endsWith(".n64") || lower.endsWith(".v64"))) {
+                    continue;
+                }
+                // Only the file name: never a path from inside the archive.
+                String baseName = new File(name).getName().replaceAll("[\\\\/:*?\"<>|]", "_");
+                File rom = new File(directory, baseName);
+                try (InputStream in = zip.getInputStream(entry); OutputStream out = new FileOutputStream(rom)) {
+                    copyStream(in, out);
+                }
+                return rom;
+            }
+        } catch (IOException notAZip) {
+            // Not a zip (or unreadable as one): use the file as it is.
+        }
+        return null;
     }
 
     private static void reportResult(int request, ArrayList<String> paths) {
