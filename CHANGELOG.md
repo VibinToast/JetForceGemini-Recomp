@@ -10,6 +10,7 @@ are written here by hand and become that version's notes when it is released.
 - Get Mods: a controller can now move down from the tags to the list of mods.
 - Get Mods: removing or updating a mod no longer fails because its file is in use.
 - Mods: moving down past the end of the mod list now stays on the last mod instead of jumping back to the top.
+- Profiles: Keep Area Progress and Permanent Tribal Saves are now on in every built-in profile except Original.
 
 ## v1.3.0 (2026-10-30)
 
