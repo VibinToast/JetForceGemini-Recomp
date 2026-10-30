@@ -270,6 +270,7 @@ struct LightingSettings {
     std::atomic<int> specular_strength{ 100 }; // ... how much they count (%)
     std::atomic<bool> emission_maps{ true }; // emission maps (materials/<hash>_e.png) on: their glow and their lights
     std::atomic<int> off_glow{ 100 };        // % of a switched-off level light's painted glow taken away
+    std::atomic<bool> steady_all{ false };   // every torch and lamp Steady (the game's flicker off), as each light's Steady
     std::atomic<int> glow{ 100 };            // % emission maps (materials/<hash>_e.png)
     std::atomic<bool> emission_lights{ true }; // lights placed where the level's emission-mapped textures are
     std::atomic<int> emission_light{ 100 };  // % their brightness
@@ -316,6 +317,7 @@ const LightOverride* lighting_override_for(uint32_t light); // a game light's ch
 float lighting_flicker(uint32_t seed, int amount, int speed);        // 1 = full, down to 1 - amount
 int lighting_pulse_light();                    // the placed light the tool pulses to show it (-1 = none)
 bool lighting_active();                        // the player's "Modern Lighting" option allows it
+bool ray_tracing_active();                     // ... and the "Ray Tracing" option (every ray-traced feature)
 void lighting_tool_tick(recomp_context* ctx);  // game thread, every tick
 void draw_lighting_tool(recomp_context* ctx);  // game thread, in a UI frame while the tool is open
 

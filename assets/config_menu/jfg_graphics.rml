@@ -180,116 +180,125 @@
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(17)">
                         <label class="config-option__title">Modern Lighting</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_modern_lighting" data-checked="modern_lighting" value="1" id="jfg_modern_lighting_on" style="nav-up: #jfg_hide_floyd_on; nav-down: #jfg_api_option_0;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_modern_lighting" data-checked="modern_lighting" value="1" id="jfg_modern_lighting_on" style="nav-up: #jfg_hide_floyd_on; nav-down: #jfg_ray_tracing_on;"/>
                             <label class="config-option__tab-label" for="jfg_modern_lighting_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_modern_lighting" data-checked="modern_lighting" value="0" id="jfg_modern_lighting_off" style="nav-up: #jfg_hide_floyd_off; nav-down: #jfg_api_option_1;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(17)" name="jfg_modern_lighting" data-checked="modern_lighting" value="0" id="jfg_modern_lighting_off" style="nav-up: #jfg_hide_floyd_off; nav-down: #jfg_ray_tracing_off;"/>
                             <label class="config-option__tab-label" for="jfg_modern_lighting_off">Off</label>
                         </div>
                     </div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(18)">
+                        <label class="config-option__title">Ray Tracing</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_ray_tracing" data-checked="ray_tracing" value="1" id="jfg_ray_tracing_on" style="nav-up: #jfg_modern_lighting_on; nav-down: #jfg_api_option_0;"/>
+                            <label class="config-option__tab-label" for="jfg_ray_tracing_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_ray_tracing" data-checked="ray_tracing" value="0" id="jfg_ray_tracing_off" style="nav-up: #jfg_modern_lighting_off; nav-down: #jfg_api_option_1;"/>
+                            <label class="config-option__tab-label" for="jfg_ray_tracing_off">Off</label>
+                        </div>
+                    </div>
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(19)">
                         <label class="config-option__title">Graphics API</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_api_option" data-checked="api_option" value="0" id="jfg_api_option_0" style="nav-up: #jfg_modern_lighting_on; nav-down: #jfg_ssao_on;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" name="jfg_api_option" data-checked="api_option" value="0" id="jfg_api_option_0" style="nav-up: #jfg_ray_tracing_on; nav-down: #jfg_ssao_on;"/>
                             <label class="config-option__tab-label" for="jfg_api_option_0">Auto</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_api_option" data-checked="api_option" value="1" id="jfg_api_option_1" style="nav-up: #jfg_modern_lighting_off; nav-down: #jfg_ssao_off;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" name="jfg_api_option" data-checked="api_option" value="1" id="jfg_api_option_1" style="nav-up: #jfg_ray_tracing_off; nav-down: #jfg_ssao_off;"/>
                             <label class="config-option__tab-label" for="jfg_api_option_1">DirectX 12</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(18)" name="jfg_api_option" data-checked="api_option" value="2" id="jfg_api_option_2" style="nav-up: #jfg_modern_lighting_off; nav-down: #jfg_ssao_off;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" name="jfg_api_option" data-checked="api_option" value="2" id="jfg_api_option_2" style="nav-up: #jfg_ray_tracing_off; nav-down: #jfg_ssao_off;"/>
                             <label class="config-option__tab-label" for="jfg_api_option_2">Vulkan</label>
                         </div>
                     </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Ambient Occlusion</label></div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(19)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(20)">
                         <label class="config-option__title">Ambient Occlusion (SSAO)</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" name="jfg_ssao" data-checked="ssao" value="1" id="jfg_ssao_on" style="nav-up: #jfg_api_option_0; nav-down: #jfg_ssao_strength_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_ssao" data-checked="ssao" value="1" id="jfg_ssao_on" style="nav-up: #jfg_api_option_0; nav-down: #jfg_ssao_strength_input;"/>
                             <label class="config-option__tab-label" for="jfg_ssao_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(19)" name="jfg_ssao" data-checked="ssao" value="0" id="jfg_ssao_off" style="nav-up: #jfg_api_option_1; nav-down: #jfg_ssao_strength_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" name="jfg_ssao" data-checked="ssao" value="0" id="jfg_ssao_off" style="nav-up: #jfg_api_option_1; nav-down: #jfg_ssao_strength_input;"/>
                             <label class="config-option__tab-label" for="jfg_ssao_off">Off</label>
                         </div>
                     </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(20)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(21)">
                         <label class="config-option__title">SSAO Strength</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{ssao_strength}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(20)" id="jfg_ssao_strength_input" type="range" min="10" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_ssao_on; nav-down: #jfg_ssao_radius_input;" data-value="ssao_strength"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" id="jfg_ssao_strength_input" type="range" min="10" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_ssao_on; nav-down: #jfg_ssao_radius_input;" data-value="ssao_strength"/>
                         </div>
                     </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(21)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(22)">
                         <label class="config-option__title">SSAO Radius</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{ssao_radius}}</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(21)" id="jfg_ssao_radius_input" type="range" min="10" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_ssao_strength_input; nav-down: #jfg_bloom_on;" data-value="ssao_radius"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" id="jfg_ssao_radius_input" type="range" min="10" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_ssao_strength_input; nav-down: #jfg_bloom_on;" data-value="ssao_radius"/>
                         </div>
                     </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Bloom</label></div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(22)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(23)">
                         <label class="config-option__title">Bloom</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_bloom" data-checked="bloom" value="1" id="jfg_bloom_on" style="nav-up: #jfg_ssao_radius_input; nav-down: #jfg_bloom_intensity_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_bloom" data-checked="bloom" value="1" id="jfg_bloom_on" style="nav-up: #jfg_ssao_radius_input; nav-down: #jfg_bloom_intensity_input;"/>
                             <label class="config-option__tab-label" for="jfg_bloom_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(22)" name="jfg_bloom" data-checked="bloom" value="0" id="jfg_bloom_off" style="nav-up: #jfg_ssao_radius_input; nav-down: #jfg_bloom_intensity_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" name="jfg_bloom" data-checked="bloom" value="0" id="jfg_bloom_off" style="nav-up: #jfg_ssao_radius_input; nav-down: #jfg_bloom_intensity_input;"/>
                             <label class="config-option__tab-label" for="jfg_bloom_off">Off</label>
                         </div>
                     </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(23)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(24)">
                         <label class="config-option__title">Bloom Intensity</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{bloom_intensity}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(23)" id="jfg_bloom_intensity_input" type="range" min="0" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_bloom_on; nav-down: #jfg_bloom_threshold_input;" data-value="bloom_intensity"/>
-                        </div>
-                    </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(24)">
-                        <label class="config-option__title">Bloom Threshold</label>
-                        <div class="config-option__range-wrapper config-option__list">
-                            <label class="config-option__range-label">{{bloom_threshold}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(24)" id="jfg_bloom_threshold_input" type="range" min="0" max="100" style="flex: 1; margin: 0dp; nav-up: #jfg_bloom_intensity_input; nav-down: #jfg_bloom_radius_input;" data-value="bloom_threshold"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(24)" id="jfg_bloom_intensity_input" type="range" min="0" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_bloom_on; nav-down: #jfg_bloom_threshold_input;" data-value="bloom_intensity"/>
                         </div>
                     </div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(25)">
+                        <label class="config-option__title">Bloom Threshold</label>
+                        <div class="config-option__range-wrapper config-option__list">
+                            <label class="config-option__range-label">{{bloom_threshold}}%</label>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(25)" id="jfg_bloom_threshold_input" type="range" min="0" max="100" style="flex: 1; margin: 0dp; nav-up: #jfg_bloom_intensity_input; nav-down: #jfg_bloom_radius_input;" data-value="bloom_threshold"/>
+                        </div>
+                    </div>
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(26)">
                         <label class="config-option__title">Bloom Radius</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{bloom_radius}}</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(25)" id="jfg_bloom_radius_input" type="range" min="1" max="20" style="flex: 1; margin: 0dp; nav-up: #jfg_bloom_threshold_input; nav-down: #jfg_vignette_on;" data-value="bloom_radius"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(26)" id="jfg_bloom_radius_input" type="range" min="1" max="20" style="flex: 1; margin: 0dp; nav-up: #jfg_bloom_threshold_input; nav-down: #jfg_vignette_on;" data-value="bloom_radius"/>
                         </div>
                     </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Vignette</label></div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(26)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(27)">
                         <label class="config-option__title">Vignette</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(26)" name="jfg_vignette" data-checked="vignette" value="1" id="jfg_vignette_on" style="nav-up: #jfg_bloom_radius_input; nav-down: #jfg_vignette_strength_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(27)" name="jfg_vignette" data-checked="vignette" value="1" id="jfg_vignette_on" style="nav-up: #jfg_bloom_radius_input; nav-down: #jfg_vignette_strength_input;"/>
                             <label class="config-option__tab-label" for="jfg_vignette_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(26)" name="jfg_vignette" data-checked="vignette" value="0" id="jfg_vignette_off" style="nav-up: #jfg_bloom_radius_input; nav-down: #jfg_vignette_strength_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(27)" name="jfg_vignette" data-checked="vignette" value="0" id="jfg_vignette_off" style="nav-up: #jfg_bloom_radius_input; nav-down: #jfg_vignette_strength_input;"/>
                             <label class="config-option__tab-label" for="jfg_vignette_off">Off</label>
                         </div>
                     </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(27)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(28)">
                         <label class="config-option__title">Vignette Strength</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{vignette_strength}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(27)" id="jfg_vignette_strength_input" type="range" min="0" max="100" style="flex: 1; margin: 0dp; nav-up: #jfg_vignette_on; nav-down: #jfg_vignette_size_input;" data-value="vignette_strength"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(28)" id="jfg_vignette_strength_input" type="range" min="0" max="100" style="flex: 1; margin: 0dp; nav-up: #jfg_vignette_on; nav-down: #jfg_vignette_size_input;" data-value="vignette_strength"/>
                         </div>
                     </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(28)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(29)">
                         <label class="config-option__title">Vignette Size</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{vignette_size}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(28)" id="jfg_vignette_size_input" type="range" min="0" max="90" style="flex: 1; margin: 0dp; nav-up: #jfg_vignette_strength_input; nav-down: #jfg_level_fog_distance_input;" data-value="vignette_size"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(29)" id="jfg_vignette_size_input" type="range" min="0" max="90" style="flex: 1; margin: 0dp; nav-up: #jfg_vignette_strength_input; nav-down: #jfg_level_fog_distance_input;" data-value="vignette_size"/>
                         </div>
                     </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Fog</label></div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(29)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(30)">
                         <label class="config-option__title">Level Fog Distance</label>
                         <div class="config-option__range-wrapper config-option__list">
                             <label class="config-option__range-label">{{level_fog_distance}}%</label>
-                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(29)" id="jfg_level_fog_distance_input" type="range" min="50" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_vignette_size_input; nav-down: #jfg_no_level_fog_on;" data-value="level_fog_distance"/>
+                            <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(30)" id="jfg_level_fog_distance_input" type="range" min="50" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_vignette_size_input; nav-down: #jfg_no_level_fog_on;" data-value="level_fog_distance"/>
                         </div>
                     </div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(30)">
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(31)">
                         <label class="config-option__title">No Level Fog</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(30)" name="jfg_no_level_fog" data-checked="no_level_fog" value="1" id="jfg_no_level_fog_on" style="nav-up: #jfg_level_fog_distance_input; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(31)" name="jfg_no_level_fog" data-checked="no_level_fog" value="1" id="jfg_no_level_fog_on" style="nav-up: #jfg_level_fog_distance_input; nav-down: none;"/>
                             <label class="config-option__tab-label" for="jfg_no_level_fog_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(30)" name="jfg_no_level_fog" data-checked="no_level_fog" value="0" id="jfg_no_level_fog_off" style="nav-up: #jfg_level_fog_distance_input; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(31)" name="jfg_no_level_fog" data-checked="no_level_fog" value="0" id="jfg_no_level_fog_off" style="nav-up: #jfg_level_fog_distance_input; nav-down: none;"/>
                             <label class="config-option__tab-label" for="jfg_no_level_fog_off">Off</label>
                         </div>
                     </div>
@@ -315,19 +324,20 @@
                     <div data-if="cur_config_index == 15"><div class="jfg-desc__card"><div class="jfg-desc__title">Draw Distant Objects</div><p>Objects no longer fade out and disappear beyond their draw distance. Level scenery itself is not affected.</p></div></div>
                     <div data-if="cur_config_index == 16"><div class="jfg-desc__card"><div class="jfg-desc__title">Hide Floyd</div><p>Floyd, his shadow and his sounds are gone while he follows your character; he still flies along and shoots. Floyd missions and a second player flying him show him as usual.</p></div></div>
                     <div data-if="cur_config_index == 17"><div class="jfg-desc__card"><div class="jfg-desc__title">Modern Lighting</div><p>Lights the levels, characters and objects per pixel: shots, torches and lamps light what they face and cast real shadows, and levels can have a directional light, surface detail and shine. <b>Off</b>: the game's own lighting. Each level's look can be tuned with the lighting tool (F12).</p></div></div>
-                    <div data-if="cur_config_index == 18"><div class="jfg-desc__card"><div class="jfg-desc__title">Graphics API</div><p>Which graphics API the game draws with. <b>Auto</b>: DirectX 12 on Windows. Takes effect the next time the game starts. Ray tracing in the lighting tool works with either; Vulkan is slower to start.</p></div></div>
-                    <div data-if="cur_config_index == 19"><div class="jfg-desc__card"><div class="jfg-desc__title">Ambient Occlusion (SSAO)</div><p>Darkens creases, corners and the ground around objects, worked out from the depth of the 3D view. The HUD is not affected.</p></div></div>
-                    <div data-if="cur_config_index == 20"><div class="jfg-desc__card"><div class="jfg-desc__title">SSAO Strength</div><p>How dark the ambient occlusion gets.</p></div></div>
-                    <div data-if="cur_config_index == 21"><div class="jfg-desc__card"><div class="jfg-desc__title">SSAO Radius</div><p>How far around a surface ambient occlusion looks, in game units.</p></div></div>
-                    <div data-if="cur_config_index == 22"><div class="jfg-desc__card"><div class="jfg-desc__title">Bloom</div><p>Bright parts of the 3D view (lights, explosions, sky, shots) glow softly into their surroundings. The HUD does not glow.</p></div></div>
-                    <div data-if="cur_config_index == 23"><div class="jfg-desc__card"><div class="jfg-desc__title">Bloom Intensity</div><p>How strong the glow is.</p></div></div>
-                    <div data-if="cur_config_index == 24"><div class="jfg-desc__card"><div class="jfg-desc__title">Bloom Threshold</div><p>How bright a colour must be to glow. Lower: more of the picture glows.</p></div></div>
-                    <div data-if="cur_config_index == 25"><div class="jfg-desc__card"><div class="jfg-desc__title">Bloom Radius</div><p>How far the glow spreads.</p></div></div>
-                    <div data-if="cur_config_index == 26"><div class="jfg-desc__card"><div class="jfg-desc__title">Vignette</div><p>Darkens the edges and corners of the 3D view. The HUD is not darkened.</p></div></div>
-                    <div data-if="cur_config_index == 27"><div class="jfg-desc__card"><div class="jfg-desc__title">Vignette Strength</div><p>How dark the corners get.</p></div></div>
-                    <div data-if="cur_config_index == 28"><div class="jfg-desc__card"><div class="jfg-desc__title">Vignette Size</div><p>How far from the middle the darkening starts: higher keeps more of the picture clear.</p></div></div>
-                    <div data-if="cur_config_index == 29"><div class="jfg-desc__card"><div class="jfg-desc__title">Level Fog Distance</div><p>How far away the levels' own fog is. Some levels use it to hide where the scenery stops being drawn, so moving it back can show things appearing in the distance.</p></div></div>
-                    <div data-if="cur_config_index == 30"><div class="jfg-desc__card"><div class="jfg-desc__title">No Level Fog</div><p>Turns the levels' own fog off. Things in the distance may be seen appearing.</p></div></div>
+                    <div data-if="cur_config_index == 18"><div class="jfg-desc__card"><div class="jfg-desc__title">Ray Tracing</div><p>Ray-traced shadows, ambient occlusion, indirect light and reflections, with Modern Lighting on, where the graphics card can trace rays. Which of them are used is set in the lighting tool (F12). <b>Off</b>: none of them, and shadows come from shadow maps. Needs a fast graphics card.</p></div></div>
+                    <div data-if="cur_config_index == 19"><div class="jfg-desc__card"><div class="jfg-desc__title">Graphics API</div><p>Which graphics API the game draws with. <b>Auto</b>: DirectX 12 on Windows. Takes effect the next time the game starts. Ray tracing in the lighting tool works with either; Vulkan is slower to start.</p></div></div>
+                    <div data-if="cur_config_index == 20"><div class="jfg-desc__card"><div class="jfg-desc__title">Ambient Occlusion (SSAO)</div><p>Darkens creases, corners and the ground around objects, worked out from the depth of the 3D view. The HUD is not affected.</p></div></div>
+                    <div data-if="cur_config_index == 21"><div class="jfg-desc__card"><div class="jfg-desc__title">SSAO Strength</div><p>How dark the ambient occlusion gets.</p></div></div>
+                    <div data-if="cur_config_index == 22"><div class="jfg-desc__card"><div class="jfg-desc__title">SSAO Radius</div><p>How far around a surface ambient occlusion looks, in game units.</p></div></div>
+                    <div data-if="cur_config_index == 23"><div class="jfg-desc__card"><div class="jfg-desc__title">Bloom</div><p>Bright parts of the 3D view (lights, explosions, sky, shots) glow softly into their surroundings. The HUD does not glow.</p></div></div>
+                    <div data-if="cur_config_index == 24"><div class="jfg-desc__card"><div class="jfg-desc__title">Bloom Intensity</div><p>How strong the glow is.</p></div></div>
+                    <div data-if="cur_config_index == 25"><div class="jfg-desc__card"><div class="jfg-desc__title">Bloom Threshold</div><p>How bright a colour must be to glow. Lower: more of the picture glows.</p></div></div>
+                    <div data-if="cur_config_index == 26"><div class="jfg-desc__card"><div class="jfg-desc__title">Bloom Radius</div><p>How far the glow spreads.</p></div></div>
+                    <div data-if="cur_config_index == 27"><div class="jfg-desc__card"><div class="jfg-desc__title">Vignette</div><p>Darkens the edges and corners of the 3D view. The HUD is not darkened.</p></div></div>
+                    <div data-if="cur_config_index == 28"><div class="jfg-desc__card"><div class="jfg-desc__title">Vignette Strength</div><p>How dark the corners get.</p></div></div>
+                    <div data-if="cur_config_index == 29"><div class="jfg-desc__card"><div class="jfg-desc__title">Vignette Size</div><p>How far from the middle the darkening starts: higher keeps more of the picture clear.</p></div></div>
+                    <div data-if="cur_config_index == 30"><div class="jfg-desc__card"><div class="jfg-desc__title">Level Fog Distance</div><p>How far away the levels' own fog is. Some levels use it to hide where the scenery stops being drawn, so moving it back can show things appearing in the distance.</p></div></div>
+                    <div data-if="cur_config_index == 31"><div class="jfg-desc__card"><div class="jfg-desc__title">No Level Fog</div><p>Turns the levels' own fog off. Things in the distance may be seen appearing.</p></div></div>
                 </div>
             </div>
         </form>

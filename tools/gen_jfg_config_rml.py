@@ -159,6 +159,8 @@ GRAPHICS = [
     ("group", None, "Experimental", None, None),
     ("bool", "modern_lighting", "Modern Lighting", None,
      "Lights the levels, characters and objects per pixel: shots, torches and lamps light what they face and cast real shadows, and levels can have a directional light, surface detail and shine. <b>Off</b>: the game's own lighting. Each level's look can be tuned with the lighting tool (F12)."),
+    ("bool", "ray_tracing", "Ray Tracing", None,
+     "Ray-traced shadows, ambient occlusion, indirect light and reflections, with Modern Lighting on, where the graphics card can trace rays. Which of them are used is set in the lighting tool (F12). <b>Off</b>: none of them, and shadows come from shadow maps. Needs a fast graphics card."),
     ("choice", "api_option", "Graphics API", [(0, "Auto"), (1, "DirectX 12"), (2, "Vulkan")],
      "Which graphics API the game draws with. <b>Auto</b>: DirectX 12 on Windows. Takes effect the next time the game starts. Ray tracing in the lighting tool works with either; Vulkan is slower to start."),
     ("group", None, "Ambient Occlusion", None, None),
