@@ -22,6 +22,9 @@
 //     segment: each side's edge plane is rebuilt in place from both faces, the collision edge is kept only where the
 //     faces make a ridge (the first side), and ledges pair up across it. (JFG_COLLISION_SEAMS=0 leaves them, =1 links
 //     them in every level.)
+//   - Back-to-back faces (a thin wall with both sides modelled): the edge planes between them come out all zeros, and
+//     the ray test shots use then finds the wall's plane far past its ends. A pack level's are rebuilt after the load
+//     (repair_zero_edge_planes).
 // A stock level gets exactly the game's results, overflows aside. "Pack level" = its track is a mod's
 // (JFG_COLLISION_PACK=1 treats every level as one, =0 none).
 //
@@ -30,13 +33,15 @@
 // logs both sizes, and warns when they come near the limit.
 //
 // JFG_COLLISION_CHECK=1 runs the game's own trackMakePolylist and trackGetHeights next to the port's on every call
-// and logs where they differ (stderr), with a summary at each track load.
+// and logs where they differ (stderr), with a summary at each track load. JFG_DEBUG_RAY and JFG_DEBUG_RAY_SWEEP test
+// the game's ray test against the faces themselves (ray_probe, ray_sweep).
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <string>
 #include <vector>
 
 #include "jfg_assets.h"
@@ -315,6 +320,80 @@ void link_seams() {
     g_open_edges.clear();
 }
 
+// --- edges between back-to-back faces --------------------------------------------------------------------------------
+// The loader builds an edge's plane from the sum of the two faces' normals. Two faces back to back along an edge (a
+// thin wall modelled with both sides) have opposite normals, so the plane comes out all zeros, and a zero plane never
+// puts a point outside the face: the face reaches on for ever past that edge. The hero's list drops such far faces
+// (the exact test), but the ray test that shots and the crosshair use (trackNearestIntersection) finds the face's
+// plane far from the face, and a shot stops at a wall that isn't there. In a pack level such a plane is rebuilt as the
+// face's own boundary (upright to the face, through the edge, as for an edge with no neighbour). The other face, which
+// uses the plane negated (bit 0x8000), gets the same boundary of its own: for two faces back to back it is the plane
+// itself, so its 0x8000 is cleared. (JFG_COLLISION_EDGES=0 leaves them, =1 rebuilds them in every level.)
+bool edges_on() {
+    const char* v = std::getenv("JFG_COLLISION_EDGES");
+    if (v && (v[0] == '0' || v[0] == '1')) return v[0] == '1';
+    return g_pack;
+}
+
+void repair_zero_edge_planes() {
+    const uint32_t track = rd32(ADDR_track);
+    struct Shared { uint32_t pi; int e; int plane; V3 m; float d; };
+    std::vector<Shared> shared, owned;
+    int rebuilt = 0, unflipped = 0;
+    for (int s = 0; s < Track::SegmentCount::get(track); s++) {
+        const uint32_t seg = Track::Segments::get(track) + s * TrackSegment::Size;
+        const uint32_t info = TrackSegment::PolyInfo::get(seg), faces = TrackSegment::Faces::get(seg);
+        // All of the segment's zero planes first (writing one as it is found would hide it from its other face).
+        for (int gi = 0; gi < TrackSegment::BatchCount::get(seg); gi++) {
+            const Group g = read_group(seg, gi);
+            if (g.flags & GROUP_NO_EDGES) continue;
+            for (int t = g.first; t < g.end; t++) {
+                const uint32_t face = faces + t * TrackFace::Size;
+                if (TrackFace::Flags::get(face) & FACE_NO_COLLISION) continue;
+                const uint32_t pi = info + t * TrackPolyInfo::Size;
+                const Plane own = read_plane(seg, TrackPolyInfo::Plane::get(pi));
+                for (int e = 0; e < 3; e++) {
+                    const uint16_t slot = TrackPolyInfo::Edge::get(pi, e);
+                    const int index = slot & 0x7FFF;
+                    const Plane p = read_plane(seg, index);
+                    if (dot(p.n, p.n) > 0.25f) continue; // a real plane
+                    int16_t va[3], vb[3];
+                    read_vertex(vertex_addr(seg, g, face, e), va);
+                    read_vertex(vertex_addr(seg, g, face, (e + 1) % 3), vb);
+                    V3 m = cross(sub(vec(vb), vec(va)), own.n);
+                    const float len = std::sqrt(dot(m, m));
+                    if (len <= 0.0f) continue;
+                    m = { m.x / len, m.y / len, m.z / len };
+                    const float d = -dot(m, vec(va));
+                    (slot & 0x8000 ? shared : owned).push_back({ pi, e, index, m, d });
+                }
+            }
+        }
+        for (const Shared& u : owned) {
+            write_plane(seg, u.plane, { u.m, u.d });
+            rebuilt++;
+        }
+        owned.clear();
+        // The faces that use another face's plane negated: now that it is rebuilt, use it as it is where it is
+        // their own boundary too; rebuild it for them if nothing did.
+        for (const Shared& u : shared) {
+            const Plane p = read_plane(seg, u.plane);
+            if (dot(p.n, p.n) < 0.25f) {
+                write_plane(seg, u.plane, { u.m, u.d });
+                rebuilt++;
+            } else if (dot(p.n, u.m) < 0.5f) {
+                continue; // already its boundary negated
+            }
+            TrackPolyInfo::Edge::set(u.pi, u.e, (uint16_t)u.plane);
+            unflipped++;
+        }
+        shared.clear();
+    }
+    if (rebuilt + unflipped > 0)
+        std::fprintf(stderr, "[jfg] collision: %d zero edge planes rebuilt (faces back to back), %d shared ones used unnegated\n",
+            rebuilt, unflipped);
+}
+
 // --- trackMakePolylist ------------------------------------------------------------------------------------------------
 struct Taken { uint32_t seg; uint32_t xz, y; };
 
@@ -567,10 +646,184 @@ bool pack_override(bool* value) {
     return true;
 }
 
+// JFG_DEBUG_RAY="x1,y1,z1,x2,y2,z2": once a level has run a few seconds, the game's ray test (trackNearestIntersection,
+// what shots and the crosshair use) along that line at 10, 20 ... 60 above it, each next to the nearest real face on
+// the same line (every colliding face of the track, tested directly), so a hit with no face there shows.
+struct RayProbe { bool on = false; float a[3], b[3]; int calls = -1; } g_ray;
+
+void read_ray_probe() {
+    const char* v = std::getenv("JFG_DEBUG_RAY");
+    if (!v) return;
+    g_ray.on = std::sscanf(v, "%f,%f,%f,%f,%f,%f", &g_ray.a[0], &g_ray.a[1], &g_ray.a[2], &g_ray.b[0], &g_ray.b[1], &g_ray.b[2]) == 6;
+}
+
+// The nearest colliding face on a -> b (0..1 along it), -1 if none; seg / face of it.
+float nearest_face(const V3& a, const V3& b, int* seg_out, int* face_out) {
+    const uint32_t track = rd32(ADDR_track);
+    const V3 d = sub(b, a);
+    float best = -1.0f;
+    for (int s = 0; s < Track::SegmentCount::get(track); s++) {
+        const uint32_t seg = Track::Segments::get(track) + s * TrackSegment::Size;
+        for (int gi = 0; gi < TrackSegment::BatchCount::get(seg); gi++) {
+            const Group g = read_group(seg, gi);
+            for (int t = g.first; t < g.end; t++) {
+                const uint32_t face = TrackSegment::Faces::get(seg) + t * TrackFace::Size;
+                if (TrackFace::Flags::get(face) & FACE_NO_COLLISION) continue;
+                int16_t v[3][3];
+                for (int c = 0; c < 3; c++) read_vertex(vertex_addr(seg, g, face, c), v[c]);
+                const V3 p0 = vec(v[0]), e1 = sub(vec(v[1]), p0), e2 = sub(vec(v[2]), p0);
+                const V3 h = cross(d, e2);
+                const float det = dot(e1, h);
+                if (std::fabs(det) < 1e-6f) continue;
+                const V3 sv = sub(a, p0);
+                const float u = dot(sv, h) / det;
+                if (u < 0.0f || u > 1.0f) continue;
+                const V3 q = cross(sv, e1);
+                const float w = dot(d, q) / det;
+                if (w < 0.0f || u + w > 1.0f) continue;
+                const float k = dot(e2, q) / det;
+                if (k < 0.0f || k > 1.0f || (best >= 0.0f && k >= best)) continue;
+                best = k;
+                *seg_out = s;
+                *face_out = t;
+            }
+        }
+    }
+    return best;
+}
+
+// JFG_DEBUG_RAY_SWEEP=n: n x n level rays across the track's bounds (horizontal, along x and along z, at heights over
+// its floor range), each against the faces themselves; logs how many the game stops where no face is (phantom), and
+// how many pass a face (missed, closer than 2 units to its edge excluded).
+void ray_sweep(recomp_context* ctx) {
+    static const int n = [] { const char* v = std::getenv("JFG_DEBUG_RAY_SWEEP"); return v ? std::atoi(v) : 0; }();
+    if (n <= 0) return;
+    const uint32_t track = rd32(ADDR_track);
+    int lo[3] = { 32767, 32767, 32767 }, hi[3] = { -32768, -32768, -32768 };
+    for (int s = 0; s < Track::SegmentCount::get(track); s++) {
+        const Bounds b = read_bounds(Track::Bounds::get(track) + s * TrackBounds::Size);
+        const int mn[3] = { b.min_x, b.min_y, b.min_z }, mx[3] = { b.max_x, b.max_y, b.max_z };
+        for (int a = 0; a < 3; a++) { lo[a] = std::min(lo[a], mn[a]); hi[a] = std::max(hi[a], mx[a]); }
+    }
+    const uint32_t buf = ((uint32_t)ctx->r29 - 0x80u) & ~0x7u;
+    int rays = 0, phantom = 0, missed = 0, water = 0, agree = 0;
+    for (int dir = 0; dir < 2; dir++)
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++) {
+                const float u = lo[dir == 0 ? 2 : 0] + (hi[dir == 0 ? 2 : 0] - lo[dir == 0 ? 2 : 0]) * (i + 0.5f) / n;
+                const float y = lo[1] + (hi[1] - lo[1]) * (j + 0.5f) / n;
+                const V3 a = dir == 0 ? V3{ (float)lo[0], y, u } : V3{ u, y, (float)lo[2] };
+                const V3 b = dir == 0 ? V3{ (float)hi[0], y, u } : V3{ u, y, (float)hi[2] };
+                wrf(buf + 0, a.x); wrf(buf + 4, a.y); wrf(buf + 8, a.z);
+                wrf(buf + 12, b.x); wrf(buf + 16, b.y); wrf(buf + 20, b.z);
+                const recomp_context saved = *ctx;
+                const bool hit = (call_game(trackNearestIntersection, ctx, { 0u, buf, buf + 12, buf + 24, 0u, 0u }) & 0xFF) != 0;
+                *ctx = saved;
+                int seg = -1, face = -1;
+                const float k = nearest_face(a, b, &seg, &face);
+                const float len = std::sqrt(dot(sub(b, a), sub(b, a)));
+                rays++;
+                if (hit) {
+                    const V3 h = { rdf(buf + 28), rdf(buf + 32), rdf(buf + 36) };
+                    const float at = std::sqrt(dot(sub(h, a), sub(h, a)));
+                    if (k < 0.0f || at + 2.0f < k * len) {
+                        if (phantom++ < 8)
+                            std::fprintf(stderr, "[jfg] ray sweep: phantom hit at (%.0f, %.0f, %.0f), first face at %.0f of %.0f\n", h.x, h.y,
+                                h.z, k < 0.0f ? -1.0f : k * len, len);
+                    } else agree++;
+                } else if (k >= 0.0f) {
+                    // What the face is: water (group flag 0x2000) or the texture's surface type.
+                    const uint32_t sg = Track::Segments::get(track) + seg * TrackSegment::Size;
+                    uint32_t flags = 0;
+                    int surface = -1;
+                    for (int gi = 0; gi < TrackSegment::BatchCount::get(sg); gi++) {
+                        const Group g = read_group(sg, gi);
+                        if (face >= g.first && face < g.end) {
+                            flags = g.flags;
+                            surface = (int8_t)rd8(Track::Textures::get(track) + g.texture * 8 + 7);
+                        }
+                    }
+                    if (flags & GROUP_WATER) water++;
+                    else {
+                        missed++;
+                        if (missed <= 6)
+                            std::fprintf(stderr, "[jfg] ray sweep: passed a face (segment %d face %d, group flags 0x%X, surface %d) at %.0f along\n",
+                                seg, face, flags, surface, k * len);
+                    }
+                } else agree++;
+            }
+    std::fprintf(stderr, "[jfg] ray sweep: %d rays, %d agree, %d phantom hits, %d water passed, %d other faces passed\n", rays,
+        agree, phantom, water, missed);
+}
+
+void ray_probe(recomp_context* ctx) {
+    if (g_ray.calls >= 0 && g_ray.calls == 599) ray_sweep(ctx);
+    if (!g_ray.on || g_ray.calls < 0 || ++g_ray.calls != 600) { if (!g_ray.on && g_ray.calls >= 0) g_ray.calls++; return; }
+    const uint32_t buf = ((uint32_t)ctx->r29 - 0x80u) & ~0x7u; // in the gap call_game leaves below $sp
+    for (int k = 1; k <= 6; k++) {
+        const float up = 10.0f * k;
+        const V3 a = { g_ray.a[0], g_ray.a[1] + up, g_ray.a[2] }, b = { g_ray.b[0], g_ray.b[1] + up, g_ray.b[2] };
+        wrf(buf + 0, a.x); wrf(buf + 4, a.y); wrf(buf + 8, a.z);
+        wrf(buf + 12, b.x); wrf(buf + 16, b.y); wrf(buf + 20, b.z);
+        const recomp_context saved = *ctx;
+        const bool hit = (call_game(trackNearestIntersection, ctx, { 0u, buf, buf + 12, buf + 24, 0u, 0u }) & 0xFF) != 0;
+        *ctx = saved;
+        int seg = -1, face = -1;
+        const float real = nearest_face(a, b, &seg, &face);
+        const V3 r = { a.x + (b.x - a.x) * real, a.y + (b.y - a.y) * real, a.z + (b.z - a.z) * real };
+        std::fprintf(stderr, "[jfg] ray probe +%.0f: game %s (%.1f, %.1f, %.1f); faces: %s (%.1f, %.1f, %.1f) segment %d face %d\n", up,
+            hit ? "hits" : "clear", hit ? rdf(buf + 28) : 0.0f, hit ? rdf(buf + 32) : 0.0f, hit ? rdf(buf + 36) : 0.0f,
+            real >= 0.0f ? "hit" : "clear", real >= 0.0f ? r.x : 0.0f, real >= 0.0f ? r.y : 0.0f, real >= 0.0f ? r.z : 0.0f, seg, face);
+        if (k == 1 && hit) {
+            std::string words;
+            for (int w = 0; w < 12; w++) { char t[16]; std::snprintf(t, sizeof(t), " %08X", rd32(buf + 24 + w * 4)); words += t; }
+            std::fprintf(stderr, "[jfg] ray probe: result words%s\n", words.c_str());
+            // Every plane the hit point lies on (two heights, so the plane is the wall's), with what owns it.
+            const V3 p1 = { rdf(buf + 28), rdf(buf + 32), rdf(buf + 36) }, p2 = { p1.x, p1.y + 40.0f, p1.z };
+            const uint32_t track = rd32(ADDR_track);
+            for (int s = 0; s < Track::SegmentCount::get(track); s++) {
+                const uint32_t sg = Track::Segments::get(track) + s * TrackSegment::Size;
+                const Bounds bd = read_bounds(Track::Bounds::get(track) + s * TrackBounds::Size);
+                if (p1.x < bd.min_x - 50 || p1.x > bd.max_x + 50 || p1.z < bd.min_z - 50 || p1.z > bd.max_z + 50) continue;
+                // Faces in plane order: which face owns each face plane, and the slots naming each plane.
+                const int faces = TrackSegment::FaceCount::get(sg);
+                int colliding = 0, first_bad = -1;
+                bool seen_nocollide = false;
+                for (int gi = 0; gi < TrackSegment::BatchCount::get(sg); gi++) {
+                    const Group g = read_group(sg, gi);
+                    for (int t = g.first; t < g.end; t++) {
+                        const bool nc = TrackFace::Flags::get(TrackSegment::Faces::get(sg) + t * TrackFace::Size) & FACE_NO_COLLISION;
+                        if (nc) seen_nocollide = true;
+                        else { if (seen_nocollide && first_bad < 0) first_bad = t; colliding++; }
+                    }
+                }
+                std::fprintf(stderr, "[jfg] ray probe: segment %d bounds x %d..%d z %d..%d: %d faces, %d colliding, first colliding face after a no-collision one: %d\n",
+                    s, bd.min_x, bd.max_x, bd.min_z, bd.max_z, faces, colliding, first_bad);
+                for (int pl = 0; pl < faces * 4; pl++) {
+                    const Plane q = read_plane(sg, pl);
+                    if (!(std::fabs(dot(q.n, p1) + q.d) < 1.0f && std::fabs(dot(q.n, p2) + q.d) < 1.0f)) continue;
+                    if (!std::isfinite(q.d) || std::fabs(dot(q.n, q.n) - 1.0f) > 0.01f) continue;
+                    std::string users;
+                    const uint32_t info = TrackSegment::PolyInfo::get(sg);
+                    for (int t = 0; t < faces; t++) {
+                        const uint32_t pi = info + t * TrackPolyInfo::Size;
+                        if (TrackPolyInfo::Plane::get(pi) == pl) users += " own:" + std::to_string(t);
+                        for (int e = 0; e < 3; e++)
+                            if ((TrackPolyInfo::Edge::get(pi, e) & 0x7FFF) == pl) users += " edge:" + std::to_string(t) + "/" + std::to_string(e);
+                    }
+                    std::fprintf(stderr, "[jfg] ray probe:   plane %d (%.3f, %.3f, %.3f, %.1f) used by%s\n", pl, q.n.x, q.n.y, q.n.z, q.d,
+                        users.empty() ? " nothing" : users.c_str());
+                }
+            }
+        }
+    }
+}
+
 } // namespace
 
 JFG_WRAP(trackMakePolylist) {
     g_rdram = rdram;
+    ray_probe(ctx);
     if (check_on()) {
         const recomp_context saved = *ctx;
         trackMakePolylist_orig(rdram, ctx);
@@ -639,7 +892,10 @@ JFG_WRAP(func_overlay_24_000001F8_1F41D28) {
     func_overlay_24_000001F8_1F41D28_orig(rdram, ctx);
     const uint32_t track = rd32(ADDR_track);
     if (seams_on() && valid_ptr(track) && rd32(ADDR_nohitsflag) == 0) link_seams();
+    if (edges_on() && valid_ptr(track) && rd32(ADDR_nohitsflag) == 0) repair_zero_edge_planes();
     g_open_edges.clear();
+    read_ray_probe();
+    g_ray.calls = 0;
     std::fprintf(stderr, "[jfg] collision: track %d loaded (%s), %d segments, poly list %d, edge list %d\n", track_id,
         g_pack ? "pack level" : "stock rules", valid_ptr(track) ? (int)Track::SegmentCount::get(track) : -1,
         valid_ptr(header) ? (int)LevelHeader::PolyList::get(header) : -1,
