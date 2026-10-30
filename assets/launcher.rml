@@ -497,7 +497,7 @@
 										<div class="rl-key-row"><div class="rl-key">F10</div><div>Tools bar: cheats, level warp, items, weapons, texture packs (Alt: back to the game)</div></div>
 										<div class="rl-key-row"><div class="rl-key">F9</div><div>The original all-in-one debug window</div></div>
 										<div class="rl-key-row"><div class="rl-key">F5 / F6</div><div>Back to the title screen / next texture pack</div></div>
-										<div class="rl-key-row"><div class="rl-key">F7</div><div>Fly camera for screenshots (General has its settings)</div></div>
+										<div class="rl-key-row"><div class="rl-key">F7</div><div>Fly camera for screenshots (General, Advanced Options has its settings)</div></div>
 										<div class="rl-key-row"><div class="rl-key">F11 / Alt+Enter</div><div>Fullscreen</div></div>
 									</div>
 									<div class="rl-action-shadow rl-changelogs"><button id="rl_changelogs" class="rl-action rl-action--outline" data-event-click="show_changelog()" style="nav-left: #nav_play;">Changelogs</button></div>

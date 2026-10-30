@@ -51,7 +51,7 @@ struct LauncherPageInfo { const char* id; const char* title; const char* subtitl
 static const LauncherPageInfo LAUNCHER_PAGES[] = {
     { "play", "Play", "Load your ROM, then jump in.", "nav_play" },
     { "profiles", "Profiles", "Whole sets of settings: the original game, Modern, Modern and Balanced, Extreme or your own.", "tab_jfg_profiles" },
-    { "general", "General", "Volume, the settings menu, what is shown on screen and the fly camera.", "tab_jfg_general" },
+    { "general", "General", "Volume, the settings menu, what is shown on screen and advanced options.", "tab_jfg_general" },
     { "gameplay", "Gameplay", "Saving, gore, player tweaks and movement.", "tab_jfg_gameplay" },
     { "controls", "Controls", "Players, quick setup, camera and aiming, sticks and rumble, mouse and keyboard, and your buttons.", "tab_jfg_controls" },
     // Not in the sidebar: Customize Buttons on the Controls page opens it (jfg_launcher_show_bindings), and its sidebar

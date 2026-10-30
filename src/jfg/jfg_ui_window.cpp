@@ -139,14 +139,14 @@ void draw_options() {
                 int smooth_index = 0;
                 for (int i = 0; i < IM_ARRAYSIZE(smooth); i++) if (g.smooth_motion == smooth[i]) smooth_index = i;
                 ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
-                if (ImGui::Combo("Frame interpolation", &smooth_index, smooth_names, IM_ARRAYSIZE(smooth_names))) {
+                if (ImGui::Combo("Display frame rate", &smooth_index, smooth_names, IM_ARRAYSIZE(smooth_names))) {
                     g.smooth_motion = smooth[smooth_index];
                     changed = true;
                 }
                 options_help("How many frames a second you see: the renderer adds in-between frames to the game's own. Monitor: "
                              "up to your monitor's refresh rate. Rain and a few effects still move at the game's rate.");
                 changed |= ImGui::Checkbox("Smooth shadows", &g.smooth_shadows);
-                options_help("With Frame Interpolation, character shadows move with the in-between frames instead of at the "
+                options_help("With Display Frame Rate, character shadows move with the in-between frames instead of at the "
                              "game's rate, so they no longer trail behind the character.");
             }
             ImGui::EndTabItem();

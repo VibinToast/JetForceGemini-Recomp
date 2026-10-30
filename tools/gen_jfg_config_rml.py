@@ -8,7 +8,8 @@ import html, os
 # (kind, key, title, extra, help). kind: group | bool | range (extra = (min, max, suffix)) | choice (extra = [(value, label)])
 # Keys are the port's options (jfg::settings) except the ones in UPSTREAM_KEYS (ui_config.cpp: volume, controller and
 # window settings of the recomp itself), which the port's tabs show too so that each setting is in one place.
-# General: volume, the menu, what is shown on screen and the fly camera. A note about F9 follows the options.
+# General: volume, the menu, what is shown on screen and, last, Advanced Options. The Language list and a note about F9
+# follow the options.
 GENERAL = [
     ("group", None, "Sound", None, None),
     ("range", "main_volume", "Master Volume", (0, 100, "%"), "The volume of all of the game's sound."),
@@ -34,6 +35,11 @@ GENERAL = [
      "<b>On</b>: when the game starts it asks GitHub whether a newer release exists, and the launcher and a note in the game show one. <b>Off</b>: it never contacts GitHub. Turning it on checks straight away. Saved in jfg_launcher.txt next to the game."),
     ("bool", "show_official_pack", "Official HD Texture Pack", None,
      "<b>On</b>: the launcher's Texture Packs page shows the official HD texture pack, to download or update with one click (with Check for Updates on). <b>Off</b>: hidden, and GitHub is not asked about it. Saved in jfg_launcher.txt next to the game."),
+    # Advanced Options: the switch that shows the settings for experts on their own tabs (ADVANCED_GROUPS, ADVANCED_KEYS).
+    # It is not saved (UI_ONLY_KEYS): they are hidden again at each start.
+    ("group", None, "Advanced Options", None, None),
+    ("bool", "show_advanced", "Show Advanced Options", None,
+     "Shows settings most players can leave as they are, each on its own tab: Game Frame Rate (Graphics, 60 is experimental), the fly camera (F7, above) and the aiming view's sliders (Controls, under Over-the-Shoulder Aiming)."),
 ]
 
 GAMEPLAY = [
@@ -169,7 +175,12 @@ CONTROLS_DESC = "\n".join(
 
 # Groups shown only while a data expression is false, with their options (a wrapper with data-if; Up/Down go past them
 # while hidden, as past locked rows).
-GROUP_HIDDEN_BY = {"Mouse & Keyboard": "mk_hidden"}
+# The groups and single options for experts, hidden until Show Advanced Options (General) is on.
+ADVANCED_GROUPS = ("Fly Camera (F7)",)
+ADVANCED_KEYS = ("frame_rate", "aim_drag_margin", "aim_drag_return", "aim_offset_x", "aim_offset_y", "aim_offset_z")
+GROUP_HIDDEN_BY = {"Mouse & Keyboard": "mk_hidden", **{g: "advanced_hidden" for g in ADVANCED_GROUPS}}
+# Rows bound to the tab's own data model (ui_config.cpp) instead of a saved option: left out of the option key lists.
+UI_ONLY_KEYS = ("show_advanced",)
 
 GRAPHICS = [
     ("group", None, "Window", None, None),
@@ -182,12 +193,13 @@ GRAPHICS = [
     ("choice", "msaa_option", "Anti-Aliasing (MSAA)", [(0, "None"), (1, "2x"), (2, "4x")],
      "Multisample anti-aliasing: smoother edges at the cost of rendering performance. Not available if your graphics card does not support programmable sample positions (needed to avoid rendering glitches)."),
     ("group", None, "Frame Rate", None, None),
+    # Saved as smooth_motion (its name before 1.3, "Frame Interpolation"), so saved settings and profiles keep it.
+    ("choice", "smooth_motion", "Display Frame Rate", [(0, "Off"), (60, "60"), (90, "90"), (120, "120"), (144, "144"), (240, "240"), (1, "Monitor")],
+     "How many frames a second you see. Above the game's own, the renderer adds in-between frames: movement looks smoother, with a little more delay, but the game itself runs no faster. <b>Monitor</b>: up to your monitor's refresh rate; never more than it. Rain and a few effects still move at the game's rate. A lower setting takes less from the graphics card."),
     ("choice", "frame_rate", "Game Frame Rate", [(0, "30 (Original)"), (1, "60 (Experimental)")],
      "How many times a second the game itself updates: movement, aiming, enemies. <b>30 (Original)</b>: like the N64 (it drops to 20 when busy). <b>60</b>: the quickest response; game speed stays the same. 60 is experimental: some enemies and bosses can behave differently than at 30. Choose <b>30</b> for the original game."),
-    ("choice", "smooth_motion", "Frame Interpolation", [(0, "Off"), (60, "60"), (90, "90"), (120, "120"), (144, "144"), (240, "240"), (1, "Monitor")],
-     "How many frames a second you see: the renderer adds in-between frames to the game's own, with either <b>Game Frame Rate</b>. <b>Monitor</b>: up to your monitor's refresh rate; never more than it. Movement looks smoother, with a little more delay; rain and a few effects still move at the game's rate. A lower setting takes less from the graphics card."),
     ("bool", "smooth_shadows", "Smooth Shadows", None,
-     "With <b>Frame Interpolation</b>, character shadows move with the in-between frames instead of at the game's rate, so they no longer trail behind the character."),
+     "With <b>Display Frame Rate</b>, character shadows move with the in-between frames instead of at the game's rate, so they no longer trail behind the character."),
     ("group", None, "Picture", None, None),
     ("bool", "widescreen", "Widescreen", None, "During gameplay the 3D view fills the window; the HUD stays in the middle. Things at the far left and right may appear late."),
     ("bool", "hud_corners", "HUD in Screen Corners", None, "With <b>Widescreen</b>, the HUD moves from the middle out to the left and right edges of the window."),
@@ -243,26 +255,29 @@ def row_ids(kind, key, extra):
     if kind == "choice": return [f"jfg_{key}_{v}" for v, _ in extra]
     return [f"jfg_{key}_input"]
 
-def option_markup(items, first_nav_up):
+def option_markup(items, first_nav_up, last_nav_down="none"):
     # Up/Down are given explicitly for every control: automatic navigation skipped the sliders below a row of radio
     # buttons (and some rows above), and at the last row Down went sideways between its radios. Between two rows of
     # radios the column is kept (On to On); a slider row has one control. The first row goes up to first_nav_up (the
-    # tab; None leaves it automatic), the last row's Down goes nowhere.
+    # tab; None leaves it automatic), the last row's Down to last_nav_down (nowhere by default).
     # A locked row (LOCKED_BY) can't take the focus, so while its lock is on, Up/Down jump over the locked rows next to it
     # (a data-style-nav-* attribute, see nav_locked, in place of the fixed property).
-    # Rows of a hidden group (GROUP_HIDDEN_BY) are skipped like locked ones while hidden.
+    # Rows of a hidden group (GROUP_HIDDEN_BY) and hidden rows (ADVANCED_KEYS) are skipped like locked ones while hidden;
+    # a row both hidden and locked is skipped while either holds.
     hidden_by, group_hide = {}, None
     for kind, key, title, _, _ in items:
         if kind == "group": group_hide = GROUP_HIDDEN_BY.get(title)
         elif group_hide: hidden_by[key] = group_hide
+        elif key in ADVANCED_KEYS: hidden_by[key] = "advanced_hidden"
     rows = [row_ids(kind, key, extra) for kind, key, _, extra, _ in items if kind != "group"]
-    locks = [LOCKED_BY.get(key) or hidden_by.get(key) for kind, key, _, _, _ in items if kind != "group"]
+    locks = [" || ".join(c for c in (hidden_by.get(key), LOCKED_BY.get(key)) if c) or None
+             for kind, key, _, _, _ in items if kind != "group"]
     def target(row, column):
         return "#" + row[min(column, len(row) - 1)]
     def neighbour(i, step, column):
         j = i + step
         if j < 0: return first_nav_up
-        return target(rows[j], column) if j < len(rows) else "none"
+        return target(rows[j], column) if j < len(rows) else last_nav_down
     def past_lock(i, step, column):
         """(lock, where to go while it is on) when the next row that way is locked; None otherwise."""
         j = i + step
@@ -335,10 +350,10 @@ def first_id(items):
     kind, key, _, extra, _ = next(i for i in items if i[0] != "group")
     return row_ids(kind, key, extra)[0]
 
-def options_tab(name, items, tab_id, extra_markup="", before_markup="", desc_markup="", first_nav_up=None):
+def options_tab(name, items, tab_id, extra_markup="", before_markup="", desc_markup="", first_nav_up=None, last_nav_down="none"):
     # With markup before the options, that markup's first element goes up to the tab instead (or the first option goes
     # up to first_nav_up).
-    body, helps, _ = option_markup(items, first_nav_up or (None if before_markup else "#" + tab_id))
+    body, helps, _ = option_markup(items, first_nav_up or (None if before_markup else "#" + tab_id), last_nav_down)
     return "\n".join([
         f'<template name="config-menu__{name}">',
         '    <head>',
@@ -412,7 +427,11 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
             <div class="config__hz-wrapper">
                 <!-- Generated by tools/gen_jfg_config_rml.py. A scrolling box, as on the other tabs: Down on the tab goes
                      to the first profile button (jfg_profile_0, jfg_tab_first_ids), as automatic navigation does not
-                     look into one from outside. -->
+                     look into one from outside.
+                     The name box has square corners: a text box clips its own text, and with rounded corners RmlUi
+                     does that with a clip mask, which the renderer's older interface (RenderInterfaceAdapter) turns
+                     into switching the scissor off, so the buttons drawn after it were no longer clipped by this scrolling box
+                     and showed past the bottom of the panel. -->
                 <div class="config__wrapper" style="overflow-y: auto; height: 100%;">
                     <div style="display: block; margin: 16dp 12dp 0dp;">
                         <label class="config-option__title config-group__title" style="display: block; padding: 0dp;">Profile: <span>{{active_profile}}</span></label>
@@ -443,7 +462,7 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
                     </div>
                     <div style="display: block; margin: 32dp 12dp 24dp;">
                         <label class="config-option__title" style="display: block; padding: 0dp;">New Profile from the Current Settings</label>
-                        <input type="text" class="nav-vert" style="display: block; width: 90%; max-width: 600dp; height: 52dp; margin: 18dp 0dp 0dp; padding: 10dp 14dp; font-size: 26dp; color: #f2f2f2; background-color: rgba(255,255,255,0.08); border-width: 1.1dp; border-color: rgba(233,205,53,0.8); border-radius: 12dp;" data-value="new_profile_name" maxlength="40"/>
+                        <input type="text" class="nav-vert" style="display: block; width: 90%; max-width: 600dp; height: 52dp; margin: 18dp 0dp 0dp; padding: 10dp 14dp; font-size: 26dp; color: #f2f2f2; background-color: rgba(255,255,255,0.08); border-width: 1.1dp; border-color: rgba(233,205,53,0.8);" data-value="new_profile_name" maxlength="40"/>
                         <div style="display: block; width: 100%; margin-top: 16dp;">
                             <button class="button" style="display: inline-block; margin: 0dp 16dp 0dp 0dp; nav-up: auto; nav-down: auto; nav-left: #tab_jfg_profiles; nav-right: auto;" data-event-click="save_profile()">Save as New Profile</button>
                             <span data-if="profile_deletable"><button class="button" style="display: inline-block; margin: 0dp; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto;" data-event-click="delete_profile()">Delete This Profile</button></span>
@@ -456,7 +475,7 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
                 <div class="config__wrapper jfg-desc">
                     <div class="jfg-desc__card"><div class="jfg-desc__title">Profiles</div>
                         <p>Choosing one resets every setting to the original game, then applies the profile; you see what changes first.</p>
-                        <p><b>Default</b>: the original game.<br/><b>Modern</b>: modern controls and visuals, 60 fps.<br/><b>Modern and Balanced</b>: plus rebalanced weapons.<br/><b>Extreme</b>: everything turned up.</p>
+                        <p><b>Original</b>: the original game.<br/><b>Modern</b>: modern controls and visuals, 60 fps.<br/><b>Modern and Balanced</b>: plus rebalanced weapons.<br/><b>Extreme</b>: everything turned up.</p>
                         <p>The Modern ones use their own button layout.<br/>Turn on <b>Keep My Controls</b> to keep yours.</p>
                         <p>Your own are saved in the profiles folder. Not included: cheats, textures, volume, controller, display, bindings.</p></div>
                 </div>
@@ -496,6 +515,9 @@ OPTION_TABS = (
 TAB_FIRST = {"jfg_textures": "jfg_pack_0", "jfg_controls": "jfg_qs_modern"}
 TAB_FIRST_NAV_UP = {"jfg_controls": "#jfg_customize_buttons"}
 TAB_DESC = {"jfg_textures": PACK_DETAILS, "jfg_controls": CONTROLS_DESC}
+# Where Down on a tab's last option goes: on General, the Language list after the options (in the game's menu only; the
+# launcher hides it, and there Down stays put).
+TAB_LAST_NAV_DOWN = {"jfg_general": "#jfg_locale_0"}
 
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -503,13 +525,14 @@ def main():
     for name, items, extra, before in OPTION_TABS:
         with open(os.path.join(cm, name + ".rml"), "w", newline="\n") as f:
             f.write(options_tab(name, items, "tab_" + name, extra_markup=extra, before_markup=before,
-                                desc_markup=TAB_DESC.get(name, ""), first_nav_up=TAB_FIRST_NAV_UP.get(name)))
+                                desc_markup=TAB_DESC.get(name, ""), first_nav_up=TAB_FIRST_NAV_UP.get(name),
+                                last_nav_down=TAB_LAST_NAV_DOWN.get(name, "none")))
     with open(os.path.join(cm, "jfg_profiles.rml"), "w", newline="\n") as f:
         f.write(PROFILES)
     with open(os.path.join(root, "src", "jfg", "jfg_config_keys.inc"), "w", newline="\n") as f:
         f.write("// Generated by tools/gen_jfg_config_rml.py: the option keys each port tab of the config menu binds.\n")
         for name, items, _, _ in OPTION_TABS:
-            keys = [k for kind, k, *_ in items if kind != "group"]
+            keys = [k for kind, k, *_ in items if kind != "group" and k not in UI_ONLY_KEYS]
             f.write(f"static const char* const {name}_keys[] = {{ " + ", ".join(f'"{k}"' for k in keys) + " };\n")
         # The element Down on a tab goes to (the options are in a scrolling box; see ConfigTabsetListener): the first
         # option, or on the Textures tab the first texture pack button.
@@ -525,7 +548,7 @@ def main():
         f.write("static const JfgOptionTitle jfg_option_titles[] = {\n")
         for _, items, _, _ in OPTION_TABS:
             for kind, key, title, extra, _ in items:
-                if kind == "group": continue
+                if kind == "group" or key in UI_ONLY_KEYS: continue
                 suffix = extra[2] if kind == "range" else ""
                 choices = "|".join(f"{v}:{label}" for v, label in extra) if kind == "choice" else ""
                 f.write(f'    {{ "{key}", "{title}", \'{kind[0]}\', "{suffix}", "{choices}" }},\n')

@@ -113,12 +113,13 @@
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(10)">
                         <label class="config-option__title">Over-the-Shoulder Aiming</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="1" id="jfg_aim_shoulder_on" style="nav-up: #jfg_camera_collision_on; " data-style-nav-down="aim_shoulder == 1 ? '#jfg_aim_centered_on' : '#jfg_aim_drag_margin_input'"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="1" id="jfg_aim_shoulder_on" style="nav-up: #jfg_camera_collision_on; " data-style-nav-down="advanced_hidden || aim_shoulder == 1 ? '#jfg_aim_centered_on' : '#jfg_aim_drag_margin_input'"/>
                             <label class="config-option__tab-label" for="jfg_aim_shoulder_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="0" id="jfg_aim_shoulder_off" style="nav-up: #jfg_camera_collision_off; " data-style-nav-down="aim_shoulder == 1 ? '#jfg_aim_centered_off' : '#jfg_aim_drag_margin_input'"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_aim_shoulder" data-checked="aim_shoulder" value="0" id="jfg_aim_shoulder_off" style="nav-up: #jfg_camera_collision_off; " data-style-nav-down="advanced_hidden || aim_shoulder == 1 ? '#jfg_aim_centered_off' : '#jfg_aim_drag_margin_input'"/>
                             <label class="config-option__tab-label" for="jfg_aim_shoulder_off">Off</label>
                         </div>
                     </div>
+                    <div data-if="!advanced_hidden">
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(11)" data-style-opacity="aim_shoulder == 1 ? '0.4' : '1'">
                         <label class="config-option__title">Aim Drag Margin</label>
                         <div class="config-option__range-wrapper config-option__list">
@@ -126,6 +127,8 @@
                             <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(11)" id="jfg_aim_drag_margin_input" type="range" min="0" max="50" style="flex: 1; margin: 0dp; nav-up: #jfg_aim_shoulder_on; nav-down: #jfg_aim_drag_return_input;" data-value="aim_drag_margin" data-attrif-disabled="aim_shoulder == 1"/>
                         </div>
                     </div>
+                    </div>
+                    <div data-if="!advanced_hidden">
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(12)" data-style-opacity="aim_shoulder == 1 ? '0.4' : '1'">
                         <label class="config-option__title">Aim Drag Return Speed</label>
                         <div class="config-option__range-wrapper config-option__list">
@@ -133,6 +136,8 @@
                             <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" id="jfg_aim_drag_return_input" type="range" min="0" max="400" style="flex: 1; margin: 0dp; nav-up: #jfg_aim_drag_margin_input; nav-down: #jfg_aim_offset_x_input;" data-value="aim_drag_return" data-attrif-disabled="aim_shoulder == 1"/>
                         </div>
                     </div>
+                    </div>
+                    <div data-if="!advanced_hidden">
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(13)" data-style-opacity="aim_shoulder == 1 ? '0.4' : '1'">
                         <label class="config-option__title">Aim Offset Left/Right</label>
                         <div class="config-option__range-wrapper config-option__list">
@@ -140,6 +145,8 @@
                             <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" id="jfg_aim_offset_x_input" type="range" min="-50" max="50" style="flex: 1; margin: 0dp; nav-up: #jfg_aim_drag_return_input; nav-down: #jfg_aim_offset_y_input;" data-value="aim_offset_x" data-attrif-disabled="aim_shoulder == 1"/>
                         </div>
                     </div>
+                    </div>
+                    <div data-if="!advanced_hidden">
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(14)" data-style-opacity="aim_shoulder == 1 ? '0.4' : '1'">
                         <label class="config-option__title">Aim Offset Up/Down</label>
                         <div class="config-option__range-wrapper config-option__list">
@@ -147,6 +154,8 @@
                             <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(14)" id="jfg_aim_offset_y_input" type="range" min="-50" max="50" style="flex: 1; margin: 0dp; nav-up: #jfg_aim_offset_x_input; nav-down: #jfg_aim_offset_z_input;" data-value="aim_offset_y" data-attrif-disabled="aim_shoulder == 1"/>
                         </div>
                     </div>
+                    </div>
+                    <div data-if="!advanced_hidden">
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(15)" data-style-opacity="aim_shoulder == 1 ? '0.4' : '1'">
                         <label class="config-option__title">Aim Zoom</label>
                         <div class="config-option__range-wrapper config-option__list">
@@ -154,12 +163,13 @@
                             <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(15)" id="jfg_aim_offset_z_input" type="range" min="0" max="300" style="flex: 1; margin: 0dp; nav-up: #jfg_aim_offset_y_input; nav-down: #jfg_aim_centered_on;" data-value="aim_offset_z" data-attrif-disabled="aim_shoulder == 1"/>
                         </div>
                     </div>
+                    </div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(16)">
                         <label class="config-option__title">Keep the Reticle Centered</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" name="jfg_aim_centered" data-checked="aim_centered" value="1" id="jfg_aim_centered_on" style="nav-down: #jfg_aim_jump_on;" data-style-nav-up="aim_shoulder == 1 ? '#jfg_aim_shoulder_on' : '#jfg_aim_offset_z_input'"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" name="jfg_aim_centered" data-checked="aim_centered" value="1" id="jfg_aim_centered_on" style="nav-down: #jfg_aim_jump_on;" data-style-nav-up="advanced_hidden || aim_shoulder == 1 ? '#jfg_aim_shoulder_on' : '#jfg_aim_offset_z_input'"/>
                             <label class="config-option__tab-label" for="jfg_aim_centered_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" name="jfg_aim_centered" data-checked="aim_centered" value="0" id="jfg_aim_centered_off" style="nav-down: #jfg_aim_jump_off;" data-style-nav-up="aim_shoulder == 1 ? '#jfg_aim_shoulder_off' : '#jfg_aim_offset_z_input'"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(16)" name="jfg_aim_centered" data-checked="aim_centered" value="0" id="jfg_aim_centered_off" style="nav-down: #jfg_aim_jump_off;" data-style-nav-up="advanced_hidden || aim_shoulder == 1 ? '#jfg_aim_shoulder_off' : '#jfg_aim_offset_z_input'"/>
                             <label class="config-option__tab-label" for="jfg_aim_centered_off">Off</label>
                         </div>
                     </div>

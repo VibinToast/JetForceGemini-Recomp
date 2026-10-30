@@ -244,7 +244,6 @@ std::vector<ToolField> weapon_fields();    // the Weapons window (F10)
 struct BuiltinProfile { const char* name; const char* description; const char* text; };
 extern const BuiltinProfile BUILTIN_PROFILES[4];
 extern std::string g_active_profile;   // "" = none chosen (the settings as they are)
-extern std::string g_profile_snapshot; // settings right after the active profile was applied (to show "changed")
 extern std::string g_profile_message;
 extern std::vector<std::string> g_user_profiles;
 const BuiltinProfile* builtin_profile(const std::string& name); // nullptr if not a built-in one
@@ -255,6 +254,7 @@ void save_profile_choice();
 void load_profile_choice();
 void write_user_profile(const std::string& name);
 void choose_profile(const std::string& name);
+bool start_new_player_profile();           // a new player starts on Modern (load_options, before reading the file)
 bool valid_profile_name(const std::string& name);
 void profile_autosave();                   // changes made while a player profile is active are written to it
 // What choosing a profile would change, shown before it is applied (issue #7: a profile's dual-stick layout silently
@@ -268,6 +268,7 @@ struct ProfilePreview {
 extern bool g_profile_keep_controls;       // Keep My Controls (saved in jfg_profile.txt)
 void set_profile_keep_controls(bool keep);
 ProfilePreview preview_profile(const std::string& name);
+bool builtin_profile_changed();             // the settings differ from the active built-in profile's
 std::string profile_preview_text(const std::string& name); // as lines for a prompt; "" when nothing would change
 void draw_profiles();                      // the Profiles tab
 void debug_profile_tick();                 // JFG_DEBUG_PROFILE

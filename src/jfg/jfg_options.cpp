@@ -167,7 +167,8 @@ void apply_option(const char* key, int value) {
 void load_options() {
     if (g_options_loaded) return;
     g_options_loaded = true;
-    if (std::FILE* f = std::fopen(OPTIONS_FILE, "r")) {
+    if (start_new_player_profile()) std::fprintf(stderr, "[jfg] new player: Modern profile\n");
+    else if (std::FILE* f = std::fopen(OPTIONS_FILE, "r")) {
         char key[64]; int value;
         while (std::fscanf(f, "%63[^=]=%d\n", key, &value) == 2) apply_option(key, value);
         std::fclose(f);

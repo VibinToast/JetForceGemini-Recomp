@@ -65,13 +65,14 @@
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(6)">
                         <label class="config-option__title">Show Save Notification</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(6)" name="jfg_save_notification" data-checked="save_notification" value="1" id="jfg_save_notification_on" style="nav-up: #jfg_show_pack_on; nav-down: #jfg_fly_speed_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(6)" name="jfg_save_notification" data-checked="save_notification" value="1" id="jfg_save_notification_on" style="nav-up: #jfg_show_pack_on; " data-style-nav-down="advanced_hidden ? '#jfg_skip_launcher_on' : '#jfg_fly_speed_input'"/>
                             <label class="config-option__tab-label" for="jfg_save_notification_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(6)" name="jfg_save_notification" data-checked="save_notification" value="0" id="jfg_save_notification_off" style="nav-up: #jfg_show_pack_off; nav-down: #jfg_fly_speed_input;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(6)" name="jfg_save_notification" data-checked="save_notification" value="0" id="jfg_save_notification_off" style="nav-up: #jfg_show_pack_off; " data-style-nav-down="advanced_hidden ? '#jfg_skip_launcher_off' : '#jfg_fly_speed_input'"/>
                             <label class="config-option__tab-label" for="jfg_save_notification_off">Off</label>
                         </div>
                     </div>
-                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Fly Camera (F7)</label></div>
+                    <div data-if="!advanced_hidden"><div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Fly Camera (F7)</label></div></div>
+                    <div data-if="!advanced_hidden">
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(7)">
                         <label class="config-option__title">Fly Speed</label>
                         <div class="config-option__range-wrapper config-option__list">
@@ -79,6 +80,8 @@
                             <input class="nav-vert" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(7)" id="jfg_fly_speed_input" type="range" min="10" max="1000" style="flex: 1; margin: 0dp; nav-up: #jfg_save_notification_on; nav-down: #jfg_fly_freeze_on;" data-value="fly_speed"/>
                         </div>
                     </div>
+                    </div>
+                    <div data-if="!advanced_hidden">
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(8)">
                         <label class="config-option__title">Freeze While Flying</label>
                         <div class="config-option__list">
@@ -88,6 +91,8 @@
                             <label class="config-option__tab-label" for="jfg_fly_freeze_off">Off</label>
                         </div>
                     </div>
+                    </div>
+                    <div data-if="!advanced_hidden">
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(9)">
                         <label class="config-option__title">Hide HUD While Flying</label>
                         <div class="config-option__list">
@@ -97,13 +102,14 @@
                             <label class="config-option__tab-label" for="jfg_fly_hide_hud_off">Off</label>
                         </div>
                     </div>
+                    </div>
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Launcher</label></div>
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(10)">
                         <label class="config-option__title">Skip the Launcher</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_skip_launcher" data-checked="skip_launcher" value="1" id="jfg_skip_launcher_on" style="nav-up: #jfg_fly_hide_hud_on; nav-down: #jfg_check_for_updates_on;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_skip_launcher" data-checked="skip_launcher" value="1" id="jfg_skip_launcher_on" style="nav-down: #jfg_check_for_updates_on;" data-style-nav-up="advanced_hidden ? '#jfg_save_notification_on' : '#jfg_fly_hide_hud_on'"/>
                             <label class="config-option__tab-label" for="jfg_skip_launcher_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_skip_launcher" data-checked="skip_launcher" value="0" id="jfg_skip_launcher_off" style="nav-up: #jfg_fly_hide_hud_off; nav-down: #jfg_check_for_updates_off;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(10)" name="jfg_skip_launcher" data-checked="skip_launcher" value="0" id="jfg_skip_launcher_off" style="nav-down: #jfg_check_for_updates_off;" data-style-nav-up="advanced_hidden ? '#jfg_save_notification_off' : '#jfg_fly_hide_hud_off'"/>
                             <label class="config-option__tab-label" for="jfg_skip_launcher_off">Off</label>
                         </div>
                     </div>
@@ -119,10 +125,20 @@
                     <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(12)">
                         <label class="config-option__title">Official HD Texture Pack</label>
                         <div class="config-option__list">
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" name="jfg_show_official_pack" data-checked="show_official_pack" value="1" id="jfg_show_official_pack_on" style="nav-up: #jfg_check_for_updates_on; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" name="jfg_show_official_pack" data-checked="show_official_pack" value="1" id="jfg_show_official_pack_on" style="nav-up: #jfg_check_for_updates_on; nav-down: #jfg_show_advanced_on;"/>
                             <label class="config-option__tab-label" for="jfg_show_official_pack_on">On</label>
-                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" name="jfg_show_official_pack" data-checked="show_official_pack" value="0" id="jfg_show_official_pack_off" style="nav-up: #jfg_check_for_updates_off; nav-down: none;"/>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(12)" name="jfg_show_official_pack" data-checked="show_official_pack" value="0" id="jfg_show_official_pack_off" style="nav-up: #jfg_check_for_updates_off; nav-down: #jfg_show_advanced_off;"/>
                             <label class="config-option__tab-label" for="jfg_show_official_pack_off">Off</label>
+                        </div>
+                    </div>
+                    <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Advanced Options</label></div>
+                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(13)">
+                        <label class="config-option__title">Show Advanced Options</label>
+                        <div class="config-option__list">
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" name="jfg_show_advanced" data-checked="show_advanced" value="1" id="jfg_show_advanced_on" style="nav-up: #jfg_show_official_pack_on; nav-down: #jfg_locale_0;"/>
+                            <label class="config-option__tab-label" for="jfg_show_advanced_on">On</label>
+                            <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(13)" name="jfg_show_advanced" data-checked="show_advanced" value="0" id="jfg_show_advanced_off" style="nav-up: #jfg_show_official_pack_off; nav-down: #jfg_locale_0;"/>
+                            <label class="config-option__tab-label" for="jfg_show_advanced_off">Off</label>
                         </div>
                     </div>
                     <div class="jfg-ingame-only">
@@ -151,6 +167,7 @@
                     <div data-if="cur_config_index == 10"><div class="jfg-desc__card"><div class="jfg-desc__title">Skip the Launcher</div><p><b>On</b>: the game starts straight away with your ROM, without the launcher. In the game, the launcher button next to Quit in this menu still takes you back to it. Saved in jfg_launcher.txt next to the game.</p></div></div>
                     <div data-if="cur_config_index == 11"><div class="jfg-desc__card"><div class="jfg-desc__title">Check for Updates</div><p><b>On</b>: when the game starts it asks GitHub whether a newer release exists, and the launcher and a note in the game show one. <b>Off</b>: it never contacts GitHub. Turning it on checks straight away. Saved in jfg_launcher.txt next to the game.</p></div></div>
                     <div data-if="cur_config_index == 12"><div class="jfg-desc__card"><div class="jfg-desc__title">Official HD Texture Pack</div><p><b>On</b>: the launcher's Texture Packs page shows the official HD texture pack, to download or update with one click (with Check for Updates on). <b>Off</b>: hidden, and GitHub is not asked about it. Saved in jfg_launcher.txt next to the game.</p></div></div>
+                    <div data-if="cur_config_index == 13"><div class="jfg-desc__card"><div class="jfg-desc__title">Show Advanced Options</div><p>Shows settings most players can leave as they are, each on its own tab: Game Frame Rate (Graphics, 60 is experimental), the fly camera (F7, above) and the aiming view's sliders (Controls, under Over-the-Shoulder Aiming).</p></div></div>
                 </div>
             </div>
         </form>

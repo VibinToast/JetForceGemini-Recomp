@@ -2,7 +2,7 @@
 static const char* const jfg_general_keys[] = { "main_volume", "start_skips_cutscenes", "fast_pause", "show_fps", "show_level", "show_pack", "save_notification", "fly_speed", "fly_freeze", "fly_hide_hud", "skip_launcher", "check_for_updates", "show_official_pack" };
 static const char* const jfg_gameplay_keys[] = { "auto_save", "auto_save_minutes", "keep_area_progress", "permanent_tribals", "damage_taken", "unlimited_continues", "refuel_speed", "floyd_fuel", "move_speed", "sprint", "sprint_speed", "sprint_aiming", "sprint_swimming", "sprint_swim_speed", "normalize_diagonal", "aim_even_speed" };
 static const char* const jfg_controls_keys[] = { "dual_stick", "dual_layout", "swap_triggers", "invert_aim_y", "invert_camera_y", "aim_from_character", "camera_speed_h", "camera_speed_v", "camera_distance", "camera_collision", "aim_shoulder", "aim_drag_margin", "aim_drag_return", "aim_offset_x", "aim_offset_y", "aim_offset_z", "aim_centered", "aim_jump", "aim_speed", "sniper_fixed_zoom", "sniper_zoom", "invert_aim_normal", "joystick_deadzone", "joystick_range", "rumble_strength", "background_input", "mouse_keyboard", "mouse_camera_speed", "mouse_aim_speed", "invert_mouse_y" };
-static const char* const jfg_graphics_keys[] = { "wm_option", "res_option", "ds_option", "msaa_option", "frame_rate", "smooth_motion", "smooth_shadows", "widescreen", "hud_corners", "fov", "texture_filter", "output_filter", "hit_flash", "shadow_opacity", "no_lod", "far_objects", "ssao", "ssao_strength", "ssao_radius", "bloom", "bloom_intensity", "bloom_threshold", "bloom_radius", "vignette", "vignette_strength", "vignette_size", "level_fog_distance", "no_level_fog" };
+static const char* const jfg_graphics_keys[] = { "wm_option", "res_option", "ds_option", "msaa_option", "smooth_motion", "frame_rate", "smooth_shadows", "widescreen", "hud_corners", "fov", "texture_filter", "output_filter", "hit_flash", "shadow_opacity", "no_lod", "far_objects", "ssao", "ssao_strength", "ssao_radius", "bloom", "bloom_intensity", "bloom_threshold", "bloom_radius", "vignette", "vignette_strength", "vignette_size", "level_fog_distance", "no_level_fog" };
 static const char* const jfg_textures_keys[] = { "texture_dump", "dump_by_level" };
 struct JfgTabFirst { const char* tab; const char* first; };
 static const JfgTabFirst jfg_tab_first_ids[] = {
@@ -78,8 +78,8 @@ static const JfgOptionTitle jfg_option_titles[] = {
     { "res_option", "Resolution", 'c', "", "0:Original|1:Original 2x|2:Auto" },
     { "ds_option", "Downsampling", 'c', "", "1:Off|2:2x|4:4x" },
     { "msaa_option", "Anti-Aliasing (MSAA)", 'c', "", "0:None|1:2x|2:4x" },
+    { "smooth_motion", "Display Frame Rate", 'c', "", "0:Off|60:60|90:90|120:120|144:144|240:240|1:Monitor" },
     { "frame_rate", "Game Frame Rate", 'c', "", "0:30 (Original)|1:60 (Experimental)" },
-    { "smooth_motion", "Frame Interpolation", 'c', "", "0:Off|60:60|90:90|120:120|144:144|240:240|1:Monitor" },
     { "smooth_shadows", "Smooth Shadows", 'b', "", "" },
     { "widescreen", "Widescreen", 'b', "", "" },
     { "hud_corners", "HUD in Screen Corners", 'b', "", "" },

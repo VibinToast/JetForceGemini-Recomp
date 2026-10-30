@@ -86,8 +86,7 @@ std::string profile_description() {
 bool active_profile_is_builtin() { load_profile_choice(); return builtin_profile(g_active_profile) != nullptr; }
 
 bool profile_changed() {
-    load_profile_choice();
-    return builtin_profile(g_active_profile) != nullptr && settings_snapshot() != g_profile_snapshot;
+    return builtin_profile_changed();
 }
 
 void choose_profile(const std::string& name) {
@@ -112,7 +111,6 @@ bool save_profile(const std::string& name) {
     write_user_profile(name);
     g_active_profile = name;
     save_profile_choice();
-    g_profile_snapshot = settings_snapshot();
     list_user_profiles();
     g_profile_message = "Saved profile \"" + name + "\".";
     return true;
