@@ -5,8 +5,8 @@
 //   - in the Game struct, so already in the game's save: the Tribal bits of each room (+0x5C rescued, +0xDC killed,
 //     indexed by the level header's regionFlag), the counts (+4 rescued, +5 killed, +6 left), the region time (+0x514),
 //     +0x530, and the weapon stats the region's stats screen shows (+0x474..+0x513);
-//   - in RAM only: the object flags of each of the region's rooms (levelSetObjectFlag / levelObjectFlagSet,
-//     D_800FB1E0: 32 x { u8 id counter, u8 bits[16] }), which mark killed squad members, so cleared rooms stay clear
+//   - in RAM only: the object flags of each of the region's rooms (levelSetObjectFlag / levelObjectFlagSet; the port
+//     keeps them, 32 blocks of 256 flags, jfg_level_flags.cpp), which mark killed squad members, so cleared rooms stay clear
 //     and kill-all doors stay open; `continues`; and where a continue restarts (D_800A3270..D_800A327C).
 // The game calls mainResetRegion whenever the level it changes to is in another region than D_800FD7A4 (RAM, so
 // after loading a file always), clearing all of the above. The character's resume point (game character +0x74:
@@ -34,12 +34,14 @@
 
 namespace jfg {
 
+uint8_t* room_flags(int room); // jfg_level_flags.cpp: a room's 256 object flags (32 bytes)
+
 namespace {
 constexpr uint32_t ADDR_currentRegion = 0x800FD7A4;   // s16 D_800FD7A4: the region being played (0 / 0xFF: none)
 constexpr uint32_t ADDR_continuePoint = 0x800A3270;   // s16 x4: level, arg, entrance, region a continue restarts at
 constexpr uint32_t ADDR_racingInGame = 0x800A4FB4;    // u8
-constexpr uint32_t ADDR_roomFlags = 0x800FB1E0;       // 32 x 17 bytes
-constexpr int ROOMS = 32, ROOM_STRIDE = 17, ROOM_BITS = 16;
+constexpr int ROOMS = 32, ROOM_BYTES = 32;          // jfg_level_flags.cpp's blocks
+constexpr int ROOM_BYTES_V1 = 16;                     // the game's 128 flags, in files of version 1
 constexpr int SAVE_SLOTS = 6;
 
 // The Game-struct ranges mainResetRegion clears, except the region time (cleared by its caller just before it).
@@ -55,10 +57,20 @@ struct Entry {
     int16_t continue_point[4] = {};
     uint32_t region_time = 0;
     uint8_t game[GAME_BYTES] = {};
-    uint8_t rooms[ROOMS][ROOM_BITS] = {};
+    uint8_t rooms[ROOMS][ROOM_BYTES] = {};
+};
+// Version 1 kept the game's 128 flags per room.
+struct EntryV1 {
+    uint8_t valid = 0;
+    int16_t region = 0;
+    int16_t continues = 0;
+    int16_t continue_point[4] = {};
+    uint32_t region_time = 0;
+    uint8_t game[GAME_BYTES] = {};
+    uint8_t rooms[ROOMS][ROOM_BYTES_V1] = {};
 };
 constexpr uint32_t FILE_MAGIC = 0x4A464741; // "JFGA"
-constexpr uint32_t FILE_VERSION = 1;
+constexpr uint32_t FILE_VERSION = 2;
 
 Entry g_entries[SAVE_SLOTS];
 bool g_loaded = false;
@@ -78,7 +90,24 @@ void load_file() {
     std::ifstream f(file_path(), std::ios::binary);
     uint32_t magic = 0, version = 0;
     if (!f.read(reinterpret_cast<char*>(&magic), 4) || !f.read(reinterpret_cast<char*>(&version), 4)) return;
-    if (magic != FILE_MAGIC || version != FILE_VERSION) return;
+    if (magic != FILE_MAGIC) return;
+    if (version == 1) {
+        EntryV1 old[SAVE_SLOTS];
+        if (!f.read(reinterpret_cast<char*>(old), sizeof(old))) return;
+        for (int i = 0; i < SAVE_SLOTS; i++) {
+            Entry& e = g_entries[i];
+            e = Entry{};
+            e.valid = old[i].valid;
+            e.region = old[i].region;
+            e.continues = old[i].continues;
+            std::memcpy(e.continue_point, old[i].continue_point, sizeof(e.continue_point));
+            e.region_time = old[i].region_time;
+            std::memcpy(e.game, old[i].game, GAME_BYTES);
+            for (int r = 0; r < ROOMS; r++) std::memcpy(e.rooms[r], old[i].rooms[r], ROOM_BYTES_V1);
+        }
+        return;
+    }
+    if (version != FILE_VERSION) return;
     Entry entries[SAVE_SLOTS];
     if (f.read(reinterpret_cast<char*>(entries), sizeof(entries))) std::memcpy(g_entries, entries, sizeof(entries));
 }
@@ -157,8 +186,7 @@ void area_progress_on_save(int slot) {
         for (int i = 0; i < 4; i++) e.continue_point[i] = (int16_t)rd16(ADDR_continuePoint + 2 * i);
         e.region_time = Game::RegionTime::get(game);
         read_game_bytes(game, e.game);
-        for (int r = 0; r < ROOMS; r++)
-            for (int b = 0; b < ROOM_BITS; b++) e.rooms[r][b] = rd8(ADDR_roomFlags + r * ROOM_STRIDE + 1 + b);
+        for (int r = 0; r < ROOMS; r++) std::memcpy(e.rooms[r], room_flags(r), ROOM_BYTES);
         // Resume in this room: the level and the entrance it was entered by, as mainChangeLevel stores it on
         // entering a region.
         const int level = (int16_t)rd16(ADDR_currentLevel), entrance = (int16_t)rd16(ADDR_currentEntrance);
@@ -210,8 +238,7 @@ void restore_area_progress() {
     }
     write_game_bytes(game, e.game);
     Game::RegionTime::set(game, e.region_time);
-    for (int r = 0; r < ROOMS; r++)
-        for (int b = 0; b < ROOM_BITS; b++) wr8(ADDR_roomFlags + r * ROOM_STRIDE + 1 + b, e.rooms[r][b]);
+    for (int r = 0; r < ROOMS; r++) std::memcpy(room_flags(r), e.rooms[r], ROOM_BYTES);
     g_post_pending = true;
     g_post_slot = slot;
     std::fprintf(stderr, "[jfg] area progress: restored for file %d (region %d, %d rescued, %d killed, %u shots)\n", slot + 1, region,

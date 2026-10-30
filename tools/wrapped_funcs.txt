@@ -246,3 +246,9 @@ trackGetHeights
 trackGetBlockList
 func_overlay_24_000001F8_1F41D28
 func_overlay_24_00000CE4_1F42814
+
+# The level object (kill) flags, 256 per room, the port's own versions (jfg_level_flags.cpp; levelObjectFlagSet and
+# levelSetObjectFlag are wrapped in jfg_squad_multiplier.cpp)
+levelInitRegionFlags
+levelGetRegionFlags
+levelGetObjectID
