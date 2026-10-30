@@ -9,7 +9,10 @@
 #   package_release.bat -Publish           the same, but publishes even when the Linux files are not there yet
 #   package_release.bat 1.0.1              builds this checkout as 1.0.1 (writes version.txt) and uploads to v1.0.1 if
 #                                          that release is a draft (a published release is never changed)
-#   package_release.bat 1.0.1 -SkipBuild   packs what is already in bin (no new build)
+#   package_release.bat 1.0.1 -SkipBuild   packs what is already in bin (no new build), with this checkout's CHANGELOG.md
+#
+# It refuses to pack unless build_windows.log has [jfg] BUILD OK and no [jfg] ERROR. It only uploads when CHANGELOG.md's
+# newest section is the version being packed.
 #
 # The .sha256 file is what the launcher's updater checks a download against. Saves, settings, dumps and ROM copies in bin
 # never go into the zip.
@@ -108,6 +111,17 @@ try {
     }
     if (-not (Test-Path (Join-Path $bin "JetForceGeminiRecompiled.exe"))) { throw "bin\JetForceGeminiRecompiled.exe not found. Run build_windows.bat first." }
 
+    # ---- gate: only a finished build is packed (the build's exit code can't be trusted, its log can) ---------------------
+    $log = Join-Path $src "build_windows.log"
+    if (-not (Test-Path $log)) { throw "$log not found: no finished build to pack." }
+    $logText = Get-Content $log -Raw   # (Tee-Object writes it as UTF-16; Get-Content reads either)
+    if ($logText.Contains("[jfg] ERROR")) { throw "$log has a [jfg] ERROR: not packing this build." }
+    if (-not $logText.Contains("[jfg] BUILD OK")) { throw "$log has no [jfg] BUILD OK: not packing this build." }
+
+    # The launcher shows the copy in bin, which only a build refreshes: with -SkipBuild it could be from before the release commit.
+    $changelogSrc = Join-Path $src "CHANGELOG.md"
+    Copy-Item -LiteralPath $changelogSrc -Destination (Join-Path $bin "assets\jfg_launcher\CHANGELOG.md") -Force
+
     # ---- zip ---------------------------------------------------------------------------------------------------------
     $name = "JFG-$Version-windows-x64-portable"
     $dist = Join-Path $root "dist"
@@ -141,6 +155,19 @@ try {
     } finally { $zip.Dispose() }
     Write-Host "Made $zipPath ($([math]::Round((Get-Item $zipPath).Length / 1MB, 1)) MB)"
 
+    # The launcher's changelog in the zip must be this commit's, with this version on top. A test pack ("## Unreleased" on
+    # top) is made, but never uploaded.
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        $reader = New-Object System.IO.StreamReader($zip.GetEntry("$name/assets/jfg_launcher/CHANGELOG.md").Open())
+        try { $zipped = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } finally { $zip.Dispose() }
+    if ($zipped.Trim() -ne ([System.IO.File]::ReadAllText($changelogSrc)).Trim()) { throw "The launcher's CHANGELOG.md in the zip differs from $changelogSrc." }
+    $top = ($zipped -split "`r?`n" | Where-Object { $_ -like "## *" } | Select-Object -First 1)
+    $isRelease = $top -like "## v$Version *"
+    if (-not $isRelease -and $top -ne "## Unreleased") { throw "CHANGELOG.md's newest section is '$top', not v$Version." }
+    if (-not $isRelease) { Write-Warning "CHANGELOG.md's newest section is '$top', not v${Version}: a test pack, it will not be uploaded." }
+
     # The launcher's updater only installs a download whose SHA-256 matches this file, so it is uploaded with the zip.
     $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLower()
     $sumPath = "$zipPath.sha256"
@@ -148,6 +175,7 @@ try {
     Write-Host "SHA-256: $hash"
 
     # ---- upload, and publish once every file is there ----------------------------------------------------------------
+    if (-not $isRelease) { Write-Host "Not uploaded: the zip is in $dist."; exit 0 }
     if (-not (Have-Gh)) { Write-Host "gh (GitHub CLI) is not installed. Add $name.zip and its .sha256 to the $tag release on GitHub by hand."; exit 0 }
     if ((Quiet { gh release view $tag }) -ne 0) { Write-Host "No GitHub release $tag. Merge into main (or run the Release workflow) to make one, then run this again."; exit 0 }
     # Only a draft gets files: a published release is never changed, so a test build cannot replace what players download.
