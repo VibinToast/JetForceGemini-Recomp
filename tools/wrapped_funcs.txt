@@ -245,3 +245,4 @@ trackMakePolylist
 trackGetHeights
 trackGetBlockList
 func_overlay_24_000001F8_1F41D28
+func_overlay_24_00000CE4_1F42814

@@ -15,6 +15,13 @@
 //     tested exactly: its x / z triangle against the query box (2D separating axes, integers, edges included). Only
 //     faces the moving sphere can't reach are dropped; the others keep their order. (JFG_COLLISION_EXACT=1 tests every
 //     level so, =0 none.)
+//   - Seams: the file names the face across each edge only inside its own segment, so the loader makes every edge on
+//     a segment seam a collision edge with an upright plane: an invisible wall or a lip along the seam, and a gap in
+//     the faces' own edge planes. In a pack level, after the track loads, an open edge whose two corners match an open
+//     edge of a face in another segment (in the opposite direction) is linked as the loader links edges inside a
+//     segment: each side's edge plane is rebuilt in place from both faces, the collision edge is kept only where the
+//     faces make a ridge (the first side), and ledges pair up across it. (JFG_COLLISION_SEAMS=0 leaves them, =1 links
+//     them in every level.)
 // A stock level gets exactly the game's results, overflows aside. "Pack level" = its track is a mod's
 // (JFG_COLLISION_PACK=1 treats every level as one, =0 none).
 //
@@ -29,6 +36,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <vector>
 
 #include "jfg_assets.h"
@@ -57,7 +65,8 @@ constexpr uint32_t ADDR_PLno = 0x800F33C4;      // s32: entries in the list
 constexpr uint32_t ADDR_heights = 0x800F2FE8;   // trackGetHeights' results: 20 x 20 bytes
 constexpr uint32_t ADDR_heightPtrs = 0x800F3178; // ... and 20 pointers to them, highest first
 constexpr int HEIGHT_RESULTS = 20, HEIGHT_SIZE = 20;
-constexpr int TRACK_TABLE = 0x24, TRACK_DATA = 0x25; // the tracks' offset table and data assets                // the tracks' data asset
+constexpr int TRACK_TABLE = 0x24, TRACK_DATA = 0x25; // the tracks' offset table and data assets
+constexpr uint32_t ADDR_nohitsflag = 0x800F2F9C; // s32: set, the loader makes no edge planes                // the tracks' data asset
 
 constexpr int STOCK_SEGMENTS = 10, PACK_SEGMENTS = 64;
 constexpr int STOCK_HEIGHT_SEGMENTS = 32, PACK_HEIGHT_SEGMENTS = 256;
@@ -168,6 +177,142 @@ bool exact_on() {
 int poly_list_cap() {
     const uint32_t h = rd32(ADDR_levelHeader);
     return valid_ptr(h) ? LevelHeader::PolyList::get(h) : 0;
+}
+
+// --- seams ---------------------------------------------------------------------------------------------------------------
+constexpr uint32_t GROUP_NO_EDGES = 0x880;      // group flags the loader makes no edge planes for
+constexpr uint8_t FACE_NO_COLLISION = 0x80, FACE_LEDGE_WALL = 0x01, FACE_LEDGE_TOP = 0x02, FACE_STEEP_EDGE = 0x04;
+
+// An edge of a face that the file gave no neighbour (its slot named the face itself).
+struct OpenEdge { uint32_t seg; int t, e, g; int16_t a[3], b[3]; };
+std::vector<OpenEdge> g_open_edges;
+
+// Seams are linked in pack levels (JFG_COLLISION_SEAMS=0: never, =1: in every level).
+bool seams_on() {
+    const char* v = std::getenv("JFG_COLLISION_SEAMS");
+    if (v && (v[0] == '0' || v[0] == '1')) return v[0] == '1';
+    return g_pack;
+}
+
+void read_vertex(uint32_t v, int16_t (&out)[3]) { out[0] = TrackVertex::X::get(v); out[1] = TrackVertex::Y::get(v); out[2] = TrackVertex::Z::get(v); }
+
+// Before the loader's plane pass on a segment (the slots still hold the file's neighbours).
+void note_open_edges(uint32_t seg) {
+    const uint32_t info = TrackSegment::PolyInfo::get(seg), faces = TrackSegment::Faces::get(seg);
+    const int group_count = TrackSegment::BatchCount::get(seg);
+    for (int gi = 0; gi < group_count; gi++) {
+        const Group g = read_group(seg, gi);
+        if (g.flags & GROUP_NO_EDGES) continue;
+        for (int t = g.first; t < g.end; t++) {
+            const uint32_t face = faces + t * TrackFace::Size;
+            if (TrackFace::Flags::get(face) & FACE_NO_COLLISION) continue;
+            const uint32_t pi = info + t * TrackPolyInfo::Size;
+            const uint16_t own = TrackPolyInfo::Plane::get(pi);
+            for (int e = 0; e < 3; e++) {
+                if (TrackPolyInfo::Edge::get(pi, e) != own) continue;
+                OpenEdge o { seg, t, e, gi, {}, {} };
+                read_vertex(vertex_addr(seg, g, face, e), o.a);
+                read_vertex(vertex_addr(seg, g, face, (e + 1) % 3), o.b);
+                g_open_edges.push_back(o);
+            }
+        }
+    }
+}
+
+struct V3 { float x, y, z; };
+V3 sub(V3 a, V3 b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+V3 cross(V3 a, V3 b) { return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x }; }
+float dot(V3 a, V3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+V3 vec(const int16_t (&v)[3]) { return { (float)v[0], (float)v[1], (float)v[2] }; }
+
+struct Plane { V3 n; float d; };
+Plane read_plane(uint32_t seg, int index) {
+    const uint32_t p = TrackSegment::Planes::get(seg) + index * TrackPlane::Size;
+    return { { TrackPlane::NX::get(p), TrackPlane::NY::get(p), TrackPlane::NZ::get(p) }, TrackPlane::D::get(p) };
+}
+void write_plane(uint32_t seg, int index, const Plane& pl) {
+    const uint32_t p = TrackSegment::Planes::get(seg) + index * TrackPlane::Size;
+    TrackPlane::NX::set(p, pl.n.x); TrackPlane::NY::set(p, pl.n.y); TrackPlane::NZ::set(p, pl.n.z); TrackPlane::D::set(p, pl.d);
+}
+Plane face_plane(const OpenEdge& o) {
+    return read_plane(o.seg, TrackPolyInfo::Plane::get(TrackSegment::PolyInfo::get(o.seg) + o.t * TrackPolyInfo::Size));
+}
+uint32_t face_addr(const OpenEdge& o) { return TrackSegment::Faces::get(o.seg) + o.t * TrackFace::Size; }
+uint32_t edge_bits_addr(const OpenEdge& o) { return TrackSegment::EdgeBits::get(o.seg) + o.t; }
+
+// The edge plane of `side`'s edge, from both faces: through the edge and the faces' bisector.
+void rebuild_edge_plane(const OpenEdge& side, const Plane& own, const Plane& other) {
+    const V3 a = vec(side.a), b = vec(side.b);
+    const V3 sum = { 5.0f * (own.n.x + other.n.x), 5.0f * (own.n.y + other.n.y), 5.0f * (own.n.z + other.n.z) };
+    V3 m = cross(sub(b, a), sum);
+    const float len = std::sqrt(dot(m, m));
+    if (len > 0.0f) m = { m.x / len, m.y / len, m.z / len };
+    const uint32_t pi = TrackSegment::PolyInfo::get(side.seg) + side.t * TrackPolyInfo::Size;
+    write_plane(side.seg, TrackPolyInfo::Edge::get(pi, side.e) & 0x7FFF, { m, -dot(m, a) });
+}
+
+// Links `first` (the side the loader would have built the edge from) and `second`.
+void link_seam(const OpenEdge& first, const OpenEdge& second) {
+    const Plane pa = face_plane(first), pb = face_plane(second);
+    rebuild_edge_plane(first, pa, pb);
+    rebuild_edge_plane(second, pb, pa);
+
+    // Ledges: a ledge wall next to a ledge top makes the top's edge a ledge edge.
+    const uint32_t fa = face_addr(first), fb = face_addr(second);
+    const uint8_t flags_a = TrackFace::Flags::get(fa), flags_b = TrackFace::Flags::get(fb);
+    if ((flags_a & FACE_LEDGE_WALL) && (flags_b & FACE_LEDGE_TOP)) {
+        TrackFace::Flags::set(fa, (uint8_t)(flags_a & ~FACE_LEDGE_WALL));
+        wr8(edge_bits_addr(second), (uint8_t)(rd8(edge_bits_addr(second)) | (1u << (second.e + 3))));
+    } else if ((flags_a & FACE_LEDGE_TOP) && (flags_b & FACE_LEDGE_WALL)) {
+        TrackFace::Flags::set(fb, (uint8_t)(flags_b & ~FACE_LEDGE_WALL));
+        wr8(edge_bits_addr(first), (uint8_t)(rd8(edge_bits_addr(first)) | (1u << (first.e + 3))));
+    }
+
+    // The collision edge stays on the first side only where the faces make a ridge (its far corner below the other
+    // face); the second side has none, as for an edge inside a segment.
+    const Group g = read_group(first.seg, first.g);
+    int16_t far[3];
+    read_vertex(vertex_addr(first.seg, g, fa, (first.e + 2) % 3), far);
+    uint8_t bits_a = (uint8_t)(rd8(edge_bits_addr(first)) & ~(1u << first.e));
+    if (dot(pb.n, vec(far)) + pb.d < 0.0f) bits_a |= (uint8_t)(1u << first.e);
+    wr8(edge_bits_addr(first), bits_a);
+    wr8(edge_bits_addr(second), (uint8_t)(rd8(edge_bits_addr(second)) & ~(1u << second.e)));
+
+    // A steep edge: more than 90 degrees between the faces, and the edge no steeper than 45.
+    const float rise = std::fabs((float)first.b[1] - (float)first.a[1]);
+    const float run = std::hypot((float)first.b[0] - (float)first.a[0], (float)first.b[2] - (float)first.a[2]);
+    if (dot(pa.n, pb.n) < 0.0f && rise <= run)
+        TrackFace::Flags::set(fa, (uint8_t)(TrackFace::Flags::get(fa) | (FACE_STEEP_EDGE << first.e)));
+}
+
+// After the track loaded: link the open edges that meet an open edge of another segment.
+void link_seams() {
+    struct Key {
+        int16_t v[6];
+        bool operator<(const Key& o) const { return std::lexicographical_compare(v, v + 6, o.v, o.v + 6); }
+    };
+    std::map<Key, std::vector<size_t>> by_edge;
+    for (size_t i = 0; i < g_open_edges.size(); i++) {
+        const OpenEdge& o = g_open_edges[i];
+        const bool ab = std::lexicographical_compare(o.a, o.a + 3, o.b, o.b + 3);
+        Key k;
+        std::copy(ab ? o.a : o.b, (ab ? o.a : o.b) + 3, k.v);
+        std::copy(ab ? o.b : o.a, (ab ? o.b : o.a) + 3, k.v + 3);
+        by_edge[k].push_back(i);
+    }
+    int linked = 0, unmatched = 0, skipped = 0;
+    for (const auto& [key, list] : by_edge) {
+        if (list.size() == 1) { unmatched++; continue; }
+        const OpenEdge& p = g_open_edges[list[0]];
+        const OpenEdge& q = g_open_edges[list[1]];
+        // Two faces of different segments, along the edge in opposite directions (both facing the same way).
+        if (list.size() != 2 || p.seg == q.seg || std::memcmp(p.a, q.b, sizeof(p.a)) != 0) { skipped++; continue; }
+        if (p.seg < q.seg) link_seam(p, q); else link_seam(q, p);
+        linked++;
+    }
+    std::fprintf(stderr, "[jfg] collision: seams: %d edges linked across segments, %d open edges left, %d not linked (more "
+        "than two faces, one segment or facing apart)\n", linked, unmatched, skipped);
+    g_open_edges.clear();
 }
 
 // --- trackMakePolylist ------------------------------------------------------------------------------------------------
@@ -470,6 +615,13 @@ JFG_WRAP(trackGetBlockList) {
     ctx->r2 = (gpr)n;
 }
 
+// The loader's plane pass on one segment (overlay 24): in a pack level, its open edges are noted first.
+JFG_WRAP(func_overlay_24_00000CE4_1F42814) {
+    g_rdram = rdram;
+    if (seams_on() && rd32(ADDR_nohitsflag) == 0) note_open_edges((uint32_t)ctx->r4);
+    func_overlay_24_00000CE4_1F42814_orig(rdram, ctx);
+}
+
 // The track loader (overlay 24): it allocates the poly and edge lists from the level header's +0xEA / +0xEC, so a
 // pack level's are raised first.
 JFG_WRAP(func_overlay_24_000001F8_1F41D28) {
@@ -483,8 +635,11 @@ JFG_WRAP(func_overlay_24_000001F8_1F41D28) {
         if (LevelHeader::PolyList::get(header) < PACK_POLY_LIST) LevelHeader::PolyList::set(header, PACK_POLY_LIST);
         if (LevelHeader::EdgeList::get(header) < PACK_EDGE_LIST) LevelHeader::EdgeList::set(header, PACK_EDGE_LIST);
     }
+    g_open_edges.clear();
     func_overlay_24_000001F8_1F41D28_orig(rdram, ctx);
     const uint32_t track = rd32(ADDR_track);
+    if (seams_on() && valid_ptr(track) && rd32(ADDR_nohitsflag) == 0) link_seams();
+    g_open_edges.clear();
     std::fprintf(stderr, "[jfg] collision: track %d loaded (%s), %d segments, poly list %d, edge list %d\n", track_id,
         g_pack ? "pack level" : "stock rules", valid_ptr(track) ? (int)Track::SegmentCount::get(track) : -1,
         valid_ptr(header) ? (int)LevelHeader::PolyList::get(header) : -1,
