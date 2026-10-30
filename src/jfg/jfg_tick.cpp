@@ -198,7 +198,8 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     if (update_version.empty() && std::chrono::steady_clock::now() >= update_poll) {
         update_poll = std::chrono::steady_clock::now() + std::chrono::seconds(1);
         JfgUpdateInfo info;
-        if (jfg_update_available(info)) { update_version = info.version; update_seen = std::chrono::steady_clock::now(); }
+        // Not for the way back from a test build (Update Channel: Stable): the launcher offers that.
+        if (jfg_update_available(info) && !info.back_to_stable) { update_version = info.version; update_seen = std::chrono::steady_clock::now(); }
     }
     const float update_t = update_version.empty() ? -1.0f
         : std::chrono::duration<float>(std::chrono::steady_clock::now() - std::max(update_seen, hint_start + std::chrono::seconds(3))).count();

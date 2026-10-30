@@ -913,6 +913,8 @@ static const UpstreamOption upstream_options[] = {
     { "skip_launcher", [] { return jfg_launcher_skip() ? 1 : 0; }, [](int v) { jfg_launcher_set_skip(v != 0); } },
     // "Check for Updates": check_for_updates in the same file; turning it on checks straight away.
     { "check_for_updates", [] { return jfg_launcher_check_updates() ? 1 : 0; }, [](int v) { jfg_launcher_set_check_updates(v != 0); } },
+    // "Update Channel": update_channel in the same file, 0 Stable, 1 Testing (test builds too); the launcher's offer changes at once.
+    { "update_channel", [] { return jfg_launcher_testing_channel() ? 1 : 0; }, [](int v) { jfg_launcher_set_testing_channel(v != 0); } },
     // "Official HD Texture Pack": show_official_pack in the same file; the launcher's Texture Packs page shows the box.
     { "show_official_pack", [] { return jfg_launcher_show_official_pack() ? 1 : 0; }, [](int v) { jfg_launcher_set_show_official_pack(v != 0); } },
     { "joystick_deadzone", [] { return dino::input::get_joystick_deadzone(); }, [](int v) { dino::input::set_joystick_deadzone(v); } },

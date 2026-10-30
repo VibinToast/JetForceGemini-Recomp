@@ -5,6 +5,10 @@ are written here by hand and become that version's notes when it is released.
 
 ## Unreleased
 
+### New options
+
+- Update Channel (General, next to Check for Updates): Testing also offers test builds, so you can try a fix before it is released. Switching back to Stable offers the latest release again, even if it is older than the test build. Your saves, settings and mods are kept.
+
 ### Changes
 
 - Simpler settings: Frame Interpolation is now called Display Frame Rate (your setting is kept). Game Frame Rate, the fly camera's settings (F7) and the over-the-shoulder aiming sliders are hidden until you turn on Show Advanced Options (General tab, above Language); they then show in their usual places.

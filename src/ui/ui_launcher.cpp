@@ -24,8 +24,11 @@ static std::string version_string;
 // A newer release exists (src/jfg/jfg_update_check.cpp): a banner on the Play page and a warning triangle next to the
 // version open the dialog with what is new and a confirmation, and the update is then downloaded and installed. The dialog
 // does not open by itself. bin\jfg_launcher.txt can turn the check off (check_for_updates=0).
+// update_test: it is a test build (Update Channel: Testing); update_back: this is a test build on the Stable channel and
+// the offer goes back to the latest release.
 static bool update_available = false, update_dialog = false, update_can_install = false, update_restarting = false;
-static std::string update_version, update_changelog, update_status, update_unavailable, changelog_text;
+static bool update_test = false, update_back = false;
+static std::string update_version, update_changelog, update_status, update_unavailable, update_page, changelog_text;
 static bool changelog_dialog = false;
 static int update_stage = 0, update_percent = 0;
 // Dialogs take the focus when they open (controller players have no other way in) and give it back when they close.
@@ -470,24 +473,25 @@ void jfg_launcher_ui_tick() {
         pending_focus_id.clear();
     }
     // "Check for Updates" turned off (General page): the banner and the triangle go; turned on, they come once found.
-    if (model_handle && update_available && !jfg_launcher_check_updates() && !update_dialog) {
-        update_available = false;
-        model_handle.DirtyVariable("update_available");
-    }
-    if (model_handle && !update_available && jfg_launcher_check_updates()) {
+    // What is offered is read again when the check finishes or the Update Channel changes (not while the dialog is open).
+    static int update_serial = -1;
+    static bool update_checking = false;
+    if (model_handle && !update_dialog && (jfg_update_serial() != update_serial || jfg_launcher_check_updates() != update_checking)) {
+        update_serial = jfg_update_serial();
+        update_checking = jfg_launcher_check_updates();
         JfgUpdateInfo info;
-        if (jfg_update_available(info)) {
-            update_available = true;
-            update_version = info.version;
-            update_changelog = jfg_changelog_rml(info.changelog, version_string);
-            update_can_install = info.can_install;
-            update_unavailable = info.unavailable;
-            model_handle.DirtyVariable("update_available");
-            model_handle.DirtyVariable("update_version");
-            model_handle.DirtyVariable("update_changelog");
-            model_handle.DirtyVariable("update_can_install");
-            model_handle.DirtyVariable("update_unavailable");
-        }
+        update_available = update_checking && jfg_update_available(info);
+        update_version = info.version;
+        update_changelog = update_available ? jfg_changelog_rml(info.changelog, version_string) : std::string();
+        update_can_install = info.can_install;
+        update_unavailable = info.unavailable;
+        update_test = info.test_build;
+        update_back = info.back_to_stable;
+        // A test build's own page (it is not "latest"); a release's: the latest release.
+        update_page = std::string("https://github.com/VibinToast/JetForceGemini-Recomp/releases/") + (update_test ? "tag/v" + update_version : "latest");
+        for (const char* name : { "update_available", "update_version", "update_changelog", "update_can_install", "update_unavailable",
+                                  "update_test", "update_back", "update_page" })
+            model_handle.DirtyVariable(name);
     }
     if (model_handle && update_dialog) {
         const JfgUpdateProgress progress = jfg_update_progress();
@@ -721,9 +725,12 @@ public:
 
         constructor.Bind("rom_valid", &rom_valid);
 
-        version_string = recomp::get_project_version().to_string();
+        version_string = jfg_update_current_version(recomp::get_project_version().to_string()); // with a test build's tag
         constructor.Bind("version_number", &version_string);
         constructor.Bind("update_available", &update_available);
+        constructor.Bind("update_test", &update_test);
+        constructor.Bind("update_back", &update_back);
+        constructor.Bind("update_page", &update_page);
         constructor.Bind("update_version", &update_version);
         constructor.Bind("update_dialog", &update_dialog);
         constructor.Bind("update_changelog", &update_changelog);
