@@ -475,7 +475,7 @@ PROFILES = '''<template name="config-menu__jfg_profiles">
                 <div class="config__wrapper jfg-desc">
                     <div class="jfg-desc__card"><div class="jfg-desc__title">Profiles</div>
                         <p>Choosing one resets every setting to the original game, then applies the profile; you see what changes first.</p>
-                        <p><b>Default</b>: the original game.<br/><b>Modern</b>: modern controls and visuals, 60 fps.<br/><b>Modern and Balanced</b>: plus rebalanced weapons.<br/><b>Extreme</b>: everything turned up.</p>
+                        <p><b>Original</b>: the original game.<br/><b>Modern</b>: modern controls and visuals, 60 fps.<br/><b>Modern and Balanced</b>: plus rebalanced weapons.<br/><b>Extreme</b>: everything turned up.</p>
                         <p>The Modern ones use their own button layout.<br/>Turn on <b>Keep My Controls</b> to keep yours.</p>
                         <p>Your own are saved in the profiles folder. Not included: cheats, textures, volume, controller, display, bindings.</p></div>
                 </div>

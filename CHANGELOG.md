@@ -8,6 +8,8 @@ are written here by hand and become that version's notes when it is released.
 ### Changes
 
 - Simpler settings: Frame Interpolation is now called Display Frame Rate (your setting is kept). Game Frame Rate, the fly camera's settings (F7) and the over-the-shoulder aiming sliders are hidden until you turn on Show Advanced Options (General tab, above Language); they then show in their usual places.
+- New players start on the Modern profile. If you already have settings, nothing changes.
+- The Default profile is now called Original.
 
 ## v1.2.4 (2026-10-25)
 

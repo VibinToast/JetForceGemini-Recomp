@@ -1,8 +1,8 @@
 // Jet Force Gemini port: profiles - whole sets of settings (Options and Weapons tabs) to switch between.
 //
 // The current settings stay in jfg_port_options.txt and jfg_weapons.txt; choosing a profile resets every setting to
-// the game's own behaviour and then applies the profile's values. Built-in profiles: Default (the original game),
-// Modern, Modern and Balanced, Extreme. Player profiles are bin\profiles\<name>.txt (option lines, and weapon lines with "weapon." in front)
+// the game's own behaviour and then applies the profile's values. Built-in profiles: Original (the original game;
+// "Default" before 1.3), Modern, Modern and Balanced, Extreme. A new player starts on Modern (start_new_player_profile). Player profiles are bin\profiles\<name>.txt (option lines, and weapon lines with "weapon." in front)
 // and follow changes made while they are active. The active profile's name is kept in jfg_profile.txt.
 // Not part of profiles: cheats, the texture pack choice, texture dumping and the language.
 #include <algorithm>
@@ -32,8 +32,8 @@ constexpr const char* PROFILE_CHOICE_FILE = "jfg_profile.txt";
 const BuiltinProfile BUILTIN_PROFILES[] = {
     // Every profile starts from State's defaults (jfg_options.h): Auto Save on, Keep Area Progress and Permanent Tribal
     // Saves off, so the other profiles and the player's own (also ones saved before these options existed) auto save.
-    // Default is the original game: no auto save.
-    { "Default", "The original game, as it played on the N64.", "start_skips_cutscenes=0\nauto_save=0\nfast_pause=0\n" },
+    // Original is the original game: no auto save.
+    { "Original", "The original game, as it played on the N64.", "start_skips_cutscenes=0\nauto_save=0\nfast_pause=0\n" },
     { "Modern", "Modern controls and visuals, smoothed to 60 fps with Display Frame Rate, with the original weapons and gameplay. Its dual-stick controls use the "
                 "Built-in Button Layout in place of your controller bindings.",
       "start_skips_cutscenes=1\nshow_fps=0\nwidescreen=1\nhud_corners=1\nframe_rate=0\nsmooth_motion=60\nshow_level=0\nshow_pack=0\ndump_by_level=0\n"
@@ -98,7 +98,6 @@ const BuiltinProfile BUILTIN_PROFILES[] = {
 };
 
 std::string g_active_profile;          // "" = none chosen (the settings as they are)
-std::string g_profile_snapshot;        // settings right after the active profile was applied (to show "changed")
 bool g_profile_loaded = false;
 bool g_profile_keep_controls = false; // Keep My Controls: choosing a profile leaves the Controls tab's settings as they are
 char g_new_profile_name[48] = {};
@@ -146,18 +145,19 @@ void save_profile_choice() {
 void load_profile_choice() {
     if (g_profile_loaded) return;
     g_profile_loaded = true;
+    load_options(); // the launcher's Profiles page can ask before anything loaded the settings
     if (std::FILE* f = std::fopen(PROFILE_CHOICE_FILE, "r")) {
         char line[64] = {};
         if (std::fgets(line, sizeof(line), f)) {
             g_active_profile = line;
             while (!g_active_profile.empty() && (g_active_profile.back() == '\n' || g_active_profile.back() == '\r')) g_active_profile.pop_back();
+            if (g_active_profile == "Default") g_active_profile = "Original"; // its name before 1.3
         }
         while (std::fgets(line, sizeof(line), f)) {
             if (std::strncmp(line, "keep_controls=", 14) == 0) g_profile_keep_controls = std::atoi(line + 14) != 0;
         }
         std::fclose(f);
     }
-    g_profile_snapshot = settings_snapshot();
 }
 
 void set_profile_keep_controls(bool keep) {
@@ -255,6 +255,15 @@ ProfilePreview preview_profile(const std::string& name) {
     return p;
 }
 
+// Whether the settings differ from the active built-in profile's ("Settings changed since choosing it"): choosing it
+// again would change something. Worked out from the profile itself, so it holds across restarts. Weapons not counted.
+bool builtin_profile_changed() {
+    load_profile_choice();
+    if (builtin_profile(g_active_profile) == nullptr) return false;
+    const ProfilePreview p = preview_profile(g_active_profile);
+    return !p.controls.empty() || p.other_changes > 0;
+}
+
 // The preview as lines for a prompt; "" when the profile changes nothing.
 std::string profile_preview_text(const std::string& name) {
     const ProfilePreview p = preview_profile(name);
@@ -333,6 +342,16 @@ void write_user_profile(const std::string& name) {
     }
 }
 
+// A new player (no jfg_port_options.txt and no jfg_profile.txt next to the game: nothing saved yet) starts on Modern.
+// Called by load_options before it reads the options file, so a player who has saved settings keeps them.
+bool start_new_player_profile() {
+    std::error_code ec;
+    if (std::filesystem::exists(PROFILE_CHOICE_FILE, ec) || std::filesystem::exists("jfg_port_options.txt", ec)) return false;
+    choose_profile("Modern");
+    g_profile_message.clear(); // not "Profile applied": the player chose nothing
+    return true;
+}
+
 void choose_profile(const std::string& name) {
     const std::string text = profile_text(name);
     g_active_profile = "";              // no autosave into the profile while it is being applied
@@ -341,7 +360,6 @@ void choose_profile(const std::string& name) {
     { std::lock_guard<std::recursive_mutex> lock(g_weapon_mutex); if (g_weapon_orig_read) save_weapons(); }
     g_active_profile = name;
     save_profile_choice();
-    g_profile_snapshot = settings_snapshot();
     g_profile_message = "Profile \"" + name + "\" applied.";
 }
 
@@ -355,7 +373,6 @@ bool valid_profile_name(const std::string& name) {
 void profile_autosave() {
     if (g_active_profile.empty() || builtin_profile(g_active_profile) != nullptr) return;
     write_user_profile(g_active_profile);
-    g_profile_snapshot = settings_snapshot();
 }
 
 void draw_profiles() {
@@ -366,7 +383,7 @@ void draw_profiles() {
                        "texture dumping are not part of profiles.");
     ImGui::Spacing();
 
-    const bool changed = settings_snapshot() != g_profile_snapshot;
+    const bool changed = builtin_profile_changed();
     std::string label = g_active_profile.empty() ? std::string("(none - your own settings)") : g_active_profile;
     if (changed && !g_active_profile.empty() && builtin_profile(g_active_profile)) label += "  (changed)";
     ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.6f, ImGui::GetFontSize() * 22.0f));
@@ -447,7 +464,6 @@ void draw_profiles() {
         write_user_profile(new_name);
         g_active_profile = new_name;
         save_profile_choice();
-        g_profile_snapshot = settings_snapshot();
         list_user_profiles();
         g_profile_message = "Saved profile \"" + new_name + "\".";
         g_new_profile_name[0] = 0;
