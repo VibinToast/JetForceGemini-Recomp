@@ -8,6 +8,7 @@ are written here by hand and become that version's notes when it is released.
 ### Fixes
 
 - Get Mods: a controller can now move down from the tags to the list of mods.
+- Get Mods: removing or updating a mod no longer fails because its file is in use.
 
 ## v1.3.0 (2026-10-30)
 
