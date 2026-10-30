@@ -83,6 +83,7 @@ std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& data); // jfg_defla
 int asset_number(const std::string& ref);
 bool mod_region(int region, std::string* name, std::string* world);
 bool appended_entry(int data_asset, int entry, std::string* owner);
+bool mod_entry(int data_asset, int entry);
 void read_baddy_patches(const nlohmann::json& j, const std::string& id, size_t order); // jfg_baddies.cpp
 void activate_baddy_patches();
 void read_player_bodies(const nlohmann::json& j, const std::string& id); // jfg_cut_enemies.cpp
@@ -1058,6 +1059,11 @@ bool jfg::appended_entry(int data_asset, int entry, std::string* owner) {
     if (it == g_entry_owner.end()) return false;
     if (owner) *owner = it->second;
     return true;
+}
+
+// True when a mod gave `entry` of a set (appended or replaced it, or replaced the whole set).
+bool jfg::mod_entry(int data_asset, int entry) {
+    return g_entry_owner.count({ data_asset, entry }) != 0 || g_asset_owner.count(data_asset) != 0;
 }
 
 // The number an appended entry got this start ("mod_id:append name"), or -1 (jfg_launch: --start-level by name).

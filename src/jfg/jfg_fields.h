@@ -319,6 +319,9 @@ constexpr uint32_t Size = 0x4C;
 namespace LevelHeader {
 using Region   = Field<uint8_t, 0x102>;
 using Room     = Field<uint8_t, 0x103>; // the room it is in its region
+using Track    = Field<int16_t, 0x54>;  // the track it loads (data asset 0x25)
+using PolyList = Field<int16_t, 0xEA>;  // entries of the track poly list (jfg_collision.cpp)
+using EdgeList = Field<int16_t, 0xEC>;  // entries of the track edge list
 }
 
 // The game's progress flags (ADDR_globalflags); the flag numbers each word holds.
@@ -361,15 +364,32 @@ namespace Scheduler {
 using FrameCount = Field<uint32_t, 0x300>; // retraces since the last "frame done"
 }
 
-// The level's geometry (debug code only).
+// The level's geometry (rd32(ADDR_track)); jfg_collision.cpp has the collision side (decomp MSR 16).
 namespace Track {
+using Textures     = Field<uint32_t, 0x00>; // 8 bytes per texture; +0x07 the s8 surface type
 using Segments     = Field<uint32_t, 0x04>; // TrackSegment[SegmentCount]
+using Bounds       = Field<uint32_t, 0x08>; // TrackBounds[SegmentCount]
 using SegmentCount = Field<int16_t, 0x1A>;
+}
+namespace TrackBounds { // s16 min x, y, z, max x, y, z
+using MinX = Field<int16_t, 0x00>;
+using MinY = Field<int16_t, 0x02>;
+using MinZ = Field<int16_t, 0x04>;
+using MaxX = Field<int16_t, 0x06>;
+using MaxY = Field<int16_t, 0x08>;
+using MaxZ = Field<int16_t, 0x0A>;
+constexpr uint32_t Size = 12;
 }
 namespace TrackSegment {
 using Verts      = Field<uint32_t, 0x00>; // TrackVertex[]
 using Faces      = Field<uint32_t, 0x04>; // TrackFace[]
 using Batches    = Field<uint32_t, 0x0C>; // TrackBatch[BatchCount + 1]
+using XZCells    = Field<uint32_t, 0x10>; // u32 per face: X cells (bits 0-15) and Z cells (16-31) it is filed in
+using YCells     = Field<uint32_t, 0x14>; // u8 per face: Y cells
+using PolyInfo   = Field<uint32_t, 0x18>; // TrackPolyInfo per face
+using Planes     = Field<uint32_t, 0x1C>; // TrackPlane[]: face planes, then edge planes
+using EdgeBits   = Field<uint32_t, 0x20>; // u8 per face: bits 0-2 collision edges, 3-5 ledge edges
+using FaceCount  = Field<int16_t, 0x26>;
 using BatchCount = Field<int16_t, 0x28>;
 constexpr uint32_t Size = 0x48;
 }
@@ -381,8 +401,21 @@ using Flags      = Field<uint32_t, 0x0C>;
 constexpr uint32_t Size = 0x10;
 }
 namespace TrackFace {
+using Flags  = Field<uint8_t, 0x00>;      // 0x80 no collision, 0x01 ledge wall, 0x02 ledge top, 0x04 << e steep edge e
 using Vertex = ArrayField<uint8_t, 0x01>; // [3]
 constexpr uint32_t Size = 0x10;
+}
+namespace TrackPolyInfo {
+using Plane = Field<uint16_t, 0x00>;      // its own (face) plane
+using Edge  = ArrayField<uint16_t, 0x02>; // [3]: the plane of edge e (bit 0x8000: negated); in the file, the face across it
+constexpr uint32_t Size = 8;
+}
+namespace TrackPlane { // n . P + d = 0
+using NX = Field<float, 0x00>;
+using NY = Field<float, 0x04>;
+using NZ = Field<float, 0x08>;
+using D  = Field<float, 0x0C>;
+constexpr uint32_t Size = 16;
 }
 namespace TrackVertex {
 using X = Field<int16_t, 0x00>;
