@@ -11,6 +11,10 @@ are written here by hand and become that version's notes when it is released.
 - New players start on the Modern profile. If you already have settings, nothing changes.
 - The Default profile is now called Original.
 
+### Fixes
+
+- Customize Buttons: the note about the Built-in Button Layout no longer covers the first binding row, Use My Bindings stays inside the panel, and a controller can reach it.
+
 ## v1.2.4 (2026-10-25)
 
 ### Fixes
