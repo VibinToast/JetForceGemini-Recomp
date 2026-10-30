@@ -686,6 +686,23 @@ public:
                         return;
                     }
                 }
+                // Get Mods, down from a tag: automatic navigation doesn't look inside the scrolling list of cards (it found
+                // the sidebar below it), so the last row of tags leads to the chosen mod's card. Tags can wrap onto more rows.
+                if (key == Rml::Input::KeyIdentifier::KI_DOWN && launcher_page == "store") {
+                    Rml::Element* tag = event.GetTargetElement();
+                    if (tag == nullptr || !tag->IsClassSet("st-chip--tag")) return;
+                    const float bottom = tag->GetAbsoluteTop() + tag->GetOffsetHeight();
+                    bool row_below = false;
+                    Rml::Element* row = tag->GetParentNode();
+                    for (int i = 0; i < row->GetNumChildren(); i++) {
+                        Rml::Element* other = row->GetChild(i);
+                        if (other->IsClassSet("st-chip--tag") && other->GetAbsoluteTop() >= bottom) row_below = true;
+                    }
+                    if (row_below) tag->SetProperty(Rml::PropertyId::NavDown, Rml::Style::Nav::Auto);
+                    else if (store_rows.empty()) tag->SetProperty(Rml::PropertyId::NavDown, Rml::Style::Nav::None);
+                    else tag->SetProperty(Rml::PropertyId::NavDown, Rml::Property{ store_sel_card, Rml::Unit::STRING });
+                    return;
+                }
                 if (key != Rml::Input::KeyIdentifier::KI_ESCAPE) return;
                 if (changelog_dialog) {
                     close_changelog_dialog();
