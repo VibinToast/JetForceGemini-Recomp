@@ -740,7 +740,9 @@ void ModMenu::create_mod_list() {
 
     if (!mod_entry_buttons.empty()) {
         mod_entry_buttons.front()->set_nav_manual(NavDirection::Up, mod_tab_id);
-        mod_entry_buttons.back()->set_nav(NavDirection::Down, install_mods_button);
+        // JFG PORT: down stops at the last mod. It went on to Install Mods, and from there automatic navigation found the
+        // launcher's sidebar and went round to its top. The buttons below are reached from Configure and the On/Off switch.
+        mod_entry_buttons.back()->set_nav_none(NavDirection::Down);
         install_mods_button->set_nav(NavDirection::Up, mod_entry_buttons.back());
     }
     else {
@@ -869,6 +871,7 @@ ModMenu::ModMenu(Element *parent) : Element(parent) {
             Button* configure_button = mod_details_panel->get_configure_button();
             install_mods_button = context.create_element<Button>(footer_container, "Install Mods", recompui::ButtonStyle::Primary);
             install_mods_button->add_pressed_callback([this](){ open_install_dialog(); });
+            install_mods_button->set_nav_none(NavDirection::Down); // JFG PORT: nothing below (see the list's last mod)
 
             ingame_note = context.create_element<Label>(footer_container, "Mods can be installed and changed from the launcher.", LabelStyle::Small);
             ingame_note->set_color(Color{ COL_TEXT_DIM, 255 });
@@ -880,11 +883,13 @@ ModMenu::ModMenu(Element *parent) : Element(parent) {
             refresh_button = context.create_element<Button>(footer_container, "Refresh", recompui::ButtonStyle::Primary);
             refresh_button->add_pressed_callback([this](){ refresh_mods(true); mark_other_mod_menus_dirty(this); });
             refresh_button->set_nav_manual(NavDirection::Up, mod_tab_id);
+            refresh_button->set_nav_none(NavDirection::Down); // JFG PORT
 
             mods_folder_button = context.create_element<Button>(footer_container, "Open Mods Folder", recompui::ButtonStyle::Primary);
             mods_folder_button->add_pressed_callback([this](){ open_mods_folder(); });
             mods_folder_button->set_nav(NavDirection::Up, configure_button);
             mods_folder_button->set_nav_manual(NavDirection::Up, mod_tab_id);
+            mods_folder_button->set_nav_none(NavDirection::Down); // JFG PORT
         } // footer_container
     } // this
     
