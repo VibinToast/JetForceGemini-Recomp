@@ -3,7 +3,7 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
-## Unreleased
+## v1.3.0 (2026-10-30)
 
 **Linux players on 1.2.x:** download this release by hand once. The repository was renamed to JetForceGemini-Recompiled and the old update check can't see the new name; from 1.3 on it works as usual.
 
