@@ -1,24 +1,25 @@
-# Builds the Windows release and uploads it to GitHub. Run it through package_release.bat. Needs the GitHub CLI (gh),
+# Builds the Windows release and uploads it to its draft on GitHub. It never publishes: only the owner does, on GitHub. Run it through package_release.bat. Needs the GitHub CLI (gh),
 # signed in (gh auth login), for anything that talks to GitHub. See RELEASING.md in the owner's Recomp-Docs notes.
 #
 #   package_release.bat                    finds the draft release waiting for a Windows build (made by the Release workflow
 #                                          when something is merged into main), builds that release's exact commit in
 #                                          dist\src-vX.Y.Z (your own checkout, changes and bin folder are not touched),
-#                                          uploads JFG-X.Y.Z-windows-x64-portable.zip and its .sha256, and publishes the
-#                                          release once the Linux files are there too
-#   package_release.bat -Publish           the same, but publishes even when the Linux files are not there yet
+#                                          uploads JFG-X.Y.Z-windows-x64-portable.zip and its .sha256 to the draft
 #   package_release.bat 1.0.1              builds this checkout as 1.0.1 (writes version.txt) and uploads to v1.0.1 if
 #                                          that release is a draft (a published release is never changed)
-#   package_release.bat 1.0.1 -SkipBuild   packs what is already in bin (no new build)
+#   package_release.bat 1.0.1 -SkipBuild   packs what is already in bin (no new build), with this checkout's CHANGELOG.md
+#
+# It refuses to pack unless build_windows.log has [jfg] BUILD OK and no [jfg] ERROR. It only uploads when CHANGELOG.md's
+# newest section is the version being packed.
 #
 # The .sha256 file is what the launcher's updater checks a download against. Saves, settings, dumps and ROM copies in bin
 # never go into the zip.
-param([string]$Version = "", [switch]$SkipBuild, [switch]$Publish)
+param([string]$Version = "", [switch]$SkipBuild)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $rom = if ($env:JFG_ROM) { $env:JFG_ROM } else { Join-Path $root "baserom.us.z64" }
 
-# Every file a release needs before it is published. Keep in step with tools/package_release.sh.
+# Every file a release needs before the owner publishes it. Keep in step with tools/package_release.sh.
 function Release-Files([string]$v) {
     "JFG-$v-windows-x64-portable.zip", "JFG-$v-windows-x64-portable.zip.sha256",
     "JFG-$v-linux-x86_64.AppImage", "JFG-$v-linux-x86_64.AppImage.sha256",
@@ -52,12 +53,6 @@ try {
             $info = Gh-Json @("release", "view", $d.tagName, "--json", "tagName,assets,targetCommitish")
             $v = $info.tagName.TrimStart("v")
             if (@($info.assets | ForEach-Object { $_.name }) -notcontains "JFG-$v-windows-x64-portable.zip") { $tag = $info.tagName; $commit = $info.targetCommitish; break }
-        }
-        if (-not $tag -and $Publish -and $drafts.Count) {
-            & gh release edit $drafts[0].tagName --draft=false
-            if ($LASTEXITCODE -ne 0) { throw "Publishing $($drafts[0].tagName) failed." }
-            Write-Host "Published $($drafts[0].tagName)."
-            exit 0
         }
         if (-not $tag) {
             if ($drafts.Count) { Write-Host "The draft release $($drafts[0].tagName) already has its Windows build." }
@@ -108,6 +103,17 @@ try {
     }
     if (-not (Test-Path (Join-Path $bin "JetForceGeminiRecompiled.exe"))) { throw "bin\JetForceGeminiRecompiled.exe not found. Run build_windows.bat first." }
 
+    # ---- gate: only a finished build is packed (the build's exit code can't be trusted, its log can) ---------------------
+    $log = Join-Path $src "build_windows.log"
+    if (-not (Test-Path $log)) { throw "$log not found: no finished build to pack." }
+    $logText = Get-Content $log -Raw   # (Tee-Object writes it as UTF-16; Get-Content reads either)
+    if ($logText.Contains("[jfg] ERROR")) { throw "$log has a [jfg] ERROR: not packing this build." }
+    if (-not $logText.Contains("[jfg] BUILD OK")) { throw "$log has no [jfg] BUILD OK: not packing this build." }
+
+    # The launcher shows the copy in bin, which only a build refreshes: with -SkipBuild it could be from before the release commit.
+    $changelogSrc = Join-Path $src "CHANGELOG.md"
+    Copy-Item -LiteralPath $changelogSrc -Destination (Join-Path $bin "assets\jfg_launcher\CHANGELOG.md") -Force
+
     # ---- zip ---------------------------------------------------------------------------------------------------------
     $name = "JFG-$Version-windows-x64-portable"
     $dist = Join-Path $root "dist"
@@ -141,13 +147,27 @@ try {
     } finally { $zip.Dispose() }
     Write-Host "Made $zipPath ($([math]::Round((Get-Item $zipPath).Length / 1MB, 1)) MB)"
 
+    # The launcher's changelog in the zip must be this commit's, with this version on top. A test pack ("## Unreleased" on
+    # top) is made, but never uploaded.
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        $reader = New-Object System.IO.StreamReader($zip.GetEntry("$name/assets/jfg_launcher/CHANGELOG.md").Open())
+        try { $zipped = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } finally { $zip.Dispose() }
+    if ($zipped.Trim() -ne ([System.IO.File]::ReadAllText($changelogSrc)).Trim()) { throw "The launcher's CHANGELOG.md in the zip differs from $changelogSrc." }
+    $top = ($zipped -split "`r?`n" | Where-Object { $_ -like "## *" } | Select-Object -First 1)
+    $isRelease = $top -like "## v$Version *"
+    if (-not $isRelease -and $top -ne "## Unreleased") { throw "CHANGELOG.md's newest section is '$top', not v$Version." }
+    if (-not $isRelease) { Write-Warning "CHANGELOG.md's newest section is '$top', not v${Version}: a test pack, it will not be uploaded." }
+
     # The launcher's updater only installs a download whose SHA-256 matches this file, so it is uploaded with the zip.
     $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLower()
     $sumPath = "$zipPath.sha256"
     [System.IO.File]::WriteAllText($sumPath, "$hash  $name.zip`n")
     Write-Host "SHA-256: $hash"
 
-    # ---- upload, and publish once every file is there ----------------------------------------------------------------
+    # ---- upload to the draft; its draft state is never changed here ------------------------------------------------
+    if (-not $isRelease) { Write-Host "Not uploaded: the zip is in $dist."; exit 0 }
     if (-not (Have-Gh)) { Write-Host "gh (GitHub CLI) is not installed. Add $name.zip and its .sha256 to the $tag release on GitHub by hand."; exit 0 }
     if ((Quiet { gh release view $tag }) -ne 0) { Write-Host "No GitHub release $tag. Merge into main (or run the Release workflow) to make one, then run this again."; exit 0 }
     # Only a draft gets files: a published release is never changed, so a test build cannot replace what players download.
@@ -156,19 +176,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Uploading to $tag failed." }
     Write-Host "Uploaded to the GitHub release $tag."
 
-    $info = Gh-Json @("release", "view", $tag, "--json", "isDraft,assets")
-    if ($info.isDraft) {
-        $have = @($info.assets | ForEach-Object { $_.name })
-        $missing = @(Release-Files $Version | Where-Object { $have -notcontains $_ })
-        if ($missing.Count -and -not $Publish) {
-            Write-Host "$tag stays a draft until these are uploaded too (tools/package_release.sh on Linux):"
-            $missing | ForEach-Object { Write-Host "  $_" }
-            Write-Host "To publish it without them: package_release.bat -Publish, or gh release edit $tag --draft=false"
-        } else {
-            & gh release edit $tag --draft=false
-            if ($LASTEXITCODE -ne 0) { throw "Publishing $tag failed." }
-            Write-Host "Published $tag : $((Gh-Json @("release", "view", $tag, "--json", "url")).url)"
-        }
+    $have = @((Gh-Json @("release", "view", $tag, "--json", "assets")).assets | ForEach-Object { $_.name })
+    $missing = @(Release-Files $Version | Where-Object { $have -notcontains $_ })
+    if ($missing.Count) {
+        Write-Host "$tag is a draft and still needs these (tools/package_release.sh on Linux):"
+        $missing | ForEach-Object { Write-Host "  $_" }
+    } else {
+        Write-Host "$tag has every file and stays a draft: only the owner publishes it."
     }
     if ($worktree) { [void](Quiet { git worktree remove --force $worktree }) }
 } finally { Pop-Location }

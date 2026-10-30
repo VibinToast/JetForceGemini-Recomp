@@ -3,7 +3,7 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
-## v1.3.0 (2026-10-30)
+## v1.3.1 (2026-10-30)
 
 **Linux players on 1.2.x:** download this release by hand once. The repository was renamed to JetForceGemini-Recompiled and the old update check can't see the new name; from 1.3 on it works as usual.
 
@@ -36,6 +36,10 @@ are written here by hand and become that version's notes when it is released.
 - The logo now says Recompiled.
 - The settings menu reopens on the page you left, and B goes back.
 - Jetpack Refuel Speed is 300% in the Modern, Modern and Balanced and Extreme profiles.
+- Auto Save no longer saves during boss fights; a save that comes due waits for the next level.
+- Keep the Reticle Centered off now works with a controller while Mouse and Keyboard Controls are on, in boss fights too; the mouse still turns the view directly.
+- Profiles: Sprint is on in Modern, Modern and Balanced and Extreme (the left stick click sprints, B still crouches). Extreme also gets three times Floyd's fuel and the fixed sniper zoom. Choose a profile again to get these.
+- Get Mods: publishing a new mod can no longer stop the mod list from loading.
 
 ### Fixes
 
