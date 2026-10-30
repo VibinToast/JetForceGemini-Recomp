@@ -8,8 +8,8 @@
 //
 // The auto save makes the same request: a few seconds after arriving in a level, and (optionally) every few minutes of
 // play. Only when a manual save would also be possible and sensible: single-player gameplay, not paused, no cutscene,
-// race, Floyd mission or level change under way, the character alive, and the file has a valid slot. Any save the game
-// makes itself restarts the timer.
+// race, Floyd mission or level change under way, not a boss fight, the character alive, and the file has a valid slot.
+// Any save the game makes itself restarts the timer.
 //
 // The slot byte alone does not show that a file is in play: after start-up it reads 0 (file 1) whatever was chosen, so
 // a warp from the title screen (F9, JFG_DEBUG_WARP) would save over file 1. The file-select screen (overlay 42) reads
@@ -48,6 +48,13 @@ using clock = std::chrono::steady_clock;
 bool g_file_in_play = false;   // a file was chosen (character select reached) or saved, see above
 bool g_port_warped = false;    // the port warped in from outside gameplay since the file-select menus
 
+// The levels holding the game's boss setup object: a save never lands mid-fight, and the save due when one is entered
+// is made in the next level. boss_control_active covers anything else fought with a boss control (a mod's level).
+bool in_boss_fight() {
+    const int level = (int16_t)rd16(ADDR_currentLevel);
+    return level == 181 || level == 195 || level == 210 || level == 233 || level == 386 || boss_control_active();
+}
+
 // The save file the game is played from, or a negative reason when a save now would not be one a player could make.
 int save_slot(recomp_context* ctx) {
     if (rd32(ADDR_mainGameMode) != 0 || rd8(ADDR_pauseMode) != 0) return -1; // front end, multiplayer, paused
@@ -55,6 +62,7 @@ int save_slot(recomp_context* ctx) {
     if (rd8(ADDR_robotMission) != 0 || rd8(ADDR_racingInGame) != 0) return -3;
     if (rd16(ADDR_currentLevel) != rd16(ADDR_nextLevel)) return -4; // a level change is under way
     if (rd32(ADDR_load_save_flags) != 0) return -5;                  // the game is saving or loading this tick
+    if (in_boss_fight()) return -10;
     const uint32_t game = rd32(ADDR_gameplay);
     if (!valid_ptr(game)) return -6;
     const int slot = Game::SaveSlot::get(game);
