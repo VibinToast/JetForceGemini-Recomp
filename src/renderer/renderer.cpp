@@ -39,6 +39,9 @@ extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_frame_rate.cpp: "Fra
 #include "config/config.hpp"
 #include "debug_ui/debug_ui.hpp"
 #include "debug_ui/backend.hpp"
+#ifdef __ANDROID__
+#include "common/sdl.hpp"
+#endif
 #include "ui/recomp_ui.h"
 #include "concurrentqueue.h"
 
@@ -312,7 +315,15 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
     RT64::Application::Core appCore{};
 #if defined(_WIN32)
     appCore.window = window_handle.window;
-#elif defined(__linux__) || defined(__ANDROID__)
+#elif defined(__ANDROID__)
+    {
+        // JFG ANDROID: RT64/Plume render straight to the ANativeWindow behind the SDL window.
+        SDL_SysWMinfo wm_info;
+        SDL_VERSION(&wm_info.version);
+        SDL_GetWindowWMInfo(window_handle, &wm_info);
+        appCore.window = wm_info.info.android.window;
+    }
+#elif defined(__linux__)
     appCore.window = window_handle;
 #elif defined(__APPLE__)
     appCore.window.window = window_handle.window;

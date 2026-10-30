@@ -119,7 +119,12 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
     return dino::runtime::create_window(data, cli_args.window_width, cli_args.window_height);
 }
 
+#ifdef __ANDROID__
+// JFG ANDROID: SDL's Java activity loads libmain.so and calls SDL_main (SDL_MAIN_HANDLED stops SDL renaming main).
+extern "C" __attribute__((visibility("default"))) int SDL_main(int argc, char** argv) {
+#else
 int main(int argc, char** argv) {
+#endif
     // Setup crash handler
     dino::runtime::crash_setup_handler();
 

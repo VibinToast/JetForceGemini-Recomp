@@ -1,0 +1,135 @@
+From 7a666888af330e4fef6caaedb8b87924cf9ae5d3 Mon Sep 17 00:00:00 2001
+From: Alexander Ottenhoff <alexander.ottenhoff@gmail.com>
+Date: Fri, 30 Oct 2026 20:03:05 +1100
+Subject: [PATCH] mods: Android native library loading and multi-page protect
+
+Copy native mod libraries to APP_NATIVE_LIBS_PATH before dlopen on Android
+(app-writable storage is mounted noexec), report dlopen errors, and change
+protection on every page a 16-byte patch touches.
+
+From linkzenic's N64ModernRuntime Android port (Zelda64Recomp-Android).
+---
+ librecomp/src/mods.cpp | 62 ++++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 57 insertions(+), 5 deletions(-)
+
+diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
+index 2cef2ff..2d1f3e8 100644
+--- a/librecomp/src/mods.cpp
++++ b/librecomp/src/mods.cpp
+@@ -147,10 +147,12 @@ private:
+     uint32_t api_version;
+ };
+ 
++static constexpr size_t PatchSize = 16;
++
+ void unprotect(void* target_func, uint64_t* old_flags) {
+     DWORD old_flags_dword;
+     BOOL result = VirtualProtect(target_func,
+-        16,
++        PatchSize,
+         PAGE_READWRITE,
+         &old_flags_dword);
+     *old_flags = old_flags_dword;
+@@ -160,7 +162,7 @@ void unprotect(void* target_func, uint64_t* old_flags) {
+ void protect(void* target_func, uint64_t old_flags) {
+     DWORD dummy_old_flags;
+     BOOL result = VirtualProtect(target_func,
+-        16,
++        PatchSize,
+         static_cast<DWORD>(old_flags),
+         &dummy_old_flags);
+     (void)result;
+@@ -169,6 +171,41 @@ void protect(void* target_func, uint64_t old_flags) {
+ #  include <unistd.h>
+ #  include <dlfcn.h>
+ #  include <sys/mman.h>
++#  if defined(__ANDROID__)
++#    include <cstdlib>
++#    include <system_error>
++#    include <sys/stat.h>
++#  endif
++
++#  if defined(__ANDROID__)
++static std::filesystem::path prepare_android_native_library_path(const std::filesystem::path& source_path) {
++    const char* native_libs_path = std::getenv("APP_NATIVE_LIBS_PATH");
++    if (native_libs_path == nullptr || native_libs_path[0] == '\0') {
++        return source_path;
++    }
++
++    std::filesystem::path destination_dir{native_libs_path};
++    std::filesystem::path destination_path = destination_dir / source_path.filename();
++    std::error_code ec;
++
++    std::filesystem::create_directories(destination_dir, ec);
++    if (ec) {
++        fprintf(stderr, "Failed to create Android native mod library dir %s: %s\n",
++            destination_dir.string().c_str(), ec.message().c_str());
++        return source_path;
++    }
++
++    std::filesystem::copy_file(source_path, destination_path, std::filesystem::copy_options::overwrite_existing, ec);
++    if (ec) {
++        fprintf(stderr, "Failed to copy Android native mod library from %s to %s: %s\n",
++            source_path.string().c_str(), destination_path.string().c_str(), ec.message().c_str());
++        return source_path;
++    }
++
++    chmod(destination_path.c_str(), 0700);
++    return destination_path;
++}
++#  endif
+ 
+ class recomp::mods::DynamicLibrary {
+ public:
+@@ -179,7 +216,16 @@ public:
+     #endif
+     DynamicLibrary() = default;
+     DynamicLibrary(const std::filesystem::path& path) {
+-        native_handle = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
++        #if defined(__ANDROID__)
++        std::filesystem::path load_path = prepare_android_native_library_path(path);
++        #else
++        const std::filesystem::path& load_path = path;
++        #endif
++        native_handle = dlopen(load_path.c_str(), RTLD_NOW | RTLD_LOCAL);
++        if (!good()) {
++            const char* error = dlerror();
++            fprintf(stderr, "dlopen failed for %s: %s\n", load_path.string().c_str(), error != nullptr ? error : "unknown error");
++        }
+ 
+         if (good()) {
+             uint32_t* recomp_api_version;
+@@ -227,13 +273,17 @@ private:
+     uint32_t api_version;
+ };
+ 
++static constexpr size_t PatchSize = 16;
++
+ void unprotect(void* target_func, uint64_t* old_flags) {
+     // Align the address to a page boundary.
+     uintptr_t page_start = (uintptr_t)target_func;
+     int page_size = getpagesize();
+     page_start = (page_start / page_size) * page_size;
++    uintptr_t page_end = (uintptr_t)target_func + PatchSize - 1;
++    page_end = (page_end / page_size + 1) * page_size;
+ 
+-    int result = mprotect((void*)page_start, page_size, PROT_READ | PROT_WRITE);
++    int result = mprotect((void*)page_start, page_end - page_start, PROT_READ | PROT_WRITE);
+     *old_flags = 0;
+     (void)result;
+ }
+@@ -243,8 +293,10 @@ void protect(void* target_func, uint64_t old_flags) {
+     uintptr_t page_start = (uintptr_t)target_func;
+     int page_size = getpagesize();
+     page_start = (page_start / page_size) * page_size;
++    uintptr_t page_end = (uintptr_t)target_func + PatchSize - 1;
++    page_end = (page_end / page_size + 1) * page_size;
+ 
+-    int result = mprotect((void*)page_start, page_size, PROT_READ | PROT_EXEC);
++    int result = mprotect((void*)page_start, page_end - page_start, PROT_READ | PROT_EXEC);
+     (void)result;
+ }
+ #endif
+-- 
+2.43.0
+

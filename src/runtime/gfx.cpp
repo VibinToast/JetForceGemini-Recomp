@@ -109,7 +109,7 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
         exit_error("Failed to create window: %s\n", SDL_GetError());
     }
 
-#if defined(__linux__)
+#if defined(__gnu_linux__)
     SetImageAsIcon("icons/512.png", window);
 #endif
 

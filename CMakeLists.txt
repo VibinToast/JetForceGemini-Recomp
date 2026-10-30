@@ -45,6 +45,11 @@ add_compile_definitions(HLSL_CPU)
 if (RECOMP_FLATPAK)
     add_compile_definitions(RECOMP_FLATPAK)
 endif()
+# JFG ANDROID: no native file dialogs on Android (JFGActivity provides the picker), so RT64 gets a stub nfd target.
+if (ANDROID AND NOT TARGET nfd)
+    add_library(nfd STATIC ${CMAKE_SOURCE_DIR}/src/android/nfd_android_stub.cpp)
+    target_include_directories(nfd PUBLIC ${CMAKE_SOURCE_DIR}/lib/rt64/src/contrib/nativefiledialog-extended/src/include)
+endif()
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/rt64 ${CMAKE_BINARY_DIR}/rt64)
 
 # hlslpp's scalar fallback uses labs() without including <cstdlib>. Newer
@@ -105,8 +110,13 @@ make_recomp_controller_db()
 add_custom_target(MakeRecompControllerDB
     DEPENDS ${RECOMP_CONTROLLER_DB_TXT})
 
-# Main executable
-add_executable(JetForceGeminiRecompiled)
+# Main executable. JFG ANDROID: on Android the game is libmain.so, which SDL's Java activity loads and calls SDL_main in.
+if (ANDROID)
+    add_library(JetForceGeminiRecompiled SHARED)
+    set_target_properties(JetForceGeminiRecompiled PROPERTIES OUTPUT_NAME main)
+else()
+    add_executable(JetForceGeminiRecompiled)
+endif()
 add_dependencies(JetForceGeminiRecompiled MakeRecompControllerDB)
 target_compile_definitions(JetForceGeminiRecompiled PRIVATE JFG_VERSION_STRING="${JFG_VERSION}")
 
@@ -167,6 +177,8 @@ file(GLOB SOURCES_RECURSIVE
     ${CMAKE_SOURCE_DIR}/src/**/*.cpp
     ${CMAKE_SOURCE_DIR}/src/**/**/*.cpp
 )
+# Android-only sources are added in the Android block below.
+list(FILTER SOURCES_RECURSIVE EXCLUDE REGEX "/src/android/")
 set (SOURCES_EXTRA
     ${CMAKE_SOURCE_DIR}/rsp/aspMain.cpp
     ${CMAKE_SOURCE_DIR}/lib/RmlUi/Backends/RmlUi_Platform_SDL.cpp
@@ -318,6 +330,12 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
 
     # Export symbols to the dynamic symbol table so backtraces work (when symbols aren't stripped)
     target_link_options(JetForceGeminiRecompiled PRIVATE -Wl,-export-dynamic)
+endif()
+
+if (ANDROID)
+    find_package(SDL2 REQUIRED)
+    target_include_directories(JetForceGeminiRecompiled PRIVATE ${SDL2_INCLUDE_DIRS} ${FREETYPE_INCLUDE_DIRS})
+    target_link_libraries(JetForceGeminiRecompiled PRIVATE ${FREETYPE_LIBRARY} SDL2::SDL2 android log)
 endif()
 
 target_link_libraries(JetForceGeminiRecompiled PRIVATE

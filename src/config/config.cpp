@@ -174,6 +174,11 @@ std::filesystem::path get_executable_folder_path() {
         buffer.resize(length);
         cached = std::filesystem::path{buffer}.parent_path();
     }
+#elif defined(__ANDROID__)
+    // JFG ANDROID: the "executable" is Android's app_process; the app folder JFGActivity sets up takes its place.
+    if (const char* app_folder = getenv("APP_FOLDER_PATH"); app_folder != nullptr) {
+        cached = std::filesystem::path{app_folder};
+    }
 #elif defined(__linux__)
     const std::filesystem::path exe = std::filesystem::read_symlink("/proc/self/exe", ec);
     if (!ec) {

@@ -102,7 +102,7 @@ static RT64::UserConfiguration::GraphicsAPI get_graphics_api() {
         case ultramodern::renderer::GraphicsApi::Auto: {
 #if defined(_WIN32)
             return RT64::UserConfiguration::GraphicsAPI::D3D12;
-#elif defined(__gnu_linux__)
+#elif defined(__gnu_linux__) || defined(__ANDROID__)
             return RT64::UserConfiguration::GraphicsAPI::Vulkan;
 #elif defined(__APPLE__)
             // TODO: Add MoltenVK option for Mac?

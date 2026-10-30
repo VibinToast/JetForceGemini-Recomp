@@ -1,0 +1,77 @@
+From 553ed954efa6e1c106e04746c22bfeba274073d3 Mon Sep 17 00:00:00 2001
+From: Alexander Ottenhoff <alexander.ottenhoff@gmail.com>
+Date: Fri, 30 Oct 2026 20:03:05 +1100
+Subject: [PATCH] Vulkan: Android/Adreno compatibility
+
+Treat graphics and compute queue families as transfer-capable even when the
+driver omits the bit (the Vulkan spec guarantees it; some Android drivers
+leave it out), and clamp scissors to the bound framebuffer.
+
+Adapted from linkzenic's rt64 Android port (Zelda64Recomp-Android).
+---
+ plume_vulkan.cpp | 30 ++++++++++++++++++++++++++----
+ 1 file changed, 26 insertions(+), 4 deletions(-)
+
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+index 480a1d7..45cf815 100644
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -3081,12 +3081,28 @@ namespace plume {
+     }
+ 
+     void VulkanCommandList::setScissors(const RenderRect *scissorRects, uint32_t count) {
++        // Clamp to the framebuffer: negative or oversized scissors are invalid and some mobile drivers fault on them.
++        auto toVkScissor = [this](const RenderRect &rect) {
++            int32_t left = rect.left;
++            int32_t top = rect.top;
++            int32_t right = rect.right;
++            int32_t bottom = rect.bottom;
++            if (targetFramebuffer != nullptr) {
++                left = std::clamp(left, 0, int32_t(targetFramebuffer->width));
++                top = std::clamp(top, 0, int32_t(targetFramebuffer->height));
++                right = std::clamp(right, left, int32_t(targetFramebuffer->width));
++                bottom = std::clamp(bottom, top, int32_t(targetFramebuffer->height));
++            }
++
++            return VkRect2D{ VkOffset2D{ left, top }, VkExtent2D{ uint32_t(right - left), uint32_t(bottom - top) } };
++        };
++
+         if (count > 1) {
+             thread_local std::vector<VkRect2D> scissorVector;
+             scissorVector.clear();
+ 
+             for (uint32_t i = 0; i < count; i++) {
+-                scissorVector.emplace_back(VkRect2D{ VkOffset2D{ scissorRects[i].left, scissorRects[i].top }, VkExtent2D{ uint32_t(scissorRects[i].right - scissorRects[i].left), uint32_t(scissorRects[i].bottom - scissorRects[i].top) } });
++                scissorVector.emplace_back(toVkScissor(scissorRects[i]));
+             }
+ 
+             if (!scissorVector.empty()) {
+@@ -3095,7 +3111,7 @@ namespace plume {
+         }
+         else {
+             // Single element fast path.
+-            VkRect2D scissor = VkRect2D{ VkOffset2D{ scissorRects[0].left, scissorRects[0].top }, VkExtent2D{ uint32_t(scissorRects[0].right - scissorRects[0].left), uint32_t(scissorRects[0].bottom - scissorRects[0].top) } };
++            VkRect2D scissor = toVkScissor(scissorRects[0]);
+             vkCmdSetScissor(vk, 0, 1, &scissor);
+         }
+     }
+@@ -3990,8 +4006,14 @@ namespace plume {
+             for (uint32_t i = 0; i < queueFamilyCount; i++) {
+                 const VkQueueFamilyProperties &props = queueFamilyProperties[i];
+ 
+-                // The family queue flags must contain all the flags required by the command list type.
+-                if ((props.queueFlags & flags) != flags) {
++                // The family queue flags must contain all the flags required by the command list type. Graphics and
++                // compute queues support transfers even when the bit isn't reported, which some Android drivers omit.
++                VkQueueFlags queueFlags = props.queueFlags;
++                if ((queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) != 0) {
++                    queueFlags |= VK_QUEUE_TRANSFER_BIT;
++                }
++
++                if ((queueFlags & flags) != flags) {
+                     continue;
+                 }
+ 
+-- 
+2.43.0
+

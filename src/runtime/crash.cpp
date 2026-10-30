@@ -165,7 +165,7 @@ static void common_crash_handler(const CrashPrintContext* log_context) {
     dump_mips_context(log_context);
 }
 
-#if defined(__linux__) /* --------------- Linux --------------- */
+#if defined(__linux__) && !defined(__ANDROID__) /* --------------- Linux --------------- */
 
 #include <signal.h>
 #include <cstdio>
