@@ -1485,6 +1485,13 @@ public:
     }
 
 
+    // JFG PORT: Show Advanced Options (General) shows the settings for experts on their own tabs, each tab's
+    // advanced_hidden (tools/gen_jfg_config_rml.py, ADVANCED_KEYS). Not saved: they are hidden again at each start.
+    static inline bool jfg_show_advanced = false;
+    void bind_advanced_hidden(Rml::DataModelConstructor& constructor) {
+        constructor.BindFunc("advanced_hidden", [](Rml::Variant& out) { out = !jfg_show_advanced; });
+    }
+
     // JFG PORT: one binding per option key, read and written through jfg::settings (or upstream_options).
     template <size_t N>
     void bind_jfg_keys(Rml::DataModelConstructor& constructor, const char* const (&keys)[N]) {
@@ -1510,6 +1517,7 @@ public:
         if (!constructor) throw std::runtime_error(std::string("Failed to make RmlUi data model ") + name);
         bind_config_list_events(constructor);
         bind_jfg_keys(constructor, keys);
+        bind_advanced_hidden(constructor);
         return constructor.GetModelHandle();
     }
 
@@ -1530,6 +1538,10 @@ public:
                 jfg::locale::choose(args.empty() ? std::string() : args[0].Get<Rml::String>());
                 jfg_config_menu_refresh();
             });
+            constructor.BindFunc("show_advanced",
+                [](Rml::Variant& out) { out = jfg_show_advanced ? 1 : 0; },
+                [](const Rml::Variant& in) { jfg_show_advanced = in.Get<int>() != 0; jfg_config_menu_refresh(); });
+            bind_advanced_hidden(constructor);
             jfg_general_model_handle = constructor.GetModelHandle();
         }
         jfg_gameplay_model_handle = make_jfg_options_model(context, "jfg_gameplay_model", jfg_gameplay_keys);
@@ -1538,6 +1550,7 @@ public:
             if (!constructor) throw std::runtime_error("Failed to make RmlUi data model for the Controls tab");
             bind_config_list_events(constructor);
             bind_jfg_keys(constructor, jfg_controls_keys);
+            bind_advanced_hidden(constructor);
             // The Players row, Quick Setup and Customize Buttons (see jfg_controls_page_entered).
             jfg_update_pads();
             constructor.BindFunc("p1_device", [](Rml::Variant& out) {
@@ -1585,19 +1598,7 @@ public:
             });
             jfg_controls_model_handle = constructor.GetModelHandle();
         }
-        {
-            Rml::DataModelConstructor constructor = context->CreateDataModel("jfg_graphics_model");
-            if (!constructor) throw std::runtime_error("Failed to make RmlUi data model for the Graphics tab");
-            bind_config_list_events(constructor);
-            bind_jfg_keys(constructor, jfg_graphics_keys);
-            // Show Advanced Options: not saved, so the section is closed again at each start (the options in it are).
-            static bool show_advanced = false;
-            constructor.BindFunc("show_advanced",
-                [](Rml::Variant& out) { out = show_advanced ? 1 : 0; },
-                [](const Rml::Variant& in) { show_advanced = in.Get<int>() != 0; jfg_config_menu_refresh(); });
-            constructor.BindFunc("advanced_hidden", [](Rml::Variant& out) { out = !show_advanced; });
-            jfg_graphics_model_handle = constructor.GetModelHandle();
-        }
+        jfg_graphics_model_handle = make_jfg_options_model(context, "jfg_graphics_model", jfg_graphics_keys);
         {
             Rml::DataModelConstructor constructor = context->CreateDataModel("jfg_textures_model");
             if (!constructor) throw std::runtime_error("Failed to make RmlUi data model for the Textures tab");

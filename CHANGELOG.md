@@ -7,7 +7,7 @@ are written here by hand and become that version's notes when it is released.
 
 ### Changes
 
-- Simpler Graphics tab: Frame Interpolation is now called Display Frame Rate (your setting is kept). Game Frame Rate, the fly camera (F7) and the over-the-shoulder aiming sliders are under Advanced Options at the bottom of the Graphics tab; turn on Show Advanced Options to see them.
+- Simpler settings: Frame Interpolation is now called Display Frame Rate (your setting is kept). Game Frame Rate, the fly camera's settings (F7) and the over-the-shoulder aiming sliders are hidden until you turn on Show Advanced Options (General tab, above Language); they then show in their usual places.
 
 ## v1.2.4 (2026-10-25)
 
