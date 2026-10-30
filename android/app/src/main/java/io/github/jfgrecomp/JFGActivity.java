@@ -72,6 +72,11 @@ public class JFGActivity extends SDLActivity {
             currentActivity = null;
         }
         super.onDestroy();
+        // The game can't start a second time in the same process (its audio device, threads and globals are still
+        // there), so a closed activity takes the process with it and the next launch starts clean.
+        if (isFinishing()) {
+            android.os.Process.killProcess(android.os.Process.myPid());
+        }
     }
 
     // The APK's program files are copied once per installed version (versionCode + update time), so an update

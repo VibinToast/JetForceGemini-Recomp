@@ -7,6 +7,8 @@
 # The APK is signed with the local debug key (~/.android/debug.keystore, created if missing), which is fine for
 # sideloading. Releases should sign with their own key: set JFG_ANDROID_KEYSTORE, JFG_ANDROID_KEY_ALIAS and
 # JFG_ANDROID_KEYSTORE_PASS.
+# Diagnostics: JFG_ANDROID_VULKAN_LAYER=/path/to/libVkLayer_khronos_validation.so builds a debuggable APK with that
+# layer inside; enable it with `adb shell setprop debug.vulkan.layers VK_LAYER_KHRONOS_validation`.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILD="$(realpath "${1:-$HERE/build-android}")"
@@ -41,7 +43,7 @@ say "resources and manifest"
 "$BUILD_TOOLS/aapt2" compile --dir "$APP/res" -o "$WORK/res/res.zip"
 "$BUILD_TOOLS/aapt2" link -I "$ANDROID_JAR" --manifest "$APP/AndroidManifest.xml" \
   --min-sdk-version $MIN_SDK --target-sdk-version $TARGET_SDK \
-  --version-code $VERSION_CODE --version-name "$VERSION" \
+  --version-code $VERSION_CODE --version-name "$VERSION" ${JFG_ANDROID_VULKAN_LAYER:+--debug-mode} \
   --java "$WORK/gen" -o "$WORK/base.apk" "$WORK/res/res.zip"
 
 say "java"
@@ -54,6 +56,10 @@ javac -nowarn -Xlint:-options -source 11 -target 11 -encoding UTF-8 -classpath "
 say "native libraries and program files"
 "$STRIP" --strip-unneeded -o "$WORK/stage/lib/arm64-v8a/libmain.so" "$BUILD/libmain.so"
 cp "$SDL2_PREFIX/lib/libSDL2.so" "$WORK/stage/lib/arm64-v8a/"
+if [ -n "${JFG_ANDROID_VULKAN_LAYER:-}" ]; then
+  say "debuggable build with Vulkan layer $(basename "$JFG_ANDROID_VULKAN_LAYER")"
+  cp "$JFG_ANDROID_VULKAN_LAYER" "$WORK/stage/lib/arm64-v8a/"
+fi
 cp -r "$HERE/assets" "$WORK/stage/assets/program/assets"
 cp "$HERE/recompcontrollerdb.txt" "$WORK/stage/assets/program/"
 cp "$WORK/dex/classes.dex" "$WORK/stage/"

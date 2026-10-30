@@ -341,7 +341,12 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
             std::unordered_map<VkDescriptorType, uint32_t> typeCounts;
             typeCounts[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = 1;
 
+#ifdef __ANDROID__
+            // JFG ANDROID: RT64 presents RGBA8 on Android, and the overlay draws into the same render pass.
+            const VkFormat requestSurfaceImageFormat[] = { VK_FORMAT_R8G8B8A8_UNORM };
+#else
             const VkFormat requestSurfaceImageFormat[] = { VK_FORMAT_B8G8R8A8_UNORM/*, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM*/ };
+#endif
 
             vulkanContext = std::make_unique<VulkanContext>();
             vulkanContext->device = interfaceDevice->vk;
