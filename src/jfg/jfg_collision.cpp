@@ -10,6 +10,11 @@
 //   - trackGetHeights: the floors under a point. The game gives up at 32 segments holding the point, after its stack
 //     list has already overflowed past about 42; a pack level gives up at PACK_HEIGHT_SEGMENTS.
 //   - trackGetBlockList: the segments holding a point, with no capacity; it now stops at 32 (trackPolyHeight's list).
+//   - The cells: each face is filed in the cells of its x / z bounding box, so a long diagonal face is in the list for
+//     every query near any part of its box and fills it. In a pack level a face whose cells meet the query's is also
+//     tested exactly: its x / z triangle against the query box (2D separating axes, integers, edges included). Only
+//     faces the moving sphere can't reach are dropped; the others keep their order. (JFG_COLLISION_EXACT=1 tests every
+//     level so, =0 none.)
 // A stock level gets exactly the game's results, overflows aside. "Pack level" = its track is a mod's
 // (JFG_COLLISION_PACK=1 treats every level as one, =0 none).
 //
@@ -63,7 +68,7 @@ constexpr uint32_t GROUP_WATER = 0x2000;        // trackGetHeights: surface type
 
 bool g_pack = false;   // the loaded track is a mod's
 int g_check = -1;      // JFG_COLLISION_CHECK
-struct CheckStats { long polylists = 0, polylist_diffs = 0, overflows = 0, heights = 0, height_diffs = 0; } g_stats;
+struct CheckStats { long polylists = 0, polylist_diffs = 0, overflows = 0, dropped = 0, heights = 0, height_diffs = 0; } g_stats;
 
 bool check_on() {
     if (g_check < 0) {
@@ -101,6 +106,28 @@ uint32_t xz_cells(const Bounds& b, int x1, int z1, int x2, int z2) {
 // getYCompareMask: 8 cells.
 uint32_t y_cells(const Bounds& b, int y1, int y2) { return axis_cells(y1, y2, b.min_y, b.max_y, 8, 3); }
 
+// The face's x / z triangle meets the box [min_x, max_x] x [min_z, max_z] (closed): their bounding rectangles meet and
+// no edge of the triangle has every corner of the box strictly on its far side.
+bool triangle_meets_box(const int (&x)[3], const int (&z)[3], const Box& box) {
+    if (std::max({ x[0], x[1], x[2] }) < box.min_x || std::min({ x[0], x[1], x[2] }) > box.max_x) return false;
+    if (std::max({ z[0], z[1], z[2] }) < box.min_z || std::min({ z[0], z[1], z[2] }) > box.max_z) return false;
+    const int64_t cx[4] = { box.min_x, box.max_x, box.max_x, box.min_x }, cz[4] = { box.min_z, box.min_z, box.max_z, box.max_z };
+    for (int e = 0; e < 3; e++) {
+        const int a = e, b = (e + 1) % 3, o = (e + 2) % 3;
+        const int64_t dx = x[b] - x[a], dz = z[b] - z[a];
+        auto side = [&](int64_t px, int64_t pz) { return dx * (pz - z[a]) - dz * (px - x[a]); };
+        const int64_t inside = side(x[o], z[o]);
+        if (inside == 0) continue; // no area: the rectangles decide
+        bool separated = true;
+        for (int c = 0; c < 4 && separated; c++) {
+            const int64_t s = side(cx[c], cz[c]);
+            if (inside > 0 ? s >= 0 : s <= 0) separated = false;
+        }
+        if (separated) return false;
+    }
+    return true;
+}
+
 bool cells_meet(uint32_t xz, uint32_t query) {
     const uint32_t m = xz & query;
     return (m & 0xFFFF) != 0 && (m >> 16) != 0;
@@ -118,6 +145,26 @@ uint32_t vertex_addr(uint32_t seg, const Group& g, uint32_t face, int corner) {
     return TrackSegment::Verts::get(seg) + (g.vertex_base + TrackFace::Vertex::get(face, corner)) * TrackVertex::Size;
 }
 
+bool face_meets_box(uint32_t seg, const Group& g, int t, const Box& box) {
+    const uint32_t face = TrackSegment::Faces::get(seg) + t * TrackFace::Size;
+    int x[3], z[3];
+    for (int c = 0; c < 3; c++) {
+        const uint32_t v = vertex_addr(seg, g, face, c);
+        x[c] = TrackVertex::X::get(v);
+        z[c] = TrackVertex::Z::get(v);
+    }
+    return triangle_meets_box(x, z, box);
+}
+
+int g_exact_override = -2; // JFG_COLLISION_EXACT: -1 unset, 0 / 1
+bool exact_on() {
+    if (g_exact_override == -2) {
+        const char* v = std::getenv("JFG_COLLISION_EXACT");
+        g_exact_override = v && (v[0] == '0' || v[0] == '1') ? v[0] - '0' : -1;
+    }
+    return g_exact_override >= 0 ? g_exact_override == 1 : g_pack;
+}
+
 int poly_list_cap() {
     const uint32_t h = rd32(ADDR_levelHeader);
     return valid_ptr(h) ? LevelHeader::PolyList::get(h) : 0;
@@ -125,6 +172,8 @@ int poly_list_cap() {
 
 // --- trackMakePolylist ------------------------------------------------------------------------------------------------
 struct Taken { uint32_t seg; uint32_t xz, y; };
+
+Box g_last_box; // the last query's box, for JFG_COLLISION_CHECK
 
 // The port's trackMakePolylist(n, starts, ends, radii, exclude, include, object). Returns 1 when the list filled up.
 uint32_t make_polylist(recomp_context* ctx) {
@@ -149,6 +198,7 @@ uint32_t make_polylist(recomp_context* ctx) {
         box.min_x -= 5; box.min_y -= 5; box.min_z -= 5;
         box.max_x += 5; box.max_y += 5; box.max_z += 5;
     }
+    g_last_box = box;
 
     // The object-model list, which the game builds from the same box.
     const uint32_t minf = (sp - 0x40) & ~0x7u, maxf = minf + 12; // in the gap call_game leaves below $sp
@@ -178,6 +228,7 @@ uint32_t make_polylist(recomp_context* ctx) {
     // The list: a marker per segment, then its faces whose cells meet the box's.
     const int cap = poly_list_cap();
     const uint32_t list = rd32(ADDR_PLlist), grps = rd32(ADDR_PLgrps), polys = rd32(ADDR_PLpolys);
+    const bool exact = exact_on();
     int count = 0;
     auto full = [&]() { wr32(ADDR_PLno, (uint32_t)count); return 1u; };
     for (int k = 0; k < taken_count; k++) {
@@ -193,6 +244,7 @@ uint32_t make_polylist(recomp_context* ctx) {
             if ((group.flags & include) == 0 && (group.flags & exclude) != 0) continue;
             for (int t = group.first; t < group.end; t++) {
                 if (!cells_meet(rd32(xz_mask + t * 4), taken[k].xz) || (rd8(y_mask + t) & taken[k].y) == 0) continue;
+                if (exact && !face_meets_box(seg, group, t, box)) continue;
                 if (count >= cap) return full();
                 wr32(list + count * 4, info + t * TrackPolyInfo::Size);
                 wr16(grps + count * 2, (uint16_t)g);
@@ -221,11 +273,31 @@ ListCopy copy_list(uint32_t ret) {
     return c;
 }
 
-void compare_lists(const ListCopy& game, const ListCopy& port) {
+// The game's list without the faces the exact test drops.
+ListCopy drop_far_faces(const ListCopy& game) {
+    ListCopy c;
+    c.ret = game.ret;
+    uint32_t seg = 0;
+    for (size_t i = 0; i < game.list.size(); i++) {
+        const bool face = (int32_t)game.list[i] < 0;
+        if (!face) seg = game.list[i] | 0x80000000u;
+        else if (!face_meets_box(seg, read_group(seg, game.grps[i]), game.polys[i], g_last_box)) {
+            g_stats.dropped++;
+            continue;
+        }
+        c.list.push_back(game.list[i]);
+        c.grps.push_back(game.grps[i]);
+        c.polys.push_back(game.polys[i]);
+    }
+    return c;
+}
+
+void compare_lists(const ListCopy& game_list, const ListCopy& port) {
     g_stats.polylists++;
+    const ListCopy game = exact_on() ? drop_far_faces(game_list) : game_list;
     const int cap = poly_list_cap();
     // Where the game overflowed (wrote past its list), only the entries before the end are comparable.
-    if ((int)game.list.size() >= cap) {
+    if ((int)game_list.list.size() >= cap) {
         g_stats.overflows++;
         return;
     }
@@ -325,8 +397,8 @@ HeightsCopy copy_heights(uint32_t count, uint32_t out_ptr) {
 
 void log_check_summary() {
     if (!check_on() || (g_stats.polylists == 0 && g_stats.heights == 0)) return;
-    std::fprintf(stderr, "[jfg] collision check: %ld poly lists (%ld differ, %ld game overflows), %ld height queries (%ld differ)\n",
-        g_stats.polylists, g_stats.polylist_diffs, g_stats.overflows, g_stats.heights, g_stats.height_diffs);
+    std::fprintf(stderr, "[jfg] collision check: %ld poly lists (%ld differ, %ld game overflows, %ld far faces dropped), %ld height queries (%ld differ)\n",
+        g_stats.polylists, g_stats.polylist_diffs, g_stats.overflows, g_stats.dropped, g_stats.heights, g_stats.height_diffs);
     g_stats = {};
 }
 
