@@ -2,6 +2,7 @@ extern "C" int jfg_skip_render_active(void); // src/jfg/jfg_cutscene_skip.cpp
 extern "C" int jfg_widescreen_active(void);  // src/jfg/jfg_visuals.cpp: the "Widescreen" option of the F9 menu
 extern "C" int jfg_texture_dump_active(void);
 extern "C" void jfg_texture_dump_scene(char* buf, int size); // src/jfg/jfg_texture_packs.cpp: the scene tag of draw_trace.txt
+extern "C" int jfg_texture_dump_mod_folder(unsigned int address, char* buf, int size); // src/jfg/jfg_texture_packs.cpp: a mod's own texture
 extern "C" void jfg_texture_dump_folder(char* buf, int size); // src/jfg/jfg_texture_packs.cpp: "One folder per level"  // src/jfg/jfg_texture_packs.cpp: "Dump textures" (F9 -> Textures)
 extern "C" int jfg_texture_pack_current(char* buf, int size); // the chosen pack folder (relative, "" = none); returns a change counter
 extern "C" int jfg_texture_three_point(void); // src/jfg/jfg_visuals.cpp: "Texture filtering" (1 = the N64's three-point filter)
@@ -87,89 +88,6 @@ namespace dino::renderer {
 
 static RT64Context* active_rt64_context = nullptr;
 static std::mutex active_rt64_context_mutex;
-
-// Shader descriptions observed from boot through the Ancient Lake title
-// attract scene using the Steam Deck graphics preset (2x, no MSAA, LDR). This
-// table contains renderer state only; it has no textures, display-list data,
-// or other ROM-derived content. Entries that do not appear in a later scene
-// simply remain cached while RT64 falls back to the universal shader for any
-// description that is not listed here.
-static constexpr std::array<RT64::ShaderDescription, 74> deck_attract_shader_preload = {{
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229010979u, 4281335807u}, {5259840u, 3087u}, {.value = 9043979u}},
-    RT64::ShaderDescription{{4229010979u, 4281335807u}, {5259840u, 3087u}, {.value = 62538763u}},
-    RT64::ShaderDescription{{4244635647u, 4294833915u}, {5260096u, 8399935u}, {.value = 134217739u}},
-    RT64::ShaderDescription{{4244635647u, 4294833915u}, {252329984u, 8924223u}, {.value = 134217739u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4244609023u, 4281138815u}, {5262808u, 535567u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4244609023u, 4281138815u}, {5262808u, 535567u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229011116u, 4043308600u}, {3356569720u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229011116u, 4043308600u}, {3356509656u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229044396u, 4027579967u}, {1067480u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356511704u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4233500332u, 288161407u}, {5259840u, 3087u}, {.value = 80434187u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3405922304u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 196756494u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356511824u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4233526787u, 1326348287u}, {3356565624u, 1575951u}, {.value = 134217742u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356511704u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4244635647u, 4294867260u}, {5260096u, 527375u}, {.value = 134217738u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356511824u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4230112940u, 269521471u}, {1066456u, 1584143u}, {.value = 143523850u}},
-    RT64::ShaderDescription{{4233500332u, 288161407u}, {5259840u, 3087u}, {.value = 26939403u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4233526787u, 1326348799u}, {1067480u, 1575951u}, {.value = 134217738u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356514392u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356565624u, 1584143u}, {.value = 196756490u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1067480u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356508736u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229044735u, 4279238207u}, {1067512u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356569720u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356569720u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356569720u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4229010979u, 4281335807u}, {5259840u, 11279u}, {.value = 143261707u}},
-    RT64::ShaderDescription{{4229010979u, 4281335807u}, {5259840u, 11279u}, {.value = 196756491u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 214651918u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229044735u, 4279238207u}, {1067632u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 161157134u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4229070372u, 4294964217u}, {5261904u, 535567u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4233526956u, 1157527355u}, {5579896u, 527375u}, {.value = 134217738u}},
-    RT64::ShaderDescription{{4229011116u, 4043308600u}, {3356509656u, 1584143u}, {.value = 143348750u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 161157130u}},
-    RT64::ShaderDescription{{4229273252u, 821952056u}, {1122424u, 1584143u}, {.value = 196756494u}},
-    RT64::ShaderDescription{{4233526788u, 536672248u}, {3356565624u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510680u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3405922304u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356569720u, 1584143u}, {.value = 143261710u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356566064u, 1584143u}, {.value = 196756494u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 196756494u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 143261706u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356510800u, 1584143u}, {.value = 196756490u}},
-    RT64::ShaderDescription{{4229010979u, 4281335807u}, {5259720u, 535567u}, {.value = 214651914u}},
-    RT64::ShaderDescription{{4229070508u, 4027576895u}, {3356511824u, 1584143u}, {.value = 196756494u}},
-}};
 
 void dummy_check_interrupts() {}
 
@@ -336,7 +254,7 @@ void set_application_user_config(RT64::Application* application, const ultramode
     }
     application->userConfig.internalColorFormat = to_rt64(config.hpfb_option);
     application->userConfig.displayBuffering = RT64::UserConfiguration::DisplayBuffering::Triple;
-    // JFG PORT: the F9 / Visuals menu's filtering options (also switched while the game runs, see update_game_aspect_override).
+    // JFG PORT: the F9 / Visuals menu's filtering options (also switched while the game runs, see update_render_options).
     application->userConfig.filtering = jfg_rt64_filtering(jfg_output_filtering());
     application->userConfig.threePointFiltering = jfg_texture_three_point() != 0;
 }
@@ -380,13 +298,15 @@ ultramodern::renderer::GraphicsApi map_graphics_api(RT64::UserConfiguration::Gra
 RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool debug) {
     fprintf(stderr, "[JFG] Initializing RT64 renderer\n");
     static unsigned char dummy_rom_header[0x40];
-    recompui::set_render_hooks();
 #if !defined(__APPLE__)
     // The inherited developer-only ImGui overlay has D3D12 and Vulkan
     // backends, but no Metal backend. The regular RmlUi launcher and menus
     // have their own renderer and remain enabled on macOS.
+    // JFG PORT: hooks draw in the order added. The ImGui layer (mods' overlay shapes, the port's toasts, F9's window)
+    // goes first so the RmlUi menus and F10's tools are drawn over it, not under a mod's HUD.
     debug_ui::backend::set_render_hooks();
 #endif
+    recompui::set_render_hooks();
 
     // Set up the RT64 application core fields.
     RT64::Application::Core appCore{};
@@ -449,8 +369,8 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
     app->enhancementConfig.f3dex.forceBranch = true;
     // Scale LODs based on the output resolution.
     app->enhancementConfig.textureLOD.scale = true;
-    // Don't try to fix rectangle lower-right coords. This causes Dino Planet's font window scissors
-    // to stretch glyph rects down by a pixel when they are drawn right on the edge of the scissor.
+    // Don't try to fix rectangle lower-right coords (kept from the base project, where the fix stretched glyph
+    // rects drawn on the edge of a scissor down by a pixel; not checked for Jet Force Gemini).
     app->enhancementConfig.rect.fixRectLR = false;
     // Pick an API if the user has set an override.
     switch (cur_config.api_option) {
@@ -489,12 +409,12 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
     // consequently compete with the game and graphics threads whenever a new
     // scene introduces material combinations, causing severe frame drops and
     // occasional driver termination. Keep compilation disabled during play;
-    // the launcher preflight temporarily enables it for a bounded table and
-    // all unlisted descriptions retain the universal-shader fallback.
+    // everything is drawn with the universal shader (no Jet Force Gemini
+    // preload table yet, see preload_common_shaders).
     if (dino::config::running_on_steam_deck()) {
         app->rasterShaderCache->setCompilationEnabled(false);
         app->workloadQueue->ubershadersOnly.store(true, std::memory_order_relaxed);
-        fprintf(stderr, "[JFG] Steam Deck runtime shader compilation disabled pending launcher preflight\n");
+        fprintf(stderr, "[JFG] Steam Deck runtime shader compilation disabled (universal shader)\n");
     }
 
     // Set the application's fullscreen state.
@@ -534,9 +454,10 @@ void RT64Context::send_dl(const OSTask* task) {
     if (jfg_skip_render_active()) return;
     check_texture_pack_actions();
     app->state->rsp->reset();
-    constexpr uint32_t DkrRdramMask = 0x007FFFFFU;
-    app->interpreter->loadUCodeGBI(task->t.ucode & DkrRdramMask, task->t.ucode_data & DkrRdramMask, true);
-    app->processDisplayLists(app->core.RDRAM, task->t.data_ptr & DkrRdramMask, 0, true);
+    // Physical addresses in the console's 8 MB of RDRAM (the task's pointers are KSEG0 addresses).
+    constexpr uint32_t RdramPhysicalMask = 0x007FFFFFU;
+    app->interpreter->loadUCodeGBI(task->t.ucode & RdramPhysicalMask, task->t.ucode_data & RdramPhysicalMask, true);
+    app->processDisplayLists(app->core.RDRAM, task->t.data_ptr & RdramPhysicalMask, 0, true);
 }
 
 void RT64Context::preload_common_shaders() {
@@ -546,24 +467,9 @@ void RT64Context::preload_common_shaders() {
         fprintf(stderr, "[JFG] Finalizing RT64 common shader pipelines\n");
         app->rasterShaderCache->shaderUber->waitForPipelineCreation();
 
-        if (dino::config::running_on_steam_deck()) {
-            const uint32_t shader_count_before = app->rasterShaderCache->shaderCount();
-            fprintf(stderr, "[JFG] Preloading %zu Steam Deck attract-scene shader pipelines\n",
-                deck_attract_shader_preload.size());
-
-            app->rasterShaderCache->setCompilationEnabled(true);
-            for (const RT64::ShaderDescription &shader : deck_attract_shader_preload) {
-                app->rasterShaderCache->submit(shader);
-            }
-            app->rasterShaderCache->waitForAll();
-            app->rasterShaderCache->setCompilationEnabled(false);
-
-            const uint32_t shader_count_after = app->rasterShaderCache->shaderCount();
-            app->workloadQueue->ubershadersOnly.store(false, std::memory_order_relaxed);
-            fprintf(stderr,
-                "[JFG] Steam Deck specialized shader preflight ready (%u new); universal fallback retained\n",
-                shader_count_after - shader_count_before);
-        }
+        // Steam Deck: no specialized shaders are compiled ahead of time yet. The base project's table was
+        // recorded from Diddy Kong Racing; one recorded from Jet Force Gemini can go here. Until then the Deck
+        // draws with the universal shader (see the RT64Context constructor).
 
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - start);
@@ -572,10 +478,9 @@ void RT64Context::preload_common_shaders() {
     }
 }
 
-void RT64Context::update_game_aspect_override() {
-    // JFG PORT: everything below reads Diddy Kong Racing variables at fixed RDRAM addresses to switch the aspect
-    // ratio for some DKR menus. Those addresses hold unrelated data in Jet Force Gemini. Instead, follow the
-    // "Widescreen" option of the F9 menu (it can change while the game runs).
+// JFG PORT: the port's render options that can change while the game runs, applied once per screen update: the
+// "Widescreen" option of the F9 menu, the presentation mode, the "Frame rate" option and the filtering options.
+void RT64Context::update_render_options() {
     {
         static int applied = -1;
         const int want = jfg_widescreen_active();
@@ -630,60 +535,10 @@ void RT64Context::update_game_aspect_override() {
             app->updateUserConfig(false);
         }
     }
-    return;
-
-    // The track-select backdrop is an authored 320-pixel-wide scrolling page.
-    // The post-race and results layouts likewise draw only a 4:3 page while the
-    // race scene remains visible behind it. Expanding any of those projections
-    // exposes content outside the page, so render them at the original aspect.
-    // Normal race gameplay continues to use the user's configured aspect ratio.
-    constexpr size_t DkrTrackMenuFlagOffset = 0x000E0EFC;
-    constexpr size_t DkrCurrentMenuIdOffset = 0x000DF9F0;
-    constexpr size_t DkrGameModeOffset = 0x00123A6C;
-    constexpr size_t DkrPostRaceViewportOffset = 0x00123A96;
-    constexpr int32_t DkrGameModeMenu = 1;
-    constexpr int32_t DkrMenuResults = 17;
-
-    const uint8_t *rdram = app->core.RDRAM;
-    const bool track_menu_active =
-        *reinterpret_cast<const int32_t *>(rdram + DkrTrackMenuFlagOffset) != 0;
-    // N64Recomp keeps byte-addressed RDRAM word-swapped on little-endian hosts.
-    const bool postrace_active = rdram[DkrPostRaceViewportOffset ^ 3U] != 0;
-    const int32_t game_mode = *reinterpret_cast<const int32_t *>(rdram + DkrGameModeOffset);
-    const int32_t current_menu_id = *reinterpret_cast<const int32_t *>(rdram + DkrCurrentMenuIdOffset);
-    if (std::getenv("JFG_SCENE_TRACE") != nullptr) {
-        static int32_t previous_game_mode = INT32_MIN;
-        static int32_t previous_menu_id = INT32_MIN;
-        if ((game_mode != previous_game_mode) || (current_menu_id != previous_menu_id)) {
-            std::fprintf(stderr, "[DKR SCENE] gameMode=%d menuId=%d\n", game_mode, current_menu_id);
-            previous_game_mode = game_mode;
-            previous_menu_id = current_menu_id;
-        }
-    }
-    const bool results_menu_active =
-        (game_mode == DkrGameModeMenu) && (current_menu_id == DkrMenuResults);
-    const bool original_aspect_active =
-        track_menu_active || postrace_active || results_menu_active;
-
-    if (original_aspect_active == game_aspect_override) {
-        return;
-    }
-
-    game_aspect_override = original_aspect_active;
-    if (game_aspect_override) {
-        app->userConfig.aspectRatio = RT64::UserConfiguration::AspectRatio::Original;
-    }
-    else {
-        app->userConfig.aspectRatio = to_rt64(ultramodern::renderer::get_graphics_config().ar_option);
-    }
-
-    app->updateUserConfig(false);
-    fprintf(stderr, "[JFG] Authored 4:3 aspect override %s\n",
-        game_aspect_override ? "enabled" : "disabled");
 }
 
 void RT64Context::update_screen() {
-    update_game_aspect_override();
+    update_render_options();
     app->updateScreen();
 }
 
@@ -703,10 +558,6 @@ bool RT64Context::update_config(const ultramodern::renderer::GraphicsConfig& old
     }
 
     set_application_user_config(app.get(), new_config);
-
-    if (game_aspect_override) {
-        app->userConfig.aspectRatio = RT64::UserConfiguration::AspectRatio::Original;
-    }
 
     // JFG PORT: a change of the Framerate options alone (Renderer Framerate, Manual Framerate: the Graphics tab applies
     // each step of the slider at once) keeps the framebuffers. Discarding them while the present thread still shows
@@ -877,6 +728,12 @@ void RT64Context::check_texture_pack_actions() {
                 // dumping textures the game redraws on most frames (dynamic_sources.txt) instead of moving them to _dynamic.
                 app->state->textureManager.resetDump(dir);
                 app->state->dumpingTexturesSkipDynamic = std::getenv("JFG_DEBUG_DUMP_ALL") == nullptr;
+                // A mod's own textures go to texture_dump/<mod id> instead (each with its own _dynamic).
+                app->state->dumpingTexturesDirectoryFor = [](uint32_t address) {
+                    char rel[512];
+                    if (!jfg_texture_dump_mod_folder(address, rel, sizeof(rel))) return std::filesystem::path();
+                    return dino::config::get_app_folder_path() / "texture_dump" / std::filesystem::u8path(rel);
+                };
                 fprintf(stderr, "[JFG] dumping textures to %s\n", dir.string().c_str());
             }
             else {
@@ -998,6 +855,14 @@ void RT64Context::check_texture_pack_actions() {
 
         if (!replacement_directories.empty()) {
             app->textureCache->loadReplacementDirectories(replacement_directories);
+            // JFG PORT: how many textures RT64 found in each pack (by hash, in its rt64.json), so a pack whose paths
+            // don't match its files shows 0. Packs inside mods (.nrm) and .rtz packs alike.
+            std::unique_lock lock(app->textureCache->textureMapMutex);
+            const auto &resolved = app->textureCache->textureMap.replacementMap.fileSystemResolvedPaths;
+            for (size_t i = 0; (i < replacement_directories.size()) && (i < resolved.size()); i++) {
+                fprintf(stderr, "[JFG] texture pack loaded: %s, %zu textures\n",
+                    replacement_directories[i].dirOrZipPath.filename().string().c_str(), resolved[i].size());
+            }
         }
         else {
             app->textureCache->clearReplacementDirectories();

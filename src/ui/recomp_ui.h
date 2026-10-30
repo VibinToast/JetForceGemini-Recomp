@@ -79,6 +79,10 @@ namespace recompui {
     Rml::Element* get_mod_tab();
     void set_config_tabset_mod_nav();
     void focus_mod_configure_button();
+    // JFG PORT: the selected mod's card (back from its settings, or the menu reopened on Mods); false if none.
+    bool focus_selected_mod();
+    // JFG PORT: a mod's settings page back to the mods (its Back button, and B / Esc).
+    void config_sub_menu_back();
 
     enum class ButtonVariant {
         Primary,

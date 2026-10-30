@@ -42,6 +42,11 @@ const std::string version_string = JFG_VERSION_STRING; // JFG PORT: from version
 
 extern "C" void recomp_entrypoint(uint8_t *rdram, recomp_context *ctx);
 gpr get_entrypoint_address();
+extern "C" void jfg_apply_asset_mods(void); // JFG PORT: src/jfg/jfg_assets.cpp
+extern "C" void jfg_check_mod_replacements(void); // JFG PORT: src/jfg/jfg_mods.cpp
+extern "C" void jfg_locale_start(void); // JFG PORT: src/jfg/jfg_locale.cpp
+extern "C" int jfg_launch_arg(int argc, char** argv, int* i); // JFG PORT: src/jfg/jfg_launch.cpp
+extern "C" int jfg_launch_ready(bool* skip_launcher); // JFG PORT: src/jfg/jfg_launch.cpp
 
 static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
     printf("Initialized RDRAM at %p\n", rdram);
@@ -49,11 +54,18 @@ static void custom_recomp_entrypoint(uint8_t *rdram, recomp_context *ctx) {
     dino::runtime::crash_register_rdram(rdram);
     dino::runtime::crash_register_thread_context(ctx);
 
+    jfg_apply_asset_mods(); // JFG PORT: data replaced by mods (src/jfg/jfg_assets.cpp), once mods are loaded
+    jfg_check_mod_replacements(); // JFG PORT: mods that turn port features off (src/jfg/jfg_mods.cpp)
+    jfg_locale_start(); // JFG PORT: the installed locales and the chosen one (src/jfg/jfg_locale.cpp)
+
     recomp_entrypoint(rdram, ctx);
 }
 
 // JFG port: boot-time globals the runtime's IPL3 emulation leaves unset (src/jfg/jfg_glue.cpp).
 extern "C" void jfg_on_init(uint8_t* rdram, recomp_context* ctx);
+// JFG port: mod support (src/jfg/jfg_mods.cpp): functions mods import, and the pre-linked ROM hooks regenerate from.
+extern "C" void jfg_register_mod_exports(void);
+std::vector<uint8_t> jfg_prelink_rom(std::span<const uint8_t> rom);
 
 // JFG PORT: Jet Force Gemini's modified osCreateThread (libultra/src/os/createthread.c, JFGDIFFS) starts every
 // thread with SR_FR set, i.e. 64-bit FPU registers where odd-numbered registers are independent, and clears it
@@ -82,8 +94,10 @@ std::vector<recomp::GameEntry> supported_games = {
         .mod_game_id = "jet-force-gemini",
         .save_type = recomp::SaveType::Flashram,
         .is_enabled = true,
-        .decompression_routine = nullptr,
-        .has_compressed_code = false,
+        // JFG PORT: not compressed, but mods' hooks regenerate functions from this ROM, and the port recompiles
+        // overlays pre-linked at private addresses (tools/prepare_overlays.py): jfg_prelink_rom gives the same copy.
+        .decompression_routine = jfg_prelink_rom,
+        .has_compressed_code = true,
         .entrypoint_address = get_entrypoint_address(),
         .entrypoint = custom_recomp_entrypoint,
         .thread_create_callback = custom_thread_create_callback,
@@ -147,7 +161,13 @@ int main(int argc, char** argv) {
                     cli_args.window_height = height;
                 }
             }
+        } else if (jfg_launch_arg(argc, argv, &i)) {
+            // JFG PORT: --start-level, --mods-only, --capabilities... (src/jfg/jfg_launch.cpp)
         }
+    }
+    // JFG PORT: --capabilities prints and ends here; --start-level skips the launcher; --mods-only limits this run's mods.
+    if (const int exit_code = jfg_launch_ready(&cli_args.skip_launcher); exit_code >= 0) {
+        return exit_code;
     }
 
 #if !defined(__APPLE__)
@@ -236,7 +256,7 @@ int main(int argc, char** argv) {
     }
     // Populate ROM validity before deciding whether the launcher is needed.
     // The runtime performs this check again during startup; doing it here lets
-    // an already configured Mac app launch straight into DKR.
+    // an already configured Mac app launch straight into the game.
     recomp::check_all_stored_roms();
     // JFG PORT: bin\jfg_launcher.txt (src/jfg/jfg_update_check.cpp). A ROM path there starts the game straight away, as
     // --rom <path> --skip-launcher would, unless --rom or --launcher was given. It also holds check_for_updates.
@@ -261,6 +281,7 @@ int main(int argc, char** argv) {
     }
 
     recompui::register_ui_exports();
+    jfg_register_mod_exports(); // JFG PORT: recomp_printf and other functions mods import (src/jfg/jfg_mods.cpp)
     dino::runtime::register_overlays();
 
     dino::config::load_config();

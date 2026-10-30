@@ -126,30 +126,6 @@ extern "C" void recomp_time_us(uint8_t* rdram, recomp_context* ctx) {
     _return(ctx, static_cast<u32>(std::chrono::duration_cast<std::chrono::microseconds>(ultramodern::time_since_start()).count()));
 }
 
-extern "C" void recomp_get_hud_mode(uint8_t* rdram, recomp_context* ctx) {
-    _return(ctx, static_cast<int>(dino::config::get_hud_mode()));
-}
-
-extern "C" void recomp_get_minimap_mode(uint8_t* rdram, recomp_context* ctx) {
-    _return(ctx, static_cast<int>(dino::config::get_minimap_mode()));
-}
-
-extern "C" void recomp_get_bgm_volume(uint8_t* rdram, recomp_context* ctx) {
-    _return(ctx, dino::config::get_bgm_volume());
-}
-
-extern "C" void recomp_get_sfx_volume(uint8_t* rdram, recomp_context* ctx) {
-    _return(ctx, dino::config::get_sfx_volume());
-}
-
-extern "C" void recomp_get_dialog_volume(uint8_t* rdram, recomp_context* ctx) {
-    _return(ctx, dino::config::get_dialog_volume());
-}
-
-extern "C" void recomp_get_subtitles_enabled(uint8_t* rdram, recomp_context* ctx) {
-    _return(ctx, dino::config::get_subtitles_enabled() ? 1 : 0);
-}
-
 namespace dino::recomp_api {
     void register_general_exports() {
         REGISTER_EXPORT(recomp_get_window_resolution);
@@ -163,11 +139,5 @@ namespace dino::recomp_api {
         REGISTER_EXPORT(recomp_exit);
         REGISTER_EXPORT(recomp_powf);
         REGISTER_EXPORT(recomp_time_us);
-        REGISTER_EXPORT(recomp_get_hud_mode);
-        REGISTER_EXPORT(recomp_get_minimap_mode);
-        REGISTER_EXPORT(recomp_get_bgm_volume);
-        REGISTER_EXPORT(recomp_get_sfx_volume);
-        REGISTER_EXPORT(recomp_get_dialog_volume);
-        REGISTER_EXPORT(recomp_get_subtitles_enabled);
     }
 }

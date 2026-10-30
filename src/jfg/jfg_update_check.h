@@ -53,9 +53,11 @@ bool jfg_restart_into_launcher();
 // The markdown of CHANGELOG.md that ships in assets/jfg_launcher, from its first version heading (newest first).
 std::string jfg_changelog_text();
 
-// The commits made since the last release, from GitHub (empty until they have arrived, or when offline), as markdown: a
-// "## Since the last release" heading and one "- " line each. Commits by GitHub's bots (the release commit of the Release
-// workflow) are left out.
+// What is coming after this build, from GitHub (empty until it has arrived, or when offline), as markdown. When a newer
+// release is in testing and its branch (release/<x.y>) has hand-written notes in CHANGELOG.md's "## Unreleased"
+// section: a "## Coming in x.y" heading and those notes. Otherwise the commits made since the last release: a
+// "## Since the last release" heading and one "- " line each, leaving out commits by GitHub's bots (the release commit
+// of the Release workflow).
 std::string jfg_changelog_commits();
 
 // Changelog markdown (the two above, JfgUpdateInfo::changelog) as RML for the launcher's dialogs, with the version

@@ -23,6 +23,10 @@
 #include "RmlUi/Core/RenderInterfaceCompatibility.h"
 #include "RmlUi/../../Source/Core/Elements/ElementLabel.h"
 #include "RmlUi_Platform_SDL.h"
+#include "jfg/jfg_locale.h" // JFG PORT: the menus in the chosen language
+static void jfg_upper_latin_texts(Rml::Element* element);
+static void jfg_switch_language(Rml::Context* context);
+static std::string jfg_upper_latin(const std::string& text); // JFG PORT: below deinit_hook
 
 #include "config/config.hpp"
 #include "input/input.hpp"
@@ -39,6 +43,7 @@
 #include "ui_renderer.h"
 void jfg_config_menu_refresh(); // JFG PORT: src/ui/ui_config.cpp
 void close_config_menu(); // src/ui/ui_config.cpp (JFG_DEBUG_CONFIG_CLOSE)
+void jfg_config_note_input(bool controller); // src/ui/ui_config.cpp: the last input in the menus (Players row)
 void jfg_config_step_tab(int dir); // JFG PORT: src/ui/ui_config.cpp
 void jfg_restore_menu_place(); // JFG PORT: src/ui/ui_config.cpp, the menu reopens where it was closed
 bool jfg_config_slider_step(int dir, float held_secs, bool bumper); // JFG PORT: src/ui/ui_config.cpp
@@ -49,6 +54,9 @@ void jfg_launcher_start_pressed(); // JFG PORT: src/ui/ui_launcher.cpp (controll
 void jfg_launcher_scroll(float pixels); // JFG PORT: src/ui/ui_launcher.cpp (controller: right stick)
 extern "C" void jfg_settings_menu_open(int open); // JFG PORT: src/jfg/jfg_camera.cpp (pauses the game)
 extern "C" void jfg_tools_ui_frame(void); // JFG PORT: src/jfg/jfg_ui_tools.cpp
+void jfg_language_prompt_frame(); // JFG PORT: src/ui/ui_language_prompt.cpp
+namespace jfg { void mod_options_frame(); } // JFG PORT: settings moved to the official mods (src/jfg/jfg_mod_options.cpp)
+namespace jfg::overlay { void set_menu_shown(bool shown); } // JFG PORT: src/jfg/jfg_overlay.cpp (mods' overlay)
 extern "C" int jfg_tools_controller_button(int button, int down, int bound); // JFG PORT: src/jfg/jfg_ui_tools.cpp (controller)
 
 static std::vector<char> read_file(const std::filesystem::path& filepath) {
@@ -213,6 +221,14 @@ public:
     int last_active_mouse_position[2] = {0, 0};
     std::unique_ptr<recompui::MenuController> config_controller;
     std::unique_ptr<recompui::MenuController> launcher_controller;
+    // JFG PORT: every text node of the menus goes through TranslateString as it is made: the chosen locale's "ui"
+    // (jfg_locale.h).
+    class JfgSystemInterface : public SystemInterface_SDL {
+    public:
+        int TranslateString(Rml::String& translated, const Rml::String& input) override {
+            return jfg::locale::translate_ui(translated, input) ? 1 : 0;
+        }
+    };
     std::unique_ptr<SystemInterface_SDL> system_interface;
     recompui::RmlRenderInterface_RT64 render_interface;
     Rml::Context* context;
@@ -227,7 +243,7 @@ public:
         launcher_menu_controller = recompui::create_launcher_menu();
         config_menu_controller = recompui::create_config_menu();
 
-        system_interface = std::make_unique<SystemInterface_SDL>();
+        system_interface = std::make_unique<JfgSystemInterface>();
         system_interface->SetWindow(window);
         render_interface.init(interface, device);
 
@@ -279,6 +295,25 @@ public:
             for (const FontFace& face : font_faces) {
                 auto font = dino::runtime::get_asset_path(face.filename);
                 Rml::LoadFontFace(font.string(), face.fallback_face);
+            }
+
+            // JFG PORT: the fonts above are Latin only. For menus in a locale with other scripts (locales/*.json "ui",
+            // e.g. Japanese), the first Japanese font the system has fills in what they lack. None is shipped.
+            const std::filesystem::path cjk_fonts[] = {
+#ifdef _WIN32
+                std::filesystem::path(std::getenv("WINDIR") ? std::getenv("WINDIR") : "C:\\Windows") / "Fonts" / "YuGothM.ttc",
+                std::filesystem::path(std::getenv("WINDIR") ? std::getenv("WINDIR") : "C:\\Windows") / "Fonts" / "meiryo.ttc",
+                std::filesystem::path(std::getenv("WINDIR") ? std::getenv("WINDIR") : "C:\\Windows") / "Fonts" / "msgothic.ttc",
+#else
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+#endif
+            };
+            for (const std::filesystem::path& font : cjk_fonts) {
+                std::error_code ec;
+                if (std::filesystem::exists(font, ec) && Rml::LoadFontFace(font.string(), true)) break;
             }
         }
     }
@@ -685,7 +720,11 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
     bool config_was_open = recompui::is_context_shown(recompui::get_config_context_id()) || recompui::is_context_shown(recompui::get_config_sub_menu_context_id());
     jfg_settings_menu_open(config_was_open ? 1 : 0); // JFG PORT
+    // JFG PORT: mods' overlay stays under the settings menu and prompts (not F10's tools bar, which leaves the HUD up)
+    jfg::overlay::set_menu_shown(config_was_open || recompui::is_prompt_open());
     jfg_tools_ui_frame(); // JFG PORT: F10's tools (src/jfg/jfg_ui_tools.cpp)
+    jfg_language_prompt_frame(); // JFG PORT: the first-run language question (src/ui/ui_language_prompt.cpp)
+    jfg::mod_options_frame(); // JFG PORT: old blood / Hide Floyd settings and profiles' mod keys, once mods are scanned
 
     using clock = std::chrono::system_clock;
 
@@ -901,6 +940,24 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                         break;
                     }
                 }
+                // JFG PORT: in the game's settings menu B is Back as well (as Esc: out of the bindings, then the menu
+                // closes), and on a mod's settings page it goes back to the mods; unless B is bound to a menu input or a
+                // binding is being set.
+                if (context_capturing_input && button == SDL_CONTROLLER_BUTTON_B && sdl_key == 0 && !recompui::is_prompt_open() &&
+                    dino::input::get_scanned_input_index() < 0) {
+                    if (recompui::is_context_shown(recompui::get_config_sub_menu_context_id())) {
+                        recompui::config_sub_menu_back();
+                        non_mouse_interacted = true;
+                        cont_interacted = true;
+                        break;
+                    }
+                    if (recompui::is_context_shown(recompui::get_config_context_id())) {
+                        ui_state->context->ProcessKeyDown(Rml::Input::KeyIdentifier::KI_ESCAPE, 0);
+                        non_mouse_interacted = true;
+                        cont_interacted = true;
+                        break;
+                    }
+                }
                 if (context_capturing_input && sdl_key) {
                     ui_state->context->ProcessKeyDown(RmlSDL::ConvertKey(sdl_key), 0);
                     latest_controller_key_pressed = sdl_key;
@@ -915,7 +972,6 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                 kb_interacted = true;
                 if (cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F8) {
                     // TODO: debug mode toggle
-                    //if (zelda64::get_debug_mode_enabled()) {
                         Rml::Debugger::SetVisible(!Rml::Debugger::IsVisible());
                     //}
                 }
@@ -1003,6 +1059,9 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
             if (open_config) {
                 ::jfg_config_menu_refresh(); // JFG PORT
+                // JFG PORT: opened with a controller button, the controller is the menu's input from the start, so its
+                // focus goes back to the mod or option it was on (jfg_restore_menu_place), not the first tab.
+                if (cur_event.type == SDL_EventType::SDL_CONTROLLERBUTTONDOWN) recompui::set_cont_active(true);
                 recompui::show_context(recompui::get_config_context_id(), "");
                 ::jfg_restore_menu_place(); // JFG PORT
             }
@@ -1047,6 +1106,19 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
         if (debug_close_secs >= 0.0f && config_was_open && since_start >= std::chrono::duration<float>(debug_close_secs)) {
             close_config_menu();
             debug_close_secs = -1.0f;
+        }
+        // JFG_DEBUG_CONFIG_REOPEN=<secs>: opens this menu again as Esc does (where it was closed) <secs> seconds after start.
+        static float debug_reopen_secs = -2.0f;
+        if (debug_reopen_secs == -2.0f) {
+            const char* env = std::getenv("JFG_DEBUG_CONFIG_REOPEN");
+            debug_reopen_secs = env ? (float)std::atof(env) : -1.0f;
+        }
+        if (debug_reopen_secs >= 0.0f && !config_was_open && ultramodern::is_game_started() &&
+            since_start >= std::chrono::duration<float>(debug_reopen_secs)) {
+            ::jfg_config_menu_refresh();
+            recompui::show_context(recompui::get_config_context_id(), "");
+            ::jfg_restore_menu_place();
+            debug_reopen_secs = -1.0f;
         }
     }
 
@@ -1117,6 +1189,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
     if (cont_interacted || kb_interacted || mouse_clicked) {
         recompui::set_cont_active(cont_interacted);
+        ::jfg_config_note_input(cont_interacted); // JFG PORT: the Controls page's Players row
     }
     dino::input::config_menu_set_cont_or_kb(ui_state->cont_is_active);
 
@@ -1150,10 +1223,80 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
         jfg_launcher_ui_tick(); // JFG PORT: animates the launcher's About page
         jfg_config_pack_join_tick(); // JFG PORT: joins split texture packs, shows the progress
+        jfg_switch_language(ui_state->context); // JFG PORT: a language picked from the Language list
+        if (jfg::locale::ui_has_accents()) { // JFG PORT: capitals with accents (jfg_upper_latin_texts)
+            for (int i = 0; i < ui_state->context->GetNumDocuments(); i++) jfg_upper_latin_texts(ui_state->context->GetDocument(i));
+        }
         ui_state->context->Update();
         ui_state->context->Render();
         ui_state->render_interface.end(command_list, swap_chain_framebuffer);
     }
+}
+
+// JFG PORT: RmlUi's text-transform: uppercase only changes a-z, so a translated menu (jfg_locale.h "ui") styled in
+// capitals would show "FENêTRé". The text nodes it styles so get their Latin letters (U+00E0-U+017F) in capitals here.
+static std::string jfg_upper_latin(const std::string& text) {
+    std::string out;
+    for (size_t i = 0; i < text.size(); i++) {
+        const uint8_t c = (uint8_t)text[i];
+        if ((c == 0xC3 || c == 0xC4 || c == 0xC5) && i + 1 < text.size()) {
+            uint32_t cp = (uint32_t)(c & 0x1F) << 6 | ((uint8_t)text[i + 1] & 0x3F);
+            if (cp >= 0xE0 && cp <= 0xFE && cp != 0xF7) cp -= 0x20;
+            else if ((cp >= 0x100 && cp <= 0x137 && cp != 0x131) || (cp >= 0x14A && cp <= 0x177)) cp &= ~1u;
+            else if ((cp >= 0x139 && cp <= 0x148) || (cp >= 0x179 && cp <= 0x17E)) cp -= (cp % 2 == 0) ? 1 : 0;
+            out.push_back((char)(0xC0 | cp >> 6));
+            out.push_back((char)(0x80 | (cp & 0x3F)));
+            i++;
+            continue;
+        }
+        out.push_back((char)c);
+    }
+    return out;
+}
+
+static void jfg_upper_latin_texts(Rml::Element* element) {
+    if (Rml::ElementText* text = rmlui_dynamic_cast<Rml::ElementText*>(element)) {
+        if (text->GetComputedValues().text_transform() == Rml::Style::TextTransform::Uppercase) {
+            const std::string upper = jfg_upper_latin(text->GetText());
+            if (upper != text->GetText()) text->SetText(upper);
+        }
+        return;
+    }
+    for (int i = 0; i < element->GetNumChildren(); i++) jfg_upper_latin_texts(element->GetChild(i));
+}
+
+// JFG PORT: a new language (jfg_locale.h "ui"): every text node of the menus is put in it where it is. A node's text
+// is looked up as the language shown so far wrote it (also in the capitals above), which gives its English, then
+// written as the new one has it. Text with {{ data }} is left to its data view, and what is made from now on goes
+// through TranslateString in the new language. Two English texts one language translates alike can swap.
+static void jfg_retranslate_texts(Rml::Element* element, const std::map<std::string, std::string>& to_english,
+                                  const std::map<std::string, std::string>& ui) {
+    if (Rml::ElementText* text = rmlui_dynamic_cast<Rml::ElementText*>(element)) {
+        const std::string& now = text->GetText();
+        auto english = to_english.find(jfg::locale::ui_key(now));
+        if (english == to_english.end()) return;
+        auto it = ui.find(english->second);
+        const std::string want = Rml::StringUtilities::DecodeRml(jfg::locale::ui_breaks(it != ui.end() ? it->second : english->second));
+        const size_t first = now.find_first_not_of(" \t\r\n"), last = now.find_last_not_of(" \t\r\n");
+        const std::string out = now.substr(0, first) + want + now.substr(last + 1);
+        if (out != now) text->SetText(out);
+        return;
+    }
+    for (int i = 0; i < element->GetNumChildren(); i++) jfg_retranslate_texts(element->GetChild(i), to_english, ui);
+}
+
+static void jfg_switch_language(Rml::Context* context) {
+    std::map<std::string, std::string> old_ui, new_ui, to_english;
+    if (!jfg::locale::take_ui_switch(old_ui, new_ui)) return;
+    auto add = [&](const std::string& text, const std::string& english) {
+        const std::string decoded = Rml::StringUtilities::DecodeRml(jfg::locale::ui_breaks(text));
+        to_english.emplace(jfg::locale::ui_key(decoded), english);
+        to_english.emplace(jfg::locale::ui_key(jfg_upper_latin(decoded)), english);
+    };
+    for (const auto& [english, text] : old_ui) add(text, english);
+    for (const auto* ui : { &old_ui, &new_ui })
+        for (const auto& [english, text] : *ui) add(english, english);
+    for (int i = 0; i < context->GetNumDocuments(); i++) jfg_retranslate_texts(context->GetDocument(i), to_english, new_ui);
 }
 
 void deinit_hook() {

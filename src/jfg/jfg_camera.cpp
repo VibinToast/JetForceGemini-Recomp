@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "jfg_api.h"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -47,7 +49,7 @@ bool fly_camera_tick(recomp_context* ctx) {
         wr8(ADDR_instrumentsHide, 1);
     }
     else show_hud();
-    const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
+    const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
     if (!g_fly.started) {
         g_fly.started = true;
         g_fly.x = rdf(cam + 0x0C); g_fly.y = rdf(cam + 0x10); g_fly.z = rdf(cam + 0x14);
@@ -101,7 +103,12 @@ extern "C" int jfg_freeze_world(void) {
 void jfg_camera_restore() {
     if (!g_cam.overridden) return;
     g_cam.overridden = false;
-    for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { uint32_t v; std::memcpy(&v, &g_cam.saved[i], 4); wr32(g_cam.camera_addr + i, v); }
+    // Not the shake (+0x30..+0x3B): camTick sets it after the scene is drawn, so the saved one is stale, and putting it
+    // back each tick kept the shake at 0 for good (camStartShake did nothing with this camera on).
+    for (uint32_t i = 0; i < Camera::Size; i += 4) {
+        if (i >= Camera::SHAKE && i < Camera::SHAKE + 12) continue;
+        uint32_t v; std::memcpy(&v, &g_cam.saved[i], 4); wr32(g_cam.camera_addr + i, v);
+    }
 }
 
 // The game's follow camera keeps itself out of walls with func_8002CC70 (from the point it looks at, the wanted camera
@@ -133,8 +140,8 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     fov_refresh();
     if (g_fly.active && g_fly.started && !g_cam.overridden) {
-        const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
-        for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
+        const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
+        for (uint32_t i = 0; i < Camera::Size; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
         g_cam.camera_addr = cam;
         g_cam.overridden = true;
         wrf(cam + 0x0C, g_fly.x); wrf(cam + 0x10, g_fly.y); wrf(cam + 0x14, g_fly.z);
@@ -143,11 +150,13 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         wr16(cam + 4, 0);
         return;
     }
+    // A mod's own camera (jfg_camera_set: a custom hero's, a boss fight's) wins over the dual-stick and aiming views.
+    if (jfg::api::mod_camera_active()) return;
     if ((!g_cam.active && !g_cam.shoulder) || g_cam.overridden) return;
-    const uint32_t cam_now = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
+    const uint32_t cam_now = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
     if (menu_paused() && g_cam.drawn_valid) {
         // "Pause in the Settings Menu": the view stays exactly as last drawn (jfg_camera_controls does not run meanwhile).
-        for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam_now + i); std::memcpy(&g_cam.saved[i], &v, 4); }
+        for (uint32_t i = 0; i < Camera::Size; i += 4) { const uint32_t v = rd32(cam_now + i); std::memcpy(&g_cam.saved[i], &v, 4); }
         g_cam.camera_addr = cam_now;
         g_cam.overridden = true;
         wrf(cam_now + 0x0C, g_cam.drawn_x); wrf(cam_now + 0x10, g_cam.drawn_y); wrf(cam_now + 0x14, g_cam.drawn_z);
@@ -162,7 +171,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     };
     const uint32_t obj = player_object(ctx);
     if (obj == 0) return;
-    const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
+    const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
     const float px = rdf(obj + 0x0C), py = rdf(obj + 0x10), pz = rdf(obj + 0x14);
     const float cx = rdf(cam + 0x0C), cy = rdf(cam + 0x10), cz = rdf(cam + 0x14);
     const float flat = std::sqrt((cx - px) * (cx - px) + (cz - pz) * (cz - pz));
@@ -176,9 +185,9 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         const uint32_t data = rd32(obj + 0x68);
         if (!valid_ptr(data)) return;
         constexpr float SIDE = 18.0f, BACK = 40.0f, HEAD = 60.0f, CONVERGE = 700.0f;
-        const float heading = angle_from_s16(rd16(data + PD_BODY_YAW)) + PI_F;
+        const float heading = angle_from_s16(rd16(data + PlayerData::BodyYaw::offset)) + PI_F;
         // the game's own aiming camera pitch: view pitch plus 3/8 of the reticle's offset, positive looking down
-        const float pitch = -(angle_from_s16(rd16(data + PD_VIEW_PITCH)) + 0.375f * angle_from_s16(rd16(data + PD_RETICLE_PITCH)));
+        const float pitch = -(angle_from_s16(rd16(data + PlayerData::ViewPitch::offset)) + 0.375f * angle_from_s16(rd16(data + PlayerData::ReticlePitch::offset)));
         const float fx = std::sin(heading) * std::cos(pitch), fy = -std::sin(pitch), fz = std::cos(heading) * std::cos(pitch);
         // screen-right is heading - 90 degrees: (-cos, sin)
         const float tx = px - fx * BACK - std::cos(heading) * SIDE;
@@ -188,7 +197,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         const float b = g_cam.shoulder_blend;
         float ctx_ = tx, cty_ = ty, ctz_ = tz;
         camera_collide(ctx, px, py + HEAD, pz, ctx_, cty_, ctz_);
-        for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
+        for (uint32_t i = 0; i < Camera::Size; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
         g_cam.camera_addr = cam;
         g_cam.overridden = true;
         const float game_look = -angle_from_s16(rd16(cam)), game_pitch = angle_from_s16(rd16(cam + 2));
@@ -239,7 +248,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
         // air, so a jump or a hover lifts the view smoothly rather than jerking it, and Lupus does not seem to drop when
         // his jets come on (issue #16). Per video frame, so the same at Game 30 and 60. Somewhere new: at once.
         const uint32_t data = rd32(obj + 0x68);
-        const bool air = valid_ptr(data) && (rd8(data + PD_STATE) & ~0x20u) == PD_STATE_JUMP;
+        const bool air = valid_ptr(data) && (rd8(data + PlayerData::State::offset) & ~0x20u) == PlayerData::StateJumping;
         const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
         const float target = py + ORBIT_CENTRE;
         const bool fresh = g_cam.follow_tick == 0 || g_cam.follow_tick + 1 != g_tick_count || std::fabs(target - g_cam.follow_look) > 300.0f;
@@ -256,7 +265,8 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     // also comes back towards it, moving or not. Turning the view while aiming leads the point the same way, sideways,
     // and tilting it up or down leads it up or down. Forwards and back it follows at once. After aiming it eases back.
     float qx = px, qz = pz;
-    const float distance = (float)g.camera_distance / 100.0f; // "Camera Distance": the game's distance, scaled
+    // "Camera Distance": the game's distance, scaled; and by a mod's (jfg_camera_set_distance)
+    const float distance = (float)g.camera_distance / 100.0f * jfg::api::g_camera_distance;
     // Stick up lowers the camera round the character until it looks up from below; the floor, when in the way, pulls
     // it in along the same line (camera_collide).
     const float pitch = std::clamp(game_elevation + g_cam.elevation, ORBIT_PITCH_MIN, ORBIT_PITCH_MAX);
@@ -328,7 +338,7 @@ extern "C" void jfg_camera_override(uint8_t* rdram_, recomp_context* ctx) {
     }
     const float elevation = pitch;
 
-    for (uint32_t i = 0; i < CAMERA_SIZE; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
+    for (uint32_t i = 0; i < Camera::Size; i += 4) { const uint32_t v = rd32(cam + i); std::memcpy(&g_cam.saved[i], &v, 4); }
     g_cam.camera_addr = cam;
     g_cam.overridden = true;
     float wx = qx - std::sin(g_cam.heading) * reach * std::cos(elevation);

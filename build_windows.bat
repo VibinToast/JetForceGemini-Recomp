@@ -164,13 +164,15 @@ rem Recompiler input only: a copy of the ROM with the overlays pre-linked at pri
 %PY% tools\prepare_overlays.py baserom.us.z64 - baserom.us.recomp.z64 - tools\jfg.us.dynamic_relocs.json
 if errorlevel 1 ( popd & echo [jfg] ERROR: prepare_overlays.py failed & exit /b 1 )
 mkdir RecompiledFuncs
+%PY% tools\refuse_mod_hooks.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json JFGRecompSyms\jfg.us.syms.toml jfg.us.toml
+if errorlevel 1 ( popd & echo [jfg] ERROR: refuse_mod_hooks.py failed & exit /b 1 )
 build-tools\N64Recomp.exe jfg.us.toml > recomp.log 2>&1
 if errorlevel 1 ( popd & echo [jfg] ERROR: N64Recomp failed - see %WORK%\recomp.log & exit /b 1 )
 build-tools\RSPRecomp.exe rsp-aspMain.jfg.toml
 if errorlevel 1 ( popd & echo [jfg] ERROR: RSPRecomp failed & exit /b 1 )
 %PY% tools\merge_gen_anim_data.py RecompiledFuncs
 if errorlevel 1 ( popd & echo [jfg] ERROR: merge_gen_anim_data.py failed & exit /b 1 )
-%PY% tools\fix_dynamic_relocs.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json baserom.us.recomp.z64 jfg.us.syms.toml
+%PY% tools\fix_dynamic_relocs.py RecompiledFuncs tools\jfg.us.dynamic_relocs.json baserom.us.recomp.z64 JFGRecompSyms\jfg.us.syms.toml
 if errorlevel 1 ( popd & echo [jfg] ERROR: fix_dynamic_relocs.py failed & exit /b 1 )
 popd
 rem Saved last, so a run that stopped half-way generates the code again next time.
@@ -194,6 +196,11 @@ echo [jfg] building ^(10-40 minutes the first time^)...
 rem -k 0: keep going after errors so one run reports all of them
 cmake --build "%WORK%\build-windows" --parallel -- -k 0
 if errorlevel 1 ( echo [jfg] ERROR: build failed - see the errors above & exit /b 1 )
+rem The game's overlay pre-linker (for mods' hooks) must give the bytes prepare_overlays.py gave the recompiler.
+if exist "%WORK%\baserom.us.recomp.z64" (
+    "%WORK%\build-windows\jfg_prelink_check.exe" "%JFG_ROM%" "%WORK%\baserom.us.recomp.z64"
+    if errorlevel 1 ( echo [jfg] ERROR: the two overlay pre-linkers differ - see above & exit /b 1 )
+) else echo [jfg] prelink check skipped: no baserom.us.recomp.z64 ^(pre-generated game code^)
 
 if not exist "%WORK%\build-windows\JetForceGeminiRecompiled.exe" ( echo [jfg] ERROR: build reported success but the executable is missing & exit /b 1 )
 
@@ -217,6 +224,6 @@ exit /b 0
 :inputs_hash
 rem One hash of everything the game code is made from (tools\recomp_inputs_hash.py), in INPUTS_HASH.
 set "INPUTS_HASH="
-for /f "usebackq delims=" %%h in (`%PY% "%WORK%\tools\recomp_inputs_hash.py" "%JFG_ROM%" "%WORK%\jfg.us.toml" "%WORK%\jfg.us.syms.toml" "%WORK%\rsp-aspMain.jfg.toml" "%WORK%\tools\*.py" "%WORK%\tools\jfg.us.dynamic_relocs.json" "%WORK%\build-tools\N64Recomp.exe" "%WORK%\build-tools\RSPRecomp.exe"`) do set "INPUTS_HASH=%%h"
+for /f "usebackq delims=" %%h in (`%PY% "%WORK%\tools\recomp_inputs_hash.py" "%JFG_ROM%" "%WORK%\jfg.us.toml" "%WORK%\JFGRecompSyms\jfg.us.syms.toml" "%WORK%\rsp-aspMain.jfg.toml" "%WORK%\tools\*.py" "%WORK%\tools\jfg.us.dynamic_relocs.json" "%WORK%\tools\wrapped_funcs.txt" "%WORK%\build-tools\N64Recomp.exe" "%WORK%\build-tools\RSPRecomp.exe"`) do set "INPUTS_HASH=%%h"
 if not defined INPUTS_HASH ( echo [jfg] ERROR: recomp_inputs_hash.py failed & exit /b 1 )
 exit /b 0

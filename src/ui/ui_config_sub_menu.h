@@ -28,6 +28,7 @@ public:
     ConfigOptionElement(Element *parent);
     virtual ~ConfigOptionElement();
     void set_option_id(std::string_view id);
+    void set_highlighted(bool on); // JFG PORT: the chosen option's card
     void set_name(std::string_view name);
     void set_description(std::string_view description);
     void set_hover_callback(std::function<void(ConfigOptionElement *, bool)> callback);

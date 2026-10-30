@@ -339,6 +339,75 @@ void update_dump_scene() {
     std::lock_guard lock(g_dump_scene_mutex);
     g_dump_scene = tag;
 }
+// Texture dumping, mods' own textures: they go to texture_dump/<mod id> (with "One folder per level",
+// texture_dump/<mod id>/<level>), each with its own _dynamic, so a texture pack made from a dump keeps the game's
+// textures apart from each mod's (a player without the mod has none of them). texLoadTexture's wrapper
+// (jfg_diagnostics.cpp) notes where in RDRAM a mod's texture was loaded, texFreeTexture's drops it, and the renderer
+// asks for the folder of each texture it dumps by the address it was loaded from.
+std::string texture_owner(int tex_id); // jfg_assets.cpp
+bool mod_textures();
+struct ModTexture {
+    uint32_t end;
+    std::string mod;
+    bool freed = false;
+    std::chrono::steady_clock::time_point freed_at{};
+};
+std::mutex g_mod_tex_mutex;
+std::map<uint32_t, ModTexture> g_mod_tex; // RDRAM offset of a mod's loaded texture -> its end and mod
+constexpr uint32_t RDRAM_OFFSET = 0x00FFFFFF;
+// The renderer draws a frame or two behind the game: a texture freed this long ago may still be drawn.
+constexpr std::chrono::milliseconds FREED_GRACE{ 500 };
+
+void texture_loaded(int tex_id, uint32_t tex) {
+    if (!mod_textures() || !valid_ptr(tex)) return;
+    const uint32_t cmd = rd32(tex + 0x0C); // the texture's display list, which the loader builds right after its data
+    if (cmd <= tex || cmd - tex > 0x100000) return;
+    const uint32_t start = tex & RDRAM_OFFSET, end = cmd & RDRAM_OFFSET;
+    std::string mod = texture_owner(tex_id);
+    std::lock_guard lock(g_mod_tex_mutex);
+    auto it = g_mod_tex.upper_bound(start); // whatever was in this memory before is gone
+    if (it != g_mod_tex.begin() && std::prev(it)->second.end > start) --it;
+    while (it != g_mod_tex.end() && it->first < end) it = g_mod_tex.erase(it);
+    if (!mod.empty()) g_mod_tex[start] = ModTexture{ end, std::move(mod) };
+}
+
+JFG_WRAP(texFreeTexture) {
+    const uint32_t tex = (uint32_t)ctx->r4;
+    if (valid_ptr(tex) && rd16(tex + 8) == 1) { // the last instance: the texture is freed
+        std::lock_guard lock(g_mod_tex_mutex);
+        auto it = g_mod_tex.find(tex & RDRAM_OFFSET);
+        if (it != g_mod_tex.end() && !it->second.freed) {
+            it->second.freed = true;
+            it->second.freed_at = std::chrono::steady_clock::now();
+        }
+    }
+    texFreeTexture_orig(rdram, ctx);
+}
+
+// The folder under texture_dump for a texture loaded from this RDRAM address: 1 and the folder for a mod's texture,
+// 0 for the game's own (the renderer's thread).
+extern "C" int jfg_texture_dump_mod_folder(uint32_t address, char* buf, int size) {
+    address &= RDRAM_OFFSET;
+    std::string mod;
+    {
+        std::lock_guard lock(g_mod_tex_mutex);
+        auto it = g_mod_tex.upper_bound(address);
+        if (it == g_mod_tex.begin()) return 0;
+        --it;
+        if (address >= it->second.end) return 0;
+        if (it->second.freed && std::chrono::steady_clock::now() - it->second.freed_at > FREED_GRACE) {
+            g_mod_tex.erase(it);
+            return 0;
+        }
+        mod = it->second.mod;
+    }
+    for (char& c : mod) if (!(std::isalnum((unsigned char)c) || c == '-' || c == '_' || c == '.')) c = '_';
+    std::string level;
+    { std::lock_guard lock(g_dump_folder_mutex); level = g_dump_folder; }
+    std::snprintf(buf, (size_t)size, "%s%s%s", mod.c_str(), level.empty() ? "" : "/", level.c_str());
+    return 1;
+}
+
 extern "C" int jfg_texture_pack_current(char* buf, int size) {
     std::lock_guard lock(g_pack_mutex);
     std::snprintf(buf, (size_t)size, "%s", g_pack_folder.c_str());

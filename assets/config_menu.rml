@@ -35,7 +35,10 @@
 	<style>
 		/* JFG PORT: the game around the menu is darkened (the recomp's backdrop lightened it a little). */
 		#window .centered-page { background-color: rgba(0, 0, 0, 0.6); }
-		.jfg-selected { border-color: #ffb21a; background-color: rgba(60, 200, 255, 0.3); color: #e8f3ff; } /* the chosen profile / pack: a gold outline on the hover background */
+		/* The chosen profile, pack or Quick Setup: gold outline and text on a faint gold, unlike the cyan of where the
+		   controller / mouse is; both: the cyan with the gold outline. */
+		.button.jfg-selected { border-color: #ffb21a; border-width: 2dp; background-color: rgba(255, 178, 26, 0.15); color: #ffb21a; }
+		.button.jfg-selected:focus, .button.jfg-selected:hover { border-color: #ffb21a; background-color: rgba(60, 200, 255, 0.3); color: #e8f3ff; }
 		.jfg-note { color: #3cc8ff; }
 		/* JFG PORT: group headings in the emblem gold, as in the launcher (the options and selections are "Gemini" cyan). */
 		.config-group__title { color: #ffb21a; }
@@ -133,7 +136,9 @@
 						<panel class="config" data-model="jfg_controls_model">
 							<template src="config-menu__jfg_controls" />
 						</panel>
-						<tab class="tab" id="tab_controls">
+						<!-- The bindings have no tab of their own (hidden; the bumpers skip it): Customize Buttons on the Controls
+						     tab opens them, Back to Controls or B goes back (ui_config.cpp, open_bindings). -->
+						<tab class="tab" id="tab_controls" style="display: none;">
 							<div>Bindings</div>
 							<div class="tab__indicator"></div>
 						</tab>
@@ -169,19 +174,11 @@
 						</tab>
 						<panel class="config">
 							<form class="config__form">
-								<div class="config__hz-wrapper">
-									<div class="config__wrapper">
-										<div style="display: block; margin: 16dp 12dp 0dp;">
-											<button class="button" id="jfg_quit_launcher" style="display: block; width: 520dp; margin: 0dp 0dp 24dp; nav-up: #tab_jfg_quit; nav-down: #jfg_quit_game; nav-left: #tab_jfg_quit; nav-right: none;" onclick="open_return_to_launcher_prompt:jfg_quit_launcher">Return to Launcher</button>
-											<button class="button" id="jfg_quit_game" style="display: block; width: 520dp; margin: 0dp; nav-up: #jfg_quit_launcher; nav-down: none; nav-left: #tab_jfg_quit; nav-right: none;" onclick="open_quit_game_prompt:jfg_quit_game">Quit Game</button>
-										</div>
-									</div>
-									<div class="config__wrapper jfg-desc">
-										<div class="jfg-desc__card"><div class="jfg-desc__title">Quit</div>
-											<p><b>Return to Launcher</b>: the game restarts on the launcher.</p>
-											<p><b>Quit Game</b>: closes the game.</p>
-											<p>Both ask first. Any progress since your last save will be lost.</p></div>
-									</div>
+								<!-- The three buttons in the middle of the page (each asks first: their prompts say what is lost). -->
+								<div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%;">
+									<button class="button" id="jfg_quit_title" style="display: block; width: 640dp; margin: 0dp 0dp 24dp; text-align: center; nav-up: #tab_jfg_quit; nav-down: #jfg_quit_launcher; nav-left: #tab_jfg_quit; nav-right: none;" onclick="open_return_to_title_prompt:jfg_quit_title">Return to Main Menu</button>
+									<button class="button" id="jfg_quit_launcher" style="display: block; width: 640dp; margin: 0dp 0dp 24dp; text-align: center; nav-up: #jfg_quit_title; nav-down: #jfg_quit_game; nav-left: #tab_jfg_quit; nav-right: none;" onclick="open_return_to_launcher_prompt:jfg_quit_launcher">Return to Launcher</button>
+									<button class="button" id="jfg_quit_game" style="display: block; width: 640dp; margin: 0dp; text-align: center; nav-up: #jfg_quit_launcher; nav-down: none; nav-left: #tab_jfg_quit; nav-right: none;" onclick="open_quit_game_prompt:jfg_quit_game">Quit Game</button>
 								</div>
 							</form>
 						</panel>

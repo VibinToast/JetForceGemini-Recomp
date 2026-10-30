@@ -34,6 +34,8 @@
 
 #include "debug_ui/debug_ui.hpp"
 #include "input/input.hpp"
+#include "jfg_api.h"
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
@@ -50,7 +52,8 @@ std::atomic<bool> g_aim_jump_active{ false }; // a jump from aiming is under way
 CameraControl g_cam; // see jfg_port.h
 
 // Boss fights: the player's boss control (boyBossControl / dogBossControl / girlBossControl) runs in place of the
-// normal one; jfg_boss_tick (hook at their entry) notes the tick. See boss_controls().
+// normal one; jfg_boss_tick (internal handler of jfg_on_boss_fight_control, jfg_api.cpp) notes the tick. See
+// boss_controls().
 uint32_t g_tick_count = 0;     // jfg_camera_controls calls
 uint32_t g_boss_seen_tick = 0; // g_tick_count when the boss control last ran
 bool boss_control_active() { return g_boss_seen_tick != 0 && g_tick_count - g_boss_seen_tick <= 2; }
@@ -124,6 +127,28 @@ extern "C" void jfg_mouse_wheel(int notches) {
     if (jfg_mouse_keyboard_active() && !dino::input::game_input_disabled()) g_mouse_wheel.fetch_add(notches, std::memory_order_relaxed);
 }
 
+// The physical controls as a modern pad (src/input/controls.cpp, input thread), for mods: JFG_PAD_* bits, triggers.
+std::atomic<uint32_t> g_pad_buttons{ 0 };
+std::atomic<float> g_pad_lt{ 0 }, g_pad_rt{ 0 };
+extern "C" void jfg_pad_state(uint32_t buttons, float left_trigger, float right_trigger) {
+    g_pad_buttons.store(buttons, std::memory_order_relaxed);
+    g_pad_lt.store(left_trigger, std::memory_order_relaxed);
+    g_pad_rt.store(right_trigger, std::memory_order_relaxed);
+}
+
+// jfg_controls_get(JfgControls* out): whether the dual-stick controls (the Dual Stick or Mouse and Keyboard option)
+// are in charge now and whether the mouse and keyboard play, and the physical controls held.
+void api::controls_get(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t out = (uint32_t)ctx->r4;
+    if (out == 0) return;
+    wr32(out + 0x00, jfg_dual_stick_active() ? 1u : 0u);
+    wr32(out + 0x04, jfg_mouse_keyboard_active() ? 1u : 0u);
+    wr32(out + 0x08, g_pad_buttons.load(std::memory_order_relaxed));
+    wrf(out + 0x0C, g_pad_lt.load(std::memory_order_relaxed));
+    wrf(out + 0x10, g_pad_rt.load(std::memory_order_relaxed));
+}
+
 extern "C" void jfg_mouse_motion(int dx, int dy) {
     {
         // JFG_DEBUG_MOUSE=1: every mouse report, with the time since the one before (does the mouse arrive in bursts?).
@@ -157,6 +182,7 @@ extern "C" void jfg_dual_stick(uint16_t* buttons, float* x, float* y, float righ
         const bool z = (b & BTN_Z) != 0, r = (b & BTN_R) != 0;
         b = (uint16_t)((b & ~(BTN_Z | BTN_R)) | (z ? BTN_R : 0) | (r ? BTN_Z : 0));
     }
+    jfg_input_toggles(&b); // a mod's toggled buttons (jfg_hero_api.cpp)
     // Tests without a controller: JFG_DUAL_STICK_TEST names a text file holding "lx,ly,rx,ry", read on every poll.
     static const char* const test_file = std::getenv("JFG_DUAL_STICK_TEST");
     if (test_file != nullptr) {
@@ -194,8 +220,8 @@ extern "C" void jfg_dual_stick_release(void) {
 }
 
 static bool aim_state(uint32_t obj) {
-    const uint32_t data = rd32(obj + 0x68);
-    return valid_ptr(data) && rd8(data + PD_STATE) == PD_STATE_AIMING;
+    const uint32_t data = Obj::Data::get(obj);
+    return valid_ptr(data) && PlayerData::State::get(data) == PlayerData::StateAiming;
 }
 
 // "Jump while aiming" option. In the game, C-up while aiming (R held) zooms the sniper scope / steps forward, and
@@ -208,7 +234,7 @@ static bool aim_state(uint32_t obj) {
 // D-pad give while aiming (walking forward, zoom) - jfg_dual_stick() records it; otherwise the N64 C-up itself.
 // Edits this tick's controller data and pressed-buttons word, after joyRead, like the mouse wheel does.
 
-static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
+static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed, bool off) {
     constexpr uint16_t BTN_R = 0x0010, C_UP = 0x0008;
     static int phase = 0, ticks = 0;
     static bool jump_was_held = false;
@@ -216,7 +242,7 @@ static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
     const bool jump_edge = jump_held && !jump_was_held;
     jump_was_held = jump_held;
     auto finish = [&]() { phase = 0; g_aim_jump_active.store(false, std::memory_order_relaxed); };
-    if (!g.aim_jump) { finish(); return; }
+    if (!g.aim_jump || off) { finish(); return; }
 
     const uint16_t cur = rd16(pad), down = rd16(pressed);
     if (phase == 0) {
@@ -238,10 +264,10 @@ static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
     }
 
     // In the air: keep R let go until the jump state ends (or the jump never started).
-    const uint32_t data = rd32(obj + 0x68);
-    const int state = valid_ptr(data) ? rd8(data + PD_STATE) : -1;
+    const uint32_t data = Obj::Data::get(obj);
+    const int state = valid_ptr(data) ? PlayerData::State::get(data) : -1;
     ticks++;
-    if ((state != PD_STATE_JUMP && ticks > 2) || ticks > 300) { finish(); return; }
+    if ((state != PlayerData::StateJumping && ticks > 2) || ticks > 300) { finish(); return; }
     wr16(pad, (uint16_t)(cur & ~BTN_R));
     wr16(pressed, (uint16_t)(down & ~BTN_R));
 }
@@ -254,13 +280,13 @@ static void aim_jump(uint32_t obj, uint32_t pad, uint32_t pressed) {
 // With the option the game is given a centered stick, so its reticle offset stays at zero, and the stick turns the
 // body direction and the view pitch directly, at a steady rate.
 static void aim_controls(uint32_t obj, uint32_t pad, float frames) {
-    const uint32_t data = rd32(obj + 0x68);
+    const uint32_t data = Obj::Data::get(obj);
     const float speed = (float)g.aim_speed / 100.0f;
-    const int raw_x = (int8_t)rd8(pad + 2), raw_y = (int8_t)rd8(pad + 3);
+    const int raw_x = Pad::StickX::get(pad), raw_y = Pad::StickY::get(pad);
     if (!g.aim_centered && !jfg_mouse_keyboard_active()) { // the mouse always turns the view directly
         if (g.aim_speed != 100) {
-            wr8(pad + 2, (uint8_t)(int8_t)std::clamp((int)std::lround(raw_x * speed), -80, 80));
-            wr8(pad + 3, (uint8_t)(int8_t)std::clamp((int)std::lround(raw_y * speed), -80, 80));
+            Pad::StickX::set(pad, (int8_t)std::clamp((int)std::lround(raw_x * speed), -80, 80));
+            Pad::StickY::set(pad, (int8_t)std::clamp((int)std::lround(raw_y * speed), -80, 80));
         }
         return;
     }
@@ -276,20 +302,20 @@ static void aim_controls(uint32_t obj, uint32_t pad, float frames) {
     const int yaw_step = (int)std::lround(axis(raw_x) * YAW_RATE * frames * speed) + g_mouse_aim_x;
     const int pitch_step = (int)std::lround(axis(raw_y) * PITCH_RATE * frames * speed) + g_mouse_aim_y;
     // Whatever offset the game still holds (from before the option was switched on) goes into the view first.
-    const uint16_t body = (uint16_t)(rd16(data + PD_BODY_YAW) + (int16_t)rd16(data + PD_RETICLE_YAW) - yaw_step);
-    wr16(obj, body);
-    wr16(data + PD_BODY_YAW_COPY, body);
-    wr16(data + PD_BODY_YAW, body);
-    for (uint32_t k : { PD_RETICLE_YAW, 0x1DCu, 0x246u }) wr16(data + k, 0);
-    const int view = std::clamp((int)(int16_t)rd16(data + PD_VIEW_PITCH) + (int)(int16_t)rd16(data + PD_RETICLE_PITCH) - pitch_step, -PITCH_LIMIT, PITCH_LIMIT);
-    wr16(data + PD_VIEW_PITCH, (uint16_t)(int16_t)view);
-    wr16(data + PD_RETICLE_PITCH, 0);
-    wr8(pad + 2, 0);
-    wr8(pad + 3, 0);
+    const uint16_t body = (uint16_t)(PlayerData::BodyYaw::get(data) + PlayerData::ReticleYaw::get(data) - yaw_step);
+    Obj::Yaw::set(obj, body);
+    PlayerData::BodyYawCopy::set(data, body);
+    PlayerData::BodyYaw::set(data, body);
+    for (uint32_t k : { PlayerData::ReticleYaw::offset, PlayerData::ReticleYawCopy::offset, PlayerData::ReticleYawCopy2::offset }) wr16(data + k, 0);
+    const int view = std::clamp((int)PlayerData::ViewPitch::get(data) + (int)PlayerData::ReticlePitch::get(data) - pitch_step, -PITCH_LIMIT, PITCH_LIMIT);
+    PlayerData::ViewPitch::set(data, (int16_t)view);
+    PlayerData::ReticlePitch::set(data, 0);
+    Pad::StickX::set(pad, 0);
+    Pad::StickY::set(pad, 0);
 }
 
 // --- boss fights -----------------------------------------------------------------------------------------------------
-extern "C" void jfg_boss_tick(void) {
+extern "C" void jfg_boss_tick(uint8_t*, recomp_context*) {
     g_boss_seen_tick = g_tick_count;
 }
 
@@ -363,17 +389,17 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
         if (turn > 0 && reticle < RETICLE_LIMIT) { const int back = std::min(turn, RETICLE_LIMIT - reticle); turn -= back; reticle += back; }
         if (turn < 0 && reticle > -RETICLE_LIMIT) { const int back = std::min(-turn, reticle + RETICLE_LIMIT); turn += back; reticle -= back; }
         wr16(obj, (uint16_t)(centre + turn));
-        wr16(data + PD_BODY_YAW_COPY, centre);
-        wr16(data + PD_BODY_YAW, centre);
-        for (uint32_t k : { PD_RETICLE_YAW, 0x1DCu, 0x246u }) wr16(data + k, (uint16_t)(int16_t)reticle);
-        const int view = std::clamp((int)(int16_t)rd16(data + PD_VIEW_PITCH) + (int)(int16_t)rd16(data + PD_RETICLE_PITCH) - pitch_step, -PITCH_LIMIT, PITCH_LIMIT);
-        wr16(data + PD_VIEW_PITCH, (uint16_t)(int16_t)view);
-        wr16(data + PD_RETICLE_PITCH, 0);
+        wr16(data + PlayerData::BodyYawCopy::offset, centre);
+        wr16(data + PlayerData::BodyYaw::offset, centre);
+        for (uint32_t k : { PlayerData::ReticleYaw::offset, 0x1DCu, 0x246u }) wr16(data + k, (uint16_t)(int16_t)reticle);
+        const int view = std::clamp((int)(int16_t)rd16(data + PlayerData::ViewPitch::offset) + (int)(int16_t)rd16(data + PlayerData::ReticlePitch::offset) - pitch_step, -PITCH_LIMIT, PITCH_LIMIT);
+        wr16(data + PlayerData::ViewPitch::offset, (uint16_t)(int16_t)view);
+        wr16(data + PlayerData::ReticlePitch::offset, 0);
         wr8(pad + 2, 0);
         wr8(pad + 3, 0);
         static const bool log = std::getenv("JFG_DEBUG_BOSS") != nullptr; // tests: the turn, the game's camera and the character
         if (log) {
-            const uint32_t c = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
+            const uint32_t c = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
             std::fprintf(stderr, "[boss] tick %u reticle %d turn %d cam yaw %d pos %.0f %.0f %.0f char %.1f %.1f\n", g_tick_count, reticle, turn,
                          (int)(int16_t)rd16(c), rdf(c + 0x0C), rdf(c + 0x10), rdf(c + 0x14), rdf(obj + 0x0C), rdf(obj + 0x14));
         }
@@ -391,43 +417,68 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
 // game's stick left as it is (the A / D keys and a controller still turn Floyd the game's way). The levelling drift is
 // left out while the mouse flies, and the roll gets a bank of its own from the mouse's turn rate.
 //
-// Two hooks in sidekickControl, s0 = Floyd's data, sp + 0x124 = the tick's frames. Phase 0 (0x8002FC28, before the roll
-// is eased): the bank added last tick is taken off again, so the game eases its own roll. Phase 1 (0x8002FC70, after the
-// roll, before heading, pitch and roll are copied to the object): the mouse's turn, pitch and bank are put in.
-extern "C" void jfg_floyd_steer(uint8_t* rdram_, recomp_context* ctx, int phase) {
+// sidekickControl's wrapper notes Floyd's data and frames; dAngle's wrapper does the steering around the roll easing.
+namespace {
+uint32_t g_sidekick_data = 0;   // Floyd's data (object + 0x68) while sidekickControl runs
+int g_sidekick_frames = 0;      // its updateRate
+int g_sidekick_dangles = -1;    // dAngle calls it has made; -1 outside it
+uint32_t g_bank_data = 0, g_pitch_data = 0, g_pitch_tick = 0;
+int g_bank_added = 0, g_pitch = 0;
+float g_bank = 0.0f;
+} // namespace
+
+extern "C" void jfg_sidekick_begin(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    constexpr uint32_t FLOYD_YAW = 0x60, FLOYD_PITCH = 0x62, FLOYD_ROLL = 0x64, FLOYD_PITCH_RATE = 0x68;
-    constexpr int PITCH_LIMIT = 0x4000, ROLL_LIMIT = 520 * 20; // the game's own limits (full stick: rate 520)
-    static uint32_t bank_data = 0, pitch_data = 0, pitch_tick = 0;
-    static int bank_added = 0, pitch = 0;
-    static float bank = 0.0f;
-    const uint32_t data = (uint32_t)ctx->r16;
-    if (!valid_ptr(data)) return;
-    if (phase == 0) {
-        if (bank_added != 0 && data == bank_data) wr16(data + FLOYD_ROLL, (uint16_t)(rd16(data + FLOYD_ROLL) - bank_added));
-        bank_added = 0;
-        return;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    g_sidekick_data = valid_ptr(obj) ? Obj::Data::get(obj) : 0;
+    g_sidekick_frames = std::clamp((int)ctx->r5, 1, 6);
+    g_sidekick_dangles = 0;
+}
+
+extern "C" void jfg_sidekick_end(void) { g_sidekick_dangles = -1; }
+
+// dAngle's wrapper, before the game's code. In a Floyd mission the first dAngle sidekickControl makes eases the roll
+// towards the turn rate; then the bank added last tick is taken off (the roll argument and Floyd's data), so the game
+// eases its own roll. Returns 1 for that call.
+extern "C" int jfg_floyd_roll_before(uint8_t* rdram_, recomp_context* ctx) {
+    if (g_sidekick_dangles < 0 || g_sidekick_dangles++ != 0) return 0;
+    g_rdram = rdram_;
+    const uint32_t data = g_sidekick_data;
+    if (rd8(ADDR_robotMission) == 0 || !valid_ptr(data)) return 0;
+    if (g_bank_added != 0 && data == g_bank_data) {
+        SidekickData::Roll::set(data, (uint16_t)(SidekickData::Roll::get(data) - g_bank_added));
+        ctx->r4 = (gpr)(int32_t)(int16_t)((int32_t)ctx->r4 - g_bank_added);
     }
-    if (!jfg_floyd_mouse_active()) { bank = 0.0f; pitch_data = 0; return; }
-    const int frames = std::clamp((int)rd32((uint32_t)ctx->r29 + 0x124), 1, 6);
+    g_bank_added = 0;
+    return 1;
+}
+
+// ... and after it, before sidekickControl copies heading, pitch and roll to Floyd's object: the mouse's turn and
+// pitch go into his data, and its bank onto the eased roll (dAngle's result, which the game stores).
+extern "C" void jfg_floyd_roll_after(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    constexpr int PITCH_LIMIT = 0x4000, ROLL_LIMIT = 424 * 20; // the game's own limits (full stick: turn rate 424)
+    const uint32_t data = g_sidekick_data;
+    if (!jfg_floyd_mouse_active()) { g_bank = 0.0f; g_pitch_data = 0; return; }
+    const int frames = g_sidekick_frames;
     // Heading: right lowers it, as with the stick.
-    wr16(data + FLOYD_YAW, (uint16_t)(rd16(data + FLOYD_YAW) - g_mouse_aim_x));
+    SidekickData::Yaw::set(data, (uint16_t)(SidekickData::Yaw::get(data) - g_mouse_aim_x));
     // Pitch: carried on from what was written last tick plus what the game's own pitch rate added (a controller's stick),
     // so the levelling drift does not pull it back. Taken from the game afresh when Floyd or the mission is new.
-    if (data != pitch_data || g_tick_count - pitch_tick > 1) pitch = (int16_t)rd16(data + FLOYD_PITCH);
-    else pitch += (int16_t)rd16(data + FLOYD_PITCH_RATE) * frames;
+    if (data != g_pitch_data || g_tick_count - g_pitch_tick > 1) g_pitch = SidekickData::Pitch::get(data);
+    else g_pitch += SidekickData::PitchRate::get(data) * frames;
     static const int pitch_sign = std::getenv("JFG_FLOYD_PITCH_SIGN") ? std::atoi(std::getenv("JFG_FLOYD_PITCH_SIGN")) : 1; // tests
-    pitch = std::clamp(pitch + pitch_sign * g_mouse_aim_y, -PITCH_LIMIT, PITCH_LIMIT);
-    wr16(data + FLOYD_PITCH, (uint16_t)(int16_t)pitch);
-    pitch_data = data;
-    pitch_tick = g_tick_count;
+    g_pitch = std::clamp(g_pitch + pitch_sign * g_mouse_aim_y, -PITCH_LIMIT, PITCH_LIMIT);
+    SidekickData::Pitch::set(data, (int16_t)g_pitch);
+    g_pitch_data = data;
+    g_pitch_tick = g_tick_count;
     // Bank: as the game banks for a turn rate (roll = -20 x rate per frame; the mouse's rate is minus its step per frame),
     // smoothed, since the mouse's steps come in lumps.
     const float target = std::clamp(20.0f * (float)g_mouse_aim_x / (float)frames, (float)-ROLL_LIMIT, (float)ROLL_LIMIT);
-    bank += (target - bank) * std::min(1.0f, 0.2f * (float)frames);
-    bank_added = (int)std::lround(bank);
-    bank_data = data;
-    wr16(data + FLOYD_ROLL, (uint16_t)(rd16(data + FLOYD_ROLL) + bank_added));
+    g_bank += (target - g_bank) * std::min(1.0f, 0.2f * (float)frames);
+    g_bank_added = (int)std::lround(g_bank);
+    g_bank_data = data;
+    ctx->r2 = (gpr)(int32_t)(int16_t)((int32_t)ctx->r2 + g_bank_added);
 }
 
 // Tests: JFG_DEBUG_PLAYER=<ticks> logs the player's state every that many ticks.
@@ -441,24 +492,24 @@ void debug_player_log(uint32_t obj) {
         if (hurt != nullptr && !done && obj != 0 && std::sscanf(hurt, "%f,%d", &t, &amount) == 2 &&
             std::chrono::duration<float>(std::chrono::steady_clock::now() - start).count() >= t) {
             done = true;
-            const uint32_t hit = rd32(obj + 0x4C);
+            const uint32_t hit = Obj::Damage::get(obj);
             if (valid_ptr(hit)) {
-                std::fprintf(stderr, "[player] hurt: health %d - %d\n", (int)(int16_t)rd16(hit + 6), amount);
-                wr16(hit + 6, (uint16_t)(int16_t)((int16_t)rd16(hit + 6) - amount));
+                std::fprintf(stderr, "[player] hurt: health %d - %d\n", (int)Damage::Health::get(hit), amount);
+                Damage::Health::set(hit, (int16_t)(Damage::Health::get(hit) - amount));
             }
         }
     }
     static const int every = std::getenv("JFG_DEBUG_PLAYER") ? std::max(1, std::atoi(std::getenv("JFG_DEBUG_PLAYER"))) : 0;
     if (every == 0 || obj == 0 || (g_tick_count % (uint32_t)every) != 0) return;
-    const uint32_t data = rd32(obj + 0x68), hit = rd32(obj + 0x4C);
-    const uint32_t pad = ADDR_sControllerCurrData + 6u * (rd8(ADDR_sPlayerID) & 3u);
+    const uint32_t data = Obj::Data::get(obj), hit = Obj::Damage::get(obj);
+    const uint32_t pad = ADDR_sControllerCurrData + Pad::Size * (rd8(ADDR_sPlayerID) & 3u);
     std::fprintf(stderr, "[player] tick %u level %d boss %d state %d anim %d pos %.1f %.1f %.1f yaw %d pad %04X %d %d hp %d dyaw %d rpitch %d vpitch %d 577 %d zoom %.2f fuel %d\n",
-        g_tick_count, (int)(int16_t)rd16(ADDR_currentLevel), int(boss_control_active()), valid_ptr(data) ? rd8(data + PD_STATE) : -1,
-        (int)(int8_t)rd8(obj + 0x3B), rdf(obj + 0x0C), rdf(obj + 0x10), rdf(obj + 0x14), (int)(int16_t)rd16(obj),
-        rd16(pad), (int)(int8_t)rd8(pad + 2), (int)(int8_t)rd8(pad + 3), valid_ptr(hit) ? (int)(int16_t)rd16(hit + 6) : -1,
-        valid_ptr(data) ? (int)(int16_t)rd16(data + PD_RETICLE_YAW) : 0, valid_ptr(data) ? (int)(int16_t)rd16(data + PD_RETICLE_PITCH) : 0,
-        valid_ptr(data) ? (int)(int16_t)rd16(data + PD_VIEW_PITCH) : 0, valid_ptr(data) ? (int)(int8_t)rd8(data + 0x577) : 0,
-        valid_ptr(data) ? rdf(data + 0x1EC) : 0.0f, valid_ptr(data) ? (int)(int16_t)rd16(data + 0x58C) : 0);
+        g_tick_count, (int)(int16_t)rd16(ADDR_currentLevel), int(boss_control_active()), valid_ptr(data) ? PlayerData::State::get(data) : -1,
+        (int)Obj::Anim::get(obj), Obj::PosX::get(obj), Obj::PosY::get(obj), Obj::PosZ::get(obj), (int)(int16_t)Obj::Yaw::get(obj),
+        Pad::Buttons::get(pad), (int)Pad::StickX::get(pad), (int)Pad::StickY::get(pad), valid_ptr(hit) ? (int)Damage::Health::get(hit) : -1,
+        valid_ptr(data) ? (int)PlayerData::ReticleYaw::get(data) : 0, valid_ptr(data) ? (int)PlayerData::ReticlePitch::get(data) : 0,
+        valid_ptr(data) ? (int)PlayerData::ViewPitch::get(data) : 0, valid_ptr(data) ? (int)PlayerData::ThrowLock::get(data) : 0,
+        valid_ptr(data) ? PlayerData::AimZoom::get(data) : 0.0f, valid_ptr(data) ? (int)PlayerData::Fuel::get(data) : 0);
 }
 
 // Dual-stick aiming (CameraControl::free_aim): the character aims from its gun at the point under the middle of
@@ -482,7 +533,7 @@ void jfg_aim_along_view(recomp_context* ctx, uint32_t obj, float ox, float oy, f
     {
         const int c = (int16_t)rd16(ADDR_currentCharacter);
         const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
-        const uint32_t weapon = ch ? rd8(ch + CHAR_WEAPON_OFFSET) : 0xFFu;
+        const uint32_t weapon = ch ? Character::CurrentWeapon::get(ch) : 0xFFu;
         if (weapon < 16) {
             const uint32_t def = WEAPON_TABLE + WEAPON_DEF_SIZE * weapon;
             const float r = (float)rd8(def + 0x07) * 6.0f * rdf(def + 0x10);
@@ -530,9 +581,9 @@ void jfg_aim_along_view(recomp_context* ctx, uint32_t obj, float ox, float oy, f
     const int line = (int)(int16_t)angle_to_s16(std::atan2(dy, std::sqrt(dx * dx + dz * dz)));
     const int body = (int)(int16_t)rd16(obj + 2);
     const int view = std::clamp(line - body, -PITCH_LIMIT, PITCH_LIMIT);
-    for (uint32_t k : { PD_VIEW_PITCH, 0x1D0u, 0x1DEu }) wr16(data + k, (uint16_t)(int16_t)view);
+    for (uint32_t k : { PlayerData::ViewPitch::offset, 0x1D0u, 0x1DEu }) wr16(data + k, (uint16_t)(int16_t)view);
     for (uint32_t k : { 0x1C8u, 0x1CCu }) wr16(data + k, (uint16_t)(int16_t)(body + view));
-    for (uint32_t k : { PD_RETICLE_YAW, 0x1DCu, 0x246u, PD_RETICLE_PITCH }) wr16(data + k, 0);
+    for (uint32_t k : { PlayerData::ReticleYaw::offset, 0x1DCu, 0x246u, PlayerData::ReticlePitch::offset }) wr16(data + k, 0);
 }
 
 // The tick's aim, before the game's control code: along the free camera's view from the point it orbits (once the camera is down
@@ -601,13 +652,12 @@ void jfg_camera_controls(recomp_context* ctx) {
         // On foot, and while aiming (the aim walk) only with "Sprint while aiming". Swimming (Vela, state 4: in the
         // water she is always in it, at the surface and below) has its own option and speed; jfg_move_scale applies
         // it to the whole 3D step, as it does the Dive speed.
-        const uint32_t data = rd32(obj + 0x68);
-        constexpr uint8_t STATE_SWIM = 4;
-        const int state = valid_ptr(data) ? rd8(data + PD_STATE) : -1;
-        if (state == STATE_SWIM) {
+        const uint32_t data = Obj::Data::get(obj);
+        const int state = valid_ptr(data) ? PlayerData::State::get(data) : -1;
+        if (state == PlayerData::StateSwimming) {
             if (g.sprint_swimming) g_cam.sprint_factor = (float)g.sprint_swim_speed / 100.0f;
         }
-        else if (state >= 0 && (state != PD_STATE_AIMING || g.sprint_aiming)) {
+        else if (state >= 0 && (state != PlayerData::StateAiming || g.sprint_aiming)) {
             g_cam.sprint_factor = (float)g.sprint_speed / 100.0f;
             g_cam.move_factor *= g_cam.sprint_factor;
         }
@@ -628,19 +678,30 @@ void jfg_camera_controls(recomp_context* ctx) {
         if (wheel_pending != 0) {
             const uint16_t button = wheel_pending < 0 ? 0x8000 : 0x4000; // wheel down: A (next), up: B (previous)
             wheel_pending += wheel_pending < 0 ? 1 : -1;
-            const uint32_t i = rd8(ADDR_sPlayerID) & 3u;
-            const uint32_t pad = ADDR_sControllerCurrData + 6u * i;
-            wr16(pad, (uint16_t)(rd16(pad) | button));
-            wr16(ADDR_buttonsPressed + 2u * i, (uint16_t)(rd16(ADDR_buttonsPressed + 2u * i) | button));
-            static const bool log = std::getenv("JFG_DEBUG_WHEEL") != nullptr;
             const int c = (int16_t)rd16(ADDR_currentCharacter);
+            if (api::hero_mod_controlled(c)) {
+                // A mod moves the hero (its buttons are its own): the weapon changes as the buttons would change it.
+                api::queue_weapon_step(button == 0x8000 ? 1 : -1);
+            }
+            else {
+                const uint32_t i = rd8(ADDR_sPlayerID) & 3u;
+                const uint32_t pad = ADDR_sControllerCurrData + Pad::Size * i;
+                wr16(pad, (uint16_t)(rd16(pad) | button));
+                wr16(ADDR_buttonsPressed + 2u * i, (uint16_t)(rd16(ADDR_buttonsPressed + 2u * i) | button));
+            }
+            static const bool log = std::getenv("JFG_DEBUG_WHEEL") != nullptr;
             const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
-            if (log) std::fprintf(stderr, "[jfg] wheel: press %s (weapon %d, %d more)\n", button == 0x8000 ? "A" : "B", ch ? rd8(ch + CHAR_WEAPON_OFFSET) : -1, wheel_pending);
+            if (log) std::fprintf(stderr, "[jfg] wheel: press %s (weapon %d, %d more)\n", button == 0x8000 ? "A" : "B", ch ? Character::CurrentWeapon::get(ch) : -1, wheel_pending);
         }
     }
     if (obj == 0) { g_cam.was_aiming = false; return; }
-    const uint32_t pad = ADDR_sControllerCurrData + 6u * (rd8(ADDR_sPlayerID) & 3u);
-    aim_jump(obj, pad, ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u));
+    const uint32_t pad = ADDR_sControllerCurrData + Pad::Size * (rd8(ADDR_sPlayerID) & 3u);
+    // A hero a mod moves (jfg_hero_takeover) reads the pad its own way: the aiming options keep out of it. Jump While
+    // Aiming stays off for a taken-over hero even while the game's code runs it: letting go of R hands it back to the
+    // mod, whose own jump it is then (and the option would hold R let go for good).
+    const int character = (int16_t)rd16(ADDR_currentCharacter);
+    const bool mod_hero = api::hero_mod_controlled(character);
+    aim_jump(obj, pad, ADDR_buttonsPressed + 2u * (rd8(ADDR_sPlayerID) & 3u), api::hero_taken_over(character));
     const bool aiming = (rd16(pad) & 0x0010) != 0;
 
     // The aiming options work with any control layout.
@@ -652,7 +713,7 @@ void jfg_camera_controls(recomp_context* ctx) {
         const int c = (int16_t)rd16(ADDR_currentCharacter);
         const uint32_t ch = (c >= 0 && c < 3) ? character_ptr(c) : 0;
         constexpr uint8_t WEAPON_SNIPER = 7;
-        const bool sniper = ch != 0 && rd8(ch + CHAR_WEAPON_OFFSET) == WEAPON_SNIPER;
+        const bool sniper = ch != 0 && Character::CurrentWeapon::get(ch) == WEAPON_SNIPER;
         const bool was_free_aim = g_cam.free_aim;
         g_cam.free_aim = aiming && was_active && g_cam.orbit_valid && jfg_dual_stick_active() && !boss_control_active() &&
                          !sniper && !g.aim_from_character;
@@ -664,7 +725,7 @@ void jfg_camera_controls(recomp_context* ctx) {
         g_cam.glide = (g_cam.free_aim && g.aim_shoulder) ? std::min(1.0f, g_cam.glide + glide_step) : std::max(0.0f, g_cam.glide - glide_step);
 #endif
     }
-    if (aim_state(obj) && !g_cam.free_aim) {
+    if (aim_state(obj) && !g_cam.free_aim && !mod_hero) {
         g_cam.shoulder = g.aim_shoulder;
         g_cam.shoulder_blend = g_cam.shoulder ? std::min(1.0f, g_cam.shoulder_blend + tick_frames / 6.0f) : 0.0f;
         aim_controls(obj, pad, tick_frames);
@@ -674,7 +735,7 @@ void jfg_camera_controls(recomp_context* ctx) {
     }
     {
         const int level = (int16_t)rd16(ADDR_currentLevel);
-        const float x = rdf(obj + 0x0C), z = rdf(obj + 0x14);
+        const float x = Obj::PosX::get(obj), z = Obj::PosZ::get(obj);
         const float moved = std::sqrt((x - g_cam.last_x) * (x - g_cam.last_x) + (z - g_cam.last_z) * (z - g_cam.last_z));
         if (level != g_cam.level || obj != g_cam.last_player || moved > 400.0f) g_cam.face_reset = true;
         g_cam.level = level; g_cam.last_player = obj; g_cam.last_x = x; g_cam.last_z = z;
@@ -683,27 +744,45 @@ void jfg_camera_controls(recomp_context* ctx) {
         static int arrive_ticks = 1000;
         if (g_cam.face_reset) arrive_ticks = 0;
         if (log_arrive && arrive_ticks < 120) {
-            const uint32_t c = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
-            const uint32_t data = rd32(obj + 0x68);
+            const uint32_t c = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
+            const uint32_t data = Obj::Data::get(obj);
             std::fprintf(stderr, "[arrive] %d lvl %d obj %08X pos %.0f %.0f facing %.1f game %.1f cam %.0f %.0f free %.1f act %d show %d reset %d st %d stick %d %d L %.2f %.2f\n",
-                arrive_ticks, level, obj, x, z, wrap_angle(angle_from_s16(rd16(obj)) + PI_F) * 180.0f / PI_F,
-                -angle_from_s16(rd16(c)) * 180.0f / PI_F, rdf(c + 0x0C), rdf(c + 0x14), g_cam.heading * 180.0f / PI_F, (int)was_active,
-                g_cam.showing, (int)g_cam.face_reset, valid_ptr(data) ? rd8(data + PD_STATE) : -1, (int)(int8_t)rd8(pad + 2), (int)(int8_t)rd8(pad + 3),
+                arrive_ticks, level, obj, x, z, wrap_angle(angle_from_s16(Obj::Yaw::get(obj)) + PI_F) * 180.0f / PI_F,
+                -angle_from_s16(Camera::Yaw::get(c)) * 180.0f / PI_F, Camera::PosX::get(c), Camera::PosZ::get(c), g_cam.heading * 180.0f / PI_F, (int)was_active,
+                g_cam.showing, (int)g_cam.face_reset, valid_ptr(data) ? PlayerData::State::get(data) : -1, (int)Pad::StickX::get(pad), (int)Pad::StickY::get(pad),
                 (float)g_stick_lx, (float)g_stick_ly);
         }
         arrive_ticks++;
     }
     if (!jfg_dual_stick_active()) { g_cam.was_aiming = false; return; }
+    if (jfg::api::mod_camera_active()) {
+        // A mod drives the camera (jfg_camera_set: a custom hero's, a boss fight's): the left stick goes to the game as
+        // the pad gives it (rotated here it would be turned twice), and the right stick, which turns the dual-stick
+        // camera, gives the C buttons instead, as an N64 pad's, for the mod's camera to read.
+        constexpr uint16_t C_UP = 0x0008, C_DOWN = 0x0004, C_LEFT = 0x0002, C_RIGHT = 0x0001;
+        constexpr float DIGITAL = 0.5f;
+        static uint16_t c_before = 0;
+        const float rx = g_stick_rx, ry = g_stick_ry;
+        const uint16_t c = (uint16_t)((rx > DIGITAL ? C_RIGHT : 0) | (rx < -DIGITAL ? C_LEFT : 0) |
+                                      (ry > DIGITAL ? C_UP : 0) | (ry < -DIGITAL ? C_DOWN : 0));
+        const uint32_t i = rd8(ADDR_sPlayerID) & 3u;
+        wr16(pad, (uint16_t)(rd16(pad) | c));
+        wr16(ADDR_buttonsPressed + 2u * i, (uint16_t)(rd16(ADDR_buttonsPressed + 2u * i) | (c & ~c_before)));
+        c_before = c;
+        g_cam.active = false;
+        g_cam.was_aiming = false;
+        return;
+    }
     if (boss_control_active()) { boss_controls(obj, pad, aiming); g_cam.was_aiming = false; return; }
-    const uint32_t cam = ADDR_cameraActorArray + CAMERA_SIZE * (rd32(ADDR_cameraNo) & 3u);
-    const float game_heading = -angle_from_s16(rd16(cam)); // where the game's own camera looks
+    const uint32_t cam = ADDR_cameraActorArray + Camera::Size * (rd32(ADDR_cameraNo) & 3u);
+    const float game_heading = -angle_from_s16(Camera::Yaw::get(cam)); // where the game's own camera looks
 
     // The game sometimes takes the camera to show something - the door that opens once a room has been cleared, for
     // instance. Its follow camera always looks towards the character; a camera that is pointed well away from it (or
     // has been moved far off) is such a shot, and the right stick leaves the camera to the game until it is back.
     // The left stick goes to the game unchanged meanwhile, and the free camera restarts from the game's afterwards.
     {
-        const float px = rdf(obj + 0x0C), pz = rdf(obj + 0x14), cx = rdf(cam + 0x0C), cz = rdf(cam + 0x14);
+        const float px = Obj::PosX::get(obj), pz = Obj::PosZ::get(obj), cx = Camera::PosX::get(cam), cz = Camera::PosZ::get(cam);
         const float flat = std::sqrt((px - cx) * (px - cx) + (pz - cz) * (pz - cz));
         const float off = flat < 30.0f ? 0.0f : std::fabs(wrap_angle(std::atan2(px - cx, pz - cz) - game_heading));
         // (Not while the dual stick aims: the game's own aiming camera then follows the character, not the view.)
@@ -714,7 +793,7 @@ void jfg_camera_controls(recomp_context* ctx) {
         if (log_cam) {
             std::fprintf(stderr, "[cam] level %d flat %.0f off %.1f showing %d game %.1f facing %.1f free %.1f\n", g_cam.level, flat,
                          off * 180.0f / PI_F, g_cam.showing, game_heading * 180.0f / PI_F,
-                         wrap_angle(angle_from_s16(rd16(obj)) + PI_F) * 180.0f / PI_F, g_cam.heading * 180.0f / PI_F);
+                         wrap_angle(angle_from_s16(Obj::Yaw::get(obj)) + PI_F) * 180.0f / PI_F, g_cam.heading * 180.0f / PI_F);
         }
         if (g_cam.showing >= 2) { g_cam.was_aiming = false; return; }
     }
@@ -729,8 +808,8 @@ void jfg_camera_controls(recomp_context* ctx) {
         // While aiming, follow the game's camera so the free camera continues from it afterwards.
         if (!g_cam.was_aiming && was_active && !g.aim_from_character) {
             const uint16_t yaw = angle_to_s16(g_cam.heading + PI_F);
-            wr16(obj, yaw);
-            const uint32_t data = rd32(obj + 0x68);
+            Obj::Yaw::set(obj, yaw);
+            const uint32_t data = Obj::Data::get(obj);
             // the object's yaw and the copies the control code keeps and writes back every tick
             if (valid_ptr(data)) { for (uint32_t k : { 0x106u, 0x11Cu, 0x122u, 0x1C6u, 0x1CAu }) wr16(data + k, yaw); }
             constexpr int PITCH_LIMIT = 0x2AAA; // as aim_controls
@@ -741,7 +820,7 @@ void jfg_camera_controls(recomp_context* ctx) {
         else if (g_cam.aim_pitch_pending >= 0 && aim_state(obj)) {
             // The game resets the aim's up/down when its aiming starts (the tick after the button): set it then.
             const uint32_t data = rd32(obj + 0x68);
-            if (valid_ptr(data)) wr16(data + PD_VIEW_PITCH, (uint16_t)g_cam.aim_pitch_pending);
+            if (valid_ptr(data)) wr16(data + PlayerData::ViewPitch::offset, (uint16_t)g_cam.aim_pitch_pending);
             g_cam.aim_pitch_pending = -1;
         }
         g_cam.was_aiming = true;
@@ -753,7 +832,7 @@ void jfg_camera_controls(recomp_context* ctx) {
     const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6);
     const float lx = g_stick_lx, ly = g_stick_ly, rx = g_stick_rx, ry = g_stick_ry;
     if (g_cam.face_reset) { // somewhere new: start behind the character, looking the way it faces
-        g_cam.heading = wrap_angle(angle_from_s16(rd16(obj)) + PI_F);
+        g_cam.heading = wrap_angle(angle_from_s16(Obj::Yaw::get(obj)) + PI_F);
         g_cam.elevation = 0;
         g_cam.face_reset = false;
         g_cam.arrive_hold = 60;
@@ -762,7 +841,7 @@ void jfg_camera_controls(recomp_context* ctx) {
         // Until the player turns the camera, it keeps to the character's facing - only while the left stick is not
         // pushed sideways (the character turns to the stick, and a camera following it would turn it round in circles).
         if (std::fabs(rx) > 0.2f || std::fabs(ry) > 0.2f || g_mouse_cam_x != 0.0f || g_mouse_cam_y != 0.0f) g_cam.arrive_hold = 0;
-        else if (std::fabs(lx) < 0.3f) g_cam.heading = wrap_angle(angle_from_s16(rd16(obj)) + PI_F);
+        else if (std::fabs(lx) < 0.3f) g_cam.heading = wrap_angle(angle_from_s16(Obj::Yaw::get(obj)) + PI_F);
         g_cam.arrive_hold -= (int)frames;
     }
     else if (!was_active || g_cam.was_aiming) { // (re)start from the game's camera
@@ -794,8 +873,8 @@ void jfg_camera_controls(recomp_context* ctx) {
         stick_x = (int)std::lround(std::sin(relative) * deflection * 78.0f * g_sign_move);
         stick_y = (int)std::lround(std::cos(relative) * deflection * 78.0f);
     }
-    wr8(pad + 2, (uint8_t)(int8_t)stick_x);
-    wr8(pad + 3, (uint8_t)(int8_t)stick_y);
+    Pad::StickX::set(pad, (int8_t)stick_x);
+    Pad::StickY::set(pad, (int8_t)stick_y);
 }
 
 // Entry of objMoveXYZ(object, dx, dy, dz), the game's "move this object by this much, with collision". The character
@@ -809,12 +888,11 @@ extern "C" void jfg_move_scale(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
     static bool busy = false;
     if (busy || g_platform_move || g_cam.player == 0 || (uint32_t)ctx->r4 != g_cam.player) return;
-    const uint32_t obj = g_cam.player, data = rd32(obj + 0x68);
+    const uint32_t obj = g_cam.player, data = Obj::Data::get(obj);
     if (!valid_ptr(data)) return;
     // Underwater (character state 4, Vela's swimming) the "Dive speed" option, and swim sprinting, scale the whole 3D
     // step, up and down too. (On foot sprint_factor is already part of move_factor.)
-    constexpr uint8_t STATE_SWIM = 4;
-    const bool swim = rd8(data + PD_STATE) == STATE_SWIM;
+    const bool swim = PlayerData::State::get(data) == PlayerData::StateSwimming;
     const float dive = swim ? (float)g.dive_speed / 100.0f * g_cam.sprint_factor : 1.0f;
     auto as_float = [](gpr reg) { const uint32_t bits = (uint32_t)reg; float f; std::memcpy(&f, &bits, 4); return f; };
     // "Normalize diagonal speed": running while sidestepping (C-left / C-right, also what the left stick gives while
@@ -823,7 +901,7 @@ extern "C" void jfg_move_scale(uint8_t* rdram_, recomp_context* ctx) {
     // "Same aim-walk speed in all directions": while aiming the game walks 8.125 units a tick forwards, 6 backwards and
     // 5 sideways (Lupus 4.5), measured with the C buttons held. The backward and sideways parts of the step are
     // stretched to the forward speed, and a diagonal is shortened to the larger part as with "Normalize diagonal speed".
-    const bool even = g.aim_even_speed && !swim && rd8(data + PD_STATE) == PD_STATE_AIMING;
+    const bool even = g.aim_even_speed && !swim && rd8(data + PlayerData::State::offset) == PlayerData::StateAiming;
     float sx = as_float(ctx->r5), sz = as_float(ctx->r7);
     float normalize = 1.0f;
     if ((g.normalize_diagonal || even) && !swim) {
@@ -850,13 +928,29 @@ extern "C" void jfg_move_scale(uint8_t* rdram_, recomp_context* ctx) {
     const float dx = sx * factor_xz - as_float(ctx->r5), dz = sz * factor_xz - as_float(ctx->r7);
     const float dy = swim ? as_float(ctx->r6) * (factor_y - 1.0f) : 0.0f;
     if (dx == 0.0f && dy == 0.0f && dz == 0.0f) return;
-    const float x0 = rdf(obj + 0x0C), y0 = rdf(obj + 0x10), z0 = rdf(obj + 0x14);
+    const float x0 = Obj::PosX::get(obj), y0 = Obj::PosY::get(obj), z0 = Obj::PosZ::get(obj);
     busy = true;
     call_game(objMoveXYZ, ctx, { obj, as_bits(dx), as_bits(dy), as_bits(dz) });
     busy = false;
-    wrf(data + 0x3C, rdf(data + 0x3C) + (rdf(obj + 0x0C) - x0));
-    if (swim) wrf(data + 0x40, rdf(data + 0x40) + (rdf(obj + 0x10) - y0));
-    wrf(data + 0x44, rdf(data + 0x44) + (rdf(obj + 0x14) - z0));
+    PlayerData::SavedX::set(data, PlayerData::SavedX::get(data) + (Obj::PosX::get(obj) - x0));
+    if (swim) PlayerData::SavedY::set(data, PlayerData::SavedY::get(data) + (Obj::PosY::get(obj) - y0));
+    PlayerData::SavedZ::set(data, PlayerData::SavedZ::get(data) + (Obj::PosZ::get(obj) - z0));
 }
 
 } // namespace jfg
+
+// controlPlatform moves what stands on a platform with one objMoveXYZ call; jfg_platform_move marks it.
+static JfgCaller g_platform;
+
+JFG_WRAP(controlPlatform) {
+    JfgCaller::Scope scope(g_platform, ctx, 0x58);
+    controlPlatform_orig(rdram, ctx);
+}
+
+JFG_WRAP(objMoveXYZ) {
+    const bool platform = g_platform.direct(ctx);
+    if (platform) jfg_platform_move(1);
+    jfg_move_scale(rdram, ctx);
+    objMoveXYZ_orig(rdram, ctx);
+    if (platform) jfg_platform_move(0);
+}

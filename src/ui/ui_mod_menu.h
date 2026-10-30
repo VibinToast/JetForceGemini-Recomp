@@ -1,6 +1,7 @@
 #ifndef RECOMPUI_ELEMENT_MOD_MENU_H
 #define RECOMPUI_ELEMENT_MOD_MENU_H
 
+#include <chrono>
 #include "librecomp/mods.hpp"
 #include "elements/ui_scroll_container.h"
 #include "ui_config_sub_menu.h"
@@ -16,7 +17,8 @@ public:
     virtual ~ModEntryView();
     void set_mod_details(const recomp::mods::ModDetails &details);
     void set_mod_thumbnail(const std::string &thumbnail);
-    void set_mod_enabled(bool enabled);
+    void set_mod_status(modui::Status status); // JFG PORT: the ON / OFF / REQUIRED tag (was set_mod_enabled, a fade)
+    void set_scale(float scale, float radius); // JFG PORT
     void set_selected(bool selected);
     void set_focused(bool focused);
 protected:
@@ -26,7 +28,12 @@ private:
     Image *thumbnail_image = nullptr;
     Element *body_container = nullptr;
     Label *name_label = nullptr;
-    Label *description_label = nullptr;
+    Label *meta_label = nullptr; // JFG PORT: version and authors, as the texture packs' cards
+    Element *side_container = nullptr; // JFG PORT: the status tag and the mod's tags under it, as Get Mods' cards
+    Label *status_tag = nullptr; // JFG PORT
+    Label *tags_label = nullptr; // JFG PORT: the manifest's tags (HUD, WEAPONS...)
+    modui::Status status = modui::Status::Off;
+    float scale = 1.0f;
     Style checked_style;
     Style hover_style;
     Style checked_hover_style;
@@ -38,12 +45,15 @@ public:
     ModEntryButton(Element *parent, uint32_t mod_index);
     virtual ~ModEntryButton();
     void set_mod_selected_callback(std::function<void(uint32_t)> callback);
+    void set_mod_activated_callback(std::function<void(uint32_t)> callback); // JFG PORT: confirm on the card
     void set_mod_drag_callback(std::function<void(uint32_t, EventDrag)> callback);
     void set_mod_details(const recomp::mods::ModDetails &details);
     void set_mod_thumbnail(const std::string &thumbnail);
-    void set_mod_enabled(bool enabled);
+    void set_mod_status(modui::Status status);
+    void set_scale(float scale, float radius);
     void set_selected(bool selected);
     void set_focused(bool focused);
+    float get_card_height() { return view->get_client_height(); } // JFG PORT: without the gap below it
 protected:
     virtual void process_event(const Event &e) override;
     std::string_view get_type_name() override { return "ModEntryButton"; }
@@ -51,6 +61,8 @@ private:
     uint32_t mod_index = 0;
     ModEntryView *view = nullptr;
     std::function<void(uint32_t)> selected_callback = nullptr;
+    std::function<void(uint32_t)> activated_callback = nullptr;
+    std::chrono::steady_clock::time_point focused_at{};
     std::function<void(uint32_t, EventDrag)> drag_callback = nullptr;
 };
 
@@ -74,8 +86,16 @@ public:
     ModMenu(Element *parent);
     virtual ~ModMenu();
     void set_mods_dirty(bool scan_mods) { mods_dirty = true; mod_scan_queued = scan_mods; }
-    Element* get_first_mod_entry() { return !mod_entry_buttons.empty() ? mod_entry_buttons[0] : nullptr; }
+    // JFG PORT: the card the menu is entered on (from the tabs, or the launcher's Mods button): the mod selected last,
+    // else the first.
+    Element* get_first_mod_entry() {
+        if (active_mod_index >= 0 && (size_t)active_mod_index < mod_entry_buttons.size()) return mod_entry_buttons[active_mod_index];
+        return !mod_entry_buttons.empty() ? mod_entry_buttons[0] : nullptr;
+    }
+    void update_entry_nav(); // JFG PORT: points the way into the menu at that card
     Element* get_mod_configure_button() { return mod_details_panel != nullptr ? mod_details_panel->get_configure_button() : nullptr; }
+    // JFG PORT: the selected mod's card gets the focus (and is scrolled to); false if no mod is selected.
+    bool focus_active_mod();
     // JFG PORT: the context (document) this menu is in: the config menu or the launcher.
     ContextId get_owner_context() const { return owner_context; }
 protected:
@@ -94,6 +114,8 @@ private:
     void mod_number_option_changed(const std::string &id, double value);
     void mod_hd_textures_enabled_changed(uint32_t value);
     void create_mod_list();
+    void refresh_mod_status(); // JFG PORT
+    void apply_scale();        // JFG PORT
     void process_event(const Event &e) override;
 
     Container *body_container = nullptr;
@@ -113,12 +135,20 @@ private:
     float mod_drag_start_coordinates[2] = {};
     float mod_drag_view_coordinates[2] = {};
     uint32_t mod_drag_target_index = 0;
+    float mod_drag_spacer_height = 0.0f; // JFG PORT: the dragged entry's height, in pixels
+    Label *ingame_note = nullptr;        // JFG PORT: in game, instead of Install Mods and Refresh
     std::vector<recomp::mods::ModDetails> mod_details{};
     std::unordered_set<std::string> loaded_thumbnails;
     std::string game_mod_id;
     bool mods_dirty = false;
     bool mod_scan_queued = false;
     ContextId owner_context;
+    // JFG PORT: 1 in the game's menu; smaller in the launcher (its text is smaller), with square corners. Known at the
+    // first update, once both menus' documents exist.
+    float scale = 1.0f;
+    float radius = 8.0f;
+    bool scale_known = false;
+    std::string pending_jump; // JFG PORT: a mod picked in the details' Requires / Required by lists, selected next update
 
     ConfigSubMenu *config_sub_menu;
 };

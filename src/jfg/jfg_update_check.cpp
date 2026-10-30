@@ -53,8 +53,11 @@ extern char** environ;
 namespace fs = std::filesystem;
 
 namespace {
-constexpr const char* RELEASES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/releases?per_page=30";
-constexpr const char* COMMITS_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/commits?per_page=100";
+constexpr const char* RELEASES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/releases?per_page=30";
+constexpr const char* COMMITS_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/commits?per_page=100";
+constexpr const char* BRANCHES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/branches?per_page=100";
+// + "<branch>/<file>": a file as it is on a branch (not counted against the API's limit of 60 requests an hour).
+const std::string RAW_FILE_PREFIX = "https://raw.githubusercontent.com/VibinToast/JetForceGemini-Recompiled/refs/heads/";
 constexpr const char* ZIP_SUFFIX = "-windows-x64-portable.zip";
 
 struct Release {
@@ -63,6 +66,7 @@ struct Release {
 
 std::mutex g_mutex;
 std::string g_commits; // see jfg_changelog_commits()
+bool g_upcoming_notes = false; // g_commits holds the hand-written notes of the release in testing, not commits
 bool g_found = false;
 JfgUpdateInfo g_info;
 Release g_target;
@@ -148,7 +152,7 @@ bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progre
     const std::wstring target = std::wstring(path) + extra;
 
     bool ok = false;
-    HINTERNET session = WinHttpOpen(L"JetForceGemini-Recomp", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET session = WinHttpOpen(L"JetForceGemini-Recompiled", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (session == nullptr) return false;
     WinHttpSetTimeouts(session, 8000, 8000, 20000, 30000);
     HINTERNET connection = WinHttpConnect(session, host, parts.nPort, 0);
@@ -186,9 +190,10 @@ bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progre
 }
 #else
 // Linux / others: curl, when it is installed. Only the release list is read here; installing is Windows only.
+// -L follows GitHub's redirect if the repository is renamed (WinHTTP above follows it by default).
 bool http_get(const std::string& url, const Sink& sink, const ProgressFn&) {
     if (url.rfind("https://", 0) != 0 || url.find('\'') != std::string::npos) return false;
-    const std::string command = "curl -fsS -m 8 -H 'Accept: application/vnd.github+json' '" + url + "' 2>/dev/null";
+    const std::string command = "curl -fsSL --proto-redir =https -m 8 -H 'Accept: application/vnd.github+json' '" + url + "' 2>/dev/null";
     FILE* pipe = popen(command.c_str(), "r");
     if (pipe == nullptr) return false;
     char buffer[4096];
@@ -236,7 +241,7 @@ bool changelog_ignored_file(const std::string& path) {
 // changes, so it is kept in bin\jfg_changelog_cache.txt ("<sha> 1" = only ignored files, "<sha> 0" = something else):
 // each commit is looked up once, which keeps well inside GitHub's limit of 60 requests an hour.
 constexpr const char* CHANGELOG_CACHE_FILE = "jfg_changelog_cache.txt";
-constexpr const char* COMMIT_URL_PREFIX = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/commits/";
+constexpr const char* COMMIT_URL_PREFIX = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/commits/";
 
 bool commit_only_ignored_files(const std::string& sha, std::vector<std::pair<std::string, bool>>& cache, bool& cache_changed) {
     for (const auto& entry : cache) if (entry.first == sha) return entry.second;
@@ -255,7 +260,69 @@ bool commit_only_ignored_files(const std::string& sha, std::vector<std::pair<std
     return only_ignored;
 }
 
-void commits_thread() {
+// ---- notes of the release in testing ------------------------------------------------------------------------------------
+// Where the hand-written "## Unreleased" section of CHANGELOG.md is: [first, last) of the whole section, heading
+// included, and where its body starts. first == npos when there is none.
+struct UnreleasedSection { size_t first = std::string::npos, body = 0, last = 0; };
+
+UnreleasedSection find_unreleased(const std::string& changelog) {
+    UnreleasedSection s;
+    size_t at = changelog.rfind("## Unreleased", 0) == 0 ? 0 : changelog.find("\n## Unreleased");
+    if (at == std::string::npos) return s;
+    if (changelog[at] == '\n') at++;
+    const size_t line_end = changelog.find('\n', at);
+    s.first = at;
+    s.body = line_end == std::string::npos ? changelog.size() : line_end + 1;
+    const size_t next = changelog.find("\n## ", line_end == std::string::npos ? changelog.size() : line_end);
+    s.last = next == std::string::npos ? changelog.size() : next + 1;
+    return s;
+}
+
+// The body of that section without its <!-- comments -->, trimmed: the release notes of the next release, written by
+// hand on its release branch (Recomp-Docs/RELEASING.md "Release notes"). Empty when there is none, or only the heading. The
+// Release workflow (.github/workflows/release.yml) makes the release notes from the same section.
+std::string unreleased_notes(std::string changelog) {
+    changelog.erase(std::remove(changelog.begin(), changelog.end(), '\r'), changelog.end());
+    const UnreleasedSection s = find_unreleased(changelog);
+    if (s.first == std::string::npos) return {};
+    std::string notes = changelog.substr(s.body, s.last - s.body);
+    for (size_t open; (open = notes.find("<!--")) != std::string::npos;) {
+        const size_t close = notes.find("-->", open);
+        notes.erase(open, close == std::string::npos ? std::string::npos : close + 3 - open);
+    }
+    const size_t a = notes.find_first_not_of(" \t\n"), b = notes.find_last_not_of(" \t\n");
+    return a == std::string::npos ? std::string() : notes.substr(a, b - a + 1);
+}
+
+// The notes of the release in testing: the "## Unreleased" section on the newest release/<x.y> branch on GitHub, when
+// that release is newer than this build. Empty when there are none; the commit list is shown instead.
+std::string upcoming_notes(const std::string& current, std::string& version) {
+    std::string body;
+    if (!http_get_string(BRANCHES_URL, body)) return {};
+    const nlohmann::json list = nlohmann::json::parse(body, nullptr, false);
+    if (list.is_discarded() || !list.is_array()) return {};
+    std::string branch;
+    for (const nlohmann::json& b : list) {
+        const std::string name = json_string(b, "name");
+        if (name.rfind("release/", 0) != 0) continue;
+        const std::string v = name.substr(8);
+        if (v.find_first_not_of("0123456789.") != std::string::npos || parse_version(v).size() != 2) continue;
+        if (branch.empty() || compare_versions(v, version) > 0) { branch = name; version = v; }
+    }
+    if (branch.empty() || !is_newer(version + ".0", current)) return {};
+    std::string changelog;
+    if (!http_get_string(RAW_FILE_PREFIX + branch + "/CHANGELOG.md", changelog)) return {};
+    return unreleased_notes(changelog);
+}
+
+void commits_thread(std::string current) {
+    std::string version;
+    if (const std::string notes = upcoming_notes(current, version); !notes.empty()) {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_commits = "## Coming in " + version + "\nIn testing, not released yet.\n" + notes + "\n\n";
+        g_upcoming_notes = true;
+        return;
+    }
     std::string body;
     if (!http_get_string(COMMITS_URL, body)) return;
     std::vector<std::pair<std::string, bool>> cache;
@@ -736,7 +803,7 @@ void start_check_threads() {
     if (g_check_started.exchange(true)) return;
     try {
         std::thread(check_thread, g_current_version).detach();
-        std::thread(commits_thread).detach();
+        std::thread(commits_thread, g_current_version).detach();
     }
     catch (...) {}
 }
@@ -894,12 +961,20 @@ std::string jfg_changelog_text() {
     // Start at the first version heading (the file opens with a few lines about itself).
     const size_t first = text.find("\n## ");
     if (first != std::string::npos) text.erase(0, first + 1);
+    // A test build of a release branch ships its "## Unreleased" notes. Once the same notes have come from GitHub
+    // ("Coming in x.y", jfg_changelog_commits) they are not listed twice.
+    bool upcoming;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        upcoming = g_upcoming_notes;
+    }
+    if (const UnreleasedSection s = find_unreleased(text); upcoming && s.first != std::string::npos) text.erase(s.first, s.last - s.first);
     return text;
 }
 
 // Markdown (as CHANGELOG.md and the release notes write it) to RML for the launcher's dialogs: "## v1.2.3 (date)" is a
-// version heading, tagged Installed / New against this build; "### x" a subheading; "- x" / "* x" an item; any other
-// line a note. The styles are the .rl-cl-* classes in assets/launcher.rml.
+// version heading, tagged Installed / New against this build; "### x" a subheading; "- x" / "* x" an item; a one-line
+// <!-- comment --> (a note to the owner in the Unreleased section) nothing; any other line a note. The styles are the .rl-cl-* classes in assets/launcher.rml.
 std::string jfg_changelog_rml(const std::string& markdown, const std::string& installed) {
     auto escape = [](const std::string& in) {
         std::string out;
@@ -943,7 +1018,7 @@ std::string jfg_changelog_rml(const std::string& markdown, const std::string& in
         }
         else if (t.rfind("### ", 0) == 0) out += "<div class=\"rl-cl-sub\">" + escape(t.substr(4)) + "</div>";
         else if (t.rfind("- ", 0) == 0 || t.rfind("* ", 0) == 0) out += "<div class=\"rl-cl-item\"><span class=\"rl-cl-dot\">&gt;</span>" + escape(t.substr(2)) + "</div>";
-        else if (!t.empty() && t[0] != '#') out += "<div class=\"rl-cl-note\">" + escape(t) + "</div>";
+        else if (!t.empty() && t[0] != '#' && t.rfind("<!--", 0) != 0) out += "<div class=\"rl-cl-note\">" + escape(t) + "</div>";
     }
     return out;
 }

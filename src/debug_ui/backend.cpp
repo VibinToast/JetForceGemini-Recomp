@@ -36,6 +36,7 @@ extern "C" void jfg_tools_key(int scancode, int down, int repeat); // JFG PORT: 
 #include "runtime/gfx.hpp"
 
 namespace jfg { bool cpu_layer_build(ImDrawList* list); } // src/jfg/jfg_cpu_layer.cpp
+namespace jfg::overlay { bool build(ImDrawList* list, ImVector<ImTextureData*>& textures); } // src/jfg/jfg_overlay.cpp
 
 namespace dino::debug_ui::backend {
 
@@ -56,7 +57,7 @@ struct VulkanContext {
 };
 
 // We must use our own ImGui context to avoid conflicting with the RT64 inspector where possible
-ImGuiContext *dino_imgui_ctx;
+ImGuiContext *jfg_imgui_ctx;
 bool b_is_open = false;
 bool b_in_ui_frame = false;
 // JFG PORT: lets the game-side code draw a passive overlay (the "press F9" hint) while the debug UI is closed.
@@ -70,6 +71,13 @@ static std::atomic<bool> b_fly_requested{ false };
 
 static ImGuiContext *prev_ctx;
 static std::unique_ptr<plume::RenderDescriptorSet> descriptor_set;
+#if defined(_WIN32)
+// JFG PORT: ImGui's D3D12 textures (the font, and the mod overlay's pictures: src/jfg/jfg_overlay.cpp) each get a
+// descriptor set of their own; one shared slot made every new texture replace the font. (One set of many slots drew
+// nothing past its first.)
+static std::vector<std::unique_ptr<plume::RenderDescriptorSet>> d3d12_texture_sets;
+static plume::D3D12Device* d3d12_imgui_device = nullptr;
+#endif
 static std::unique_ptr<plume::RenderCommandQueue> d3d12_upload_queue; // JFG PORT: ImGui's DX12 backend uploads its textures through a queue of its own
 static std::mutex frame_mutex;
 static moodycamel::ConcurrentQueue<SDL_Event> event_queue{};
@@ -124,7 +132,7 @@ static void handle_toggle_key(const SDL_Event& event) {
 }
 
 void begin() {
-    if (!dino_imgui_ctx->Initialized) return;
+    if (!jfg_imgui_ctx->Initialized) return;
 
     if (!b_is_open) {
         // Still process the event queue but don't send any to ImGui
@@ -145,7 +153,7 @@ void begin() {
     frame_mutex.lock();
 
     prev_ctx = ImGui::GetCurrentContext();
-    ImGui::SetCurrentContext(dino_imgui_ctx);
+    ImGui::SetCurrentContext(jfg_imgui_ctx);
 
     SDL_Event event{};
     while (event_queue.try_dequeue(event)) {
@@ -191,7 +199,7 @@ void begin() {
 
 void end() {
     if (b_in_ui_frame) {
-        assert(dino_imgui_ctx->Initialized);
+        assert(jfg_imgui_ctx->Initialized);
 
         ImGui::Render();
         ImGui::SetCurrentContext(prev_ctx);
@@ -234,11 +242,11 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
 
     ImGuiContext *prev_ctx = ImGui::GetCurrentContext();
 
-    dino_imgui_ctx = ImGui::CreateContext();
-    ImGui::SetCurrentContext(dino_imgui_ctx);
+    jfg_imgui_ctx = ImGui::CreateContext();
+    ImGui::SetCurrentContext(jfg_imgui_ctx);
 
     static std::string imgui_ini_path = (dino::config::get_app_folder_path() / "imgui.ini").string();
-    dino_imgui_ctx->IO.IniFilename = imgui_ini_path.c_str();
+    jfg_imgui_ctx->IO.IniFilename = imgui_ini_path.c_str();
 
     ImGui_ImplSDL2_InitForOther(dino::runtime::get_window());
 
@@ -263,8 +271,8 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
             descriptor_set = interface_device->createDescriptorSet(plume::RenderDescriptorSetDesc(&descriptor_range, 1));
 
             plume::D3D12DescriptorSet *interface_descriptor_set = static_cast<plume::D3D12DescriptorSet *>(descriptor_set.get());
-            const D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle = interface_device->viewHeapAllocator->getCPUHandleAt(interface_descriptor_set->viewAllocation.offset);
-            const D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle = interface_device->viewHeapAllocator->getGPUHandleAt(interface_descriptor_set->viewAllocation.offset);
+            d3d12_imgui_device = interface_device;
+            d3d12_texture_sets.clear();
             // JFG PORT: ImGui 1.92+ (upstream RT64's) takes an init struct and needs a command queue for texture uploads.
             d3d12_upload_queue = interface_device->createCommandQueue(plume::RenderCommandListType::DIRECT);
             ImGui_ImplDX12_InitInfo init_info;
@@ -273,8 +281,20 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
             init_info.NumFramesInFlight = 2;
             init_info.RTVFormat = DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM;
             init_info.SrvDescriptorHeap = interface_device->viewHeapAllocator->heap;
-            init_info.LegacySingleSrvCpuDescriptor = cpu_handle;
-            init_info.LegacySingleSrvGpuDescriptor = gpu_handle;
+            init_info.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu) {
+                plume::RenderDescriptorRange range(plume::RenderDescriptorRangeType::TEXTURE, 0, 1);
+                auto set = d3d12_imgui_device->createDescriptorSet(plume::RenderDescriptorSetDesc(&range, 1));
+                const uint32_t at = static_cast<plume::D3D12DescriptorSet *>(set.get())->viewAllocation.offset;
+                *out_cpu = d3d12_imgui_device->viewHeapAllocator->getCPUHandleAt(at);
+                *out_gpu = d3d12_imgui_device->viewHeapAllocator->getGPUHandleAt(at);
+                d3d12_texture_sets.push_back(std::move(set));
+            };
+            init_info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpu, D3D12_GPU_DESCRIPTOR_HANDLE) {
+                for (auto it = d3d12_texture_sets.begin(); it != d3d12_texture_sets.end(); ++it) {
+                    const uint32_t at = static_cast<plume::D3D12DescriptorSet *>(it->get())->viewAllocation.offset;
+                    if (d3d12_imgui_device->viewHeapAllocator->getCPUHandleAt(at).ptr == cpu.ptr) { d3d12_texture_sets.erase(it); return; }
+                }
+            };
             ImGui_ImplDX12_Init(&init_info);
 #else
             assert(false && "Unsupported Graphics API.");
@@ -355,53 +375,51 @@ static void render_draw_data(plume::RenderCommandList* command_list, ImDrawData*
     }
 }
 
-// JFG PORT: the game's CPU-drawn reticles while RT64 adds in-between frames (src/jfg/jfg_cpu_layer.cpp). Built here for
-// every presented frame, unlike the overlay, whose draw data is made once per game tick. Needs the font atlas only for
-// its white pixel, so nothing is drawn before the first overlay or debug window frame created it.
-static void draw_cpu_layer(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
-    if (dino_imgui_ctx == nullptr || !dino_imgui_ctx->Initialized) return;
-    ImGuiContext *prev_ctx = ImGui::GetCurrentContext();
-    ImGui::SetCurrentContext(dino_imgui_ctx);
-    ImGuiIO &io = ImGui::GetIO();
-    if (io.Fonts != nullptr && io.Fonts->TexRef.GetTexID() != ImTextureID_Invalid) {
-        static ImDrawList *list = nullptr;
-        if (list == nullptr) list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
-        const ImVec2 size((float)swap_chain_framebuffer->getWidth(), (float)swap_chain_framebuffer->getHeight());
-        list->_ResetForNewFrame();
-        list->PushClipRect(ImVec2(0.0f, 0.0f), size);
-        list->PushTexture(io.Fonts->TexRef);
-        if (jfg::cpu_layer_build(list)) {
-            ImDrawData draw_data;
-            draw_data.Valid = true;
-            draw_data.DisplayPos = ImVec2(0.0f, 0.0f);
-            draw_data.DisplaySize = size;
-            draw_data.FramebufferScale = ImVec2(1.0f, 1.0f);
-            draw_data.Textures = nullptr;
-            draw_data.AddDrawList(list);
-            render_draw_data(command_list, &draw_data);
-        }
-    }
-    ImGui::SetCurrentContext(prev_ctx);
-}
-
+// JFG PORT: what the render hook draws over each presented frame, in one ImGui render call (the backends cycle their
+// vertex buffers once per call and assume one call a frame: a second call's drawing was lost):
+// - the game's CPU-drawn reticles while RT64 adds in-between frames (src/jfg/jfg_cpu_layer.cpp), built here for every
+//   presented frame; it needs the font atlas for its white pixel, so nothing is drawn before the first overlay or debug
+//   window frame created it;
+// - the mod overlay (src/jfg/jfg_overlay.cpp): mods' pictures and shapes at the window's resolution, every presented
+//   frame, with its own textures (a white one for the shapes, the mods' pictures), which the backend creates and updates;
+// - the debug window and the port's overlay (FPS, toasts), whose draw data is made once per game tick.
 static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
-    {
-        const std::lock_guard<std::mutex> frame_lock(frame_mutex);
-        draw_cpu_layer(command_list, swap_chain_framebuffer);
-    }
-
-    if (!b_is_open && !b_overlay) return;
-
     const std::lock_guard<std::mutex> frame_lock(frame_mutex);
-
+    if (jfg_imgui_ctx == nullptr || !jfg_imgui_ctx->Initialized) return;
     ImGuiContext *prev_ctx = ImGui::GetCurrentContext();
-    ImGui::SetCurrentContext(dino_imgui_ctx);
+    ImGui::SetCurrentContext(jfg_imgui_ctx);
+    ImGuiIO &io = ImGui::GetIO();
+    const ImVec2 size((float)swap_chain_framebuffer->getWidth(), (float)swap_chain_framebuffer->getHeight());
 
-    ImDrawData *draw_data = ImGui::GetDrawData();
-    if (draw_data != nullptr) {
-        render_draw_data(command_list, draw_data);
+    static ImDrawList *cpu_list = nullptr, *mod_list = nullptr;
+    if (cpu_list == nullptr) cpu_list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
+    if (mod_list == nullptr) mod_list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
+    static ImVector<ImTextureData*> textures;
+    textures.resize(0);
+
+    ImDrawData combined;
+    combined.Valid = true;
+    combined.DisplayPos = ImVec2(0.0f, 0.0f);
+    combined.DisplaySize = size;
+    combined.FramebufferScale = ImVec2(1.0f, 1.0f);
+
+    if (io.Fonts != nullptr && io.Fonts->TexRef.GetTexID() != ImTextureID_Invalid) {
+        cpu_list->_ResetForNewFrame();
+        cpu_list->PushClipRect(ImVec2(0.0f, 0.0f), size);
+        cpu_list->PushTexture(io.Fonts->TexRef);
+        if (jfg::cpu_layer_build(cpu_list)) combined.AddDrawList(cpu_list);
     }
+    mod_list->_ResetForNewFrame();
+    mod_list->PushClipRect(ImVec2(0.0f, 0.0f), size);
+    if (jfg::overlay::build(mod_list, textures) && mod_list->VtxBuffer.Size > 0) combined.AddDrawList(mod_list);
 
+    ImDrawData *ui = (b_is_open || b_overlay) ? ImGui::GetDrawData() : nullptr;
+    if (ui != nullptr && ui->Valid) {
+        if (ui->Textures != nullptr) for (ImTextureData *t : *ui->Textures) textures.push_back(t);
+        for (ImDrawList *l : ui->CmdLists) combined.AddDrawList(l);
+    }
+    combined.Textures = &textures;
+    if (combined.CmdListsCount > 0 || !textures.empty()) render_draw_data(command_list, &combined);
     ImGui::SetCurrentContext(prev_ctx);
 }
 
@@ -411,7 +429,7 @@ static void rt64_deinit_hook() {
     b_is_open = false;
 
     ImGuiContext *prev_ctx = ImGui::GetCurrentContext();
-    ImGui::SetCurrentContext(dino_imgui_ctx);
+    ImGui::SetCurrentContext(jfg_imgui_ctx);
 
     switch (get_graphics_api()) {
         case RT64::UserConfiguration::GraphicsAPI::D3D12:
@@ -435,7 +453,7 @@ static void rt64_deinit_hook() {
 
     ImGui_ImplSDL2_Shutdown();
 
-    ImGui::DestroyContext(dino_imgui_ctx);
+    ImGui::DestroyContext(jfg_imgui_ctx);
     ImGui::SetCurrentContext(prev_ctx);
     active_graphics_api = RT64::UserConfiguration::GraphicsAPI::OptionCount;
 }

@@ -1,0 +1,254 @@
+# Game functions the port wraps instead of changing them ([wrappers] in jfg.us.toml). Each needs a wrapper in src/jfg/
+# declared with JFG_WRAP(name) (jfg_hooks.h). Mods' patches and hooks apply to the original inside the wrapper.
+
+# 60 fps squad cadence (jfg_frame_rate.cpp)
+SquaddieControl
+SquadronControl
+squadsModuleTick
+
+# Mod API events (jfg_api.cpp)
+mainChangeLevel
+hitPlayerAimCheck
+girlBossControl
+boyBossControl
+dogBossControl
+bloodSpurtAdd
+bloodHitSpriteAdd
+severedLimbControl
+
+# The "Enemies ignore you" cheat (jfg_squad_cheat.cpp)
+CheckLineOfSight
+squadsAddInterestingEvent
+squadsPlayerShootsSquaddie
+
+# More memory for levels: the main heap to 8 MB (jfg_memory.cpp)
+mempool_init
+
+# Gore options (jfg_gore.cpp)
+bloodSpurtUpdateAll
+
+# Calls between overlays from code a mod hook regenerated (jfg_mods.cpp)
+TrapDanglingJump
+
+# 60 fps and gameplay fixes, error handling (wrappers next to their handlers)
+FlowerBoltControl
+dAngle
+objAnimDframe
+objMoveXYZ
+laserboltInit
+mineInit
+mainGetGameFlag
+mainResetRegion
+mmAlloc
+mmAlloc2
+mathBreakPoint
+squadsCheckEnemyPointers
+TidyLinkedList
+squadsFireWeapon
+mantisControl
+amSndPlayXYZ
+GalaxianBatsSoundsHandler
+osSyncPrintf
+
+# Mod API events (jfg_api.cpp): drawing, sounds, screen flash, Floyd
+objPrintObject
+amSndPlay
+frontFlashScreen
+sidekickControl
+
+# Locales (jfg_locale.cpp): the menu text buffer, the language slot, subtitles, fonts 4-7 and page fonts
+initFront
+setLanguage
+subtitleStart
+fontInit
+func_8006FD98_70998
+func_80071388_71F88
+
+# Runtime assets (jfg_assets.cpp): the game's asset loaders
+piRomLoad
+piRomLoadSection
+piRomGetFileSize
+
+# Hide Floyd: his shadow (jfg_visuals.cpp)
+shadowGenerate
+
+# Frame interpolation: matrix tags (jfg_interpolation.cpp)
+camPushModelMtx
+camPushFloatModelMtx
+camPushMuzzleMtx
+camScaleModelMtx
+
+# Engine, main loop, overlays, squads, platforms, object setup (jfg_engine_wrappers.cpp, jfg_controls.cpp, jfg_diagnostics.cpp)
+rcpFast3d
+ad_sndp_play
+n_alEvtqPostEvent
+n_alEvtqNextEvent
+__scTaskReady
+func_80044FAC_45BAC
+joyRead
+viFrameSync
+func_8001BF9C_1CB9C
+trackGetFog
+runlinkDownloadCode
+runlinkResumeCode
+runlinkFreeCode
+runlinkUnloadOverlay
+romCopy
+mmFree
+func_overlay_3_000148C0_1EE9DA0
+func_overlay_3_00014694_1EE9B74
+squadsGetFormationPosition
+explosionAddBlast
+controlPlatform
+objSetupObject
+objGetObjdef
+func_8000F978_10578
+texLoadTexture
+texFreeTexture
+modLoadModel
+texLoadSprite
+mmAllocR
+
+# World tick and scene, scheduler, target lock, FOV, refuel, sniper (jfg_engine_wrappers.cpp, jfg_frame_rate.cpp, jfg_visuals.cpp, jfg_gameplay.cpp)
+func_80045F00_46B00
+objCutCameraActive
+objObjectsPauseTick
+trackDraw
+__scHandleRetrace
+frontPlayerTarget
+camSetFOV
+refuelControl
+frontMenuFrameTick
+objTvTimes
+func_overlay_15_00004658_1F17FD8
+func_overlay_16_00004440_1F22458
+func_overlay_17_00004614_1F2C15C
+frontGetTargetControl
+Powerf
+controlGetManualAim
+
+# Audio: AI_LEN read directly (jfg_engine_wrappers.cpp)
+__amHandleFrameMsg
+
+# CPU-drawn rain and reticles with in-between frames (jfg_cpu_layer.cpp)
+rainDraw
+fxOutputLines
+
+# Gore: kept blood splats drawn in extra passes (jfg_gore.cpp)
+bloodSpurtsDraw
+
+# Shadow Opacity (jfg_visuals.cpp)
+func_8001B8E0_1C4E0
+
+# HUD in Screen Corners (jfg_hud_corners.cpp)
+frontSingleInstruments
+camStandardOrtho
+frontInstruments
+texDPInit
+sprSetTextureFilter
+fxDrawDigitalNumber
+frontDrawObj
+frontPrintNum
+fontPrintXY
+frontDrawRectangles
+instDrawHealth
+func_overlay_14_0000292C_1F10284
+func_overlay_14_00000220_1F0DB78
+func_overlay_14_00000074_1F0D9CC
+
+# The aim reticle's 3D part with in-between frames (jfg_interpolation.cpp)
+frontDrawTarget
+
+# CPU-drawn reticle: an empty layer during a fade (jfg_cpu_layer.cpp)
+mainCPUeffects
+fxInitLines
+
+# Crash fixes: a reused squad member with no object, the 60 fps squadron count (jfg_diagnostics.cpp, jfg_frame_rate.cpp)
+SquaddieInitFromRomdef
+objDoFrees
+
+# Mods' new enemy types (object types made from a stock one): the squad code treats them as it (jfg_kinds.cpp)
+BaddyTypeToIndex
+func_800050A8_5CA8
+
+# Mods' planets on the planet-select map (jfg_worldmap.cpp)
+frontMap
+frontCleanupMap
+func_overlay_9_000039F0_1F047C8
+
+# Mods' regions: names on the area title and the Tribal screen (jfg_regions.cpp)
+frontDisplayRegion
+tribalScreen
+frontGetWorldName
+
+# Cut enemies and objects: the animation picker's list of 16, the orb creature's hit spheres, the frog's data block,
+# the proximity mine's shot and throw, the brute's beam, mods' player bodies (jfg_cut_enemies.cpp)
+func_overlay_3_00004614_1ED9AF4
+func_80007528_8128
+func_8000E680_F280
+BTSBSpannerHand
+LaserBeamInit
+func_800386B0_392B0
+controlThrowWeapon
+objSetupPlayers
+
+# Mod API: a mod can take over a hero's control (jfg_hero_api.cpp)
+boyControl
+
+# Mod API: a camera a mod sets after the game's own (jfg_hero_api.cpp)
+func_8002B418_2C018
+
+# Mod API: mods draw over the HUD (jfg_api.cpp)
+prnBorder
+
+# Mod API: messages for the HUD's panel (jfg_on_hud_message, jfg_api.cpp)
+instQueueMsg
+
+# Mod API: the blast damage each object takes (jfg_object_blast_damage, jfg_hero_api.cpp)
+func_8002AA7C_2B67C
+# Mod API: jfg_on_kill, every squad member's death and who shot it last (jfg_kills.cpp)
+SquaddiePassesAway
+mainIncreaseWeaponKills
+mainSetTribalStatus
+# Mod sound replacement: placed stand-ins stop with the game's (jfg_music.cpp)
+amSndStopXYZ
+# Floyd's lights' frame for mods (jfg_visuals.cpp)
+func_800319C0_325C0
+# Weapon registry: modded weapons on slot 15 (jfg_weapon_registry.cpp)
+controlSelectNextWeapon
+controlSelectPreviousWeapon
+weaponPickupControl
+func_overlay_18_00001218_1F30BF0
+func_overlay_18_00001294_1F30C6C
+
+# The held model of a modded weapon (jfg_weapon_registry.cpp, decomp MSR 10e)
+func_8000BE5C_CA5C
+func_80007C68_8868
+objMakeGunMtx
+
+# New squad enemy types run by mods (jfg_squad_types.cpp, decomp MSR 12)
+BTSBStandardFire
+hitVectorCheck
+hitUpdate
+GetBaddyData
+func_overlay_3_0000D360_1EE2840
+
+# Mod API: more enemies per squad (jfg_squad_multiplier, jfg_squad_multiplier.cpp, decomp MSR 13)
+squadsInitialiseBeforeObjects
+SquadronInit
+squadsInitialiseAfterObjects
+levelObjectFlagSet
+levelSetObjectFlag
+
+# Track collision with bigger limits for pack levels, the port's own versions (jfg_collision.cpp)
+trackMakePolylist
+trackGetHeights
+trackGetBlockList
+func_overlay_24_000001F8_1F41D28
+func_overlay_24_00000CE4_1F42814
+
+# The level object (kill) flags, 256 per room, the port's own versions (jfg_level_flags.cpp; levelObjectFlagSet and
+# levelSetObjectFlag are wrapped in jfg_squad_multiplier.cpp)
+levelInitRegionFlags
+levelGetRegionFlags
+levelGetObjectID

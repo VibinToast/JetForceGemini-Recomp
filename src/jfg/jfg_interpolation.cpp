@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 
@@ -28,14 +29,9 @@ int drawn_count = 0;
 uint32_t push_caller = 0; // return address of the push function running now
 uint32_t push_source = 0; // its third argument: what it draws (transform, source matrix, position; the scale's bits)
 
-constexpr uint32_t OBJ_DEFINITION = 0x40;     // Object: pointer to its definition (objects.h)
-constexpr uint32_t OBJ_MODELS = 0x6C;         // Object: its model instances (ModelInstance_JFG*[], models.h)
-constexpr uint32_t OBJ_MODEL_INDEX = 0x3A;    // Object: s8, the one drawn (segment.unk3A)
-constexpr uint32_t INST_BONES = 0x10;         // ModelInstance_JFG: f32 *unk10[2], its two bone buffers (one per frame)
-
 uint32_t object_id(uint32_t object) {
     // The object's address with its definition, so an object created where another one was freed differs.
-    return (object * 2654435761u) ^ rd32(object + OBJ_DEFINITION);
+    return (object * 2654435761u) ^ Obj::Def::get(object);
 }
 constexpr uint32_t ADDR_modelMtx = 0x800FAAB0; // D_800FAAB0: the float model matrix the push functions multiply with the camera
 constexpr uint32_t ADDR_lastMtx = 0x800FAB30;  // D_800FAB30: the Mtx the push function just wrote
@@ -45,12 +41,12 @@ bool drawing_reticle = false;
 constexpr uint32_t RETICLE_ID = 0x7E71C1E5u;
 }
 
-// frontDrawTarget's entry (1) and frontPlayerTarget right after its call of frontDrawTarget (0).
+// frontDrawTarget's wrapper: 1 before the game's code, 0 after (frontPlayerTarget is its only caller).
 extern "C" void jfg_interp_reticle(int drawing) {
     drawing_reticle = drawing != 0;
 }
 
-// Entry of objPrintObject(dList, mtx, vtx, obj). A character's model has no model matrix of its own: its bones are
+// Before objPrintObject(dList, mtx, vtx, obj) (its wrapper, jfg_api.cpp). A character's model has no model matrix of its own: its bones are
 // world-space matrices the game converts into a bone buffer of the model instance, and the model's display lists
 // multiply them onto the camera from there (G_DMAOFFSETS points at the buffer). Both of the instance's buffers are
 // tagged with the object, so RT64 can tell whose bones they are.
@@ -61,25 +57,25 @@ extern "C" void jfg_interp_object(uint8_t* rdram_, recomp_context* ctx) {
     drawn_count++;
     if (!valid_ptr(object)) return;
 
-    const uint32_t models = rd32(object + OBJ_MODELS);
-    const int index = (int8_t)rd8(object + OBJ_MODEL_INDEX);
+    const uint32_t models = Obj::Models::get(object);
+    const int index = Obj::ModelIndex::get(object);
     if (!valid_ptr(models) || index < 0 || index > 15) return;
     const uint32_t instance = rd32(models + (uint32_t)index * 4);
     if (!valid_ptr(instance)) return;
     const uint32_t id = (object_id(object) ^ ((uint32_t)index * 2246822519u)) | 1u; // never RT64's 0 ("not interpolated")
     for (uint32_t i = 0; i < 2; i++) {
-        const uint32_t buffer = rd32(instance + INST_BONES + i * 4);
+        const uint32_t buffer = ModelInstance::Bones::get(instance, i); // one per buffer (frame)
         if (valid_ptr(buffer)) rt64_jfg_tag_bone_buffer(buffer & 0x00FFFFFFu, id == 0xFFFFFFFFu ? 1u : id);
     }
 }
 
-// objPrintObject's return.
+// After objPrintObject (its wrapper, jfg_api.cpp).
 extern "C" void jfg_interp_object_done(uint8_t* rdram_, recomp_context* ctx) {
     (void)rdram_; (void)ctx;
     if (drawn_count > 0) drawn_count--;
 }
 
-// Entry of each push function: where it was called from, and its third argument ($a2), which tells apart several
+// Before each push function: where it was called from, and its third argument ($a2), which tells apart several
 // matrices pushed from the same place (a character's weapon parts): camPushModelMtx's transform, camPushFloatModelMtx's
 // source matrix, camPushMuzzleMtx's position, camScaleModelMtx's scale.
 extern "C" void jfg_interp_push(uint8_t* rdram_, recomp_context* ctx) {
@@ -88,7 +84,7 @@ extern "C" void jfg_interp_push(uint8_t* rdram_, recomp_context* ctx) {
     push_source = (uint32_t)ctx->r6;
 }
 
-// Each push function right after it noted the matrix it wrote (D_800FAB30). A matrix pushed outside an object's
+// Each push function after it wrote the matrix and noted it (D_800FAB30; its wrapper). A matrix pushed outside an object's
 // drawing is tagged with ID 0, so a tag left at that address by an earlier frame cannot apply to it.
 extern "C" void jfg_interp_pushed(uint8_t* rdram_, recomp_context* ctx) {
     (void)ctx;
@@ -122,3 +118,37 @@ extern "C" void jfg_interp_pushed(uint8_t* rdram_, recomp_context* ctx) {
 }
 
 } // namespace jfg
+
+bool jfg_reticle_event(uint8_t* rdram, recomp_context* ctx); // jfg_api.cpp
+
+JFG_WRAP(frontDrawTarget) {
+    if (!jfg_reticle_event(rdram, ctx)) return; // a mod draws its own reticle
+    jfg::jfg_interp_reticle(1);
+    frontDrawTarget_orig(rdram, ctx);
+    jfg::jfg_interp_reticle(0);
+}
+
+// The four matrix push functions: jfg_interp_push before, jfg_interp_pushed after.
+JFG_WRAP(camPushModelMtx) {
+    jfg_interp_push(rdram, ctx);
+    camPushModelMtx_orig(rdram, ctx);
+    jfg_interp_pushed(rdram, ctx);
+}
+
+JFG_WRAP(camPushFloatModelMtx) {
+    jfg_interp_push(rdram, ctx);
+    camPushFloatModelMtx_orig(rdram, ctx);
+    jfg_interp_pushed(rdram, ctx);
+}
+
+JFG_WRAP(camPushMuzzleMtx) {
+    jfg_interp_push(rdram, ctx);
+    camPushMuzzleMtx_orig(rdram, ctx);
+    jfg_interp_pushed(rdram, ctx);
+}
+
+JFG_WRAP(camScaleModelMtx) {
+    jfg_interp_push(rdram, ctx);
+    camScaleModelMtx_orig(rdram, ctx);
+    jfg_interp_pushed(rdram, ctx);
+}

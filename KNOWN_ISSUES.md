@@ -5,8 +5,8 @@ Found something that isn't listed here? See [Reporting bugs](README.md#reporting
 
 ## Stability
 
-- **Rare crash or freeze with Frame Interpolation on.** Several causes were fixed in 1.2 and none have been seen
-  since, but if it happens to you, please report it with your `crash.log`. Turning Frame Interpolation off avoids it.
+- **Rare crash or freeze with Display Frame Rate on.** Several causes were fixed in 1.2 and none have been seen
+  since, but if it happens to you, please report it with your `crash.log`. Setting Display Frame Rate to Off avoids it.
 - **Game Frame Rate 60 is experimental:** some enemy groups and bosses can behave differently than at 30 (for
   example a wave counts as cleared one enemy early). If something seems off, try 30.
 
@@ -14,7 +14,7 @@ Found something that isn't listed here? See [Reporting bugs](README.md#reporting
 
 - **The camera can move during some cutscenes.** With dual-stick controls the camera can sometimes be turned during
   a door-unlock cutscene, and during the Mizar boss intro before the fight starts.
-- **The screen can shake while walking over uneven ground with Frame Interpolation on**, for example at the entrance of
+- **The screen can shake while walking over uneven ground with Display Frame Rate on**, for example at the entrance of
   Mizar's Palace. **Fix planned.**
 
 ## Graphics
@@ -22,7 +22,7 @@ Found something that isn't listed here? See [Reporting bugs](README.md#reporting
 - **Shadows look wrong in the intro cutscene of the Tribals level.** **Fix planned.**
 - **The Floyd screen just before a Floyd mission has a visual glitch.** **Fix planned.**
 - **With level of detail turned off, ants in cutscenes still use their low-detail models.**
-- **Uneven frame times with Frame Interpolation on a high-end GPU when anti-aliasing (MSAA) is off.** Keep MSAA on (2x is the default), or set NVIDIA's "Power management mode" to "Prefer maximum performance" for the game.
+- **Uneven frame times with Display Frame Rate on, on a high-end GPU, when anti-aliasing (MSAA) is off.** Keep MSAA on (2x is the default), or set NVIDIA's "Power management mode" to "Prefer maximum performance" for the game.
 
 ## Menus and launcher
 

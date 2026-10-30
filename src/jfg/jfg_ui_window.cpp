@@ -3,7 +3,7 @@
 // Opened and closed with F9 or the ` (grave) key. Drawn through the base project's debug UI backend
 // (src/debug_ui), which already owns an ImGui context and renders it on top of the game.
 //
-// This file: the F9 window and its Cheats and Level warp tabs. The other tabs are in jfg_profiles.cpp, jfg_weapons.cpp
+// This file: the F9 window and its Cheats, Level warp and Mod API tabs. The other tabs are in jfg_profiles.cpp, jfg_weapons.cpp
 // and jfg_ui_items.cpp. F10's tools are RmlUi, in jfg_ui_tools.cpp.
 #include <algorithm>
 #include <cfloat>
@@ -14,7 +14,9 @@
 #include <vector>
 
 #include "imgui/imgui.h"
+#include "jfg_api.h"
 #include "jfg_game.h"
+#include "jfg_locale.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
@@ -64,13 +66,6 @@ void draw_options() {
     if (ImGui::BeginTabBar("options_tabs", ImGuiTabBarFlags_FittingPolicyResizeDown)) {
         if (ImGui::BeginTabItem("General")) {
             options_section("General");
-            changed |= ImGui::Checkbox("No blood (as in the Japanese version)", &g.no_blood);
-            ImGui::BeginDisabled(g.no_blood);
-            changed |= ImGui::Checkbox("Blood stays (splats on the ground and walls)", &g.gore_keep_blood);
-            changed |= ImGui::Checkbox("Body parts stay", &g.gore_keep_limbs);
-            changed |= options_slider("Blood splats", &g.blood_splats, 64, 4096);
-            changed |= options_slider("Blood amount %", &g.blood_amount, 100, 800);
-            ImGui::EndDisabled();
             changed |= ImGui::Checkbox("START skips cutscenes", &g.start_skips_cutscenes);
             options_help("Also skips the logo screens at start-up and the story intro after creating a file. A skipped cutscene "
                          "still runs to its end at full machine speed, so everything it does (flags, items, the next level) still "
@@ -108,9 +103,20 @@ void draw_options() {
             options_help("How strongly the screen turns red when the character is hit. 0: no red flash.");
             changed |= options_slider("Shadow opacity %", &g.shadow_opacity, 0, 200);
             options_help("How dark the shadows under characters and objects are drawn. 100: the original game; 0: none.");
-            changed |= ImGui::Checkbox("Hide Floyd", &g.hide_floyd);
-            options_help("Floyd, his shadow and his sounds are gone while he follows the character; he still flies along "
-                         "and shoots. Floyd missions and a second player flying him show him as usual.");
+            {
+                const std::vector<std::pair<std::string, std::string>> locales = jfg::locale::list();
+                const std::string chosen = jfg::locale::chosen();
+                std::string current = locales.front().second;
+                for (const auto& [id, name] : locales) if (id == chosen) current = name;
+                if (ImGui::BeginCombo("Language", current.c_str())) {
+                    for (const auto& [id, name] : locales) {
+                        if (ImGui::Selectable(name.c_str(), id == chosen)) jfg::locale::choose(id);
+                    }
+                    ImGui::EndCombo();
+                }
+                options_help("The language of menus, subtitles and hints: English and every file in the game's locales "
+                             "folder (locales/<name>.json). Text a language lacks is shown in English.");
+            }
             changed |= ImGui::Checkbox("Disable LOD (full-detail models at any distance)", &g.no_lod);
             options_help("Characters and objects normally switch to a simpler model once they are a little way off.");
             changed |= ImGui::Checkbox("Draw distant objects (no object draw distance)", &g.far_objects);
@@ -133,14 +139,14 @@ void draw_options() {
                 int smooth_index = 0;
                 for (int i = 0; i < IM_ARRAYSIZE(smooth); i++) if (g.smooth_motion == smooth[i]) smooth_index = i;
                 ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
-                if (ImGui::Combo("Frame interpolation", &smooth_index, smooth_names, IM_ARRAYSIZE(smooth_names))) {
+                if (ImGui::Combo("Display frame rate", &smooth_index, smooth_names, IM_ARRAYSIZE(smooth_names))) {
                     g.smooth_motion = smooth[smooth_index];
                     changed = true;
                 }
                 options_help("How many frames a second you see: the renderer adds in-between frames to the game's own. Monitor: "
                              "up to your monitor's refresh rate. Rain and a few effects still move at the game's rate.");
                 changed |= ImGui::Checkbox("Smooth shadows", &g.smooth_shadows);
-                options_help("With Frame Interpolation, character shadows move with the in-between frames instead of at the "
+                options_help("With Display Frame Rate, character shadows move with the in-between frames instead of at the "
                              "game's rate, so they no longer trail behind the character.");
             }
             ImGui::EndTabItem();
@@ -305,7 +311,9 @@ void draw_options() {
             changed |= ImGui::Checkbox("Unlimited continues", &g.unlimited_continues);
             options_help("Dying never uses up the last continue, so an area is never restarted from its entrance.");
             changed |= options_slider("Jetpack refuel speed %", &g.refuel_speed, 25, 1000);
-            changed |= options_slider("Vela's dive speed %", &g.dive_speed, 50, 400);
+            changed |= options_slider("Floyd's fuel %", &g.floyd_fuel, 100, 300);
+            changed |= ImGui::Checkbox("Faster pause menu", &g.fast_pause);
+            if (DIVE_SPEED_OPTION) changed |= options_slider("Vela's dive speed %", &g.dive_speed, 50, 400);
 
             options_section("Fly camera (F7)");
             if (ImGui::Button(g_fly.active ? "Stop flying (F7)" : "Fly camera (F7)")) g_fly_toggle_request = true;
@@ -377,8 +385,10 @@ void draw_cheats() {
         wr32(ADDR_debugMenuEnable, game_debug ? 1 : 0);
     }
     ImGui::Checkbox("Skip the Tribal check (all Tribals count as rescued)", &g.skip_tribal_check);
+    ImGui::Checkbox("Enemies ignore you (watch squads patrol)", &g.squads_ignore);
     ImGui::TextDisabled("The first four switch the game's own retail cheat flags. The Tribal check makes the game's\n"
-                        "\"all Tribals rescued\" test pass (game flag 88) without changing your save.");
+                        "\"all Tribals rescued\" test pass (game flag 88) without changing your save. Enemies that\n"
+                        "ignore you don't see, hear or fight back; turn it on before they spot you.");
 }
 
 void draw_warp() {
@@ -410,6 +420,64 @@ void draw_warp() {
                         "AlphaSewer = Sekhmet, ...). Entries ending in Seq are cutscenes. Use from inside a game.");
 }
 
+// The Mod API tab: how often each event fires, and how often anything listened (an active port option or a mod's
+// callback). Only events something listens to cost time; the rest return at once (jfg_api.cpp, fire).
+static void draw_mod_api() {
+    constexpr size_t count = (size_t)api::Event::Count;
+    struct Rate {
+        uint64_t fired = 0, ran = 0;
+    };
+    static Rate last[count];
+    static Rate rate[count];
+    static double last_time = -1.0;
+    const double now = ImGui::GetTime();
+    if (last_time < 0.0 || now - last_time >= 1.0) { // per-second rates, updated once a second
+        const double seconds = last_time < 0.0 ? 1.0 : now - last_time;
+        for (size_t i = 0; i < count; i++) {
+            const api::Stats s = api::stats((api::Event)i);
+            if (last_time >= 0.0) {
+                rate[i].fired = (uint64_t)((s.fired - last[i].fired) / seconds + 0.5);
+                rate[i].ran = (uint64_t)((s.ran - last[i].ran) / seconds + 0.5);
+            }
+            last[i] = {s.fired, s.ran};
+        }
+        last_time = now;
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("Per second. \"Listened\" = an active port option or a mod ran for it; the rest cost nothing.");
+    ImGui::PopStyleColor();
+    if (!ImGui::BeginTable("events", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) return;
+    ImGui::TableSetupColumn("Event");
+    ImGui::TableSetupColumn("Fired", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 5.0f);
+    ImGui::TableSetupColumn("Listened", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 5.0f);
+    ImGui::TableSetupColumn("Mods", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 3.5f);
+    ImGui::TableHeadersRow();
+    uint64_t total_fired = 0, total_ran = 0;
+    for (size_t i = 0; i < count; i++) {
+        const api::Event event = (api::Event)i;
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(api::event_name(event));
+        ImGui::TableNextColumn();
+        ImGui::Text("%llu", (unsigned long long)rate[i].fired);
+        ImGui::TableNextColumn();
+        ImGui::Text("%llu", (unsigned long long)rate[i].ran);
+        ImGui::TableNextColumn();
+        ImGui::Text("%zu", api::mod_callbacks(event));
+        total_fired += rate[i].fired;
+        total_ran += rate[i].ran;
+    }
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::TextDisabled("all events");
+    ImGui::TableNextColumn();
+    ImGui::Text("%llu", (unsigned long long)total_fired);
+    ImGui::TableNextColumn();
+    ImGui::Text("%llu", (unsigned long long)total_ran);
+    ImGui::EndTable();
+}
+
 // F9: the original all-in-one window (jfg_debug_frame, while the debug UI is open without the toolbar).
 void draw_debug_window(recomp_context* ctx) {
     ImGui::GetIO().FontGlobalScale = 1.0f; // the toolbar scales globally; this window scales itself
@@ -430,6 +498,7 @@ void draw_debug_window(recomp_context* ctx) {
                 if (in_game) draw_inventory(ctx); else ImGui::TextDisabled("No game loaded.");
                 ImGui::EndTabItem();
             }
+            if (ImGui::BeginTabItem("Mod API")) { draw_mod_api(); ImGui::EndTabItem(); }
             ImGui::EndTabBar();
         }
     }

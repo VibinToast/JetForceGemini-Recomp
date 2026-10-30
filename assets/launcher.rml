@@ -107,6 +107,22 @@
 			.rl-main { top: 34dp; right: 46dp; bottom: 46dp; left: 524dp; }
 			.rl-main-inner { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; padding: 30dp 36dp 24dp; }
 			.rl-title { display: block; flex: 0 0 auto; text-transform: uppercase; font-size: 49dp; line-height: 56dp; color: #3CC8FF; }
+			/* The page title, and on the Play page the language drop-down at its far side. */
+			.rl-title-row { display: flex; flex: 0 0 auto; flex-direction: row; justify-content: space-between; align-items: center; }
+			.rl-lang { display: block; position: relative; flex: 0 0 auto; width: 220dp; } /* the list is as wide, right under the button */
+			.rl-lang-button { display: block; padding: 8dp 14dp; border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF;
+				font-family: "JetBrains Mono"; font-weight: bold; font-size: 18dp; line-height: 24dp; white-space: nowrap; cursor: pointer;
+				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
+			.rl-lang-button:hover { border-color: #FFB21A; }
+			#window:not([mouse-active]) .rl-lang-button:focus { border-color: #FFB21A; color: #E8F3FF; }
+			.rl-lang-arrow { display: inline-block; margin-left: 12dp; transform: rotate(90deg); }
+			.rl-lang-list { display: block; position: absolute; top: 46dp; left: 0dp; right: 0dp; z-index: 10; padding: 4dp 0dp;
+				border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; }
+			.rl-lang-item { display: block; padding: 6dp 14dp; border-width: 0dp; background-color: #050B1C; color: #E8F3FF; font-family: "JetBrains Mono"; font-weight: bold; font-size: 18dp;
+				line-height: 24dp; white-space: nowrap; text-align: left; cursor: pointer; focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; }
+			.rl-lang-item.rl-on { background-color: #0A2660; color: #3CC8FF; }
+			.rl-lang-item:hover { background-color: #1F3D73; color: #FFFFFF; }
+			#window:not([mouse-active]) .rl-lang-item:focus { color: #050B1C; background-color: #3CC8FF; }
 			.rl-cursor { color: #3CC8FF; animation: 1.1s linear-in-out infinite rl-blink; }
 			@keyframes rl-blink { 0% { opacity: 1; } 49% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
 			.rl-subtitle { display: block; flex: 0 0 auto; margin: 10dp 0dp 18dp; font-size: 19dp; line-height: 26dp; color: #8199BF; }
@@ -227,6 +243,7 @@
 			.rl-page .config-option__details { color: #3CC8FF; }
 			.rl-page .jfg-note { color: #3CC8FF; }
 			.rl-page .jfg-keys-note { display: none; } /* the General page's note about F10 / F9: those are for the game */
+			.rl-page .jfg-ingame-only { display: none; } /* the Language list: locale files are read as the game starts */
 			.rl-page .config__wrapper p { font-family: "JetBrains Mono"; font-size: 18dp; line-height: 27dp; color: #E8F3FF; }
 			.rl-page .config__wrapper p b, .rl-page .config__wrapper p i { color: #3CC8FF; }
 			/* The focused option's description (generated pages): the option's name as a heading, larger text, a cyan bar. */
@@ -244,9 +261,12 @@
 			.rl-page .config__wrapper_scroll p b, .rl-page .config__wrapper_scroll p i { color: #3CC8FF; }
 			.rl-page .button { border-radius: 0dp; border-width: 2dp; border-color: #3CC8FF; background-color: #050B1C; color: #3CC8FF;
 				font-family: "JetBrains Mono"; font-weight: bold; font-size: 19dp; letter-spacing: 1dp; padding: 16dp 20dp; }
-			.rl-page .button:hover, .rl-page .button:focus { background-color: #0A2660; border-color: #FFB21A; color: #E8F3FF; }
-			.rl-page .button.jfg-selected { background-color: #0A2660; border-color: #FFB21A; color: #E8F3FF; } /* the chosen profile / pack: a gold outline on the hover background */
-			.rl-page .jfg-pack.jfg-selected .jfg-pack__meta { color: #E8F3FF; }
+			/* Where the controller / mouse is: a solid cyan fill, as the sidebar's open page. The chosen profile, pack or Quick
+			   Setup (jfg-selected): gold outline and text on a faint gold. Both: the fill keeps the gold outline. */
+			.rl-page .button:hover, .rl-page .button:focus { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; }
+			.rl-page .button.jfg-selected { background-color: rgba(255, 178, 26, 0.12); border-color: #FFB21A; color: #FFB21A; }
+			.rl-page .button.jfg-selected:hover, .rl-page .button.jfg-selected:focus { background-color: #3CC8FF; border-color: #FFB21A; color: #050B1C; }
+			.rl-page .jfg-pack:hover .jfg-pack__meta, .rl-page .jfg-pack:focus .jfg-pack__meta { color: #0A2660; }
 			/* The Textures page's pack cards (as in config_menu.rml, at the launcher's size) and the focused pack's details. */
 			.rl-page .jfg-pack-list { display: block; width: 100%; margin-top: 12dp; }
 			.rl-page .jfg-pack-join { display: block; margin: 10dp 10dp 0dp; font-size: 16dp; line-height: 24dp; color: #FFB21A; }
@@ -278,6 +298,84 @@
 			#rl_page_controls .config-option__list input:first-of-type { nav-left: #tab_jfg_controls; }
 			#rl_page_graphics .config-option__list input:first-of-type { nav-left: #tab_jfg_graphics; }
 			#rl_page_textures .config-option__list input:first-of-type { nav-left: #tab_jfg_textures; }
+			/* Get Mods (the mod store, src/jfg/jfg_mod_store.cpp): the filters and sources across the top, the cards on the left,
+			   the chosen mod's details on the right. */
+			.st-top { display: block; flex: 0 0 auto; }
+			.st-preview { display: block; margin-bottom: 12dp; padding: 8dp 14dp; border-left: 4dp #FFB21A; background-color: rgba(255, 178, 26, 0.10);
+				font-family: "JetBrains Mono"; font-size: 18dp; line-height: 26dp; color: #FFB21A; }
+			.st-row { display: flex; flex-direction: row; align-items: center; margin-bottom: 10dp; }
+			.st-label { display: block; margin-right: 12dp; font-family: "JFG Black"; font-size: 18dp; color: #8199BF; text-transform: uppercase; }
+			.st-spacer { flex: 1 1 auto; }
+			.st-chip { display: block; margin-right: 8dp; padding: 8dp 16dp; border-width: 2dp; border-color: #1F3D73; background-color: #050B1C; color: #8199BF;
+				font-family: "JetBrains Mono"; font-weight: bold; font-size: 18dp; letter-spacing: 0.5dp; cursor: pointer;
+				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
+			.st-chip.st-on { border-color: #3CC8FF; color: #3CC8FF; background-color: rgba(60, 200, 255, 0.10); }
+			.st-chip:hover, .st-chip:focus { background-color: #3CC8FF; border-color: #3CC8FF; color: #050B1C; }
+			.st-chip--update.st-has { border-color: #FFB21A; color: #FFB21A; }
+			.st-source { display: flex; flex-direction: row; align-items: center; box-sizing: border-box; width: 100%; height: 58dp; margin-bottom: 10dp; padding: 0dp 16dp; white-space: nowrap;
+				border-width: 2dp; border-color: #1F3D73; background-color: #050B1C; color: #8199BF; font-family: "JetBrains Mono"; font-weight: bold; font-size: 19dp; cursor: pointer;
+				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: none; nav-right: none; }
+			.st-source.st-on { color: #E8F3FF; }
+			.st-source:hover, .st-source:focus { border-color: #FFB21A; }
+			.st-check { display: block; flex: 0 0 auto; width: 26dp; height: 26dp; margin-right: 16dp; box-sizing: border-box; padding: 5dp; border-width: 3dp; border-color: #3CC8FF; }
+			.st-check-mark { display: none; width: 100%; height: 100%; background-color: #3CC8FF; }
+			.st-source.st-on .st-check-mark { display: block; }
+			.st-source-name { display: block; white-space: nowrap; }
+			.st-source-status { display: block; margin-left: auto; padding-left: 10dp; white-space: nowrap; font-weight: normal; color: #8199BF; }
+			.st-sources-shadow { top: 110dp; bottom: 110dp; left: 260dp; right: 260dp; }
+			.st-source-row { display: flex; flex-direction: row; align-items: center; margin-bottom: 10dp; }
+			.st-source-row .st-source { flex: 1 1 auto; width: auto; margin-bottom: 0dp; }
+			.st-source-x { margin: 0dp 0dp 0dp 10dp; padding: 16dp 16dp; }
+			.st-add { display: block; margin-top: 18dp; padding-top: 14dp; border-top: 2dp #1F3D73; }
+			.st-add-title { display: block; margin-bottom: 10dp; font-family: "JFG Black"; font-size: 18dp; color: #8199BF; text-transform: uppercase; }
+			.st-add-row { display: flex; flex-direction: row; align-items: center; }
+			.st-add-text { display: block; flex: 1 1 auto; height: 50dp; box-sizing: border-box; margin-right: 10dp; padding: 12dp 14dp; border-width: 2dp; border-color: #1F3D73;
+				background-color: #050B1C; color: #E8F3FF; font-family: "JetBrains Mono"; font-size: 19dp; focus: auto; tab-index: auto; }
+			.st-add-text:focus, .st-add-text:hover { border-color: #FFB21A; }
+			.st-add-row .st-chip { margin-right: 0dp; padding: 13dp 22dp; }
+			.st-add-msg { display: block; margin-top: 10dp; font-family: "JetBrains Mono"; font-size: 17dp; color: #FFB21A; }
+			.st-add-note { display: block; margin-top: 10dp; font-family: "JetBrains Mono"; font-size: 16dp; line-height: 23dp; color: #8199BF; }
+			.st-sources-list { position: absolute; top: 104dp; left: 28dp; right: 28dp; bottom: 100dp; overflow-y: auto; }
+			.st-row--tags { flex-wrap: wrap; margin-bottom: 4dp; }
+			.st-row--tags .st-label { margin-bottom: 6dp; }
+			.st-chip--tag { margin-bottom: 6dp; padding: 6dp 12dp; font-size: 16dp; }
+			.st-tag-count { margin-left: 8dp; font-weight: normal; color: #8199BF; }
+			.st-chip--tag:hover .st-tag-count, .st-chip--tag:focus .st-tag-count { color: #050B1C; }
+			.st-body { display: flex; flex-direction: row; flex: 1 1 auto; min-height: 0dp; }
+			.st-list { display: block; flex: 1 1 58%; overflow-y: auto; padding-right: 10dp; }
+			.st-card { display: flex; flex-direction: row; align-items: center; width: 100%; box-sizing: border-box; margin-bottom: 8dp; padding: 10dp 12dp;
+				border-width: 2dp; border-color: #1F3D73; background-color: rgba(3, 8, 22, 0.78); text-align: left; cursor: pointer;
+				focus: auto; tab-index: auto; nav-up: auto; nav-down: auto; nav-left: auto; nav-right: auto; }
+			.st-card:hover { border-color: #3CC8FF; }
+			.st-card:focus { border-color: #FFB21A; }
+			.st-card.st-selected { border-color: #3CC8FF; background-color: rgba(60, 200, 255, 0.12); }
+			.st-thumb { flex: 0 0 auto; width: 76dp; height: 76dp; margin-right: 16dp; background-color: rgba(3, 8, 22, 0.9); }
+			.st-card-text { display: block; flex: 1 1 auto; }
+			.st-card-name { display: block; font-family: "JetBrains Mono"; font-weight: bold; font-size: 21dp; line-height: 27dp; color: #E8F3FF; }
+			.st-card-short { display: block; margin-top: 3dp; font-family: "JetBrains Mono"; font-size: 17dp; line-height: 23dp; color: #8199BF; }
+			.st-card-meta { display: block; margin-top: 4dp; font-family: "JetBrains Mono"; font-size: 16dp; line-height: 21dp; color: #3CC8FF; }
+			.st-card-meta.st-blocked { color: #FF6B5E; }
+			.st-badges { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; margin-left: 10dp; }
+			.st-badge { display: block; margin-bottom: 5dp; padding: 2dp 8dp; border-width: 2dp; border-color: #3CF07A; color: #3CF07A;
+				font-family: "JetBrains Mono"; font-weight: bold; font-size: 15dp; line-height: 19dp; }
+			.st-badge--update { border-color: #FFB21A; background-color: #FFB21A; color: #050B1C; }
+			.st-badge--busy { border-color: #3CC8FF; color: #3CC8FF; }
+			.st-tag { display: block; font-family: "JetBrains Mono"; font-size: 15dp; line-height: 19dp; color: #8199BF; text-transform: uppercase; }
+			.st-empty { display: block; padding: 30dp; font-family: "JetBrains Mono"; font-size: 20dp; color: #8199BF; }
+			.st-detail { display: block; flex: 1 1 42%; margin-left: 12dp; padding: 20dp 22dp; overflow-y: auto;
+				border-width: 2dp; border-color: #1F3D73; background-color: rgba(3, 8, 22, 0.78); }
+			.st-detail-thumb { display: block; width: 128dp; height: 128dp; margin-bottom: 16dp; }
+			.st-detail-name { display: block; font-family: "JFG Black"; font-size: 28dp; line-height: 33dp; color: #FFB21A; }
+			.st-detail-meta { display: block; margin: 8dp 0dp 14dp; font-family: "JetBrains Mono"; font-size: 18dp; line-height: 25dp; color: #3CC8FF; }
+			.st-detail-desc { display: block; font-family: "JetBrains Mono"; font-size: 20dp; line-height: 32dp; color: #E8F3FF; }
+			.st-detail-deps { display: block; margin-top: 12dp; font-family: "JetBrains Mono"; font-size: 17dp; line-height: 24dp; color: #FFB21A; }
+			.st-detail-note { display: block; margin-top: 12dp; padding-left: 10dp; border-left: 3dp #3CC8FF; font-family: "JetBrains Mono"; font-size: 17dp; line-height: 24dp; color: #8199BF; }
+			.st-actions { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; margin-top: 8dp; }
+			.st-state { display: block; margin: 20dp 28dp 4dp 0dp; font-family: "JetBrains Mono"; font-weight: bold; font-size: 19dp; color: #3CF07A; }
+			.st-state.st-blocked { color: #FF6B5E; }
+			.st-progress { display: block; margin-top: 20dp; }
+			.st-progress-text { display: block; margin-bottom: 8dp; font-family: "JetBrains Mono"; font-size: 18dp; color: #E8F3FF; }
+			.st-result { display: block; margin-top: 12dp; font-family: "JetBrains Mono"; font-size: 17dp; line-height: 24dp; color: #8199BF; }
 		</style>
 	</head>
 	<body>
@@ -305,23 +403,23 @@
 								data-event-focus="set_page('general')" style="nav-up: #tab_jfg_profiles; nav-down: #tab_jfg_gameplay; nav-right: #jfg_main_volume_input;">General</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_gameplay" class="rl-btn" data-class-rl-active="page == 'gameplay'"
 								data-event-focus="set_page('gameplay')" style="nav-up: #tab_jfg_general; nav-down: #tab_jfg_controls; nav-right: #jfg_auto_save_on;">Gameplay</button></div>
-							<div class="rl-btn-shadow"><button id="tab_jfg_controls" class="rl-btn" data-class-rl-active="page == 'controls'"
-								data-event-focus="set_page('controls')" style="nav-up: #tab_jfg_gameplay; nav-down: #tab_controls; nav-right: #jfg_dual_stick_on;">Controls</button></div>
-							<div class="rl-btn-shadow"><button id="tab_controls" class="rl-btn" data-class-rl-active="page == 'bindings'"
-								data-event-focus="set_page('bindings')" style="nav-up: #tab_jfg_controls; nav-down: #tab_jfg_graphics; nav-right: #cont_kb_toggle;">Bindings</button></div>
+							<div class="rl-btn-shadow"><button id="tab_jfg_controls" class="rl-btn" data-class-rl-active="page == 'controls' || page == 'bindings'"
+								data-event-focus="set_page('controls')" style="nav-up: #tab_jfg_gameplay; nav-down: #tab_jfg_graphics; nav-right: #jfg_qs_modern;">Controls</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_graphics" class="rl-btn" data-class-rl-active="page == 'graphics'"
-								data-event-focus="set_page('graphics')" style="nav-up: #tab_controls; nav-down: #tab_jfg_textures; nav-right: #jfg_wm_option_0;">Graphics</button></div>
+								data-event-focus="set_page('graphics')" style="nav-up: #tab_jfg_controls; nav-down: #tab_jfg_textures; nav-right: #jfg_wm_option_0;">Graphics</button></div>
 							<div class="rl-btn-shadow"><button id="tab_jfg_textures" class="rl-btn" data-class-rl-active="page == 'textures'"
 								data-event-focus="set_page('textures')" style="nav-up: #tab_jfg_graphics; nav-down: #tab_mods;"
 								data-style-nav-right="!official_shown ? '#jfg_pack_0' : (official_busy ? '#rl_official_cancel' : '#rl_official_info')">Texture Packs</button></div>
 							<div class="rl-btn-shadow"><button id="tab_mods" class="rl-btn" data-class-rl-active="page == 'mods'"
-								data-event-focus="set_page('mods')" style="nav-up: #tab_jfg_textures; nav-down: #nav_about; nav-right: auto;">Mods</button></div>
+								data-event-focus="set_page('mods')" style="nav-up: #tab_jfg_textures; nav-down: #tab_store; nav-right: auto;">Mods</button></div>
+							<div class="rl-btn-shadow"><button id="tab_store" class="rl-btn" data-class-rl-active="page == 'store'"
+								data-event-focus="set_page('store')" style="nav-up: #tab_mods; nav-down: #nav_about; nav-right: #st_filter_all;">Get Mods</button></div>
 							<div class="rl-btn-shadow"><button id="nav_about" class="rl-btn" data-class-rl-active="page == 'about'"
-								data-event-focus="set_page('about')" style="nav-up: #tab_mods; nav-down: #nav_exit;">About</button></div>
+								data-event-focus="set_page('about')" style="nav-up: #tab_store; nav-down: #nav_exit;">About</button></div>
 							<div class="rl-separator"></div>
 							<div class="rl-btn-shadow"><button id="nav_exit" class="rl-btn rl-btn--exit" onclick="exit_game"
 								style="nav-up: #nav_about; nav-down: #nav_play;">Exit</button></div>
-							<div class="rl-version"><div class="rl-version-side"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp')">GitHub</button></div><div class="rl-version-mid">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version {{update_version}} is available. Click (or use the banner on the Play page) to see what is new and update.</div></div></div><div class="rl-version-side"></div></div>
+							<div class="rl-version"><div class="rl-version-side"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recompiled')">GitHub</button></div><div class="rl-version-mid">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version <span>{{update_version}}</span> is available. Click (or use the banner on the Play page) to see what is new and update.</div></div></div><div class="rl-version-side"></div></div>
 						</div>
 					</div>
 				</div>
@@ -330,7 +428,17 @@
 				<div class="rl-shadow rl-main">
 					<div class="rl-card">
 						<div class="rl-main-inner">
-							<div class="rl-title rl-pixel">{{page_title}}<span class="rl-cursor">_</span></div>
+							<div class="rl-title-row">
+								<div class="rl-title rl-pixel">{{page_title}}<span class="rl-cursor">_</span></div>
+								<!-- The language (English and locales/*.json), only when there are others. -->
+								<div class="rl-lang" data-if="page == 'play' &amp;&amp; rl_locales.size &gt; 1">
+									<button class="rl-lang-button" id="rl_lang" data-event-click="toggle_lang()" style="nav-up: none; nav-down: #rl_browse; nav-left: #nav_play; nav-right: none;">{{rl_locale_name}}<span class="rl-lang-arrow">&gt;</span></button>
+									<div class="rl-lang-list" data-if="rl_lang_open">
+										<button class="rl-lang-item" data-for="l : rl_locales" data-attr-id="'rl_lang_' + it_index" data-class-rl-on="l.selected"
+											data-event-click="pick_locale(l.id)">{{l.name}}</button>
+									</div>
+								</div>
+							</div>
 							<div class="rl-subtitle">{{page_subtitle}}</div>
 							<div class="rl-content">
 
@@ -350,14 +458,14 @@
 												<div class="rl-text" data-if="rom_valid">Your Jet Force Gemini (US) ROM is installed.</div>
 												<div class="rl-text rl-muted">The ROM stays on your computer and is never bundled with the game.</div>
 												<div class="rl-action-shadow"><button id="rl_browse" class="rl-action" data-class-rl-action--outline="rom_valid"
-													data-event-click="browse_rom()" style="nav-left: #nav_play; nav-up: none;">{{browse_label}}</button></div>
+													data-event-click="browse_rom()" style="nav-left: #nav_play; nav-up: #rl_lang;">{{browse_label}}</button></div>
 											</div>
 										</div>
 									</div></div>
 									<div class="rl-banner-shadow" data-if="update_available">
 										<button id="rl_update_banner" class="rl-banner" data-event-click="show_update()"
 											style="nav-left: #nav_play; nav-up: #rl_browse;" data-style-nav-down="official_update ? '#rl_pack_banner' : '#rl_start'">
-											<span class="rl-banner-title">Update available: v{{update_version}}</span>
+											<span class="rl-banner-title">Update available: <span>v{{update_version}}</span></span>
 											<span class="rl-banner-text">See what is new and update. Your saves and settings are kept.</span>
 										</button>
 									</div>
@@ -379,7 +487,7 @@
 									<div data-if="rom_valid">
 										<div class="rl-skip">
 											<div class="rl-action-shadow rl-skip-shadow"><button id="rl_skip_launcher" class="rl-action" data-class-rl-action--outline="!skip_launcher" data-event-click="toggle_skip_launcher()"
-												style="nav-left: #nav_play; nav-up: #rl_start;">Skip the launcher: {{ skip_launcher ? 'On' : 'Off' }}</button></div>
+												style="nav-left: #nav_play; nav-up: #rl_start;">Skip the launcher: <span data-if="skip_launcher">On</span><span data-if="!skip_launcher">Off</span></button></div>
 											<div class="rl-skip-note">On: the game starts straight away with this ROM next time. In the game, the launcher button next to Quit in the settings menu (Select / Esc) brings you back here.</div>
 										</div>
 									</div>
@@ -389,7 +497,7 @@
 										<div class="rl-key-row"><div class="rl-key">F10</div><div>Tools bar: cheats, level warp, items, weapons, texture packs (Alt: back to the game)</div></div>
 										<div class="rl-key-row"><div class="rl-key">F9</div><div>The original all-in-one debug window</div></div>
 										<div class="rl-key-row"><div class="rl-key">F5 / F6</div><div>Back to the title screen / next texture pack</div></div>
-										<div class="rl-key-row"><div class="rl-key">F7</div><div>Fly camera for screenshots (General has its settings)</div></div>
+										<div class="rl-key-row"><div class="rl-key">F7</div><div>Fly camera for screenshots (General, Advanced Options has its settings)</div></div>
 										<div class="rl-key-row"><div class="rl-key">F11 / Alt+Enter</div><div>Fullscreen</div></div>
 									</div>
 									<div class="rl-action-shadow rl-changelogs"><button id="rl_changelogs" class="rl-action rl-action--outline" data-event-click="show_changelog()" style="nav-left: #nav_play;">Changelogs</button></div>
@@ -449,6 +557,68 @@
 									<div class="rl-tpl"><template src="config-menu__mods"/></div>
 								</div>
 
+								<!-- Get Mods: the mod store (src/jfg/jfg_mod_store.cpp; Recomp-Docs OFFICIAL_MODS_PLAN.md "Mod Store") -->
+								<div class="rl-page" id="rl_page_store" data-if="page == 'store'">
+									<div class="st-top">
+										<div class="st-preview" data-if="store_preview">Preview: these collections are read from bin/mod_store_preview (JFG_MOD_STORE_PREVIEW), not GitHub.</div>
+										<div class="st-row">
+											<button class="st-chip" id="st_filter_all" data-class-st-on="store_filter == 'all'" data-event-click="store_set_filter('all')" style="nav-left: #tab_store; nav-up: none; nav-down: #st_tag_all;">All {{store_count_all}}</button>
+											<button class="st-chip" id="st_filter_installed" data-class-st-on="store_filter == 'installed'" data-event-click="store_set_filter('installed')" style="nav-up: none; nav-down: #st_tag_all;">Installed {{store_count_installed}}</button>
+											<button class="st-chip st-chip--update" id="st_filter_updates" data-class-st-on="store_filter == 'updates'" data-class-st-has="store_count_updates &gt; 0" data-event-click="store_set_filter('updates')" style="nav-up: none; nav-down: #st_tag_all;">Updates {{store_count_updates}}</button>
+											<div class="st-spacer"></div>
+											<button class="st-chip" id="st_sources" data-event-click="store_sources_open()" style="nav-up: none; nav-down: #st_tag_all;">Sources {{store_sources_on}}/{{store_sources.size}}</button>
+											<button class="st-chip" id="st_reload" data-event-click="store_reload()" style="nav-up: none; nav-right: none; nav-down: #st_tag_all;">Refresh</button>
+										</div>
+										<div class="st-row st-row--tags">
+											<div class="st-label">Tags</div>
+											<button class="st-chip st-chip--tag" id="st_tag_all" data-class-st-on="store_tag == ''" data-event-click="store_set_tag('')" style="nav-left: #tab_store;">All</button>
+											<button class="st-chip st-chip--tag" data-for="tag : store_tags" data-attr-id="'st_tag_' + it_index" data-class-st-on="store_tag == tag.name"
+												data-event-click="store_set_tag(tag.name)" data-style-nav-right="it_index == store_tags.size - 1 ? 'none' : 'auto'">{{tag.name}}<span class="st-tag-count">{{tag.count}}</span></button>
+										</div>
+									</div>
+									<div class="st-body">
+										<div class="st-list">
+											<button class="st-card" data-for="r : store_rows" data-attr-id="'st_mod_' + it_index" data-class-st-selected="r.selected"
+												data-event-click="store_select(r.id)" data-event-focus="store_focus(r.id)" data-style-nav-left="'#tab_store'" data-style-nav-right="store_right"
+												data-style-nav-up="it_index == 0 ? '#st_tag_all' : 'auto'" data-style-nav-down="it_index == store_rows.size - 1 ? 'none' : 'auto'">
+												<div class="st-thumb" data-style-decorator="r.thumb != '' ? 'image(' + r.thumb + ' contain)' : 'none'"></div>
+												<div class="st-card-text">
+													<div class="st-card-name">{{r.name}}</div>
+													<div class="st-card-short">{{r.short_text}}</div>
+													<div class="st-card-meta" data-class-st-blocked="r.blocked">{{r.status}}  -  {{r.source_name}}</div>
+												</div>
+												<div class="st-badges">
+													<div class="st-badge st-badge--busy" data-if="r.busy">INSTALLING</div>
+													<div class="st-badge st-badge--update" data-if="r.update &amp;&amp; !r.busy">UPDATE</div>
+													<div class="st-badge" data-if="r.installed &amp;&amp; !r.update &amp;&amp; !r.busy">INSTALLED</div>
+													<div class="st-tag">{{r.tags}}</div>
+												</div>
+											</button>
+											<div class="st-empty" data-if="store_rows.size == 0">Nothing here. Turn a source on, or pick another filter.</div>
+										</div>
+										<div class="st-detail" id="st_detail" data-if="store_sel_name != ''">
+											<div class="st-detail-thumb" data-if="store_sel_thumb != ''" data-style-decorator="store_sel_thumb != '' ? 'image(' + store_sel_thumb + ' contain)' : 'none'"></div>
+											<div class="st-detail-name">{{store_sel_name}}</div>
+											<div class="st-detail-meta">{{store_sel_meta}}</div>
+											<div class="st-detail-desc">{{store_sel_desc}}</div>
+											<div class="st-detail-deps" data-if="store_sel_deps != ''">{{store_sel_deps}}</div>
+											<div class="st-detail-note" data-if="store_sel_note != ''">{{store_sel_note}}</div>
+											<div class="st-progress" data-if="store_busy">
+												<div class="st-progress-text">{{store_text}}</div>
+												<div class="rl-official-bar"><div class="rl-progress-bar" data-style-width="store_percent + '%'"></div></div>
+											</div>
+											<div class="st-actions" data-if="!store_busy">
+												<div class="rl-action-shadow" data-if="store_sel_can_act"><button id="st_act" class="rl-action" data-event-click="store_install()" style="nav-up: none; nav-down: none;" data-style-nav-left="store_sel_card"
+													data-style-nav-right="store_sel_can_remove ? '#st_remove' : 'none'">{{store_sel_action}}</button></div>
+												<div class="st-state" data-class-st-blocked="store_sel_blocked" data-if="!store_sel_can_act">{{store_sel_action}}</div>
+												<div class="rl-action-shadow" data-if="store_sel_can_remove"><button id="st_remove" class="rl-action rl-action--outline" data-event-click="store_remove()" style="nav-up: none; nav-down: none; nav-right: none;"
+													data-style-nav-left="store_sel_can_act ? '#st_act' : store_sel_card">Remove</button></div>
+											</div>
+											<div class="st-result" data-if="!store_busy &amp;&amp; store_text != ''">{{store_text}}</div>
+										</div>
+									</div>
+								</div>
+
 								<!-- About -->
 								<div class="rl-page rl-page-scroll" id="rl_page_about" data-if="page == 'about'">
 									<div class="rl-about">
@@ -485,7 +655,7 @@
 											</div></div>
 											<div class="rl-gap"></div>
 											<div class="rl-block-shadow"><div class="rl-block">
-												<div class="rl-text rl-muted" style="margin-top: 0dp;">Jet Force Gemini is a trademark of its owners. This is a fan project, not affiliated with or endorsed by Rare, Nintendo or Microsoft. Version {{version_number}}.</div>
+												<div class="rl-text rl-muted" style="margin-top: 0dp;">Jet Force Gemini is a trademark of its owners. This is a fan project, not affiliated with or endorsed by Rare, Nintendo or Microsoft. Version <span>{{version_number}}</span></div>
 											</div></div>
 										</div>
 									</div>
@@ -497,28 +667,63 @@
 				</div>
 				<div class="rl-modal" data-class-rl-on="update_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
 					<div class="rl-modal-title">Update available</div>
-					<div class="rl-modal-sub">v{{version_number}} &gt; v{{update_version}}. What is new:</div>
+					<div class="rl-modal-sub"><span>v{{version_number}} &gt; v{{update_version}}.</span> What is new:</div>
 					<div class="rl-modal-notes" id="rl_update_notes" data-rml="update_changelog"></div>
 					<div class="rl-modal-status" data-if="update_stage != 0" data-class-rl-error="update_stage == 2">{{update_status}}</div>
 					<div class="rl-progress" data-if="update_stage == 1"><div class="rl-progress-bar" data-style-width="update_percent + '%'"></div></div>
-					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install">Update to v{{update_version}}? The game restarts when it is done. Your saves and settings are kept.</div>
+					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install">Update to <span>v{{update_version}}?</span> The game restarts when it is done. Your saves and settings are kept.</div>
 					<div class="rl-modal-ask rl-warn" data-if="update_stage == 0 &amp;&amp; !update_can_install">{{update_unavailable}}</div>
 					<div class="rl-modal-buttons">
 						<div class="rl-action-shadow" data-if="update_stage == 0"><button id="rl_update_go" class="rl-action" data-event-click="update_install()"
 							style="nav-up: none; nav-down: none; nav-left: none; nav-right: #rl_update_later;">Update now</button></div>
 						<div class="rl-action-shadow" data-if="update_stage != 1 &amp;&amp; update_stage != 3"><button id="rl_update_later" class="rl-action rl-action--outline" data-event-click="update_close()"
 							data-style-nav-left="update_stage == 0 ? '#rl_update_go' : 'none'" data-style-nav-right="'#rl_update_page'"
-							style="nav-up: none; nav-down: none;">{{update_stage == 2 ? 'Close' : 'Later'}}</button></div>
-						<div class="rl-action-shadow" data-if="update_stage == 0 || update_stage == 2"><button id="rl_update_page" class="rl-action rl-action--outline" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recomp/releases/latest')"
+							style="nav-up: none; nav-down: none;"><span data-if="update_stage == 2">Close</span><span data-if="update_stage != 2">Later</span></button></div>
+						<div class="rl-action-shadow" data-if="update_stage == 0 || update_stage == 2"><button id="rl_update_page" class="rl-action rl-action--outline" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recompiled/releases/latest')"
 							style="nav-up: none; nav-down: none; nav-left: #rl_update_later; nav-right: none;">Release page</button></div>
 					</div>
 				</div></div></div>
 				<div class="rl-modal" data-class-rl-on="changelog_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
 					<div class="rl-modal-title">Changelogs</div>
-					<div class="rl-modal-sub">You have v{{version_number}}. Newest first. Up/Down or the mouse wheel scrolls.</div>
+					<div class="rl-modal-sub">You have <span>v{{version_number}}.</span> Newest first. Up/Down or the mouse wheel scrolls.</div>
 					<div class="rl-modal-notes rl-modal-notes--tall" id="rl_changelog_notes" data-rml="changelog_text"></div>
 					<div class="rl-modal-buttons">
 						<div class="rl-action-shadow"><button id="rl_changelog_close" class="rl-action" data-event-click="changelog_close()" style="nav-up: none; nav-down: none; nav-left: none; nav-right: none;">Close</button></div>
+					</div>
+				</div></div></div>
+				<!-- Get Mods' sources: each collection switched on or off (src/jfg/jfg_mod_store.cpp) -->
+				<div class="rl-modal" data-class-rl-on="store_sources_dialog"><div class="rl-modal-shadow st-sources-shadow"><div class="rl-modal-box">
+					<div class="rl-modal-title">Sources</div>
+					<div class="rl-modal-sub">The collections Get Mods lists. Turn one off to hide its mods; Page opens its GitHub page.</div>
+					<div class="st-sources-list">
+						<div class="st-source-row" data-for="src : store_sources">
+							<button class="st-source" data-attr-id="'st_source_' + it_index" data-class-st-on="src.enabled"
+								data-event-click="store_toggle_source(src.id)" style="nav-left: none;"
+								data-style-nav-right="'#st_source_web_' + it_index"
+								data-style-nav-up="it_index == 0 ? 'none' : '#st_source_' + (it_index - 1)"
+								data-style-nav-down="it_index == store_sources.size - 1 ? '#st_add_text' : '#st_source_' + (it_index + 1)">
+								<div class="st-check"><div class="st-check-mark"></div></div><div class="st-source-name">{{src.name}}</div><div class="st-source-status">{{src.status}}</div></button>
+							<button class="st-chip st-source-x" data-attr-id="'st_source_web_' + it_index" data-event-click="open_url(src.page)"
+								data-style-nav-left="'#st_source_' + it_index" data-style-nav-right="src.removable ? '#st_source_x_' + it_index : 'none'"
+								style="nav-up: none; nav-down: none;">Page</button>
+							<button class="st-chip st-source-x" data-if="src.removable" data-attr-id="'st_source_x_' + it_index" data-event-click="store_remove_source(src.id)"
+								data-style-nav-left="'#st_source_web_' + it_index" style="nav-right: none; nav-up: none; nav-down: none;">Remove</button>
+						</div>
+						<!-- Someone else's collection: a GitHub repo publishing a catalog.json, as the official ones do -->
+						<div class="st-add">
+							<div class="st-add-title">Add a collection</div>
+							<div class="st-add-row">
+								<input type="text" id="st_add_text" class="st-add-text" data-value="store_add_text" maxlength="200"
+									data-style-nav-up="store_sources.size == 0 ? 'none' : '#st_source_' + (store_sources.size - 1)" style="nav-left: none; nav-right: #st_add_btn; nav-down: #st_sources_close;"/>
+								<button id="st_add_btn" class="st-chip" data-event-click="store_add_source()" style="nav-left: #st_add_text; nav-right: none; nav-down: #st_sources_close;"
+									data-style-nav-up="store_sources.size == 0 ? 'none' : '#st_source_' + (store_sources.size - 1)">Add</button>
+							</div>
+							<div class="st-add-msg" data-if="store_add_msg != ''">{{store_add_msg}}</div>
+							<div class="st-add-note">Its GitHub repo as owner/repo, or its address. Mods from other people aren't checked by the official collections: they run in the game, so add only ones you trust.</div>
+						</div>
+					</div>
+					<div class="rl-modal-buttons">
+						<div class="rl-action-shadow"><button id="st_sources_close" class="rl-action" data-event-click="store_sources_close()" style="nav-down: none; nav-left: none; nav-right: none; nav-up: #st_add_text;">Close</button></div>
 					</div>
 				</div></div></div>
 				<div class="rl-scanlines"></div>
