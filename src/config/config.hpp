@@ -14,6 +14,9 @@ namespace dino::config {
     void load_config();
     void save_config();
     bool running_on_steam_deck();
+    // JFG PORT: the launcher and menus hide desktop-only settings and hints (window mode, F-keys, open-folder buttons).
+    // On for Android; JFG_HANDHELD_UI=1 turns it on elsewhere (to check the layout on a PC).
+    bool handheld_ui();
 
     void reset_input_bindings();
     void reset_cont_input_bindings();

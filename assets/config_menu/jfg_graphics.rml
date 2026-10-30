@@ -8,7 +8,7 @@
                 <div class="config__wrapper" data-event-mouseout="set_cur_config_index(-1)" style="overflow-y: auto; height: 100%;">
 
                     <div class="config-option" style="margin: 24dp 0dp 0dp;"><label class="config-option__title config-group__title">Window</label></div>
-                    <div class="config-option jfg-option" data-event-mouseover="set_cur_config_index(0)">
+                    <div class="config-option jfg-option jfg-desktop-only" data-event-mouseover="set_cur_config_index(0)">
                         <label class="config-option__title">Window Mode</label>
                         <div class="config-option__list">
                             <input type="radio" data-event-blur="set_cur_config_index(-1)" data-event-focus="set_cur_config_index(0)" name="jfg_wm_option" data-checked="wm_option" value="0" id="jfg_wm_option_0" style="nav-up: #tab_jfg_graphics; nav-down: #jfg_res_option_0;"/>

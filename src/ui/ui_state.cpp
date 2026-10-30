@@ -1406,10 +1406,36 @@ bool recompui::is_any_context_shown() {
     return ui_state->is_any_context_shown();
 }
 
+// JFG PORT: handheld layout (dino::config::handheld_ui). The document gets the class "handheld", which the style sheets
+// use to hide desktop-only settings and hints (.jfg-desktop-only). Controller navigation that pointed at a hidden
+// option is pointed at the option below it instead.
+static void apply_handheld_layout(Rml::Element* element) {
+    static const std::pair<const char*, const char*> replaced_nav_targets[] = {
+        { "#jfg_wm_option_0", "#jfg_res_option_0" }, // Window Mode -> Resolution
+        { "#jfg_wm_option_1", "#jfg_res_option_1" },
+    };
+    for (Rml::PropertyId id : { Rml::PropertyId::NavUp, Rml::PropertyId::NavDown, Rml::PropertyId::NavLeft, Rml::PropertyId::NavRight }) {
+        const Rml::Property* property = element->GetLocalProperty(id);
+        if (property == nullptr || property->unit != Rml::Unit::STRING) continue;
+        const Rml::String target = property->Get<Rml::String>();
+        for (const auto& [hidden, replacement] : replaced_nav_targets) {
+            if (target == hidden) element->SetProperty(id, Rml::Property{ Rml::String{ replacement }, Rml::Unit::STRING });
+        }
+    }
+    for (int i = 0; i < element->GetNumChildren(); i++) {
+        apply_handheld_layout(element->GetChild(i));
+    }
+}
+
 Rml::ElementDocument* recompui::load_document(const std::filesystem::path& path) {
     std::lock_guard lock{ui_state_mutex};
 
-    return ui_state->context->LoadDocument(path.string());
+    Rml::ElementDocument* document = ui_state->context->LoadDocument(path.string());
+    if (document != nullptr && dino::config::handheld_ui()) {
+        document->SetClass("handheld", true);
+        apply_handheld_layout(document);
+    }
+    return document;
 }
 
 Rml::ElementDocument* recompui::create_empty_document() {

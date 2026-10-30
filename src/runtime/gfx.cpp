@@ -103,6 +103,10 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
 #elif defined(__APPLE__)
     flags |= SDL_WINDOW_METAL;
 #endif
+#ifdef __ANDROID__
+    // JFG ANDROID: full screen, which also has SDL hide the status and navigation bars (immersive mode).
+    flags |= SDL_WINDOW_FULLSCREEN;
+#endif
 
     window = SDL_CreateWindow("Jet Force Gemini: Recompiled", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, flags);
 

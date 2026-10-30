@@ -22,6 +22,8 @@
 			flex: 1;
 			text-align: center;
 		}
+		/* JFG PORT: handheld layout (Android): desktop-only settings and keyboard hints. */
+		body.handheld .jfg-desktop-only { display: none; }
 	</style>
 	<link type="text/template" href="config_menu/controls.rml" />
 	<link type="text/template" href="config_menu/mods.rml" />

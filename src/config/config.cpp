@@ -45,8 +45,21 @@ bool running_on_steam_deck() {
     return is_steam_deck;
 }
 
+bool handheld_ui() {
+#ifdef __ANDROID__
+    return true;
+#else
+    static const bool forced = [] { const char* v = getenv("JFG_HANDHELD_UI"); return v != nullptr && v[0] == '1'; }();
+    return forced;
+#endif
+}
+
 ultramodern::renderer::WindowMode wm_default() {
+#ifdef __ANDROID__
+    return ultramodern::renderer::WindowMode::Fullscreen; // the app is always full screen (the option is hidden)
+#else
     return is_steam_deck ? ultramodern::renderer::WindowMode::Fullscreen : ultramodern::renderer::WindowMode::Windowed;
+#endif
 }
 
 #ifdef __gnu_linux__

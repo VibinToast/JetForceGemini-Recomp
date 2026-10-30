@@ -851,6 +851,8 @@ class ConfigTabsetListener : public Rml::EventListener {
                         for (const JfgTabFirst& t : jfg_tab_first_ids) {
                             if (tab_id == t.tab) jfg_first = std::string("#") + t.first;
                         }
+                        // Handheld layout: Window Mode is hidden, so the Graphics tab starts at Resolution.
+                        if (dino::config::handheld_ui() && jfg_first == "#jfg_wm_option_0") jfg_first = "#jfg_res_option_0";
                     }
                     for (size_t i = 0; i < num_children; i++) {
                         if (!jfg_first.empty()) tabs->GetChild(i)->SetProperty(Rml::PropertyId::NavDown, Rml::Property{ jfg_first, Rml::Unit::STRING });
