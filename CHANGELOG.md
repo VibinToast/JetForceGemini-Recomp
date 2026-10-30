@@ -10,6 +10,7 @@ are written here by hand and become that version's notes when it is released.
 - Auto Save no longer saves during boss fights; a save that comes due waits for the next level.
 - Keep the Reticle Centered off now works with a controller while Mouse and Keyboard Controls are on, in boss fights too; the mouse still turns the view directly.
 - Profiles: Sprint is on in Modern, Modern and Balanced and Extreme (the left stick click sprints, B still crouches). Extreme also gets three times Floyd's fuel and the fixed sniper zoom. Choose a profile again to get these.
+- Get Mods: publishing a new mod can no longer stop the mod list from loading.
 
 ## v1.3.0 (2026-10-30)
 

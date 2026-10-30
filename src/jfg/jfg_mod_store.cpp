@@ -1,7 +1,7 @@
 // Jet Force Gemini port: the launcher's mod store (Get Mods page). The design: Recomp-Docs OFFICIAL_MODS_PLAN.md
 // "Mod Store".
-// - Sources: collections of mods, each one GitHub repo publishing a catalog.json at its latest release; the owner's
-//   are built in, and the player can add other people's by "owner/repo" or address (mod_store.json "added", after
+// - Sources: collections of mods, each one GitHub repo publishing a catalog.json at its release tagged "catalog" (a
+//   mod's own release then can't take the "latest" link away from it), else at its latest release; the owner's are built in, and the player can add other people's by "owner/repo" or address (mod_store.json "added", after
 //   the built-in ones). Each can be turned off (mod_store.json). The list is in priority order: when two sources list the
 //   same mod id, the first one's entry is used and the page says another source has it too.
 // - A catalog lists each mod with its own version and release: name, descriptions, authors, tags, thumbnail, file URL,
@@ -156,6 +156,15 @@ std::string added_id(const std::string& repo) {
     return id;
 }
 
+// A collection's catalog, and where else to look when that fails (no "catalog" release: older and other people's
+// collections). mod_store.json keeps only the repos, so sources saved by earlier versions get these too.
+std::string catalog_url(const std::string& repo) { return std::string(GITHUB) + repo + "/releases/download/catalog/catalog.json"; }
+std::string catalog_fallback_url(const std::string& url) {
+    constexpr const char* TAGGED = "/releases/download/catalog/";
+    const size_t at = url.find(TAGGED);
+    return at == std::string::npos ? std::string() : url.substr(0, at) + "/releases/latest/download/" + url.substr(at + std::strlen(TAGGED));
+}
+
 void load_state() {
     g_installed.clear();
     g_added.clear();
@@ -180,7 +189,7 @@ void load_state() {
         JfgStoreSource s;
         s.id = b.id;
         s.name = b.name;
-        s.url = std::string(GITHUB) + b.repo + "/releases/latest/download/catalog.json";
+        s.url = catalog_url(b.repo);
         s.official = true;
         s.enabled = enabled.count(b.id) ? enabled[b.id] : true;
         g_sources.push_back(s);
@@ -189,7 +198,7 @@ void load_state() {
         JfgStoreSource s;
         s.id = added_id(repo);
         s.name = repo; // until its catalog gives its name
-        s.url = std::string(GITHUB) + repo + "/releases/latest/download/catalog.json";
+        s.url = catalog_url(repo);
         s.removable = true;
         s.enabled = enabled.count(s.id) ? enabled[s.id] : true;
         g_sources.push_back(s);
@@ -284,7 +293,8 @@ void with_mods_closed(const std::function<void(std::error_code&)>& change, std::
 void fetch_worker(std::vector<std::pair<std::string, std::string>> sources) { // id, catalog url
     for (const auto& [id, url] : sources) {
         const fs::path file = fs::path(CACHE_FOLDER) / fs::u8path(id) / "catalog.json";
-        const bool ok = download(url, file);
+        bool ok = download(url, file);
+        if (!ok) if (const std::string other = catalog_fallback_url(url); !other.empty()) ok = download(other, file);
         std::lock_guard<std::mutex> lock(g_mutex);
         for (JfgStoreSource& s : g_sources) {
             if (s.id != id) continue;
@@ -489,7 +499,8 @@ void jfg_store_refresh() {
     std::vector<std::pair<std::string, std::string>> fetch;
     for (JfgStoreSource& s : g_sources) {
         if (preview()) {
-            const fs::path file = preview_path(s.url);
+            fs::path file = preview_path(s.url);
+            if (file.empty() || !fs::is_regular_file(file)) file = preview_path(catalog_fallback_url(s.url));
             if (!file.empty() && fs::is_regular_file(file)) parse_catalog(s, read_text(file));
             else s.error = "Not in the preview";
             continue;
