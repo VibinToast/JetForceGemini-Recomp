@@ -97,7 +97,8 @@ bool SetImageAsIcon(const char* filename, SDL_Window* window)
 ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::gfx_data_t, int width, int height) {
     uint32_t flags = SDL_WINDOW_RESIZABLE;
 
-#if defined(RT64_SDL_WINDOW_VULKAN)
+#if defined(RT64_SDL_WINDOW_VULKAN) || defined(__ANDROID__)
+    // JFG ANDROID: without the Vulkan flag SDL makes the window an OpenGL one, whose EGL surface keeps Vulkan out.
     flags |= SDL_WINDOW_VULKAN;
 #elif defined(__APPLE__)
     flags |= SDL_WINDOW_METAL;

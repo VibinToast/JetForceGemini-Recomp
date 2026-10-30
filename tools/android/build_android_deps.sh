@@ -19,6 +19,7 @@ CMAKE="$ANDROID_HOME/cmake/3.30.3/bin/cmake"
 JOBS="${JOBS:-$(nproc)}"
 
 mkdir -p "$WORK" "$PREFIX_ROOT"
+HERE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$WORK"
 
 fetch() {  # url file sha256
@@ -34,6 +35,8 @@ COMMON=(-G Ninja -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.t
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DCMAKE_BUILD_TYPE=Release)
 
 rm -rf "SDL2-$SDL2_VERSION" sdl-build && tar -xzf "SDL2-$SDL2_VERSION.tar.gz"
+# Vulkan windows must not get EGL surfaces when Android recreates the surface (see the patch).
+patch -d "SDL2-$SDL2_VERSION" -p1 < "$HERE_DIR/../../patches/android/sdl2-vulkan-surface.patch"
 "$CMAKE" -S "SDL2-$SDL2_VERSION" -B sdl-build "${COMMON[@]}" \
   -DCMAKE_INSTALL_PREFIX="$PREFIX_ROOT/SDL2-$SDL2_VERSION-android-arm64" -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST=OFF
 "$CMAKE" --build sdl-build --parallel "$JOBS"
