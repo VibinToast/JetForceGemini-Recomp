@@ -1,12 +1,10 @@
-# Builds the Windows release and uploads it to GitHub. Run it through package_release.bat. Needs the GitHub CLI (gh),
+# Builds the Windows release and uploads it to its draft on GitHub. It never publishes: only the owner does, on GitHub. Run it through package_release.bat. Needs the GitHub CLI (gh),
 # signed in (gh auth login), for anything that talks to GitHub. See RELEASING.md in the owner's Recomp-Docs notes.
 #
 #   package_release.bat                    finds the draft release waiting for a Windows build (made by the Release workflow
 #                                          when something is merged into main), builds that release's exact commit in
 #                                          dist\src-vX.Y.Z (your own checkout, changes and bin folder are not touched),
-#                                          uploads JFG-X.Y.Z-windows-x64-portable.zip and its .sha256, and publishes the
-#                                          release once the Linux files are there too
-#   package_release.bat -Publish           the same, but publishes even when the Linux files are not there yet
+#                                          uploads JFG-X.Y.Z-windows-x64-portable.zip and its .sha256 to the draft
 #   package_release.bat 1.0.1              builds this checkout as 1.0.1 (writes version.txt) and uploads to v1.0.1 if
 #                                          that release is a draft (a published release is never changed)
 #   package_release.bat 1.0.1 -SkipBuild   packs what is already in bin (no new build), with this checkout's CHANGELOG.md
@@ -16,12 +14,12 @@
 #
 # The .sha256 file is what the launcher's updater checks a download against. Saves, settings, dumps and ROM copies in bin
 # never go into the zip.
-param([string]$Version = "", [switch]$SkipBuild, [switch]$Publish)
+param([string]$Version = "", [switch]$SkipBuild)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $rom = if ($env:JFG_ROM) { $env:JFG_ROM } else { Join-Path $root "baserom.us.z64" }
 
-# Every file a release needs before it is published. Keep in step with tools/package_release.sh.
+# Every file a release needs before the owner publishes it. Keep in step with tools/package_release.sh.
 function Release-Files([string]$v) {
     "JFG-$v-windows-x64-portable.zip", "JFG-$v-windows-x64-portable.zip.sha256",
     "JFG-$v-linux-x86_64.AppImage", "JFG-$v-linux-x86_64.AppImage.sha256",
@@ -55,12 +53,6 @@ try {
             $info = Gh-Json @("release", "view", $d.tagName, "--json", "tagName,assets,targetCommitish")
             $v = $info.tagName.TrimStart("v")
             if (@($info.assets | ForEach-Object { $_.name }) -notcontains "JFG-$v-windows-x64-portable.zip") { $tag = $info.tagName; $commit = $info.targetCommitish; break }
-        }
-        if (-not $tag -and $Publish -and $drafts.Count) {
-            & gh release edit $drafts[0].tagName --draft=false
-            if ($LASTEXITCODE -ne 0) { throw "Publishing $($drafts[0].tagName) failed." }
-            Write-Host "Published $($drafts[0].tagName)."
-            exit 0
         }
         if (-not $tag) {
             if ($drafts.Count) { Write-Host "The draft release $($drafts[0].tagName) already has its Windows build." }
@@ -174,7 +166,7 @@ try {
     [System.IO.File]::WriteAllText($sumPath, "$hash  $name.zip`n")
     Write-Host "SHA-256: $hash"
 
-    # ---- upload, and publish once every file is there ----------------------------------------------------------------
+    # ---- upload to the draft; its draft state is never changed here ------------------------------------------------
     if (-not $isRelease) { Write-Host "Not uploaded: the zip is in $dist."; exit 0 }
     if (-not (Have-Gh)) { Write-Host "gh (GitHub CLI) is not installed. Add $name.zip and its .sha256 to the $tag release on GitHub by hand."; exit 0 }
     if ((Quiet { gh release view $tag }) -ne 0) { Write-Host "No GitHub release $tag. Merge into main (or run the Release workflow) to make one, then run this again."; exit 0 }
@@ -184,19 +176,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Uploading to $tag failed." }
     Write-Host "Uploaded to the GitHub release $tag."
 
-    $info = Gh-Json @("release", "view", $tag, "--json", "isDraft,assets")
-    if ($info.isDraft) {
-        $have = @($info.assets | ForEach-Object { $_.name })
-        $missing = @(Release-Files $Version | Where-Object { $have -notcontains $_ })
-        if ($missing.Count -and -not $Publish) {
-            Write-Host "$tag stays a draft until these are uploaded too (tools/package_release.sh on Linux):"
-            $missing | ForEach-Object { Write-Host "  $_" }
-            Write-Host "To publish it without them: package_release.bat -Publish, or gh release edit $tag --draft=false"
-        } else {
-            & gh release edit $tag --draft=false
-            if ($LASTEXITCODE -ne 0) { throw "Publishing $tag failed." }
-            Write-Host "Published $tag : $((Gh-Json @("release", "view", $tag, "--json", "url")).url)"
-        }
+    $have = @((Gh-Json @("release", "view", $tag, "--json", "assets")).assets | ForEach-Object { $_.name })
+    $missing = @(Release-Files $Version | Where-Object { $have -notcontains $_ })
+    if ($missing.Count) {
+        Write-Host "$tag is a draft and still needs these (tools/package_release.sh on Linux):"
+        $missing | ForEach-Object { Write-Host "  $_" }
+    } else {
+        Write-Host "$tag has every file and stays a draft: only the owner publishes it."
     }
     if ($worktree) { [void](Quiet { git worktree remove --force $worktree }) }
 } finally { Pop-Location }
