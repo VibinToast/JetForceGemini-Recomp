@@ -18,6 +18,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 
 /**
@@ -186,6 +188,87 @@ public class JFGActivity extends SDLActivity {
         } else {
             nativeOnFileDialogMultipleResult(ok, ok ? paths.toArray(new String[0]) : new String[0]);
         }
+    }
+
+    // HTTPS for the launcher (release list, official texture pack), called by the game on its own worker threads
+    // (src/jfg/jfg_update_check.cpp). Android has no curl, which the desktop Linux build uses.
+
+    /** The body of a small HTTPS GET (at most 4 MB), or null on any failure. */
+    public static String httpGetText(String url) {
+        HttpURLConnection connection = null;
+        try {
+            connection = openHttps(url, 8000);
+            connection.setRequestProperty("Accept", "application/vnd.github+json");
+            if (connection.getResponseCode() != 200) {
+                return null;
+            }
+            java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
+            try (InputStream in = connection.getInputStream()) {
+                byte[] buffer = new byte[16384];
+                int read;
+                while ((read = in.read(buffer)) > 0) {
+                    if (body.size() + read > (4 << 20)) {
+                        return null;
+                    }
+                    body.write(buffer, 0, read);
+                }
+            }
+            return body.toString("UTF-8");
+        } catch (Exception e) {
+            Log.w(TAG, "GET " + url + " failed: " + e);
+            return null;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    /**
+     * Downloads url into path. With resumeFrom > 0 the file already holds that many bytes and only the rest is
+     * requested; a server that sends the whole file anyway gets it written from the start. Returns true when the
+     * download completed.
+     */
+    public static boolean httpDownload(String url, String path, long resumeFrom) {
+        HttpURLConnection connection = null;
+        try {
+            connection = openHttps(url, 30000);
+            connection.setRequestProperty("Accept", "application/octet-stream");
+            if (resumeFrom > 0) {
+                connection.setRequestProperty("Range", "bytes=" + resumeFrom + "-");
+            }
+            int status = connection.getResponseCode();
+            boolean append = resumeFrom > 0 && status == 206;
+            if (status != 200 && !append) {
+                Log.w(TAG, "Download " + url + ": HTTP " + status);
+                return false;
+            }
+            try (InputStream in = connection.getInputStream();
+                 OutputStream out = new FileOutputStream(path, append)) {
+                copyStream(in, out);
+            }
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "Download " + url + " failed: " + e);
+            return false;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    // GitHub release assets redirect to another https host, which HttpURLConnection follows.
+    private static HttpURLConnection openHttps(String url, int readTimeoutMs) throws IOException {
+        if (!url.startsWith("https://")) {
+            throw new IOException("only https is allowed");
+        }
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        connection.setInstanceFollowRedirects(true);
+        connection.setConnectTimeout(8000);
+        connection.setReadTimeout(readTimeoutMs);
+        connection.setRequestProperty("User-Agent", "JetForceGemini-Recomp");
+        return connection;
     }
 
     private String displayName(Uri uri) {

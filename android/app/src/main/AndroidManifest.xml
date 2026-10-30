@@ -12,6 +12,8 @@
     <uses-feature android:name="android.hardware.type.pc" android:required="false" />
 
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- The launcher's release check and the official HD texture pack download (GitHub, https only). -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
