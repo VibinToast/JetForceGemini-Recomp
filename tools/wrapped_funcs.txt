@@ -239,3 +239,9 @@ SquadronInit
 squadsInitialiseAfterObjects
 levelObjectFlagSet
 levelSetObjectFlag
+
+# Track collision with bigger limits for pack levels, the port's own versions (jfg_collision.cpp)
+trackMakePolylist
+trackGetHeights
+trackGetBlockList
+func_overlay_24_000001F8_1F41D28
