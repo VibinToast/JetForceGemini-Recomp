@@ -3,7 +3,7 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
-## Unreleased
+## v1.3.2 (2026-10-30)
 
 - Linux: fixed a crash when choosing a save file after restarting the game. Nothing needs deleting.
 - Windows: the same bug made the game forget progress on mods' planets after a restart; it is now kept.
