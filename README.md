@@ -7,6 +7,8 @@ the game's code is translated from your ROM and compiled for your PC. <br><br>
 
 [![Roadmap: 1.0 Liftoff, 1.1 Launcher, 1.2 Quality of Life and 1.3 Mods are released, 1.3 is the latest; 1.4 High Fidelity is in progress](images/roadmap.svg)](ROADMAP.md)
 
+**Linux players on 1.2.x:** download this release by hand once. The repository was renamed and the old update check can't see the new name; from 1.3 on, it works as usual.
+
 **No game code or assets are included.** You need your own ROM.
 
 **Contents:** [ROM](#rom) · [Features](#features) · [Modding](#modding) · [Steam Deck](#steam-deck) · [Keys](#keys) ·
@@ -140,7 +142,7 @@ Keep `bin` private, because it holds a copy of the ROM.
 
 ## Reporting bugs
 
-Report bugs on the [Issues page](https://github.com/VibinToast/JetForceGemini-Recomp/issues). Check first whether it
+Report bugs on the [Issues page](https://github.com/VibinToast/JetForceGemini-Recompiled/issues). Check first whether it
 is already reported there or listed in [Known issues](KNOWN_ISSUES.md).
 
 Please include:
