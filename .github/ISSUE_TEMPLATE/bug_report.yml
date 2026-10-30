@@ -6,8 +6,8 @@ body:
     attributes:
       value: |
         Thanks for reporting! Please check first whether it's already reported in
-        [Issues](https://github.com/VibinToast/JetForceGemini-Recomp/issues) or listed in
-        [Known issues](https://github.com/VibinToast/JetForceGemini-Recomp/blob/main/KNOWN_ISSUES.md).
+        [Issues](https://github.com/VibinToast/JetForceGemini-Recompiled/issues) or listed in
+        [Known issues](https://github.com/VibinToast/JetForceGemini-Recompiled/blob/main/KNOWN_ISSUES.md).
         **Never attach your ROM.**
 
   - type: input
