@@ -35,7 +35,7 @@ extern "C" void jfg_tools_key(int scancode, int down, int repeat); // JFG PORT: 
 #include "config/config.hpp"
 #include "runtime/gfx.hpp"
 
-namespace jfg { bool cpu_layer_build(ImDrawList* list); } // src/jfg/jfg_cpu_layer.cpp
+namespace jfg { bool cpu_layer_build(ImDrawList* list); void cpu_layer_trace_drawn(bool drawn); } // src/jfg/jfg_cpu_layer.cpp
 namespace jfg::overlay { bool build(ImDrawList* list, ImVector<ImTextureData*>& textures); } // src/jfg/jfg_overlay.cpp
 
 namespace dino::debug_ui::backend {
@@ -403,11 +403,13 @@ static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::Render
     combined.DisplaySize = size;
     combined.FramebufferScale = ImVec2(1.0f, 1.0f);
 
+    bool cpu_layer = false;
     if (io.Fonts != nullptr && io.Fonts->TexRef.GetTexID() != ImTextureID_Invalid) {
         cpu_list->_ResetForNewFrame();
         cpu_list->PushClipRect(ImVec2(0.0f, 0.0f), size);
         cpu_list->PushTexture(io.Fonts->TexRef);
-        if (jfg::cpu_layer_build(cpu_list)) combined.AddDrawList(cpu_list);
+        cpu_layer = jfg::cpu_layer_build(cpu_list);
+        if (cpu_layer) combined.AddDrawList(cpu_list);
     }
     mod_list->_ResetForNewFrame();
     mod_list->PushClipRect(ImVec2(0.0f, 0.0f), size);
@@ -419,7 +421,11 @@ static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::Render
         for (ImDrawList *l : ui->CmdLists) combined.AddDrawList(l);
     }
     combined.Textures = &textures;
-    if (combined.CmdListsCount > 0 || !textures.empty()) render_draw_data(command_list, &combined);
+    // CmdLists.Size: AddDrawList does not keep ImGui's obsolete CmdListsCount, which stays 0 here. Testing that left the
+    // reticles undrawn on every frame without a texture to update (no mod overlay, FPS counter or toast) (JFG-175).
+    const bool draw = combined.CmdLists.Size > 0 || !textures.empty();
+    if (draw) render_draw_data(command_list, &combined);
+    if (cpu_layer) jfg::cpu_layer_trace_drawn(draw);
     ImGui::SetCurrentContext(prev_ctx);
 }
 
