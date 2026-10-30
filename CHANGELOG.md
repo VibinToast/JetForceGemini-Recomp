@@ -14,6 +14,7 @@ are written here by hand and become that version's notes when it is released.
 ### Fixes
 
 - Custom levels: the hero no longer falls through floors or stops at invisible walls in big levels (higher collision limits, long thin triangles handled, floors joined where the level's pieces meet), and rooms remember up to 255 killed enemies and broken crates instead of 128.
+- Customize Buttons: the note about the Built-in Button Layout no longer covers the first binding row, Use My Bindings stays inside the panel, and a controller can reach it.
 
 ## v1.2.4 (2026-10-25)
 
