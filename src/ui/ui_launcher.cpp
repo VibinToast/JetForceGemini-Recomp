@@ -488,7 +488,7 @@ void jfg_launcher_ui_tick() {
         update_test = info.test_build;
         update_back = info.back_to_stable;
         // A test build's own page (it is not "latest"); a release's: the latest release.
-        update_page = std::string("https://github.com/VibinToast/JetForceGemini-Recomp/releases/") + (update_test ? "tag/v" + update_version : "latest");
+        update_page = std::string("https://github.com/VibinToast/JetForceGemini-Recompiled/releases/") + (update_test ? "tag/v" + update_version : "latest");
         for (const char* name : { "update_available", "update_version", "update_changelog", "update_can_install", "update_unavailable",
                                   "update_test", "update_back", "update_page" })
             model_handle.DirtyVariable(name);
@@ -689,6 +689,23 @@ public:
                         }
                         return;
                     }
+                }
+                // Get Mods, down from a tag: automatic navigation doesn't look inside the scrolling list of cards (it found
+                // the sidebar below it), so the last row of tags leads to the chosen mod's card. Tags can wrap onto more rows.
+                if (key == Rml::Input::KeyIdentifier::KI_DOWN && launcher_page == "store") {
+                    Rml::Element* tag = event.GetTargetElement();
+                    if (tag == nullptr || !tag->IsClassSet("st-chip--tag")) return;
+                    const float bottom = tag->GetAbsoluteTop() + tag->GetOffsetHeight();
+                    bool row_below = false;
+                    Rml::Element* row = tag->GetParentNode();
+                    for (int i = 0; i < row->GetNumChildren(); i++) {
+                        Rml::Element* other = row->GetChild(i);
+                        if (other->IsClassSet("st-chip--tag") && other->GetAbsoluteTop() >= bottom) row_below = true;
+                    }
+                    if (row_below) tag->SetProperty(Rml::PropertyId::NavDown, Rml::Style::Nav::Auto);
+                    else if (store_rows.empty()) tag->SetProperty(Rml::PropertyId::NavDown, Rml::Style::Nav::None);
+                    else tag->SetProperty(Rml::PropertyId::NavDown, Rml::Property{ store_sel_card, Rml::Unit::STRING });
+                    return;
                 }
                 if (key != Rml::Input::KeyIdentifier::KI_ESCAPE) return;
                 if (changelog_dialog) {

@@ -2,7 +2,7 @@
 //
 // A squadron's wanted member count (squadron data +0x01, u8) comes from its list entry (+0x0B) in SquadronInit, its
 // only writer. Each squadron also reserves one saved kill flag per member, in a row from +0x88 (squadsInitialiseAfter-
-// Objects -> func_80051CCC: levelGetObjectID(+0x01)), out of a 128-bit block per level: placed members take the first
+// Objects -> func_80051CCC: levelGetObjectID(+0x01)), out of a 256-bit block per level (jfg_level_flags.cpp): placed members take the first
 // ones (entry +0x18), generated members the next (+0x8C, counting up as they are made). A set flag means "killed
 // before": the member is counted as made (+0x63) and not spawned, and a squadron with all its flags set opens its door
 // at load. Keep Area Progress saves and restores those blocks.
@@ -40,6 +40,8 @@ extern "C" void trackGetBlock(uint8_t* rdram, recomp_context* ctx);
 namespace jfg {
 
 uint32_t kills_squaddie(); // jfg_kills.cpp: the member SquaddieControl is updating, else 0
+bool level_flag_is_set(uint8_t* rdram, recomp_context* ctx); // jfg_level_flags.cpp: the port's levelObjectFlagSet and
+void level_flag_set(uint8_t* rdram, recomp_context* ctx);     // levelSetObjectFlag (a0 = the id)
 bool fling_member(uint32_t obj, float vx, float vy, float vz, int calls); // jfg_hero_api.cpp (jfg_enemy_fling)
 
 namespace {
@@ -270,7 +272,7 @@ JFG_WRAP(levelObjectFlagSet) {
             return;
         }
     }
-    levelObjectFlagSet_orig(rdram, ctx);
+    ctx->r2 = level_flag_is_set(rdram, ctx) ? 1 : 0;
 }
 
 namespace jfg {
@@ -369,7 +371,7 @@ JFG_WRAP(levelSetObjectFlag) {
         const Squadron* s = squadron ? find(Obj::Data::get(squadron)) : nullptr;
         if (s && (uint32_t)(ctx->r4 & 0xFF) == rd8(sq + SQ_FLAG) && extra_id(*s, (uint32_t)ctx->r4)) return;
     }
-    levelSetObjectFlag_orig(rdram, ctx);
+    level_flag_set(rdram, ctx);
 }
 
 namespace jfg {

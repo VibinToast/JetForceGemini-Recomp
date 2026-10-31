@@ -412,10 +412,19 @@ struct JfgTabPlace {
 static std::vector<JfgTabPlace> jfg_tab_places;
 static int jfg_menu_closed_tab = -1;
 
-// The scrolling options list that holds element (a config__wrapper taller inside than out), or nullptr.
+// Whether e is a scrolling options list: a config__wrapper that scrolls (overflow-y auto) and is taller inside than out.
+// The bindings page's config__wrapper does not scroll: its own list inside does (JFG-166).
+static bool jfg_is_scroll_list(Rml::Element* e) {
+    if (!e->IsClassSet("config__wrapper")) return false;
+    const Rml::Style::Overflow overflow = e->GetComputedValues().overflow_y();
+    if (overflow != Rml::Style::Overflow::Auto && overflow != Rml::Style::Overflow::Scroll) return false;
+    return e->GetScrollHeight() > e->GetClientHeight() + 1.0f;
+}
+
+// The scrolling options list that holds element, or nullptr.
 static Rml::Element* jfg_scroll_list_of(Rml::Element* element) {
     for (Rml::Element* e = element; e != nullptr; e = e->GetParentNode()) {
-        if (e->IsClassSet("config__wrapper") && e->GetScrollHeight() > e->GetClientHeight() + 1.0f) return e;
+        if (jfg_is_scroll_list(e)) return e;
     }
     return nullptr;
 }
@@ -428,7 +437,7 @@ static Rml::Element* jfg_tab_list(int index) {
     Rml::ElementList lists;
     panel->GetElementsByClassName(lists, "config__wrapper");
     for (Rml::Element* l : lists) {
-        if (l->GetScrollHeight() > l->GetClientHeight() + 1.0f) return l;
+        if (jfg_is_scroll_list(l)) return l;
     }
     return nullptr;
 }
@@ -743,10 +752,10 @@ class ConfigFocusScrollListener : public Rml::EventListener {
         if (target == nullptr) return;
         const Rml::String& tag = target->GetTagName();
         if (tag != "input" && tag != "button" && tag != "select" && tag != "textarea") return; // the focus chain's leaf only
-        // The scrolling list (a config__wrapper taller inside than out) and the row of it that holds the element.
+        // The scrolling list (jfg_is_scroll_list) and the row of it that holds the element.
         Rml::Element* row = target;
         Rml::Element* list = target->GetParentNode();
-        while (list != nullptr && !(list->IsClassSet("config__wrapper") && list->GetScrollHeight() > list->GetClientHeight() + 1.0f)) {
+        while (list != nullptr && !jfg_is_scroll_list(list)) {
             row = list;
             list = list->GetParentNode();
         }
@@ -1239,9 +1248,16 @@ public:
         constructor.BindFunc("jfg_bindings_unused", [](Rml::Variant& out) {
             out = cur_device == dino::input::InputDevice::Keyboard ? jfg::settings::keyboard_bindings_unused() : jfg::settings::controller_bindings_unused();
         });
-        constructor.BindEventCallback("jfg_use_my_bindings", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        constructor.BindEventCallback("jfg_use_my_bindings", [](Rml::DataModelHandle, Rml::Event& event, const Rml::VariantList&) {
             jfg::settings::set("dual_layout", 0);
             jfg_config_menu_refresh();
+            // The note and this button hide now: put focus on the first binding row instead of the hidden button.
+            Rml::Element* target = event.GetTargetElement();
+            Rml::ElementDocument* doc = target != nullptr ? target->GetOwnerDocument() : nullptr;
+            if (doc != nullptr) {
+                doc->UpdateDocument();
+                if (Rml::Element* e = doc->GetElementById("input_row_button_0_0")) e->Focus(true);
+            }
         });
         // JFG PORT: Back to Controls (the Controls page / tab's Customize Buttons opened this page).
         constructor.BindEventCallback("jfg_bindings_back", [](Rml::DataModelHandle, Rml::Event& event, const Rml::VariantList&) {

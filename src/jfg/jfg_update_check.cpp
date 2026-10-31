@@ -53,11 +53,11 @@ extern char** environ;
 namespace fs = std::filesystem;
 
 namespace {
-constexpr const char* RELEASES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/releases?per_page=50";
-constexpr const char* COMMITS_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/commits?per_page=100";
-constexpr const char* BRANCHES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/branches?per_page=100";
+constexpr const char* RELEASES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/releases?per_page=50";
+constexpr const char* COMMITS_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/commits?per_page=100";
+constexpr const char* BRANCHES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/branches?per_page=100";
 // + "<branch>/<file>": a file as it is on a branch (not counted against the API's limit of 60 requests an hour).
-const std::string RAW_FILE_PREFIX = "https://raw.githubusercontent.com/VibinToast/JetForceGemini-Recomp/refs/heads/";
+const std::string RAW_FILE_PREFIX = "https://raw.githubusercontent.com/VibinToast/JetForceGemini-Recompiled/refs/heads/";
 constexpr const char* ZIP_SUFFIX = "-windows-x64-portable.zip";
 
 struct Release {
@@ -195,7 +195,7 @@ bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progre
     const std::wstring target = std::wstring(path) + extra;
 
     bool ok = false;
-    HINTERNET session = WinHttpOpen(L"JetForceGemini-Recomp", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET session = WinHttpOpen(L"JetForceGemini-Recompiled", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (session == nullptr) return false;
     WinHttpSetTimeouts(session, 8000, 8000, 20000, 30000);
     HINTERNET connection = WinHttpConnect(session, host, parts.nPort, 0);
@@ -284,7 +284,7 @@ bool changelog_ignored_file(const std::string& path) {
 // changes, so it is kept in bin\jfg_changelog_cache.txt ("<sha> 1" = only ignored files, "<sha> 0" = something else):
 // each commit is looked up once, which keeps well inside GitHub's limit of 60 requests an hour.
 constexpr const char* CHANGELOG_CACHE_FILE = "jfg_changelog_cache.txt";
-constexpr const char* COMMIT_URL_PREFIX = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/commits/";
+constexpr const char* COMMIT_URL_PREFIX = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/commits/";
 
 bool commit_only_ignored_files(const std::string& sha, std::vector<std::pair<std::string, bool>>& cache, bool& cache_changed) {
     for (const auto& entry : cache) if (entry.first == sha) return entry.second;
