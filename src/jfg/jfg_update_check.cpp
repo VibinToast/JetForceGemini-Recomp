@@ -1082,6 +1082,11 @@ void jfg_update_check_start(const std::string& current) {
 }
 
 bool jfg_update_available(JfgUpdateInfo& info) {
+#ifdef __ANDROID__
+    // The releases are desktop builds (the Windows zip installs from here); an Android build updates as its own APK.
+    (void)info;
+    return false;
+#endif
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_found) return false;
     info = g_info;
