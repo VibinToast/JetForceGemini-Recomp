@@ -49,6 +49,10 @@
 #include <unistd.h>
 extern char** environ;
 #endif
+#ifdef __ANDROID__
+#include <SDL_system.h>
+#include <jni.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -230,6 +234,52 @@ bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progre
     if (connection != nullptr) WinHttpCloseHandle(connection);
     WinHttpCloseHandle(session);
     return ok;
+}
+#elif defined(__ANDROID__)
+// Android: no curl, so JFGActivity's HTTPS helpers (java.net) do the requests. Calls a static method of the running
+// activity's class from this thread (SDL attaches it to the JVM).
+template <typename Fn>
+bool with_activity_class(Fn&& fn) {
+    JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
+    jobject activity = env != nullptr ? static_cast<jobject>(SDL_AndroidGetActivity()) : nullptr;
+    if (activity == nullptr) return false;
+    jclass cls = env->GetObjectClass(activity);
+    const bool ok = cls != nullptr && fn(env, cls);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    if (cls != nullptr) env->DeleteLocalRef(cls);
+    env->DeleteLocalRef(activity);
+    return ok;
+}
+
+bool http_get(const std::string& url, const Sink& sink, const ProgressFn&) {
+    std::string body;
+    const bool ok = with_activity_class([&](JNIEnv* env, jclass cls) {
+        jmethodID method = env->GetStaticMethodID(cls, "httpGetText", "(Ljava/lang/String;)Ljava/lang/String;");
+        if (method == nullptr) return false;
+        jstring jurl = env->NewStringUTF(url.c_str());
+        auto result = static_cast<jstring>(env->CallStaticObjectMethod(cls, method, jurl));
+        env->DeleteLocalRef(jurl);
+        if (result == nullptr) return false;
+        const char* utf = env->GetStringUTFChars(result, nullptr);
+        body = utf;
+        env->ReleaseStringUTFChars(result, utf);
+        env->DeleteLocalRef(result);
+        return true;
+    });
+    return ok && sink(body.data(), body.size());
+}
+
+bool android_http_download(const std::string& url, const fs::path& file, uint64_t resume_from) {
+    return with_activity_class([&](JNIEnv* env, jclass cls) {
+        jmethodID method = env->GetStaticMethodID(cls, "httpDownload", "(Ljava/lang/String;Ljava/lang/String;J)Z");
+        if (method == nullptr) return false;
+        jstring jurl = env->NewStringUTF(url.c_str());
+        jstring jpath = env->NewStringUTF(file.string().c_str());
+        const jboolean done = env->CallStaticBooleanMethod(cls, method, jurl, jpath, static_cast<jlong>(resume_from));
+        env->DeleteLocalRef(jurl);
+        env->DeleteLocalRef(jpath);
+        return done == JNI_TRUE;
+    });
 }
 #else
 // Linux / others: curl, when it is installed. Only the release list is read here; installing is Windows only.
@@ -801,6 +851,17 @@ int jfg_http_download(const std::string& url, const fs::path& file, uint64_t exp
             }
         });
     if (f != nullptr) std::fclose(f);
+#elif defined(__ANDROID__)
+    // Like curl below: the download runs on its own thread and the size of the file is the progress.
+    std::atomic<int> result{ -1 };
+    std::thread worker([&] { result = android_http_download(url, file, have) ? 1 : 0; });
+    while (result.load() == -1) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        const uint64_t size = fs::exists(file, ec) ? fs::file_size(file, ec) : 0;
+        if (progress && !progress(size, expected_size)) cancelled = true; // noted; the download finishes the file
+    }
+    worker.join();
+    const bool ok = result.load() == 1;
 #else
     // curl writes the rest of the file (-C -: from the size it already has) and reports nothing back; the size of the
     // file is the progress.
@@ -1021,6 +1082,11 @@ void jfg_update_check_start(const std::string& current) {
 }
 
 bool jfg_update_available(JfgUpdateInfo& info) {
+#ifdef __ANDROID__
+    // The releases are desktop builds (the Windows zip installs from here); an Android build updates as its own APK.
+    (void)info;
+    return false;
+#endif
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_found) return false;
     info = g_info;

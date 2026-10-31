@@ -45,8 +45,21 @@ bool running_on_steam_deck() {
     return is_steam_deck;
 }
 
+bool handheld_ui() {
+#ifdef __ANDROID__
+    return true;
+#else
+    static const bool forced = [] { const char* v = getenv("JFG_HANDHELD_UI"); return v != nullptr && v[0] == '1'; }();
+    return forced;
+#endif
+}
+
 ultramodern::renderer::WindowMode wm_default() {
+#ifdef __ANDROID__
+    return ultramodern::renderer::WindowMode::Fullscreen; // the app is always full screen (the option is hidden)
+#else
     return is_steam_deck ? ultramodern::renderer::WindowMode::Fullscreen : ultramodern::renderer::WindowMode::Windowed;
+#endif
 }
 
 #ifdef __gnu_linux__
@@ -173,6 +186,11 @@ std::filesystem::path get_executable_folder_path() {
     if (length > 0 && length < buffer.size()) {
         buffer.resize(length);
         cached = std::filesystem::path{buffer}.parent_path();
+    }
+#elif defined(__ANDROID__)
+    // JFG ANDROID: the "executable" is Android's app_process; the app folder JFGActivity sets up takes its place.
+    if (const char* app_folder = getenv("APP_FOLDER_PATH"); app_folder != nullptr) {
+        cached = std::filesystem::path{app_folder};
     }
 #elif defined(__linux__)
     const std::filesystem::path exe = std::filesystem::read_symlink("/proc/self/exe", ec);

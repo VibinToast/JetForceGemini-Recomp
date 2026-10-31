@@ -39,6 +39,9 @@ extern "C" int jfg_refresh_override(void);   // src/jfg/jfg_frame_rate.cpp: "Fra
 #include "config/config.hpp"
 #include "debug_ui/debug_ui.hpp"
 #include "debug_ui/backend.hpp"
+#ifdef __ANDROID__
+#include "common/sdl.hpp"
+#endif
 #include "ui/recomp_ui.h"
 #include "concurrentqueue.h"
 
@@ -88,6 +91,49 @@ namespace dino::renderer {
 
 static RT64Context* active_rt64_context = nullptr;
 static std::mutex active_rt64_context_mutex;
+
+#ifdef __ANDROID__
+// JFG ANDROID: Android destroys the app's window when it goes to the background and makes a new one when it comes back.
+// SDL reports going to the background from its event pump (usually before the surface is destroyed, but not
+// guaranteed: Plume keeps its own reference to the window, so a late detach only sees Vulkan errors), and presentation
+// lets go of the window then. Back in the foreground, update_screen moves it to SDL's window: the new one once SDL has
+// it, or the same one if Android kept it.
+static std::atomic<bool> android_backgrounded{ false };
+
+static int SDLCALL android_app_event_watch(void*, SDL_Event* event) {
+    if (event->type == SDL_APP_WILLENTERBACKGROUND) {
+        android_backgrounded = true;
+        std::lock_guard lock{ active_rt64_context_mutex };
+        if (active_rt64_context != nullptr) {
+            active_rt64_context->android_detach_window();
+        }
+    }
+    else if (event->type == SDL_APP_DIDENTERFOREGROUND) {
+        android_backgrounded = false;
+    }
+    return 0;
+}
+
+void RT64Context::android_detach_window() {
+    if (window_detached.exchange(true)) {
+        return;
+    }
+    app->setPresentWindow(nullptr);
+    fprintf(stderr, "[android] window detached (background)\n");
+}
+
+void RT64Context::android_reattach_window() {
+    // SDL's window has no native window between the old surface being destroyed and the new one being made.
+    SDL_SysWMinfo wm_info;
+    SDL_VERSION(&wm_info.version);
+    if (!SDL_GetWindowWMInfo(sdl_window, &wm_info) || wm_info.info.android.window == nullptr) {
+        return;
+    }
+    const bool ok = app->setPresentWindow(wm_info.info.android.window);
+    fprintf(stderr, "[android] window reattached (%s)\n", ok ? "ok" : "failed");
+    window_detached = false;
+}
+#endif
 
 void dummy_check_interrupts() {}
 
@@ -312,7 +358,21 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
     RT64::Application::Core appCore{};
 #if defined(_WIN32)
     appCore.window = window_handle.window;
-#elif defined(__linux__) || defined(__ANDROID__)
+#elif defined(__ANDROID__)
+    {
+        // JFG ANDROID: RT64/Plume render straight to the ANativeWindow behind the SDL window.
+        SDL_SysWMinfo wm_info;
+        SDL_VERSION(&wm_info.version);
+        SDL_GetWindowWMInfo(window_handle, &wm_info);
+        appCore.window = wm_info.info.android.window;
+        sdl_window = window_handle;
+        static bool event_watch_added = false;
+        if (!event_watch_added) {
+            SDL_AddEventWatch(android_app_event_watch, nullptr);
+            event_watch_added = true;
+        }
+    }
+#elif defined(__linux__)
     appCore.window = window_handle;
 #elif defined(__APPLE__)
     appCore.window.window = window_handle.window;
@@ -538,6 +598,11 @@ void RT64Context::update_render_options() {
 }
 
 void RT64Context::update_screen() {
+#ifdef __ANDROID__
+    if (window_detached && !android_backgrounded) {
+        android_reattach_window();
+    }
+#endif
     update_render_options();
     app->updateScreen();
 }

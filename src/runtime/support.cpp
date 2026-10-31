@@ -5,6 +5,15 @@
 #include "nfd.h"
 #include "RmlUi/Core.h"
 
+#ifdef __ANDROID__
+// JFG ANDROID: file dialogs go through the Android document picker in JFGActivity (Zelda64Recomp-Android's design).
+#include <SDL_system.h>
+#include <android/log.h>
+#include <jni.h>
+#include <mutex>
+#include <utility>
+#endif
+
 #ifdef __APPLE__
 #include <dispatch/dispatch.h>
 #include <mach-o/dyld.h>
@@ -68,6 +77,68 @@ namespace dino::runtime {
 #endif
 
     // MARK: - Internal Helpers
+#ifdef __ANDROID__
+    namespace {
+        std::mutex file_dialog_mutex;
+        std::function<void(bool, const std::filesystem::path&)> file_dialog_callback;
+        std::function<void(bool, const std::list<std::filesystem::path>&)> file_dialog_multiple_callback;
+
+        // Calls a static no-argument method of the running activity (JFGActivity), which shows the picker and reports
+        // back through nativeOnFileDialogResult / nativeOnFileDialogMultipleResult.
+        bool launch_android_file_dialog(const char* method_name) {
+            JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
+            jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
+            if (env == nullptr || activity == nullptr) {
+                __android_log_print(ANDROID_LOG_WARN, "JFGFileDialog", "No SDL Android activity");
+                return false;
+            }
+
+            jclass activity_class = env->GetObjectClass(activity);
+            jmethodID open_method = activity_class != nullptr ? env->GetStaticMethodID(activity_class, method_name, "()V") : nullptr;
+            bool ok = false;
+            if (open_method != nullptr) {
+                env->CallStaticVoidMethod(activity_class, open_method);
+                ok = true;
+            }
+            if (env->ExceptionCheck()) {
+                env->ExceptionDescribe();
+                env->ExceptionClear();
+                ok = false;
+            }
+
+            if (activity_class != nullptr) {
+                env->DeleteLocalRef(activity_class);
+            }
+            env->DeleteLocalRef(activity);
+            return ok;
+        }
+    }
+
+    void finish_android_file_dialog(bool success, const std::filesystem::path& path) {
+        std::function<void(bool, const std::filesystem::path&)> callback;
+        {
+            std::lock_guard lock(file_dialog_mutex);
+            callback = std::move(file_dialog_callback);
+            file_dialog_callback = {};
+        }
+        if (callback) {
+            callback(success, path);
+        }
+    }
+
+    void finish_android_file_dialog_multiple(bool success, const std::list<std::filesystem::path>& paths) {
+        std::function<void(bool, const std::list<std::filesystem::path>&)> callback;
+        {
+            std::lock_guard lock(file_dialog_mutex);
+            callback = std::move(file_dialog_multiple_callback);
+            file_dialog_multiple_callback = {};
+        }
+        if (callback) {
+            callback(success, paths);
+        }
+    }
+#endif
+
     static void show_nfd_error() {
         const char *msg = NFD_GetError();
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, dino::config::program_name.data(), msg, nullptr);
@@ -119,7 +190,11 @@ namespace dino::runtime {
     // MARK: - Public API
 
     std::filesystem::path get_program_path() {
-#if defined(__APPLE__)
+#if defined(__ANDROID__)
+        // JFGActivity extracts the APK's assets here before the game starts.
+        const char* program_path = std::getenv("APP_PROGRAM_PATH");
+        return program_path != nullptr ? std::filesystem::path{program_path} : std::filesystem::path{};
+#elif defined(__APPLE__)
         return get_bundle_resource_directory();
 #elif defined(__linux__) && defined(RECOMP_FLATPAK)
         return "/app/bin";
@@ -143,7 +218,19 @@ namespace dino::runtime {
     }
 
     void open_file_dialog(std::function<void(bool success, const std::filesystem::path& path)> callback) {
-#ifdef __APPLE__
+#if defined(__ANDROID__)
+        {
+            std::lock_guard lock(file_dialog_mutex);
+            if (file_dialog_callback) {
+                callback(false, {});
+                return;
+            }
+            file_dialog_callback = std::move(callback);
+        }
+        if (!launch_android_file_dialog("openFileDialog")) {
+            finish_android_file_dialog(false, {});
+        }
+#elif defined(__APPLE__)
         dispatch_on_ui_thread([callback]() {
             perform_file_dialog_operation(callback);
         });
@@ -153,7 +240,19 @@ namespace dino::runtime {
     }
 
     void open_file_dialog_multiple(std::function<void(bool success, const std::list<std::filesystem::path>& paths)> callback) {
-#ifdef __APPLE__
+#if defined(__ANDROID__)
+        {
+            std::lock_guard lock(file_dialog_mutex);
+            if (file_dialog_multiple_callback) {
+                callback(false, {});
+                return;
+            }
+            file_dialog_multiple_callback = std::move(callback);
+        }
+        if (!launch_android_file_dialog("openFileDialogMultiple")) {
+            finish_android_file_dialog_multiple(false, {});
+        }
+#elif defined(__APPLE__)
         dispatch_on_ui_thread([callback]() {
             perform_file_dialog_operation_multiple(callback);
         });
@@ -175,3 +274,34 @@ namespace dino::runtime {
 #endif
     }
 }
+
+#ifdef __ANDROID__
+extern "C" JNIEXPORT void JNICALL Java_io_github_jfgrecomp_JFGActivity_nativeOnFileDialogResult(
+    JNIEnv* env, jclass, jboolean success, jstring path) {
+    std::filesystem::path selected;
+    if (path != nullptr) {
+        const char* utf = env->GetStringUTFChars(path, nullptr);
+        selected = std::filesystem::path{utf};
+        env->ReleaseStringUTFChars(path, utf);
+    }
+    dino::runtime::finish_android_file_dialog(success == JNI_TRUE && !selected.empty(), selected);
+}
+
+extern "C" JNIEXPORT void JNICALL Java_io_github_jfgrecomp_JFGActivity_nativeOnFileDialogMultipleResult(
+    JNIEnv* env, jclass, jboolean success, jobjectArray paths) {
+    std::list<std::filesystem::path> selected;
+    if (success == JNI_TRUE && paths != nullptr) {
+        const jsize count = env->GetArrayLength(paths);
+        for (jsize i = 0; i < count; i++) {
+            auto path = static_cast<jstring>(env->GetObjectArrayElement(paths, i));
+            if (path != nullptr) {
+                const char* utf = env->GetStringUTFChars(path, nullptr);
+                selected.emplace_back(std::filesystem::path{utf});
+                env->ReleaseStringUTFChars(path, utf);
+                env->DeleteLocalRef(path);
+            }
+        }
+    }
+    dino::runtime::finish_android_file_dialog_multiple(!selected.empty(), selected);
+}
+#endif

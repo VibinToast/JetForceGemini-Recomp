@@ -560,7 +560,7 @@ void join_split_packs() {
             parts.push_back(part);
         }
         if (empty_part) continue; // a placeholder: still downloading
-        const std::string key = file + "|" + std::to_string(total) + "|" + std::to_string(newest.time_since_epoch().count());
+        const std::string key = file + "|" + std::to_string(total) + "|" + std::to_string(static_cast<long long>(newest.time_since_epoch().count()));
         std::lock_guard lock(g_join_mutex);
         if (auto given_up = g_join_given_up.find(key); given_up != g_join_given_up.end()) {
             g_join_text = given_up->second; // still not whole: say so again

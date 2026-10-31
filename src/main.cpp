@@ -6,6 +6,9 @@
 #include <filesystem>
 #include <string>
 #include <system_error>
+#ifdef __ANDROID__
+#include <unistd.h>
+#endif
 
 #include "nfd.h"
 #include "ultramodern/ultramodern.hpp"
@@ -119,8 +122,23 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
     return dino::runtime::create_window(data, cli_args.window_width, cli_args.window_height);
 }
 
+#ifdef __ANDROID__
+// JFG ANDROID: SDL's Java activity loads libmain.so and calls SDL_main (SDL_MAIN_HANDLED stops SDL renaming main).
+extern "C" __attribute__((visibility("default"))) int SDL_main(int argc, char** argv) {
+#else
 int main(int argc, char** argv) {
+#endif
     // Setup crash handler
+#ifdef __ANDROID__
+    // JFG ANDROID: nothing reads stdout/stderr on Android, so they go to jfg.log in the app folder (visible over USB).
+    if (const char* app_folder = getenv("APP_FOLDER_PATH"); app_folder != nullptr) {
+        const std::string log_path = std::string{app_folder} + "/jfg.log";
+        if (freopen(log_path.c_str(), "w", stderr) != nullptr) {
+            setvbuf(stderr, nullptr, _IONBF, 0);
+            dup2(fileno(stderr), fileno(stdout));
+        }
+    }
+#endif
     dino::runtime::crash_setup_handler();
 
     // Parse CLI args

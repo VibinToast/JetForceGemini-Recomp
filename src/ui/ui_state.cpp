@@ -13,6 +13,7 @@
 #include <vector>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 
 #include "rt64_render_hooks.h"
 
@@ -228,6 +229,18 @@ public:
         int TranslateString(Rml::String& translated, const Rml::String& input) override {
             return jfg::locale::translate_ui(translated, input) ? 1 : 0;
         }
+#ifdef __ANDROID__
+        // JFG ANDROID: a text field gets the focus (profile names, and any other text box): show the on-screen
+        // keyboard; SDL turns it off again when the field loses the focus. Desktops type into the fields as before.
+        void ActivateKeyboard(Rml::Vector2f caret_position, float line_height) override {
+            SDL_Rect rect{ (int)caret_position.x, (int)caret_position.y, 1, (int)line_height };
+            SDL_SetTextInputRect(&rect);
+            SDL_StartTextInput();
+        }
+        void DeactivateKeyboard() override {
+            SDL_StopTextInput();
+        }
+#endif
     };
     std::unique_ptr<SystemInterface_SDL> system_interface;
     recompui::RmlRenderInterface_RT64 render_interface;
@@ -1405,10 +1418,36 @@ bool recompui::is_any_context_shown() {
     return ui_state->is_any_context_shown();
 }
 
+// JFG PORT: handheld layout (dino::config::handheld_ui). The document gets the class "handheld", which the style sheets
+// use to hide desktop-only settings and hints (.jfg-desktop-only). Controller navigation that pointed at a hidden
+// option is pointed at the option below it instead.
+static void apply_handheld_layout(Rml::Element* element) {
+    static const std::pair<const char*, const char*> replaced_nav_targets[] = {
+        { "#jfg_wm_option_0", "#jfg_res_option_0" }, // Window Mode -> Resolution
+        { "#jfg_wm_option_1", "#jfg_res_option_1" },
+    };
+    for (Rml::PropertyId id : { Rml::PropertyId::NavUp, Rml::PropertyId::NavDown, Rml::PropertyId::NavLeft, Rml::PropertyId::NavRight }) {
+        const Rml::Property* property = element->GetLocalProperty(id);
+        if (property == nullptr || property->unit != Rml::Unit::STRING) continue;
+        const Rml::String target = property->Get<Rml::String>();
+        for (const auto& [hidden, replacement] : replaced_nav_targets) {
+            if (target == hidden) element->SetProperty(id, Rml::Property{ Rml::String{ replacement }, Rml::Unit::STRING });
+        }
+    }
+    for (int i = 0; i < element->GetNumChildren(); i++) {
+        apply_handheld_layout(element->GetChild(i));
+    }
+}
+
 Rml::ElementDocument* recompui::load_document(const std::filesystem::path& path) {
     std::lock_guard lock{ui_state_mutex};
 
-    return ui_state->context->LoadDocument(path.string());
+    Rml::ElementDocument* document = ui_state->context->LoadDocument(path.string());
+    if (document != nullptr && dino::config::handheld_ui()) {
+        document->SetClass("handheld", true);
+        apply_handheld_layout(document);
+    }
+    return document;
 }
 
 Rml::ElementDocument* recompui::create_empty_document() {
