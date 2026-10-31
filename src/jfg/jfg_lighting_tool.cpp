@@ -119,6 +119,10 @@ std::vector<Setting>& settings_table() {
         { "off_glow", "Glow of lights switched off (%)", &s.off_glow, nullptr, 0, 200, Group::Lights, false,
           "A torch or lamp switched off in the Level lights tab also takes away the glow the level has painted in around "
           "it, this much (its own colour over its reach). 0 leaves the painted glow." },
+        { "steady_all", "No flicker (every torch and lamp)", nullptr, &s.steady_all, 0, 1, Group::Lights, false,
+          "The game makes torches, fires and lamps flicker. On: every one of them holds still at its average colour, "
+          "brightness and size, as Steady does for one light. Set in the defaults for every level, or in a level's own "
+          "settings for that level." },
         { "light_tint", "Lights keep the surface's colour (%)", &s.light_tint, nullptr, 0, 100, Group::Lights, false,
           "The level's own colours tint the light that falls on them: blue water lit by a white torch stays blue, even with "
           "the level ambient down. 0: lights add their own colour only (the surface's tint goes with the ambient)." },
@@ -126,6 +130,49 @@ std::vector<Setting>& settings_table() {
           "How much a surface turned away from a light gets less of it. 0 keeps the game's look." },
         { "max_lights", "Most lights per frame", &s.max_lights, nullptr, 0, 64, Group::Lights, true,
           "The nearest lights are kept. Every lit pixel adds up each light." },
+        { "ray_shadows", "Ray-traced shadows", nullptr, &s.ray_shadows, 0, 1, Group::Shadows, false,
+          "With ray tracing on: shadows traced with the GPU's ray tracing instead of shadow maps: every light that casts shadows gets them, "
+          "with soft edges. Needs a GPU with ray tracing (DirectX 12 or Vulkan); without it the shadow maps stay." },
+        { "ray_light_size", "Light size (units)", &s.ray_light_size, nullptr, 0, 100, Group::Shadows, false,
+          "How big the lights are for ray-traced shadows: the bigger, the softer a shadow's edge, more so the further "
+          "it falls from what casts it. 0: hard edges." },
+        { "ray_sun_softness", "Directional light softness (0.1 degrees)", &s.ray_sun_softness, nullptr, 0, 100, Group::Shadows, false,
+          "How wide the directional light is in the sky, for its ray-traced shadows: the sun is about 3 (0.3 degrees). "
+          "0: hard edges." },
+        { "ray_ao", "Ray-traced ambient occlusion", nullptr, &s.ray_ao, 0, 1, Group::Shadows, false,
+          "With ray tracing on: corners, crevices and the ground under things are darkened, from rays traced "
+          "around each pixel's surface (not only what the screen shows, as the screen-space AO does). It takes the "
+          "screen-space AO's place and its smoothing; the Graphics menu's Ambient Occlusion need not be on." },
+        { "ray_ao_reach", "Occlusion reach (units)", &s.ray_ao_reach, nullptr, 5, 500, Group::Shadows, false,
+          "How far around a surface counts: larger darkens wider areas, smaller only tight corners." },
+        { "ray_ao_strength", "Occlusion strength (%)", &s.ray_ao_strength, nullptr, 0, 200, Group::Shadows, false,
+          "How much it darkens." },
+        { "ray_sky", "Sky occlusion (%)", &s.ray_sky, nullptr, 0, 200, Group::Shadows, false,
+          "With ray tracing on: what doesn't see the open sky (under roofs and overhangs, in tunnels and caves) "
+          "is darkened, the open stays as it is. Rays traced upwards from each pixel's surface. 0 is off." },
+        { "ray_sky_reach", "Sky distance (units)", &s.ray_sky_reach, nullptr, 200, 20000, Group::Shadows, false,
+          "How far a ray must get without hitting anything to count as seeing the sky." },
+        { "ray_gi", "Ray-traced indirect light", nullptr, &s.ray_gi, 0, 1, Group::Shadows, false,
+          "With ray tracing on: light bounces. A grid of probes around the camera traces rays every frame; what "
+          "the torches, placed lights and the directional light light up lights its surroundings in turn, and the "
+          "sky's light comes in where the sky is seen. Smoothed over frames (a moving light's bounce follows in about "
+          "half a second)." },
+        { "ray_gi_strength", "Indirect light (%)", &s.ray_gi_strength, nullptr, 0, 400, Group::Shadows, false,
+          "How bright the bounced light and the sky's light are." },
+        { "ray_gi_spacing", "Probe spacing (units)", &s.ray_gi_spacing, nullptr, 32, 400, Group::Shadows, true,
+          "How far apart the probes are: smaller follows walls and corners more closely, larger reaches further from "
+          "the camera (the grid is 16 x 8 x 16 probes)." },
+        { "ray_sky_light", "Sky light (%)", &s.ray_sky_light, nullptr, 0, 400, Group::Shadows, false,
+          "The open sky's light on what sees it, in the sky colour below (with Ray-traced indirect light on). 0 is off." },
+        { "sky_r", "Sky colour red", &s.sky_r, nullptr, 0, 255, Group::Shadows, false, "" },
+        { "sky_g", "Sky colour green", &s.sky_g, nullptr, 0, 255, Group::Shadows, false, "" },
+        { "sky_b", "Sky colour blue", &s.sky_b, nullptr, 0, 255, Group::Shadows, false, "" },
+        { "ray_reflect", "Reflections on shiny surfaces (%)", &s.ray_reflect, nullptr, 0, 200, Group::Shadows, false,
+          "With ray tracing on: surfaces with a specular map (materials/<hash>_s.png) mirror what is around them, "
+          "as much as their map's strength says, more at a grazing angle. 0 is off." },
+        { "ray_reflect_water", "Reflections on water (%)", &s.ray_reflect_water, nullptr, 0, 200, Group::Shadows, false,
+          "With ray tracing on: water (the level's see-through surfaces facing up) mirrors its surroundings and the "
+          "sky, little when looked down into, much at a grazing angle. 0 is off." },
         { "shadows", "Shadow darkness (%)", &s.shadows, nullptr, 0, 100, Group::Shadows, false,
           "How dark shadows from the lights are. 0 is off, as in the game." },
         { "glow_shadow", "Shadows on painted glow (%)", &s.glow_shadow, nullptr, 0, 100, Group::Shadows, false,
@@ -1395,6 +1442,18 @@ bool lighting_active() {
     return (g_forced_lighting >= 0) ? (g_forced_lighting != 0) : g.modern_lighting;
 }
 
+// The same for ray tracing: JFG_RAY_TRACING=1 / 0 for this session.
+int g_forced_ray_tracing = -1;
+
+bool ray_tracing_active() {
+    static bool checked = false;
+    if (!checked) {
+        checked = true;
+        if (const char* env = std::getenv("JFG_RAY_TRACING")) g_forced_ray_tracing = (std::atoi(env) != 0) ? 1 : 0;
+    }
+    return (g_forced_ray_tracing >= 0) ? (g_forced_ray_tracing != 0) : g.ray_tracing;
+}
+
 namespace {
 // Modern lighting on / off, from the button at the top of the tool (the Graphics option, saved; or for this session
 // when a test switch turned it on).
@@ -1404,6 +1463,16 @@ void toggle_lighting() {
         return;
     }
     g.modern_lighting = !g.modern_lighting;
+    save_options();
+}
+
+// ... and every ray-traced feature (the Ray Tracing option), from the button below it.
+void toggle_ray_tracing() {
+    if (g_forced_ray_tracing >= 0) {
+        g_forced_ray_tracing = g_forced_ray_tracing ? 0 : 1;
+        return;
+    }
+    g.ray_tracing = !g.ray_tracing;
     save_options();
 }
 } // namespace
@@ -1582,6 +1651,14 @@ void draw_lighting_tool(recomp_context* ctx) {
             ImGui::PopStyleColor(2);
             ImGui::SameLine();
             ImGui::TextDisabled(on ? "click for the game's original lighting" : "click for the modern lighting");
+            // Every ray-traced feature on / off (the Ray Tracing option); which ones, in the Shadows tab.
+            const bool rays = ray_tracing_active();
+            ImGui::PushStyleColor(ImGuiCol_Button, rays ? ImVec4(0.15f, 0.55f, 0.25f, 1.0f) : ImVec4(0.45f, 0.35f, 0.15f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rays ? ImVec4(0.2f, 0.65f, 0.3f, 1.0f) : ImVec4(0.55f, 0.45f, 0.2f, 1.0f));
+            if (ImGui::Button(rays ? "Ray tracing: ON" : "Ray tracing: OFF", ImVec2(ImGui::GetFontSize() * 11.0f, 0.0f))) toggle_ray_tracing();
+            ImGui::PopStyleColor(2);
+            ImGui::SameLine();
+            ImGui::TextDisabled(rays ? "click to turn every ray-traced feature off" : "click for the ray-traced features (Shadows tab)");
         }
         load_level_names();
         const std::string name = (g_level >= 0 && g_level < (int)g_level_names.size()) ? g_level_names[g_level] : "";

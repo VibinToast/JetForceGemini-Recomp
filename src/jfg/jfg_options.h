@@ -47,6 +47,7 @@ struct State {
                                    // monitor's rate, else at most that many frames a second (one of smooth_motion_values)
     bool smooth_shadows = true;    // "Smooth Shadows": character shadows follow the in-between frames (jfg_shadow_interp.cpp)
     bool modern_lighting = false;  // "Modern Lighting": lights per pixel, shadows and the lighting tool's settings (jfg_lighting.cpp)
+    bool ray_tracing = false;      // "Ray Tracing": every ray-traced lighting feature, with Modern Lighting (the lighting tool picks which)
     int  interp_limit = 0;         // only read from older settings files: the old Interpolation Limit, carried over to Smooth Motion
     bool widescreen = false;       // render the 3D view to the full window width, see jfg_widescreen_active()
     bool hud_corners = false;      // in widescreen, the HUD at the window's edges (jfg_hud_corners.cpp)

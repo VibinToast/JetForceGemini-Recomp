@@ -243,6 +243,21 @@ struct LightingSettings {
     std::atomic<bool> unlit_objects{ true }; // objects the game draws unlit (bridges, crates) are lit like the level
     std::atomic<bool> characters{ true };    // light characters and objects in RT64 (per pixel, with their normals)
     std::atomic<int> character_lights{ 40 }; // % the frame's lights add on characters (the game's own come from them)
+    std::atomic<bool> ray_shadows{ false };  // ray-traced shadows instead of the shadow maps (when the GPU can)
+    std::atomic<int> ray_light_size{ 4 };    // ... the lights' size (radius, world units) for soft edges, 0 = hard
+    std::atomic<int> ray_sun_softness{ 10 }; // ... the directional light's angular radius (tenths of a degree)
+    std::atomic<bool> ray_ao{ false };       // ray-traced ambient occlusion (with ray-traced shadows on)
+    std::atomic<int> ray_ao_reach{ 60 };     // ... how far it looks (world units)
+    std::atomic<int> ray_ao_strength{ 100 }; // ... how much it darkens (%)
+    std::atomic<int> ray_sky{ 0 };           // ray-traced sky occlusion (%): darker where the sky isn't seen, 0 = off
+    std::atomic<int> ray_sky_reach{ 3000 };  // ... how far a ray must get to count as seeing the sky (world units)
+    std::atomic<bool> ray_gi{ false };       // ray-traced indirect light (one bounce and on, from probes) and sky light
+    std::atomic<int> ray_gi_strength{ 100 }; // ... its strength (%)
+    std::atomic<int> ray_gi_spacing{ 80 };   // ... how far apart its probes are (world units)
+    std::atomic<int> ray_sky_light{ 0 };     // ... the sky's light (%)
+    std::atomic<int> sky_r{ 140 }, sky_g{ 170 }, sky_b{ 220 }; // ... its colour
+    std::atomic<int> ray_reflect{ 0 };       // ray-traced reflections on shiny surfaces (specular maps; %), 0 = off
+    std::atomic<int> ray_reflect_water{ 0 }; // ... on water (%), 0 = off
     std::atomic<int> light_tint{ 0 };        // % the frame's lights on the level take each surface's own colour
     std::atomic<int> facing{ 40 };           // % the level lighting depends on a surface facing its light (0 = as the game)
     std::atomic<int> shadows{ 80 };          // % how dark shadows from the lights are
@@ -271,6 +286,7 @@ struct LightingSettings {
     std::atomic<int> specular_strength{ 100 }; // ... how much they count (%)
     std::atomic<bool> emission_maps{ true }; // emission maps (materials/<hash>_e.png) on: their glow and their lights
     std::atomic<int> off_glow{ 100 };        // % of a switched-off level light's painted glow taken away
+    std::atomic<bool> steady_all{ false };   // every torch and lamp Steady (the game's flicker off), as each light's Steady
     std::atomic<int> glow{ 100 };            // % emission maps (materials/<hash>_e.png)
     std::atomic<bool> emission_lights{ true }; // lights placed where the level's emission-mapped textures are
     std::atomic<int> emission_light{ 100 };  // % their brightness
@@ -317,6 +333,7 @@ const LightOverride* lighting_override_for(uint32_t light); // a game light's ch
 float lighting_flicker(uint32_t seed, int amount, int speed);        // 1 = full, down to 1 - amount
 int lighting_pulse_light();                    // the placed light the tool pulses to show it (-1 = none)
 bool lighting_active();                        // the player's "Modern Lighting" option allows it
+bool ray_tracing_active();                     // ... and the "Ray Tracing" option (every ray-traced feature)
 void lighting_tool_tick(recomp_context* ctx);  // game thread, every tick
 void draw_lighting_tool(recomp_context* ctx);  // game thread, in a UI frame while the tool is open
 

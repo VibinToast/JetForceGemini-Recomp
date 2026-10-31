@@ -974,6 +974,21 @@ static const UpstreamOption upstream_options[] = {
             new_options.msaa_option = want;
             set_graphics_now();
         } },
+    // "Graphics API" (Experimental): 0 Auto, 1 DirectX 12, 2 Vulkan. Saved with the graphics options and used from the
+    // next start (renderer.cpp picks the API when it creates RT64); the running renderer keeps its API.
+    { "api_option",
+        [] {
+            using ultramodern::renderer::GraphicsApi;
+            return new_options.api_option == GraphicsApi::D3D12 ? 1 : new_options.api_option == GraphicsApi::Vulkan ? 2 : 0;
+        },
+        [](int v) {
+            using ultramodern::renderer::GraphicsApi;
+#if !defined(_WIN32)
+            if (v == 1) return;
+#endif
+            new_options.api_option = v == 1 ? GraphicsApi::D3D12 : v == 2 ? GraphicsApi::Vulkan : GraphicsApi::Auto;
+            set_graphics_now();
+        } },
 };
 
 class ConfigMenu : public recompui::MenuController {

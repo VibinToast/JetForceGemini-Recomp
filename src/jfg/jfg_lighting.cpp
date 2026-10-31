@@ -48,6 +48,7 @@ extern std::atomic<int> rt64_jfg_debug_normal; // ...
 extern std::atomic<int> rt64_jfg_debug_shadow; // ...
 extern std::atomic<float> rt64_jfg_facing;     // ...
 extern std::atomic<int> rt64_jfg_unlit_objects; // ...
+extern std::atomic<int> rt64_jfg_ray_shadows;   // ...
 extern std::atomic<float> rt64_jfg_shadows;    // ...
 extern std::atomic<int> rt64_jfg_shadow_lights; // ...
 extern std::atomic<int> rt64_jfg_shadow_size;  // ...
@@ -241,9 +242,12 @@ extern "C" void jfg_light_object(uint8_t* rdram_, recomp_context* ctx) {
                     pos[c] = rdf(l + OBJ_LIGHT_POS + c * 4);
                 }
                 pos[3] = 1.0f;
-                if (const LightOverride* o = lighting_override_for(l)) {
-                    const auto steady = o->steady ? g_steady.find(l) : g_steady.end();
+                const LightOverride* o = lighting_override_for(l);
+                if ((o && o->steady) || lighting_settings().steady_all.load()) {
+                    const auto steady = g_steady.find(l);
                     if (steady != g_steady.end()) for (uint32_t c = 0; c < 3; c++) rgb[c] = steady->second.rgb[c] / 255.0f;
+                }
+                if (o) {
                     const float scale = (o->on && o->radius > 0) ? o->intensity / 100.0f * lighting_flicker(l, o->flicker, o->flicker_speed) : 0.0f;
                     if (o->recolour) {
                         rgb[0] = o->r / 255.0f;
@@ -459,6 +463,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     rt64_jfg_debug_shadow.store(s.debug_shadow.load() ? 1 : 0, std::memory_order_relaxed);
     rt64_jfg_facing.store(active ? std::clamp(s.facing.load(), 0, 100) / 100.0f : 0.0f, std::memory_order_relaxed);
     rt64_jfg_unlit_objects.store((mode > 0 && s.unlit_objects.load()) ? 1 : 0, std::memory_order_relaxed);
+    rt64_jfg_ray_shadows.store((active && ray_tracing_active()) ? 1 : 0, std::memory_order_relaxed); // every ray-traced feature
     rt64_jfg_shadows.store(active ? std::clamp(s.shadows.load(), 0, 100) / 100.0f : 0.0f, std::memory_order_relaxed);
     rt64_jfg_shadow_lights.store(std::clamp(s.shadow_lights.load(), 0, 4), std::memory_order_relaxed);
     rt64_jfg_shadow_size.store(std::clamp(s.shadow_size.load(), 128, 2048), std::memory_order_relaxed);
@@ -524,9 +529,10 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
         const LightOverride* own = lighting_override_for(l);
         float rgb[3]; // its colour (0-255), which the game animates for flames
         for (uint32_t c = 0; c < 3; c++) rgb[c] = (float)rd8(l + OBJ_LIGHT_COLOUR + c);
-        // Steady (the lighting tool): the game's own flicker off, at the light's average colour, brightness and size over
-        // the last few seconds (kept per light; a light at another spot, as in another level, starts again).
-        if (own && own->steady) {
+        // Steady (the lighting tool, for this light or every one): the game's own flicker off, at the light's average
+        // colour, brightness and size over the last few seconds (kept per light; a light at another spot, as in another
+        // level, starts again).
+        if ((own && own->steady) || s.steady_all.load()) {
             if (g_steady.size() > 1024) g_steady.clear();
             auto it = g_steady.find(l);
             if (it == g_steady.end() || it->second.x != x || it->second.y != y || it->second.z != z) {
@@ -601,6 +607,33 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     }
     s.sent_placed_lights = placed_sent;
 
+    // Only a light that has stayed put for a moment casts shadows: a rocket's or an explosion's light (moving, or there
+    // for a few frames) would throw the nearby models' hard shadows across the level, flashing. A flame's light
+    // jitters around where it settled and drops out for a frame now and then (no brightness), so that doesn't count as
+    // moving (id: the light's slot, so a slot used again somewhere else starts again).
+    {
+        struct Still { float x, y, z; int ticks, unseen; };
+        static std::unordered_map<uint32_t, Still> still;
+        const int StillTicks = 20, ForgetTicks = 30; // game frames
+        const float Wander = 24.0f; // units from where it settled
+        for (auto& [id, s] : still) s.unseen++;
+        for (Light& light : found) {
+            uint32_t id;
+            std::memcpy(&id, &light.d[8], 4);
+            auto it = still.find(id);
+            if (it == still.end() || std::fabs(it->second.x - light.d[0]) + std::fabs(it->second.y - light.d[1]) + std::fabs(it->second.z - light.d[2]) > Wander) {
+                it = still.insert_or_assign(id, Still{ light.d[0], light.d[1], light.d[2], 0, 0 }).first;
+            }
+            Still& s = it->second;
+            s.unseen = 0;
+            s.ticks = std::min(s.ticks + 1, StillTicks);
+            if (s.ticks < StillTicks) light.d[9] = 1.0f;
+        }
+        for (auto it = still.begin(); it != still.end();) {
+            it = (it->second.unseen > ForgetTicks) ? still.erase(it) : std::next(it);
+        }
+    }
+
     const size_t max_lights = (size_t)std::clamp(s.max_lights.load(), 0, (int)MAX_FRAME_LIGHTS);
     // Nearest first (RT64 gives the first ones that cast shadows a shadow map).
     std::sort(found.begin(), found.end(), [](const Light& a, const Light& b) { return a.dist2 < b.dist2; });
@@ -636,7 +669,7 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     const bool on = mode > 0;
     const float yaw = s.sun_yaw.load() * 3.14159265f / 180.0f, pitch = s.sun_pitch.load() * 3.14159265f / 180.0f;
     const float sun = s.sun_intensity.load() / 100.0f;
-    float params[24] = {};
+    float params[40] = {};
     params[0] = std::cos(pitch) * std::sin(yaw);
     params[1] = std::sin(pitch);
     params[2] = std::cos(pitch) * std::cos(yaw);
@@ -659,7 +692,22 @@ extern "C" void jfg_frame_lights(uint8_t* rdram_, recomp_context* ctx) {
     params[19] = (on && s.emission_maps.load()) ? std::clamp(s.glow.load(), 0, 200) / 100.0f : 0.0f;
     params[20] = (on && s.specular_maps.load()) ? std::clamp(s.specular_strength.load(), 0, 200) / 100.0f : 0.0f;
     params[21] = on ? std::clamp(s.light_tint.load(), 0, 100) / 100.0f : 0.0f;
-    rt64_jfg_lighting_params(params, 24);
+    params[22] = (float)std::clamp(s.ray_light_size.load(), 0, 100);
+    params[23] = std::clamp(s.ray_sun_softness.load(), 0, 100) / 10.0f * 3.14159265f / 180.0f;
+    params[24] = s.ray_ao.load() ? (float)std::clamp(s.ray_ao_reach.load(), 5, 500) : 0.0f;
+    params[25] = std::clamp(s.ray_ao_strength.load(), 0, 200) / 100.0f;
+    params[26] = std::clamp(s.ray_sky.load(), 0, 200) / 100.0f;
+    params[27] = (float)std::clamp(s.ray_sky_reach.load(), 200, 20000);
+    params[28] = s.ray_gi.load() ? std::clamp(s.ray_gi_strength.load(), 0, 400) / 100.0f : 0.0f;
+    params[29] = (float)std::clamp(s.ray_gi_spacing.load(), 32, 400);
+    params[30] = std::clamp(s.ray_sky_light.load(), 0, 400) / 100.0f;
+    params[32] = std::clamp(s.sky_r.load(), 0, 255) / 255.0f;
+    params[33] = std::clamp(s.sky_g.load(), 0, 255) / 255.0f;
+    params[34] = std::clamp(s.sky_b.load(), 0, 255) / 255.0f;
+    params[35] = std::clamp(s.ray_reflect.load(), 0, 200) / 100.0f;
+    params[36] = std::clamp(s.ray_reflect_water.load(), 0, 200) / 100.0f;
+    params[37] = s.ray_shadows.load() ? 1.0f : 0.0f; // with ray tracing on; else the shadow maps
+    rt64_jfg_lighting_params(params, 40);
     rt64_jfg_frame_objects((uint32_t)ctx->r4 & RDRAM_MASK, g_object_ranges.data(), (uint32_t)(g_object_ranges.size() / 3),
                            g_object_normals.data(), (uint32_t)g_object_normals.size(), g_object_lights.data(),
                            (uint32_t)(g_object_lights.size() / OBJECT_LIGHT_FLOATS));
