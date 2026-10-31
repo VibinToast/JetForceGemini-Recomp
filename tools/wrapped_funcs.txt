@@ -252,3 +252,10 @@ func_overlay_24_00000CE4_1F42814
 levelInitRegionFlags
 levelGetRegionFlags
 levelGetObjectID
+
+# Modern lighting: the game's track and object lighting, skipped while RT64 lights per pixel (jfg_lighting.cpp)
+trackLightAsm
+lightObject
+lightSingleLight
+lightTwoLights
+lightMultiLight

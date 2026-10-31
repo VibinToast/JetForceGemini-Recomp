@@ -36,9 +36,11 @@ ShadowPlace& place_of(uint32_t object) {
 
 constexpr float MAX_STEP = 100.0f; // a larger move in one game frame is a jump (a warp, a respawn): not slid
 
-// The batch being written by func_8001FA24.
+// The batch being written by func_8001FA24, and the counts it started from: vertices (D_800A0EBC, $t2), triangles
+// (D_800A0EC0, $t3) and batches (D_800A0EC4, $fp), which it stores back advanced at its end.
 bool batch_open = false;
 uint32_t batch_start = 0;
+uint64_t start_vertices = 0, start_triangles = 0, start_batches = 0;
 float batch_uls = 0, batch_ult = 0;
 }
 
@@ -83,15 +85,25 @@ extern "C" void jfg_shadow_begin(uint8_t* rdram_, recomp_context* ctx) {
     batch_uls = -ds / 8.0f;
     batch_ult = -dt / 8.0f;
     batch_start = (uint32_t)ctx->r7 & 0x00FFFFFFu;
+    start_vertices = ctx->r10;
+    start_triangles = ctx->r11;
+    start_batches = ctx->r30;
     batch_open = true;
 }
 
 // func_8001FA24 after its last triangle ($a3: the end). Batches are registered even with the option off (no shift),
-// so an older shift never applies to new triangles at the same place.
+// so an older shift never applies to new triangles at the same place. With the game's shadows off (Lighting tab), the
+// counts go back to where they started, so what it wrote is never drawn.
 extern "C" void jfg_shadow_end(uint8_t* rdram_, recomp_context* ctx) {
     (void)rdram_;
     if (!batch_open) return;
     batch_open = false;
+    if (lighting_settings().no_game_shadows.load() && lighting_active()) {
+        ctx->r10 = start_vertices;
+        ctx->r11 = start_triangles;
+        ctx->r30 = start_batches;
+        return;
+    }
     const uint32_t end = (uint32_t)ctx->r7 & 0x00FFFFFFu;
     if (end > batch_start) rt64_jfg_shadow_batch(batch_start, end, batch_uls, batch_ult);
 }

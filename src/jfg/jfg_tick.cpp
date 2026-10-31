@@ -15,6 +15,8 @@
 #include <string>
 #include <vector>
 
+#include <SDL.h>
+
 #include "imgui/imgui.h"
 #include "debug_ui/debug_ui.hpp"
 #include "debug_ui/backend.hpp"
@@ -74,6 +76,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     weapons::tick(ctx);
     jfg_locale_tick(ctx);
     tools_game_tick(ctx); // F10's requests and the values it shows
+    lighting_tool_tick(ctx); // the lighting tool's level files, placement mode and saving
 
     // Cheats keep applying while the menu is closed.
     apply_flag(g.invulnerable, g.applied_invulnerable, ADDR_invulnerabilityCheat);
@@ -126,6 +129,34 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         }
     }
 
+    // Scripted testing: JFG_DEBUG_FULLSCREEN=<seconds>[,<seconds>...] presses F11 (fullscreen on / off) at each of those
+    // times, through SDL's event queue as a real key press goes.
+    {
+        static const auto start = std::chrono::steady_clock::now();
+        static const char* env = std::getenv("JFG_DEBUG_FULLSCREEN");
+        static std::vector<int> times;
+        static size_t next = 0;
+        if (env != nullptr && times.empty()) {
+            for (const char* c = env; *c; ) {
+                times.push_back(std::atoi(c));
+                while (*c && *c != ',') c++;
+                if (*c == ',') c++;
+            }
+        }
+        if (next < times.size() && std::chrono::steady_clock::now() - start >= std::chrono::seconds(times[next])) {
+            next++;
+            SDL_Event e = {};
+            e.type = SDL_KEYDOWN;
+            e.key.state = SDL_PRESSED;
+            e.key.keysym.scancode = SDL_SCANCODE_F11;
+            e.key.keysym.sym = SDLK_F11;
+            SDL_PushEvent(&e);
+            e.type = SDL_KEYUP;
+            e.key.state = SDL_RELEASED;
+            SDL_PushEvent(&e);
+            std::fprintf(stderr, "[jfg] test: F11 pressed\n");
+        }
+    }
     launch_tick(ctx); // --start-level and friends (jfg_launch.cpp)
     music_tick(ctx);  // mods' OGG music for levels (jfg_music.cpp)
     worldmap_tick();  // mods' planets: the one the hero is in counts as entered (jfg_worldmap.cpp)
@@ -341,6 +372,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         load_level_names();
         draw_debug_window(ctx);
     }
+    if (dino::debug_ui::backend::lighting_tool_open() && dino::debug_ui::backend::in_ui_frame()) draw_lighting_tool(ctx);
     dino::debug_ui::ui_frame_end();
 
     // 60 fps: viFrameSync paces the game by gVideoDeltaTime (2 video frames, 3 when it falls behind); the game's own

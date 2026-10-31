@@ -118,6 +118,16 @@ static RT64::UserConfiguration::GraphicsAPI get_graphics_api() {
 }
 
 bool is_open() { return b_is_open; }
+// JFG PORT: the lighting tool (F12) is an ImGui window of its own. While it is open the UI frame runs and the game keeps
+// its controls; Alt pressed on its own hands the mouse and keyboard to the tool (to click and type in it) and back.
+// A controller always plays the game.
+static std::atomic<bool> b_lighting_open{ false };
+static std::atomic<bool> b_lighting_playing{ true };
+bool lighting_tool_open() { return b_lighting_open.load(); }
+bool lighting_tool_playing() { return b_lighting_playing.load(); }
+void set_lighting_tool_playing(bool playing) { b_lighting_playing = playing; }
+void set_lighting_tool_open(bool open) { b_lighting_open = open; }
+static bool ui_wanted() { return b_is_open || b_overlay || b_lighting_open.load(); }
 bool in_ui_frame() { return b_in_ui_frame; }
 void set_overlay(bool enabled) { b_overlay = enabled; }
 bool take_reset_request() { return b_reset_requested.exchange(false); }
@@ -129,12 +139,17 @@ static void handle_toggle_key(const SDL_Event& event) {
     if (event.type != SDL_KEYDOWN || event.key.repeat) return;
     const SDL_Scancode code = event.key.keysym.scancode;
     if (code == SDL_Scancode::SDL_SCANCODE_GRAVE || code == SDL_Scancode::SDL_SCANCODE_F9) b_is_open = !b_is_open;
+    // F12: open (the game keeps the controls) or close the lighting tool.
+    if (code == SDL_Scancode::SDL_SCANCODE_F12) {
+        b_lighting_open = !b_lighting_open;
+        b_lighting_playing = true;
+    }
 }
 
 void begin() {
     if (!jfg_imgui_ctx->Initialized) return;
 
-    if (!b_is_open) {
+    if (!ui_wanted()) {
         // Still process the event queue but don't send any to ImGui
         SDL_Event event{};
         while (event_queue.try_dequeue(event)) {
@@ -142,7 +157,7 @@ void begin() {
         }
     }
 
-    if (!b_is_open && !b_overlay) {
+    if (!ui_wanted()) {
         // Still not open even after handling key events
         return;
     }
@@ -162,10 +177,13 @@ void begin() {
     }
 
     // JFG PORT: an overlay-only frame must not take over the mouse cursor.
-    if (b_is_open) ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+    if (b_is_open || (b_lighting_open && !b_lighting_playing)) ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
     else ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+    // ... nor clicks: while the game has the mouse, the lighting tool's window ignores it.
+    if (!b_is_open && b_lighting_open && b_lighting_playing) ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
+    else ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
 
-    if (!b_is_open && !b_overlay) {
+    if (!ui_wanted()) {
         // Closed after handling key events
         b_in_ui_frame = false;
         ImGui::SetCurrentContext(prev_ctx);
@@ -219,6 +237,18 @@ static int sdl_event_filter(void *userdata, SDL_Event *event) {
     }
     if (event->type == SDL_KEYDOWN && event->key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F7 && !event->key.repeat) {
         b_fly_requested = true;
+    }
+    // JFG PORT: Alt pressed and released with no other key between, while the lighting tool is open: the mouse and
+    // keyboard to the tool and back.
+    if ((event->type == SDL_KEYDOWN || event->type == SDL_KEYUP) && !event->key.repeat) {
+        static bool alt_alone = false;
+        const SDL_Scancode code = event->key.keysym.scancode;
+        const bool alt = (code == SDL_SCANCODE_LALT) || (code == SDL_SCANCODE_RALT);
+        if (event->type == SDL_KEYDOWN) alt_alone = alt;
+        else if (alt && alt_alone) {
+            alt_alone = false;
+            if (b_lighting_open) b_lighting_playing = !b_lighting_playing;
+        }
     }
     // JFG PORT: F10 (show / hide) and Alt (mouse and keyboard to the game and back) for F10's tools.
     if (event->type == SDL_KEYDOWN || event->type == SDL_KEYUP) {
@@ -415,7 +445,7 @@ static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::Render
     mod_list->PushClipRect(ImVec2(0.0f, 0.0f), size);
     if (jfg::overlay::build(mod_list, textures) && mod_list->VtxBuffer.Size > 0) combined.AddDrawList(mod_list);
 
-    ImDrawData *ui = (b_is_open || b_overlay) ? ImGui::GetDrawData() : nullptr;
+    ImDrawData *ui = ui_wanted() ? ImGui::GetDrawData() : nullptr;
     if (ui != nullptr && ui->Valid) {
         if (ui->Textures != nullptr) for (ImTextureData *t : *ui->Textures) textures.push_back(t);
         for (ImDrawList *l : ui->CmdLists) combined.AddDrawList(l);

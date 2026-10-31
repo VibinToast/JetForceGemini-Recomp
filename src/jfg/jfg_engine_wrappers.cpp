@@ -17,8 +17,10 @@ namespace jfg { void apply_baddy_patches(uint32_t rom, uint32_t ram); } // jfg_b
 // set to NULL), and the sound player's update events are dropped except "stop": a skip runs hundreds of ticks before
 // the audio thread gets a turn, and a full event queue made the player lose its periodic event for good. If that
 // happened anyway, jfg_evt_next puts the event back before the queue is read (otherwise the audio thread spun forever
-// on "nonsense" events and the game froze).
+// on "nonsense" events and the game froze). First, modern lighting sends the frame's track lights to RT64 with the
+// display list's address (jfg_lighting.cpp).
 JFG_WRAP(rcpFast3d) {
+    jfg_frame_lights(rdram, ctx);
     if (jfg_rcp_skip(rdram, (uint32_t)ctx->r6)) { ctx->r2 = 0; return; }
     rcpFast3d_orig(rdram, ctx);
 }

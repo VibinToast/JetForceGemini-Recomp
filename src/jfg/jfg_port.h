@@ -227,6 +227,99 @@ void apply_no_lod(recomp_context* ctx); // "Disable LOD", "Draw distant objects"
 void fov_refresh();                     // before the scene is drawn
 std::string depth_fog_status();         // the F9 menu's depth fog status line
 
+// --- jfg_lighting.cpp, jfg_lighting_tool.cpp ----------------------------------------------------------------------
+// Modern lighting (JFG-125). The lighting tool (F12) edits these live and saves them per level (lighting/level_N.txt)
+// or as the defaults (lighting/default.txt); the JFG_* test switches set them at start. The values here are the
+// built-in look the "Modern Lighting" option gives before anything is saved (nothing applies while it is off).
+struct LightingSettings {
+    std::atomic<int> mode{ 2 };              // 0 off, 1 the game's level lights per pixel, 2 also torches and lamps
+    std::atomic<int> level_ambient{ 100 };   // % of the level's own colours, its ambient light
+    std::atomic<int> level_strength{ 100 };  // % of the game's level lights (shots, flashes)
+    std::atomic<int> object_strength{ 50 };  // % of the torch and lamp lights on the level (mode 2)
+    std::atomic<int> object_radius{ 125 };   // % of a torch or lamp light's radius (the game's own conversion: 125)
+    std::atomic<int> max_lights{ 32 };       // lights sent per frame (at most 64)
+    std::atomic<bool> no_game_lighting{ true };  // skip the game's per-vertex level lighting without replacing it
+    std::atomic<bool> no_object_lighting{ true };  // skip the game's per-vertex lighting of characters and objects
+    std::atomic<bool> unlit_objects{ true }; // objects the game draws unlit (bridges, crates) are lit like the level
+    std::atomic<bool> characters{ true };    // light characters and objects in RT64 (per pixel, with their normals)
+    std::atomic<int> character_lights{ 40 }; // % the frame's lights add on characters (the game's own come from them)
+    std::atomic<int> light_tint{ 0 };        // % the frame's lights on the level take each surface's own colour
+    std::atomic<int> facing{ 40 };           // % the level lighting depends on a surface facing its light (0 = as the game)
+    std::atomic<int> shadows{ 80 };          // % how dark shadows from the lights are
+    std::atomic<int> shadow_lights{ 4 };     // how many of the nearest lights get a shadow map (0-4)
+    std::atomic<int> shadow_size{ 512 };     // each shadow map face's size in texels
+    std::atomic<int> glow_shadow{ 75 };      // % of the level's painted glow a full shadow takes
+    std::atomic<bool> no_game_shadows{ true };  // drop the game's blob shadows under characters
+    std::atomic<bool> sun{ false };          // the directional light
+    std::atomic<int> sun_yaw{ 45 };          // its direction: degrees around (0 = towards +z)
+    std::atomic<int> sun_pitch{ 50 };        // ... and up (90 = straight down from above)
+    std::atomic<int> sun_r{ 255 }, sun_g{ 244 }, sun_b{ 214 }; // its colour
+    std::atomic<int> sun_intensity{ 35 };    // % of full white
+    std::atomic<int> sun_characters{ 100 };  // % of it on characters and objects
+    std::atomic<bool> sun_shadows{ true };   // it casts shadows (around where the camera looks)
+    std::atomic<int> sun_shadow_area{ 1000 }; // half the size of the square it shadows, world units
+    std::atomic<int> detail{ 10 };           // surface detail from the textures: tenths of a world unit of height
+    std::atomic<int> detail_characters{ 0 }; // % of it on characters and objects (their textures are mostly painted features)
+    std::atomic<int> shine{ 20 };            // % shine (specular highlights)
+    std::atomic<int> sharpness{ 24 };        // how tight the highlights are
+    std::atomic<bool> smooth_surfaces{ true }; // the level's smooth surface directions (else one per triangle)
+    std::atomic<int> shine_characters{ 20 };   // % shine on characters and objects (new character lighting)
+    std::atomic<int> sharpness_characters{ 24 }; // how tight their highlights are
+    std::atomic<bool> normal_maps{ true };   // authored normal maps (materials/<hash>_n.png) on
+    std::atomic<int> normal_strength{ 100 }; // ... how much they count (%)
+    std::atomic<bool> specular_maps{ true }; // authored specular maps (materials/<hash>_s.png) on
+    std::atomic<int> specular_strength{ 100 }; // ... how much they count (%)
+    std::atomic<bool> emission_maps{ true }; // emission maps (materials/<hash>_e.png) on: their glow and their lights
+    std::atomic<int> off_glow{ 100 };        // % of a switched-off level light's painted glow taken away
+    std::atomic<int> glow{ 100 };            // % emission maps (materials/<hash>_e.png)
+    std::atomic<bool> emission_lights{ true }; // lights placed where the level's emission-mapped textures are
+    std::atomic<int> emission_light{ 100 };  // % their brightness
+    std::atomic<int> emission_reach{ 300 };  // their reach for a 64 x 64 unit patch (world units)
+    std::atomic<bool> emission_shadows{ false }; // they cast shadows
+    std::atomic<bool> emission_objects{ true }; // also where objects, characters and effects with emission maps are drawn
+    std::atomic<bool> debug_world{ false };  // show the world position as colour
+    std::atomic<bool> debug_normal{ false }; // show the surface direction as colour
+    std::atomic<bool> debug_shadow{ false }; // paint the lights' shadows red
+    std::atomic<bool> log{ false };          // jfg_lighting.log
+    std::atomic<int> sent_level_lights{ 0 }, sent_object_lights{ 0 }, sent_placed_lights{ 0 }; // what the last frame sent
+};
+LightingSettings& lighting_settings();
+
+// A light placed with the lighting tool (saved with the level), and changes to one of the game's own torches or lamps
+// (found again by where it is).
+struct PlacedLight {
+    float x = 0, y = 0, z = 0;
+    int r = 255, g = 200, b = 140;
+    int intensity = 100;  // %
+    int radius = 200;     // world units
+    int inner = 30;       // % of the radius at full strength
+    int flicker = 0;      // % how much it dims at most
+    int flicker_speed = 100; // %
+    bool on = true;
+    bool shadows = true;  // casts shadows
+};
+struct LightOverride {
+    float x = 0, y = 0, z = 0;
+    bool on = true;
+    bool recolour = false;
+    int r = 255, g = 255, b = 255;
+    int intensity = 100;  // % of its own
+    int radius = 100;     // % of its own
+    int flicker = 0;
+    int flicker_speed = 100;
+    bool shadows = true;  // casts shadows
+    int nth = 0;          // which of the game's lights at this spot (several can stand on one), in the game's order
+    bool steady = false;  // the game's own flicker off: held at its average colour, brightness and size
+};
+const std::vector<PlacedLight>& lighting_placed_lights();
+const std::vector<PlacedLight>& lighting_emission_lights(); // where the level's emission maps are (the lighting tool's Surfaces tab)
+const LightOverride* lighting_override_for(uint32_t light); // a game light's changes (its object light); nullptr: its own look
+float lighting_flicker(uint32_t seed, int amount, int speed);        // 1 = full, down to 1 - amount
+int lighting_pulse_light();                    // the placed light the tool pulses to show it (-1 = none)
+bool lighting_active();                        // the player's "Modern Lighting" option allows it
+void lighting_tool_tick(recomp_context* ctx);  // game thread, every tick
+void draw_lighting_tool(recomp_context* ctx);  // game thread, in a UI frame while the tool is open
+
 // --- jfg_weapons.cpp ---------------------------------------------------------------------------------------------
 extern bool g_weapon_orig_read;            // the weapon table's original values have been read
 extern std::recursive_mutex g_weapon_mutex; // UI thread edits, game thread applies

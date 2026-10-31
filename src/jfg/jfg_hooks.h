@@ -67,6 +67,11 @@ int jfg_refuel_amount(int amount);                                     // refuel
 float jfg_sniper_zoom(float zoom);                                     // controlGetManualAim
 int jfg_sniper_walk(int weapon);                                       // the characters' aim control (overlays 15-17)
 int jfg_flag_override(int flag);                                       // mainGetGameFlag's wrapper
+// jfg_lighting.cpp
+int jfg_track_light(uint8_t* rdram, recomp_context* ctx);              // trackLightAsm's wrapper
+void jfg_frame_lights(uint8_t* rdram, recomp_context* ctx);            // rcpFast3d's wrapper (before jfg_rcp_skip)
+int jfg_object_light(void);                                            // the wrappers of lightSingleLight, lightTwoLights, lightMultiLight
+void jfg_light_object(uint8_t* rdram, recomp_context* ctx);            // lightObject's wrapper
 // jfg_gore.cpp
 void jfg_gore_make_room(uint8_t* rdram, int amount);                    // bloodSpurtAdd's wrapper (Blood stays)
 void jfg_gore_level_change(uint8_t* rdram, recomp_context* ctx);       // jfg_on_level_change handler (Blood stays)

@@ -478,6 +478,15 @@ static void draw_mod_api() {
     ImGui::EndTable();
 }
 
+// A slider straight on a live setting: stored on every change (options_slider reports only the release, and the value
+// is read back from the setting each frame, so the drag would snap back).
+static void live_slider(const char* label, std::atomic<int>& setting, int lo, int hi) {
+    int value = setting.load();
+    ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x * 0.55f, ImGui::GetFontSize() * 22.0f));
+    if (ImGui::SliderInt(label, &value, lo, hi)) setting = value;
+}
+
+// Lighting tab: modern lighting, in progress (jfg_lighting.cpp). Changes apply at once; nothing is saved.
 // F9: the original all-in-one window (jfg_debug_frame, while the debug UI is open without the toolbar).
 void draw_debug_window(recomp_context* ctx) {
     ImGui::GetIO().FontGlobalScale = 1.0f; // the toolbar scales globally; this window scales itself
@@ -492,6 +501,10 @@ void draw_debug_window(recomp_context* ctx) {
             if (ImGui::BeginTabItem("Profiles")) { draw_profiles(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Cheats")) { draw_cheats(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Options")) { draw_options(); ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Lighting")) {
+                ImGui::TextWrapped("Lighting has its own tool now: press F12.");
+                ImGui::EndTabItem();
+            }
             if (ImGui::BeginTabItem("Level warp")) { draw_warp(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Weapons")) { draw_weapons(); ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Items")) {
