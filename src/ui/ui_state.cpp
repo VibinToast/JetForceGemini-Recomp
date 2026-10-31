@@ -229,6 +229,18 @@ public:
         int TranslateString(Rml::String& translated, const Rml::String& input) override {
             return jfg::locale::translate_ui(translated, input) ? 1 : 0;
         }
+#ifdef __ANDROID__
+        // JFG ANDROID: a text field gets the focus (profile names, and any other text box): show the on-screen
+        // keyboard; SDL turns it off again when the field loses the focus. Desktops type into the fields as before.
+        void ActivateKeyboard(Rml::Vector2f caret_position, float line_height) override {
+            SDL_Rect rect{ (int)caret_position.x, (int)caret_position.y, 1, (int)line_height };
+            SDL_SetTextInputRect(&rect);
+            SDL_StartTextInput();
+        }
+        void DeactivateKeyboard() override {
+            SDL_StopTextInput();
+        }
+#endif
     };
     std::unique_ptr<SystemInterface_SDL> system_interface;
     recompui::RmlRenderInterface_RT64 render_interface;

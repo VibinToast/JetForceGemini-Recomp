@@ -293,6 +293,47 @@ public class JFGActivity extends SDLActivity {
         }
     }
 
+    /**
+     * A small HTTPS request (for features that talk to a web API, such as RetroAchievements): a GET, or a POST of postData when it isn't null. Returns
+     * "<status>\n<body>", or null when no response came back at all.
+     */
+    public static String httpRequest(String url, String postData, String contentType, String userAgent) {
+        HttpURLConnection connection = null;
+        try {
+            connection = openHttps(url, 30000);
+            if (userAgent != null) {
+                connection.setRequestProperty("User-Agent", userAgent);
+            }
+            if (postData != null) {
+                byte[] body = postData.getBytes("UTF-8");
+                connection.setDoOutput(true);
+                connection.setRequestMethod("POST");
+                connection.setRequestProperty("Content-Type",
+                        contentType != null ? contentType : "application/x-www-form-urlencoded");
+                connection.setFixedLengthStreamingMode(body.length);
+                try (OutputStream out = connection.getOutputStream()) {
+                    out.write(body);
+                }
+            }
+            int status = connection.getResponseCode();
+            InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            java.io.ByteArrayOutputStream response = new java.io.ByteArrayOutputStream();
+            if (stream != null) {
+                try (InputStream in = stream) {
+                    copyStream(in, response);
+                }
+            }
+            return status + "\n" + response.toString("UTF-8");
+        } catch (Exception e) {
+            Log.w(TAG, "Request " + url + " failed: " + e);
+            return null;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
     // GitHub release assets redirect to another https host, which HttpURLConnection follows.
     private static HttpURLConnection openHttps(String url, int readTimeoutMs) throws IOException {
         if (!url.startsWith("https://")) {

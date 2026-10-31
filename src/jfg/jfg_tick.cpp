@@ -27,6 +27,7 @@
 #include "jfg_options.h"
 #include "jfg_port.h"
 #include "jfg_update_check.h"
+#include "config/config.hpp"
 
 void jfg_note_code_mods(); // jfg_mods.cpp
 
@@ -234,7 +235,11 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     }
     const float update_t = update_version.empty() ? -1.0f
         : std::chrono::duration<float>(std::chrono::steady_clock::now() - std::max(update_seen, hint_start + std::chrono::seconds(3))).count();
+#ifdef __ANDROID__
+    const bool update_toast = false; // updates install from the launcher on Windows only; an Android build has its own APK
+#else
     const bool update_toast = update_t >= 0.0f && update_t < UPDATE_SHOW && jfg_launcher_check_updates(); // not once turned off
+#endif
     std::string script_text;
     float script_alpha = 0.0f;
     const bool script_toast = lua_overlay_text(script_text, script_alpha);
@@ -247,7 +252,8 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
         if (t < 0.5f) alpha = t / 0.5f;
         else if (t > HINT_HOLD) alpha = std::max(0.0f, 1.0f - (t - HINT_HOLD) / HINT_FADE);
         const ImVec2 size = ImGui::GetIO().DisplaySize;
-        const char* text = "Settings: Select / Esc  -  Tools: F10"; // F9 (debug window) is named in the settings menu instead
+        // F9 (debug window) is named in the settings menu instead; a handheld has no keyboard for the F-keys.
+        const char* text = dino::config::handheld_ui() ? "Settings: Select" : "Settings: Select / Esc  -  Tools: F10";
         ImFont* font = ImGui::GetFont();
         const float font_size = std::max(18.0f, size.y / 32.0f);
         const ImVec2 extent = font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, text);
