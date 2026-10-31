@@ -13,6 +13,7 @@
 #include <vector>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 
 #include "rt64_render_hooks.h"
 
