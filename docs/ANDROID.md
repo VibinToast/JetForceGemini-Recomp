@@ -3,9 +3,8 @@
 An experimental Android build for Snapdragon/Adreno handhelds (developed for the Retroid Pocket 6). It installs as a
 normal APK, so Android launchers that install apps from GitHub releases (such as Quiver Launcher) can use it.
 
-Status: the APK builds; it has **not yet been run on a device**. Expect rough edges: there are no touch controls
-(use the handheld's buttons or a controller), and returning to the app after switching away may not restore the
-picture.
+Status: **experimental**. Played on a Retroid Pocket 6 (Snapdragon 8 Gen 2, Adreno 740); other GPUs are untested.
+There are no touch controls (use the handheld's buttons or a controller).
 
 ## Playing
 
@@ -21,14 +20,14 @@ If the screen stays black or the game closes at start, the GPU driver may be the
 ## Building
 
 Needs a Linux x86_64 PC with the [desktop build](../README.md) working (it generates the game code from your ROM),
-plus the Android SDK and NDK:
+plus the Android SDK and NDK. The Android changes to RT64, Plume and N64ModernRuntime are in their `jfg` branches,
+so the pinned submodules build for Android as they are:
 
 ```sh
 # once: Android packages (sdkmanager is in the SDK's cmdline-tools)
 sdkmanager "platforms;android-35" "build-tools;35.0.0" "cmake;3.30.3" "ndk;26.0.10792818"
 
 ./build_linux.sh path/to/rom.z64             # generates RecompiledFuncs and rsp/aspMain.cpp
-tools/android/apply_patches.sh               # Android changes to RT64, Plume and N64ModernRuntime
 tools/android/build_android_deps.sh          # SDL2 and FreeType for Android arm64, into ~/Android/prefixes
 c++ -std=c++17 -O2 lib/rt64/src/tools/file_to_c/file_to_c.cpp -o build-android-host/file_to_c
 
@@ -59,6 +58,8 @@ Like the desktop builds, the APK contains game code translated from your ROM. Ke
   picker the game's ROM and mod dialogs use (`src/runtime/support.cpp`).
 - The game is built as `libmain.so`; SDL's activity calls its `SDL_main`.
 - RT64 renders to the activity's `ANativeWindow` through Plume's Vulkan backend, in RGBA8.
+- `patches/android/sdl2-vulkan-surface.patch` is applied to SDL 2.32.10 by `build_android_deps.sh`: SDL's
+  `onNativeSurfaceChanged` would otherwise make an EGL surface on the window Vulkan presents to.
 
 ## Credits
 
