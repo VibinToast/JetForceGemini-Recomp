@@ -7,6 +7,7 @@ are written here by hand and become that version's notes when it is released.
 
 ### New options
 
+- Modern Lighting (Graphics, off by default): levels, characters and objects are lit per pixel. Shots, torches and lamps light what they face and cast real shadows, and levels can have a directional light, surface detail and shine. Texture packs can add normal, specular and emission maps. Press F12 for the lighting tool to adjust and save the look of each level.
 - Update Channel (General, next to Check for Updates): Testing also offers test builds, so you can try a fix before it is released. Switching back to Stable offers the latest release again, even if it is older than the test build. Your saves, settings and mods are kept.
 
 ## v1.3.2 (2026-10-30)
