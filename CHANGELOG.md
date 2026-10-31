@@ -3,6 +3,12 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
+## Unreleased
+
+### New options
+
+- Update Channel (General, next to Check for Updates): Testing also offers test builds, so you can try a fix before it is released. Switching back to Stable offers the latest release again, even if it is older than the test build. Your saves, settings and mods are kept.
+
 ## v1.3.2 (2026-10-30)
 
 - Linux: fixed a crash when choosing a save file after restarting the game. Nothing needs deleting.

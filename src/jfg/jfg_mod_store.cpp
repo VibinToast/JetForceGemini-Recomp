@@ -104,26 +104,9 @@ std::string read_text(const fs::path& file) {
     return s.str();
 }
 
-// "1.2.10" -> comparable parts; a missing part is 0.
-std::vector<int> version_parts(const std::string& v) {
-    std::vector<int> parts;
-    int n = 0;
-    bool any = false;
-    for (char c : v) {
-        if (c >= '0' && c <= '9') { n = n * 10 + (c - '0'); any = true; }
-        else if (c == '.') { parts.push_back(n); n = 0; any = false; }
-        else break;
-    }
-    if (any || !parts.empty()) parts.push_back(n);
-    return parts;
-}
-bool newer(const std::string& a, const std::string& b) { // a > b
-    std::vector<int> x = version_parts(a), y = version_parts(b);
-    const size_t n = std::max(x.size(), y.size());
-    x.resize(n, 0);
-    y.resize(n, 0);
-    return x > y;
-}
+// a > b: "1.2.10" > "1.2.9", a missing part is 0, and a test build of the game is below its release (a mod that needs
+// 1.4.0 is not offered to 1.4.0-test.4).
+bool newer(const std::string& a, const std::string& b) { return jfg_compare_versions(a, b) > 0; }
 
 std::string size_text(uint64_t bytes) {
     char text[32];

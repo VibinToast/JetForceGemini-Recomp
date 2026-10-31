@@ -33,6 +33,8 @@ GENERAL = [
      "<b>On</b>: the game starts straight away with your ROM, without the launcher. In the game, the launcher button next to Quit in this menu still takes you back to it. Saved in jfg_launcher.txt next to the game."),
     ("bool", "check_for_updates", "Check for Updates", None,
      "<b>On</b>: when the game starts it asks GitHub whether a newer release exists, and the launcher and a note in the game show one. <b>Off</b>: it never contacts GitHub. Turning it on checks straight away. Saved in jfg_launcher.txt next to the game."),
+    ("choice", "update_channel", "Update Channel", [(0, "Stable"), (1, "Testing")],
+     "<b>Stable</b>: only releases are offered. <b>Testing</b>: test builds are offered too, so you can try a fix before it is released (they can have new bugs). Going back to Stable from a test build offers the latest release, even if it is older. Your saves, settings and mods are kept either way. Saved in jfg_launcher.txt next to the game."),
     ("bool", "show_official_pack", "Official HD Texture Pack", None,
      "<b>On</b>: the launcher's Texture Packs page shows the official HD texture pack, to download or update with one click (with Check for Updates on). <b>Off</b>: hidden, and GitHub is not asked about it. Saved in jfg_launcher.txt next to the game."),
     # Advanced Options: the switch that shows the settings for experts on their own tabs (ADVANCED_GROUPS, ADVANCED_KEYS).

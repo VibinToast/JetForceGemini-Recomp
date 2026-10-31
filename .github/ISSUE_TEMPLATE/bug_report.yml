@@ -14,7 +14,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Shown in the launcher (for example 1.2.1). If you built it yourself, the commit.
+      description: Shown in the launcher (for example 1.2.1, or 1.4.0-test.2 for a test build). If you built it yourself, the commit.
       placeholder: "1.2.1"
     validations:
       required: true

@@ -419,7 +419,7 @@
 							<div class="rl-separator"></div>
 							<div class="rl-btn-shadow"><button id="nav_exit" class="rl-btn rl-btn--exit" onclick="exit_game"
 								style="nav-up: #nav_about; nav-down: #nav_play;">Exit</button></div>
-							<div class="rl-version"><div class="rl-version-side"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recompiled')">GitHub</button></div><div class="rl-version-mid">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip">Version <span>{{update_version}}</span> is available. Click (or use the banner on the Play page) to see what is new and update.</div></div></div><div class="rl-version-side"></div></div>
+							<div class="rl-version"><div class="rl-version-side"><button class="rl-repo" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recompiled')">GitHub</button></div><div class="rl-version-mid">v{{version_number}}<div class="rl-update" data-class-rl-on="update_available" data-event-click="show_update()"><div class="rl-update-tri"></div><div class="rl-update-mark">!</div><div class="rl-update-tip"><span data-if="!update_back">Version <span>{{update_version}}</span> is available.</span><span data-if="update_back">This is a test build. The stable version, <span>{{update_version}}</span>, is available.</span> Click (or use the banner on the Play page) to see what is new and update.</div></div></div><div class="rl-version-side"></div></div>
 						</div>
 					</div>
 				</div>
@@ -465,8 +465,11 @@
 									<div class="rl-banner-shadow" data-if="update_available">
 										<button id="rl_update_banner" class="rl-banner" data-event-click="show_update()"
 											style="nav-left: #nav_play; nav-up: #rl_browse;" data-style-nav-down="official_update ? '#rl_pack_banner' : '#rl_start'">
-											<span class="rl-banner-title">Update available: <span>v{{update_version}}</span></span>
-											<span class="rl-banner-text">See what is new and update. Your saves and settings are kept.</span>
+											<span class="rl-banner-title" data-if="!update_back &amp;&amp; !update_test"><span>Update available:</span> <span>v{{update_version}}</span></span>
+											<span class="rl-banner-title" data-if="update_test"><span>Test build available:</span> <span>v{{update_version}}</span></span>
+											<span class="rl-banner-title" data-if="update_back"><span>Back to the stable version:</span> <span>v{{update_version}}</span></span>
+											<span class="rl-banner-text" data-if="!update_back">See what is new and update. Your saves and settings are kept.</span>
+											<span class="rl-banner-text" data-if="update_back">You are on a test build. Go back to the latest release. Your saves and settings are kept.</span>
 										</button>
 									</div>
 									<!-- An installed official HD texture pack with a newer version out (src/ui/ui_launcher.cpp) -->
@@ -666,20 +669,23 @@
 					</div>
 				</div>
 				<div class="rl-modal" data-class-rl-on="update_dialog"><div class="rl-modal-shadow"><div class="rl-modal-box">
-					<div class="rl-modal-title">Update available</div>
-					<div class="rl-modal-sub"><span>v{{version_number}} &gt; v{{update_version}}.</span> What is new:</div>
+					<div class="rl-modal-title" data-if="!update_back &amp;&amp; !update_test">Update available</div>
+					<div class="rl-modal-title" data-if="update_test">Test build available</div>
+					<div class="rl-modal-title" data-if="update_back">Back to the stable version</div>
+					<div class="rl-modal-sub"><span>v{{version_number}} &gt; v{{update_version}}.</span> <span data-if="!update_back">What is new:</span><span data-if="update_back">The latest release:</span></div>
 					<div class="rl-modal-notes" id="rl_update_notes" data-rml="update_changelog"></div>
 					<div class="rl-modal-status" data-if="update_stage != 0" data-class-rl-error="update_stage == 2">{{update_status}}</div>
 					<div class="rl-progress" data-if="update_stage == 1"><div class="rl-progress-bar" data-style-width="update_percent + '%'"></div></div>
-					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install">Update to <span>v{{update_version}}?</span> The game restarts when it is done. Your saves and settings are kept.</div>
+					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install &amp;&amp; !update_back">Update to <span>v{{update_version}}?</span> The game restarts when it is done. Your saves and settings are kept.</div>
+					<div class="rl-modal-ask" data-if="update_stage == 0 &amp;&amp; update_can_install &amp;&amp; update_back">Go back to <span>v{{update_version}}?</span> It replaces this test build, and the game restarts when it is done. Your saves, settings and mods are kept.</div>
 					<div class="rl-modal-ask rl-warn" data-if="update_stage == 0 &amp;&amp; !update_can_install">{{update_unavailable}}</div>
 					<div class="rl-modal-buttons">
 						<div class="rl-action-shadow" data-if="update_stage == 0"><button id="rl_update_go" class="rl-action" data-event-click="update_install()"
-							style="nav-up: none; nav-down: none; nav-left: none; nav-right: #rl_update_later;">Update now</button></div>
+							style="nav-up: none; nav-down: none; nav-left: none; nav-right: #rl_update_later;"><span data-if="!update_back">Update now</span><span data-if="update_back">Go back now</span></button></div>
 						<div class="rl-action-shadow" data-if="update_stage != 1 &amp;&amp; update_stage != 3"><button id="rl_update_later" class="rl-action rl-action--outline" data-event-click="update_close()"
 							data-style-nav-left="update_stage == 0 ? '#rl_update_go' : 'none'" data-style-nav-right="'#rl_update_page'"
 							style="nav-up: none; nav-down: none;"><span data-if="update_stage == 2">Close</span><span data-if="update_stage != 2">Later</span></button></div>
-						<div class="rl-action-shadow" data-if="update_stage == 0 || update_stage == 2"><button id="rl_update_page" class="rl-action rl-action--outline" data-event-click="open_url('https://github.com/VibinToast/JetForceGemini-Recompiled/releases/latest')"
+						<div class="rl-action-shadow" data-if="update_stage == 0 || update_stage == 2"><button id="rl_update_page" class="rl-action rl-action--outline" data-event-click="open_url(update_page)"
 							style="nav-up: none; nav-down: none; nav-left: #rl_update_later; nav-right: none;">Release page</button></div>
 					</div>
 				</div></div></div>

@@ -78,7 +78,8 @@ try {
     } else {
         # ---- this checkout, as the version given ---------------------------------------------------------------------
         $Version = $Version.TrimStart("v")
-        if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "The version must be three numbers like 1.0.0, not '$Version'." }
+        # A test build (a GitHub prerelease, offered on the launcher's Testing update channel): 1.4.0-test.4.
+        if ($Version -notmatch '^\d+\.\d+\.\d+(-test\.\d+)?$') { throw "The version must be three numbers like 1.0.0 (a test build: 1.4.0-test.1), not '$Version'." }
         $tag = "v$Version"
         $versionFile = Join-Path $root "version.txt"
         $current = if (Test-Path $versionFile) { (Get-Content $versionFile -Raw).Trim() } else { "" }
@@ -176,6 +177,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Uploading to $tag failed." }
     Write-Host "Uploaded to the GitHub release $tag."
 
+    # A test build is never published from here: the owner publishes it (as a prerelease) and links it on the issue.
+    if ($Version -match '-test\.') { Write-Host "$tag is a test build: it stays a draft for the owner to publish as a prerelease."; exit 0 }
     $have = @((Gh-Json @("release", "view", $tag, "--json", "assets")).assets | ForEach-Object { $_.name })
     $missing = @(Release-Files $Version | Where-Object { $have -notcontains $_ })
     if ($missing.Count) {
