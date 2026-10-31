@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <unordered_set>
 #include <filesystem>
 
@@ -10,6 +11,8 @@
 namespace RT64 {
     struct Application;
 }
+
+struct SDL_Window;
 
 namespace dino::renderer {
     inline const std::string special_option_texture_pack_enabled = "_recomp_texture_pack_enabled";
@@ -30,9 +33,17 @@ namespace dino::renderer {
         uint32_t get_display_framerate() const override;
         float get_resolution_scale() const override;
         void preload_common_shaders();
+#ifdef __ANDROID__
+        void android_detach_window();
+#endif
 
     private:
         std::unique_ptr<RT64::Application> app;
+#ifdef __ANDROID__
+        SDL_Window* sdl_window = nullptr;
+        std::atomic<bool> window_detached{ false };
+        void android_reattach_window();
+#endif
         std::unordered_set<std::string> enabled_texture_packs;
         std::unordered_set<std::string> secondary_disabled_texture_packs;
 
