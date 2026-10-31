@@ -87,6 +87,15 @@ namespace dino::input {
     InputField get_scanned_input();
     int get_scanned_input_index();
 
+    // JFG PORT: the connected controllers, oldest first (the Controls page's Players row). Today every one of them
+    // plays player 1. kind: 0 other, 1 Xbox, 2 PlayStation, 3 Switch; n64: the name says it is an N64-style pad.
+    struct ConnectedController {
+        std::string name;
+        int kind;
+        bool n64;
+    };
+    std::vector<ConnectedController> get_connected_controllers();
+
     struct DefaultN64Mappings {
         std::vector<InputField> a;
         std::vector<InputField> b;

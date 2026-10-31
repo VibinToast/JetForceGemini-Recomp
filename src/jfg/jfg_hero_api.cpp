@@ -1,17 +1,25 @@
 // Jet Force Gemini port: the hero part of the mod API (API version 4): a mod can take over a hero's control, read the
 // controller and camera, read the level's collision triangles and floors, and hurt objects. Built for the custom-hero
-// test (Recomp-Docs MARIO_TEST.md); the layouts are in mod_api/jfg_api.h.
+// test (Recomp-Docs MARIO_TEST.md); the layouts are in mod_api/jfg_api.h. Version 5 added what the official mods use
+// (Recomp-Docs OFFICIAL_MODS_PLAN.md): toggled buttons, a hero's dash and protection, Floyd and his shots, setting
+// enemies alight or electrocuting them, ground fire, the flamethrower's and shocker's reach.
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstring>
 
 #include "librecomp/overlays.hpp"
 #include "jfg_api.h"
 #include "jfg_fields.h"
 #include "jfg_game.h"
 #include "jfg_hooks.h"
+#include "jfg_per_mod.h"
 #include "jfg_port.h"
+#include <chrono>
+#include <map>
 
 extern "C" void controlReadJoypad(uint8_t* rdram, recomp_context* ctx);
+extern "C" void trackNearestIntersection(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackPolyHeight(uint8_t* rdram, recomp_context* ctx);
 extern "C" void trackGetBlock(uint8_t* rdram, recomp_context* ctx);
 extern "C" void mainGetGameCharacter(uint8_t* rdram, recomp_context* ctx);
@@ -20,6 +28,27 @@ extern "C" void frontFlashScreen(uint8_t* rdram, recomp_context* ctx);
 extern "C" void camSetFOV(uint8_t* rdram, recomp_context* ctx);
 extern "C" void controlSelectNextWeapon(uint8_t* rdram, recomp_context* ctx);
 extern "C" void controlSelectPreviousWeapon(uint8_t* rdram, recomp_context* ctx);
+extern "C" void objSetupObject(uint8_t* rdram, recomp_context* ctx);
+extern "C" void objFreeObject(uint8_t* rdram, recomp_context* ctx);
+extern "C" void explosionStart(uint8_t* rdram, recomp_context* ctx);
+extern "C" void camStartShake(uint8_t* rdram, recomp_context* ctx);
+extern "C" void explosionAddBlast(uint8_t* rdram, recomp_context* ctx);
+extern "C" void shockwaveStart(uint8_t* rdram, recomp_context* ctx);
+extern "C" void hitsCheckLineOfSight(uint8_t* rdram, recomp_context* ctx);
+extern "C" void SetSquaddieOnFire(uint8_t* rdram, recomp_context* ctx);
+extern "C" void squadsElectrocuteSquaddie(uint8_t* rdram, recomp_context* ctx);
+extern "C" void squadsPlayerShootsSquaddie(uint8_t* rdram, recomp_context* ctx);
+extern "C" void amSndPlay(uint8_t* rdram, recomp_context* ctx);
+extern "C" void amSndPlayXYZ(uint8_t* rdram, recomp_context* ctx);
+extern "C" void charSpeak(uint8_t* rdram, recomp_context* ctx);
+extern "C" void func_overlay_15_00005180_1F18B00(uint8_t* rdram, recomp_context* ctx); // Vela: set her move (obj, data, move, frame)
+extern "C" void func_overlay_16_00004F78_1F22F90(uint8_t* rdram, recomp_context* ctx); // Juno: the same
+extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
+namespace jfg { bool hud_in_corners(); void hud_area(float& left, float& right); } // jfg_hud_corners.cpp
+namespace jfg { int asset_number(const std::string& ref); } // jfg_assets.cpp
+namespace jfg { void overlay_size_now(float* out); } // jfg_overlay.cpp
+namespace jfg { void claim_for_mod(uint32_t obj, size_t mod_index); } // jfg_object_claims.cpp
+void squad_multiplier_export(uint8_t* rdram, recomp_context* ctx, size_t mod_index); // jfg_squad_multiplier.cpp
 
 namespace jfg::api {
 // A camera a mod set this tick (jfg_camera_set), applied by the camera step's wrapper.
@@ -32,7 +61,6 @@ namespace {
 constexpr uint32_t ADDR_track = 0x800A0D60;      // Track*, the level's track (track.c)
 constexpr uint32_t ADDR_controlcam = 0x800F6DC0; // Camera*, the camera the hero's control steers by
 constexpr uint32_t ADDR_controlXjoy = 0x800F6DAC, ADDR_controlYjoy = 0x800F6DB0; // s32, filled by controlReadJoypad
-constexpr uint32_t ADDR_ObjList = 0x800F2CA4, ADDR_ObjListCount = 0x800F2CA8;
 constexpr int CHARACTERS = 3; // Vela, Juno, Lupus
 
 // The hero's per-tick data (Obj::Data of a hero, ControlPlayer in the decomp's charControl.h).
@@ -42,7 +70,48 @@ using OldX     = Field<float, 0x3C>;    // the position before this tick's move
 using OldY     = Field<float, 0x40>;
 using OldZ     = Field<float, 0x44>;
 using BodyYaw  = Field<uint16_t, 0x11C>;
+using PushX      = Field<float, 0x6C>;     // a push (knockback): world x and z per 1/60 s tick, the move functions
+using PushZ      = Field<float, 0x70>;     // add it while PushTicks runs, and walls stop it as they stop walking
+using PushTicks  = Field<int8_t, 0x149>;
+using State      = Field<uint8_t, 0x568>;  // low 4 bits: 0 walk/run, 1 stand, 2 crouch, 3 air, 4 swim, 5/11 aim, 10 dead
+using SideMoving = Field<uint8_t, 0x56C>;  // set while the hero moves sideways (a strafe or a roll)
+using Roll       = Field<uint8_t, 0x584>;  // a roll under way: 1 left, 2 right (3, 4 crouched); its speed follows a curve
+using Protected  = Field<int16_t, 0x5C8>;  // 60 Hz ticks of protection: damage is dropped, enemies don't aim at it
+using Floyd      = Field<uint32_t, 0x50C>; // Floyd's object while he follows this hero
+using FloydFlown = Field<uint8_t, 0x10D>;  // bit 0: the player flies Floyd
+using Beam       = Field<uint32_t, 0x560>; // the shocker's beam object
+using Flames     = Field<uint32_t, 0x564>; // the flamethrower's particles
 }
+constexpr uint32_t OVERLAY_3_ROM = 0x01ED54E0;         // the squads' code (overlay 3)
+constexpr uint32_t ADDR_cooperativeGame = 0x800A4FC8;  // u8: a second player flies Floyd
+constexpr int16_t KIND_SQUAD_MEMBER = 0x18;
+// The shocker's beam (Obj::Data of object 0xB6, behaviour 0x98).
+namespace Beam {
+using EndX   = Field<float, 0xA48>;
+using EndY   = Field<float, 0xA4C>;
+using EndZ   = Field<float, 0xA50>;
+using Active = Field<uint8_t, 0xA7D>;
+}
+// The flamethrower's block (Hero::Flames): 30 particles of 0x34 bytes from +0x08.
+constexpr uint32_t FLAME_FIRST = 0x08, FLAME_SIZE = 0x34, FLAME_X = 0x00, FLAME_LIFE = 0x2C;
+constexpr int FLAMES = 30;
+
+uint32_t hero_data(uint32_t hero) {
+    if (!valid_ptr(hero) || Obj::Kind::get(hero) != 1) return 0; // behaviour 1: a hero
+    const uint32_t data = Obj::Data::get(hero);
+    return valid_ptr(data) ? data : 0;
+}
+
+bool is_squad_member(uint32_t obj) {
+    return valid_ptr(obj) && Obj::Kind::get(obj) == KIND_SQUAD_MEMBER && valid_ptr(Obj::Data::get(obj)) &&
+           jfg_overlay_loaded_at(OVERLAY_3_ROM) != 0;
+}
+
+// A spawn entry for objSetupObject, in the gap call_game leaves below $sp (objSetupObject copies it).
+uint32_t entry_at(recomp_context* ctx) { return ((uint32_t)ctx->r29 - 0x80u) & ~0x7u; }
+
+int16_t angle(float y, float x) { return (int16_t)(int32_t)std::lround(std::atan2(y, x) * (32768.0f / 3.14159265f)); }
+
 
 bool g_takeover[CHARACTERS] = {};
 bool g_game_control[CHARACTERS] = {}; // a taken-over hero runs the game's control code (jfg_hero_game_control)
@@ -100,6 +169,12 @@ void hero_select_weapon(uint8_t* rdram_, recomp_context* ctx) {
     const recomp_context saved = *ctx;
     call_game(direction > 0 ? controlSelectNextWeapon : controlSelectPreviousWeapon, ctx, { obj, data });
     *ctx = saved;
+    // The control code puts back the weapon it last chose (+0x585) when the one in hand differs, as its own buttons
+    // set it: it is the new one now.
+    g_rdram = rdram_;
+    const int c = rd8(data + 1) & 3;
+    const uint32_t ch = c < 3 ? character_ptr(c) : 0;
+    if (valid_ptr(ch)) wr8(data + 0x585, Character::CurrentWeapon::get(ch));
 }
 
 // jfg_input_get(JfgInput* out): the first player's controller as the hero's control reads it this tick.
@@ -128,6 +203,34 @@ void camera_get(uint8_t* rdram_, recomp_context* ctx) {
     wrf(out + 0x08, Camera::PosZ::get(cam));
     wr32(out + 0x0C, Camera::Yaw::get(cam));
     wr32(out + 0x10, Camera::Pitch::get(cam));
+}
+
+// jfg_world_to_screen(const float* world, float* out): where a point of the level shows on screen, in the overlay's
+// units (jfg_overlay_size): out[0] x, out[1] y, out[2] its distance in front of the camera, out[3] overlay units per
+// level unit at that distance (to size a picture drawn there). 1 if it is in front of the camera, else 0 (out not
+// filled). It uses the game's view-projection matrix of the frame (D_800FAAF0, camera.c: view x perspective, row
+// vectors), which maps the middle 4:3 of the picture: RT64's widescreen only widens it at the sides, so the 4:3 half
+// width (160 units of 240 high) is the scale in both modes.
+void world_to_screen(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    constexpr uint32_t VIEW_PROJ = 0x800FAAF0, PERSPECTIVE = 0x800FAA70;
+    const uint32_t in = (uint32_t)ctx->r4, out = (uint32_t)ctx->r5;
+    ctx->r2 = 0;
+    if (in == 0 || out == 0 || rd32(ADDR_mainGameMode) != 0) return;
+    const float v[4] = { rdf(in), rdf(in + 4), rdf(in + 8), 1.0f };
+    float clip[4];
+    for (int j = 0; j < 4; j++) {
+        clip[j] = 0.0f;
+        for (int i = 0; i < 4; i++) clip[j] += v[i] * rdf(VIEW_PROJ + (uint32_t)(i * 16 + j * 4));
+    }
+    if (clip[3] < 1.0f) return;
+    float screen[2];
+    jfg::overlay_size_now(screen);
+    wrf(out + 0, screen[0] * 0.5f + clip[0] / clip[3] * 160.0f);
+    wrf(out + 4, 120.0f - clip[1] / clip[3] * 120.0f);
+    wrf(out + 8, clip[3]);
+    wrf(out + 12, rdf(PERSPECTIVE + 5 * 4) * 120.0f / clip[3]); // [1][1]: the vertical scale
+    ctx->r2 = 1;
 }
 
 // Calls fn(segment, batch flags, texture, first face, end face, first vertex) for every batch of the level's track.
@@ -297,6 +400,37 @@ void objects_near(uint8_t* rdram_, recomp_context* ctx) {
         wrf(o + 0x08, Damage::CentreY::get(found[i].dmg));
         wrf(o + 0x0C, Damage::CentreZ::get(found[i].dmg));
         wr32(o + 0x10, (uint32_t)(int32_t)Damage::Health::get(found[i].dmg));
+    }
+    ctx->r2 = (gpr)n;
+}
+
+// jfg_objects_of_kind(int kind, JfgObjectInfo* out, int max): the level's objects of that kind (Obj::Kind, their
+// behaviour: 60 keys, 98 chests, 61 health, ...) that are shown (none of the transform's hidden flags, 0xC00, which
+// objPrintObject skips: a pickup taken), with their place; returns how many there are (at most max copied).
+// JfgObjectInfo: object, f32 x, y, z, s32 kind (0x14 bytes).
+void objects_of_kind(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const int kind = (int)(int32_t)ctx->r4;
+    const uint32_t out = (uint32_t)ctx->r5;
+    const int max = (int)ctx->r6;
+    int n = 0;
+    const uint32_t list = rd32(ADDR_ObjList);
+    const int count = (int)rd32(ADDR_ObjListCount);
+    if (valid_ptr(list) && count > 0 && count < 4096) {
+        for (int i = 0; i < count; i++) {
+            const uint32_t obj = rd32(list + 4u * (uint32_t)i);
+            if (!valid_ptr(obj) || Obj::Kind::get(obj) != kind) continue;
+            if (rd16(obj + 0x06) & 0xC00) continue; // hidden
+            if (out != 0 && n < max) {
+                const uint32_t o = out + 0x14u * (uint32_t)n;
+                wr32(o + 0x00, obj);
+                wrf(o + 0x04, Obj::PosX::get(obj));
+                wrf(o + 0x08, Obj::PosY::get(obj));
+                wrf(o + 0x0C, Obj::PosZ::get(obj));
+                wr32(o + 0x10, (uint32_t)kind);
+            }
+            n++;
+        }
     }
     ctx->r2 = (gpr)n;
 }
@@ -502,11 +636,831 @@ void hero_heads(uint8_t* rdram_, recomp_context* ctx) {
 
 // jfg_hud_hide_health(int character, int hide): while hidden, the game's health meter is not drawn for that hero (a
 // mod draws its own).
-void hud_hide_health(uint8_t*, recomp_context* ctx) {
+// Hidden while any mod asks.
+PerMod<bool> g_hide_health_requests[CHARACTERS];
+void hud_hide_health(uint8_t*, recomp_context* ctx, size_t mod_index) {
     const int character = (int)ctx->r4;
-    if (character >= 0 && character < CHARACTERS) g_hide_health[character] = ctx->r5 != 0;
+    if (character < 0 || character >= CHARACTERS) return;
+    g_hide_health_requests[character].set(mod_index, ctx->r5 != 0, false);
+    g_hide_health[character] = g_hide_health_requests[character].any();
+}
+
+// jfg_hud_in_corners(void): 1 while the single-player HUD is at the window's edges (HUD in Screen Corners, in
+// widescreen), 0 while it is in the middle 4:3 area.
+void hud_in_corners_export(uint8_t*, recomp_context* ctx) { ctx->r2 = jfg::hud_in_corners() ? 1 : 0; }
+// jfg_hud_area(float* out): out[0] the single-player HUD's left edge, out[1] its right edge, in overlay units.
+void hud_area_export(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t out = (uint32_t)ctx->r4;
+    if (out < 0x80000400u || out >= 0xA0000000u) return; // the game's memory or a mod's
+    float left, right;
+    jfg::hud_area(left, right);
+    wrf(out, left);
+    wrf(out + 4, right);
+}
+// jfg_hud_corner(int wanted) -> the screen corner (0 top left, 1 top right, 2 bottom left, 3 bottom right) the calling
+// mod's HUD piece goes in: the one it wants unless another mod holds it, else the next free one round the screen.
+// A mod holds its corner while it keeps asking (each frame it draws); one not asked for in a second is free again.
+struct CornerHold { size_t mod; std::chrono::steady_clock::time_point at; };
+std::map<int, CornerHold> g_corners;
+void hud_corner(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const int wanted = (int)ctx->r4 & 3;
+    const auto now = std::chrono::steady_clock::now();
+    for (auto it = g_corners.begin(); it != g_corners.end();) {
+        it = (now - it->second.at > std::chrono::seconds(1) || it->second.mod == mod_index) ? g_corners.erase(it) : std::next(it);
+    }
+    static const int round_screen[4] = { 0, 1, 3, 2 }; // clockwise: top left, top right, bottom right, bottom left
+    int at = 0;
+    while (round_screen[at] != wanted) at++;
+    int corner = wanted;
+    for (int k = 0; k < 4; k++) {
+        const int c = round_screen[(at + k) % 4];
+        if (!g_corners.count(c)) { corner = c; break; }
+    }
+    g_corners[corner] = { mod_index, now };
+    ctx->r2 = (gpr)corner;
+}
+
+// --- toggled buttons (input thread) --------------------------------------------------------------------------------
+std::atomic<uint16_t> g_toggle_mask{ 0 };    // jfg_input_toggle: buttons that toggle
+std::atomic<uint16_t> g_toggle_latched{ 0 }; // ... and read as held now
+std::atomic<uint16_t> g_toggle_release{ 0 }; // jfg_input_toggle_release: let go at the next poll
+std::atomic<uint16_t> g_blocked{ 0 };        // jfg_input_block: buttons that read as let go
+
+// Each mod's blocked and toggled buttons are kept apart (game thread) and combined for the input thread: a button stays
+// blocked or toggled while any mod asks.
+std::map<size_t, uint16_t> g_mod_blocked, g_mod_toggles;
+uint16_t combined(const std::map<size_t, uint16_t>& masks) {
+    uint16_t all = 0;
+    for (const auto& [mod, mask] : masks) all |= mask;
+    return all;
+}
+
+// jfg_input_block(unsigned int buttons, int on): while on, those N64 buttons read as not pressed (a dodge that may not
+// fire, say).
+void input_block(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const uint16_t mask = (uint16_t)ctx->r4;
+    uint16_t& mine = g_mod_blocked[mod_index];
+    mine = ctx->r5 != 0 ? (uint16_t)(mine | mask) : (uint16_t)(mine & ~mask);
+    g_blocked.store(combined(g_mod_blocked));
+}
+
+// jfg_input_toggle(unsigned int buttons, int on): those N64 buttons toggle: a press holds them down, the next lets go.
+void input_toggle(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const uint16_t mask = (uint16_t)ctx->r4;
+    uint16_t& mine = g_mod_toggles[mod_index];
+    mine = ctx->r5 != 0 ? (uint16_t)(mine | mask) : (uint16_t)(mine & ~mask);
+    const uint16_t all = combined(g_mod_toggles);
+    g_toggle_mask.store(all);
+    g_toggle_latched.fetch_and(all); // buttons no mod toggles any more are let go
+}
+
+// jfg_input_toggle_release(unsigned int buttons): the mod's toggled buttons held now are let go.
+void input_toggle_release(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const auto it = g_mod_toggles.find(mod_index);
+    if (it != g_mod_toggles.end()) g_toggle_release.fetch_or((uint16_t)(ctx->r4 & it->second));
+}
+
+// jfg_input_toggled(void): the toggled buttons held now.
+void input_toggled(uint8_t*, recomp_context* ctx) { ctx->r2 = g_toggle_latched.load(); }
+
+// --- heroes -------------------------------------------------------------------------------------------------------
+// jfg_hero_get(void): the first player's hero object, or NULL.
+void hero_get(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = rd32(ADDR_mainGameMode) == 0 ? player_object(ctx) : 0;
+    ctx->r2 = (gpr)(int32_t)(hero_data(obj) != 0 ? obj : 0);
+}
+
+// jfg_hero_aim(void* hero, JfgAim* out): { s32 yaw, pitch (0x10000 a turn, pitch positive up); s32 aiming (the aim
+// view), pitched (aiming or with a target: the pitch counts, else the game's shots go level); f32 dir[3] (unit, with
+// the pitch when pitched, else level) } from the hero's control data (+0x1CA yaw, +0x1CC pitch, +0x568 state 5 / 11
+// aiming, +0xFC target; decomp: grenadeInit, func_800386B0). 1, or 0 if it is not a hero.
+bool mod_ptr(uint32_t p); // below
+constexpr uint32_t AIM_YAW = 0x1CA, AIM_PITCH = 0x1CC, AIM_STATE = 0x568, AIM_TARGET = 0xFC, AIM_BARREL = 0x544;
+void hero_aim(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t data = hero_data((uint32_t)ctx->r4), out = (uint32_t)ctx->r5;
+    ctx->r2 = 0;
+    if (data == 0 || !mod_ptr(out)) return;
+    const uint16_t yaw = rd16(data + AIM_YAW), pitch_raw = rd16(data + AIM_PITCH);
+    const uint8_t state = rd8(data + AIM_STATE);
+    const bool aiming = state == 5 || state == 11, pitched = aiming || rd32(data + AIM_TARGET) != 0;
+    const uint16_t pitch = pitched ? pitch_raw : 0;
+    constexpr float TO_RAD = 3.14159265f / 32768.0f;
+    const float y = (float)(int16_t)yaw * TO_RAD, pt = (float)(int16_t)pitch * TO_RAD;
+    wr32(out + 0x00, yaw);
+    wr32(out + 0x04, (uint32_t)(int32_t)(int16_t)pitch_raw);
+    wr32(out + 0x08, aiming ? 1u : 0u);
+    wr32(out + 0x0C, pitched ? 1u : 0u);
+    wrf(out + 0x10, -std::sin(y) * std::cos(pt));
+    wrf(out + 0x14, std::sin(pt));
+    wrf(out + 0x18, -std::cos(y) * std::cos(pt));
+    ctx->r2 = 1;
+}
+
+// jfg_hero_barrel(void* hero, float* out): where the gun's barrel is in the world as the game keeps it (control data
+// +0x544: the held model's barrel point turned by the hand joint), x, y, z. 1, or 0 when it isn't kept (the aim view
+// draws no gun) or isn't near the hero.
+void hero_barrel(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t hero = (uint32_t)ctx->r4, data = hero_data(hero), out = (uint32_t)ctx->r5;
+    ctx->r2 = 0;
+    if (data == 0 || !mod_ptr(out)) return;
+    const uint8_t state = rd8(data + AIM_STATE);
+    if (state == 5 || state == 11) return;
+    const float bx = rdf(data + AIM_BARREL), by = rdf(data + AIM_BARREL + 4), bz = rdf(data + AIM_BARREL + 8);
+    const float dx = bx - Obj::PosX::get(hero), dy = by - Obj::PosY::get(hero), dz = bz - Obj::PosZ::get(hero);
+    if (dx * dx + dy * dy + dz * dz >= 150.0f * 150.0f) return;
+    wrf(out, bx); wrf(out + 4, by); wrf(out + 8, bz);
+    ctx->r2 = 1;
+}
+
+// jfg_hero_state(void* hero): the hero's state (low 4 bits), -1 if it is not a hero.
+void hero_state(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t data = hero_data((uint32_t)ctx->r4);
+    ctx->r2 = data != 0 ? (gpr)(Hero::State::get(data) & 0xF) : (gpr)-1;
+}
+
+// jfg_hero_weapon(void): the weapon in the first player's hand (the character's current weapon), -1 if none.
+void hero_weapon(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const int c = (int16_t)rd16(ADDR_currentCharacter);
+    const uint32_t ch = (rd32(ADDR_mainGameMode) == 0 && c >= 0 && c < 3) ? character_ptr(c) : 0;
+    ctx->r2 = (gpr)(ch != 0 ? weapons::weapon_in_hand(ch, c) : -1); // modded weapons: their ids (16 up)
+}
+
+// jfg_game_paused(void): 1 while the world stands still: the pause menu, or the settings menu with Pause in the Settings
+// Menu on (jfg_freeze_world: the game's own tick still runs then, drawing objects without moving them), or the fly camera
+// frozen.
+void game_paused(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    ctx->r2 = (jfg_freeze_world() != 0 || (int8_t)rd8(ADDR_pauseMode) != 0) ? 1 : 0;
+}
+
+// The first player's character (its saved state: health, weapons, ammo), 0 outside a level.
+uint32_t player_character() {
+    const int c = (int16_t)rd16(ADDR_currentCharacter);
+    return (rd32(ADDR_mainGameMode) == 0 && c >= 0 && c < 3) ? character_ptr(c) : 0;
+}
+
+// jfg_hero_ammo(int weapon): the first player's ammo for that weapon (0..14; 15 up: the proximity mine and modded
+// weapons, -1 when not owned), -1 outside a level.
+void hero_ammo(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t ch = player_character();
+    const int w = (int)ctx->r4;
+    if (w >= 15) { ctx->r2 = (gpr)(ch != 0 ? weapons::carried_ammo(w) : -1); return; }
+    ctx->r2 = (ch != 0 && w >= 0) ? (gpr)Character::Ammo::get(ch, (uint32_t)w) : (gpr)-1;
+}
+
+// jfg_hero_set_ammo(int weapon, int ammo): sets it (0..0xFFFF; the game keeps it at the weapon's capacity itself).
+void hero_set_ammo(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t ch = player_character();
+    const int w = (int)ctx->r4;
+    if (w >= 15) { if (ch != 0) weapons::set_carried_ammo(w, (int)ctx->r5); return; }
+    if (ch != 0 && w >= 0) Character::Ammo::set(ch, (uint32_t)w, (uint16_t)std::clamp((int)ctx->r5, 0, 0xFFFF));
+}
+
+// jfg_enemy_dying(void* enemy): 1 when the squad member is dying: no health left (it plays its death), or left with the
+// sliver of health the game gives the kinds that lie down and bleed out instead of dying at once (overlay 3's
+// SquaddieControl: at most its squadron's member health / 8 (one unit at least, ten at most) plus one). 0 otherwise,
+// -1 if it is not a squad member.
+void enemy_dying(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    if (!valid_ptr(obj) || Obj::Kind::get(obj) != KIND_SQUAD_MEMBER) { ctx->r2 = (gpr)-1; return; }
+    const uint32_t dmg = Obj::Damage::get(obj);
+    const uint32_t data = Obj::Data::get(obj);
+    const int health = valid_ptr(dmg) ? Damage::Health::get(dmg) : 0;
+    if (health <= 0) { ctx->r2 = 1; return; }
+    const uint32_t squadron = valid_ptr(data) ? SquadMemberData::Squadron::get(data) : 0;
+    const uint32_t sdata = valid_ptr(squadron) ? Obj::Data::get(squadron) : 0;
+    const int full = valid_ptr(sdata) ? SquadronData::MemberHealth::get(sdata) : 0;
+    const int sliver = std::clamp(full >> 3, 0x100, 0xA00) + 1;
+    ctx->r2 = (full > 0 && health <= sliver && health < full) ? 1 : 0;
+}
+
+// jfg_hero_push(void* hero, float x, float z, int ticks): the hero is pushed x, z level units per 1/60 s for that
+// many 1/60 s ticks (the game's knockback: walls stop it); the game eases it off after.
+void hero_push(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t data = hero_data((uint32_t)ctx->r4);
+    if (data == 0) return;
+    auto as_float = [](gpr bits) { const uint32_t v = (uint32_t)bits; float f; std::memcpy(&f, &v, 4); return f; };
+    Hero::PushX::set(data, as_float(ctx->r5));
+    Hero::PushZ::set(data, as_float(ctx->r6));
+    Hero::PushTicks::set(data, (int8_t)std::clamp((int)ctx->r7, 0, 127));
+}
+
+// jfg_hero_hit(void* hero, int units): the hero is hit as by an enemy's shot: the hero's control code takes one unit of
+// health (0x80 in the hero's data + 0x190) or two (0xC0), with its hit reaction, sound and red flash, unless the hero
+// is protected (+0x5C8) (overlays 15-17's control code, e.g. overlay_16.c's boy control).
+void hero_hit(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t data = hero_data((uint32_t)ctx->r4);
+    if (data == 0) return;
+    wr8(data + 0x190, (int)ctx->r5 >= 2 ? 0xC0 : 0x80);
+}
+
+// The hero's move setter (overlay 15 Vela's, 16 Juno's), or null for Lupus and outside a level.
+static void (*move_setter())(uint8_t*, recomp_context*) {
+    if (rd32(ADDR_mainGameMode) != 0) return nullptr;
+    const int character = (int16_t)rd16(ADDR_currentCharacter);
+    if (character == 1) return func_overlay_16_00004F78_1F22F90;
+    if (character == 0) return func_overlay_15_00005180_1F18B00;
+    return nullptr;
+}
+
+// jfg_hero_move(void* hero, int move): the hero's move (its animation, which the game's move picker carries on from:
+// 0 walk, 1 run, 0x10 standing still; 4 and 0x0E are crouched) from its start. Juno and Vela only; returns 1 if set.
+void hero_move(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const uint32_t data = hero_data(obj);
+    const auto set_move = move_setter();
+    ctx->r2 = 0;
+    if (data == 0 || set_move == nullptr) return;
+    call_game(set_move, ctx, { obj, data, (uint32_t)ctx->r5 & 0xFF, 0 }); // frame 0.0f
+    g_rdram = rdram_;
+    Obj::AnimPhase::set(obj, 0.0f);
+    ctx->r2 = 1;
+}
+
+// jfg_hero_roll(void* hero, int right): the hero rolls to its left (0) or right (1) as the game's side buttons start a
+// roll while it stands (overlay 16's func_00004934: the roll state, the roll move from its start, the sideways flag): the
+// game then plays the roll and moves the hero along the roll's speed curve. Juno and Vela only (Lupus has no roll);
+// returns 1 if it rolled.
+void hero_roll(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const bool right = ctx->r5 != 0;
+    const uint32_t data = hero_data(obj);
+    const int character = (int16_t)rd16(ADDR_currentCharacter);
+    ctx->r2 = 0;
+    if (data == 0 || rd32(ADDR_mainGameMode) != 0) return;
+    void (*set_move)(uint8_t*, recomp_context*) = nullptr;
+    uint32_t move = 0;
+    if (character == 1) { set_move = func_overlay_16_00004F78_1F22F90; move = right ? 0x0B : 0x31; }      // Juno
+    else if (character == 0) { set_move = func_overlay_15_00005180_1F18B00; move = right ? 0x0B : 0x32; } // Vela
+    if (set_move == nullptr) return;
+    Hero::Roll::set(data, right ? 2 : 1);
+    call_game(set_move, ctx, { obj, data, move, 0 }); // frame 0.0f
+    g_rdram = rdram_;
+    Obj::AnimPhase::set(obj, 0.0f);
+    Hero::SideMoving::set(data, 1);
+    ctx->r2 = 1;
+}
+
+// jfg_game_sound(int id, float x, float y, float z): the game's sound effect id, placed at x, y, z (amSndPlayXYZ, as the
+// game places its own: louder near the camera).
+void game_sound(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t id = (uint32_t)ctx->r4 & 0xFFFF;
+    call_game(amSndPlayXYZ, ctx, { id, (uint32_t)ctx->r5, (uint32_t)ctx->r6, (uint32_t)ctx->r7, 4, 0 });
+}
+
+// jfg_game_sound_flat(int id): the game's sound effect id, not placed (amSndPlay, as the game plays its menu and HUD
+// sounds): heard the same wherever the camera is.
+void game_sound_flat(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    call_game(amSndPlay, ctx, { (uint32_t)ctx->r4 & 0xFFFF, 0 });
+}
+
+// jfg_hero_speak(void* hero, int type): the hero's own voice of that type (charSpeak: the sound set for the hero
+// playing, Juno, Vela or Lupus; 0 the jump, 1 the landing, 3 being hit), as the game plays them.
+void hero_speak(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const uint32_t type = (uint32_t)ctx->r5 & 0xFF;
+    if (hero_data(obj) == 0 || type > 15) return;
+    call_game(charSpeak, ctx, { obj, type });
+}
+
+// jfg_hero_protect(void* hero, int ticks): no damage reaches the hero for at least that many 1/60 s ticks (8 at
+// least: the game's own protection, as after a level exit).
+void hero_protect(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t data = hero_data((uint32_t)ctx->r4);
+    if (data == 0) return;
+    const int ticks = std::clamp((int)ctx->r5, 8, 0x7FFF);
+    if (Hero::Protected::get(data) < ticks) Hero::Protected::set(data, (int16_t)ticks);
+}
+
+// --- Floyd --------------------------------------------------------------------------------------------------------
+// jfg_floyd_get(int* state): Floyd's object while he is with the first player's hero, or NULL. state (may be NULL):
+// 0 he follows the hero (the game's AI), 1 a player flies him (a co-op game, or the hero flying him), 2 a Floyd
+// mission.
+void floyd_get(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t state_out = (uint32_t)ctx->r4;
+    const uint32_t hero = rd32(ADDR_mainGameMode) == 0 ? player_object(ctx) : 0;
+    const uint32_t data = hero_data(hero);
+    const uint32_t floyd = data != 0 ? Hero::Floyd::get(data) : 0;
+    int state = 0;
+    if (rd8(ADDR_robotMission) != 0) state = 2;
+    else if (rd8(ADDR_cooperativeGame) != 0 || (data != 0 && (Hero::FloydFlown::get(data) & 1) != 0)) state = 1;
+    if (state_out != 0) wr32(state_out, (uint32_t)state);
+    ctx->r2 = (gpr)(int32_t)(valid_ptr(floyd) ? floyd : 0);
+}
+
+// jfg_fire_bolt(const JfgBolt* bolt): a laser bolt (Floyd's: object 0x50) from bolt's start towards its target.
+// Returns the bolt object, NULL if none was made. JfgBolt: f32 x, y, z, tx, ty, tz; s32 damage (units of health,
+// 1..127); f32 speed (Floyd's: 35); s32 life (ticks of 1/10 s; Floyd's: 30); owner (the bolts don't hit it); s32 sound
+// (-1 none; Floyd's: 0xDA).
+void fire_bolt(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t b = (uint32_t)ctx->r4;
+    ctx->r2 = 0;
+    if (b == 0) return;
+    const float x = rdf(b + 0x00), y = rdf(b + 0x04), z = rdf(b + 0x08);
+    const float dx = x - rdf(b + 0x0C), dy = rdf(b + 0x10) - y, dz = z - rdf(b + 0x14);
+    const uint32_t e = entry_at(ctx);
+    for (uint32_t i = 0; i < 0x24; i += 4) wr32(e + i, 0);
+    wr16(e + 0x00, 0x50);
+    wr8(e + 0x02, 0x24);
+    wr16(e + 0x04, (uint16_t)(int16_t)std::clamp(x, -32768.0f, 32767.0f));
+    wr16(e + 0x06, (uint16_t)(int16_t)std::clamp(y, -32768.0f, 32767.0f));
+    wr16(e + 0x08, (uint16_t)(int16_t)std::clamp(z, -32768.0f, 32767.0f));
+    wr8(e + 0x0A, (uint8_t)std::clamp((int)rd32(b + 0x18), 1, 127));
+    wr8(e + 0x0B, (uint8_t)std::clamp((int)rd32(b + 0x20), 1, 255));
+    wr16(e + 0x0C, (uint16_t)angle(dx, dz)); // as Floyd's code works them out (Arctanf)
+    wr16(e + 0x0E, (uint16_t)angle(dy, std::sqrt(dx * dx + dz * dz)));
+    wr8(e + 0x13, 0xFF);
+    wrf(e + 0x14, rdf(b + 0x1C) > 0.0f ? rdf(b + 0x1C) : 35.0f);
+    wr32(e + 0x18, rd32(b + 0x24));
+    wr32(e + 0x1C, 0x800A1790); // Floyd's bolts' effect tables
+    wr32(e + 0x20, 0x800A1850);
+    const uint32_t bolt = call_game(objSetupObject, ctx, { e, 1 });
+    if (valid_ptr(bolt)) wr32(bolt + 0x3C, 0);
+    const int sound = (int)rd32(b + 0x28);
+    if (sound >= 0) call_game(amSndPlay, ctx, { (uint32_t)sound, 0 });
+    ctx->r2 = (gpr)(int32_t)(valid_ptr(bolt) ? bolt : 0);
+}
+
+// jfg_fire_plasma(const JfgPlasma* plasma): a plasma ball (the plasma shotgun's: object 0x13E, kind 0xA3, its code
+// twisterInit / twisterControl in overlay 131) from plasma's start towards its target, as shoot_plasmashot spawns it.
+// JfgPlasma: f32 x, y, z, tx, ty, tz; s32 size (its damage in units of health, 1..15; drawn and sized as the
+// shotgun's 1..4 charge, larger ones as 4); f32 speed (0: it stays where it is); s32 time (1/10 s); owner (whose shot it
+// is: its hits count as that hero's plasma shotgun). Returns the ball, NULL if none was made.
+void fire_plasma(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
+    g_rdram = rdram_;
+    const uint32_t b = (uint32_t)ctx->r4;
+    ctx->r2 = 0;
+    if (b == 0) return;
+    const float x = rdf(b + 0x00), y = rdf(b + 0x04), z = rdf(b + 0x08);
+    const float dx = x - rdf(b + 0x0C), dy = rdf(b + 0x10) - y, dz = z - rdf(b + 0x14);
+    const uint32_t e = entry_at(ctx);
+    for (uint32_t i = 0; i < 0x18; i += 4) wr32(e + i, 0);
+    wr16(e + 0x00, 0x13E);
+    wr8(e + 0x02, 0x18);
+    wr16(e + 0x04, (uint16_t)(int16_t)std::clamp(x, -32768.0f, 32767.0f));
+    wr16(e + 0x06, (uint16_t)(int16_t)std::clamp(y, -32768.0f, 32767.0f));
+    wr16(e + 0x08, (uint16_t)(int16_t)std::clamp(z, -32768.0f, 32767.0f));
+    wr8(e + 0x0A, (uint8_t)std::clamp((int)rd32(b + 0x18), 1, 15));
+    wr8(e + 0x0B, (uint8_t)std::clamp((int)rd32(b + 0x20), 1, 255));
+    wr16(e + 0x0C, (uint16_t)angle(dx, dz));
+    wr16(e + 0x0E, (uint16_t)angle(dy, std::sqrt(dx * dx + dz * dz)));
+    wrf(e + 0x10, std::max(0.0f, rdf(b + 0x1C)));
+    wr32(e + 0x14, rd32(b + 0x24));
+    const uint32_t ball = call_game(objSetupObject, ctx, { e, 1 });
+    if (valid_ptr(ball)) wr32(ball + 0x3C, 0);
+    claim_for_mod(ball, mod_index); // the calling mod's ball (jfg_object_claim)
+    ctx->r2 = (gpr)(int32_t)(valid_ptr(ball) ? ball : 0);
+}
+
+// jfg_level_ray(const float* from, const float* to, float* out): the first point of the level (its track, as a plasma
+// ball tests its flight: trackNearestIntersection) on the line from -> to. 1 if there is one, with out = x, y, z of it
+// and the surface's normal (nx, ny, nz, facing from); 0 otherwise. The result (+0x04 the point, +0x20 its distance)
+// carries no normal the port has found, so it is the plane of three such hits on lines a little apart.
+void level_ray(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t a = (uint32_t)ctx->r4, b = (uint32_t)ctx->r5, out = (uint32_t)ctx->r6;
+    ctx->r2 = 0;
+    if (a == 0 || b == 0 || out == 0) return;
+    const float ax = rdf(a), ay = rdf(a + 4), az = rdf(a + 8), bx = rdf(b), by = rdf(b + 4), bz = rdf(b + 8);
+    float dx = bx - ax, dy = by - ay, dz = bz - az;
+    const float len = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (len < 0.001f) return;
+    dx /= len; dy /= len; dz /= len;
+    const uint32_t buf = ((uint32_t)ctx->r29 - 0x80u) & ~0x7u; // in the gap call_game leaves below $sp
+    auto cast = [&](float ox, float oy, float oz, float* hit) -> bool {
+        g_rdram = rdram_;
+        wrf(buf + 0, ax + ox); wrf(buf + 4, ay + oy); wrf(buf + 8, az + oz);
+        wrf(buf + 12, bx + ox); wrf(buf + 16, by + oy); wrf(buf + 20, bz + oz);
+        const bool found = (call_game(trackNearestIntersection, ctx, { 0u, buf, buf + 12, buf + 24, 0u, 0u }) & 0xFF) != 0;
+        g_rdram = rdram_;
+        if (!found) return false;
+        hit[0] = rdf(buf + 24 + 4); hit[1] = rdf(buf + 24 + 8); hit[2] = rdf(buf + 24 + 12);
+        return std::isfinite(hit[0]) && std::isfinite(hit[1]) && std::isfinite(hit[2]);
+    };
+    float p[3];
+    if (!cast(0, 0, 0, p)) return;
+    // Four lines beside the first, 6 units off across it (right, up, left, down), each started 24 units further back
+    // and run 24 further on: a start right at the surface can be behind it and miss. Hits more than 30 units from the
+    // first are on another surface (an edge) and left out; the plane is that of the first hit and the two others that
+    // span it best.
+    float ux = 0, uy = 1, uz = 0;
+    if (std::fabs(dy) > 0.9f) { ux = 1; uy = 0; }
+    float sx = dy * uz - dz * uy, sy = dz * ux - dx * uz, sz = dx * uy - dy * ux; // side = d x up
+    const float sl = std::sqrt(sx * sx + sy * sy + sz * sz);
+    sx /= sl; sy /= sl; sz /= sl;
+    const float tx = sy * dz - sz * dy, ty = sz * dx - sx * dz, tz = sx * dy - sy * dx; // across both
+    constexpr float OFF = 6.0f, BACK = 24.0f;
+    const float offs[4][3] = { { sx, sy, sz }, { tx, ty, tz }, { -sx, -sy, -sz }, { -tx, -ty, -tz } };
+    float near[4][3];
+    int count = 0;
+    for (const auto& o : offs) {
+        float h[3];
+        // Back by BACK along the line at the start, on by BACK at the end: offset the start and end differently.
+        g_rdram = rdram_;
+        wrf(buf + 0, ax + o[0] * OFF - dx * BACK); wrf(buf + 4, ay + o[1] * OFF - dy * BACK); wrf(buf + 8, az + o[2] * OFF - dz * BACK);
+        wrf(buf + 12, bx + o[0] * OFF + dx * BACK); wrf(buf + 16, by + o[1] * OFF + dy * BACK); wrf(buf + 20, bz + o[2] * OFF + dz * BACK);
+        const bool found = (call_game(trackNearestIntersection, ctx, { 0u, buf, buf + 12, buf + 24, 0u, 0u }) & 0xFF) != 0;
+        g_rdram = rdram_;
+        if (!found) continue;
+        h[0] = rdf(buf + 24 + 4); h[1] = rdf(buf + 24 + 8); h[2] = rdf(buf + 24 + 12);
+        if (!std::isfinite(h[0]) || !std::isfinite(h[1]) || !std::isfinite(h[2])) continue;
+        const float ex = h[0] - p[0], ey = h[1] - p[1], ez = h[2] - p[2];
+        if (ex * ex + ey * ey + ez * ez > 30.0f * 30.0f) continue;
+        near[count][0] = h[0]; near[count][1] = h[1]; near[count][2] = h[2];
+        count++;
+    }
+    // If the plane can't be measured: a floor or ceiling for a line going steeply down or up, else a wall facing back.
+    float nx, ny, nz;
+    if (std::fabs(dy) > 0.5f) {
+        nx = 0; ny = dy > 0 ? -1.0f : 1.0f; nz = 0;
+    } else {
+        const float hl = std::sqrt(dx * dx + dz * dz);
+        nx = -dx / hl; ny = 0; nz = -dz / hl;
+    }
+    float best = 0.0f;
+    for (int i = 0; i < count; i++) {
+        for (int j = i + 1; j < count; j++) {
+            const float e1x = near[i][0] - p[0], e1y = near[i][1] - p[1], e1z = near[i][2] - p[2];
+            const float e2x = near[j][0] - p[0], e2y = near[j][1] - p[1], e2z = near[j][2] - p[2];
+            float cx = e1y * e2z - e1z * e2y, cy = e1z * e2x - e1x * e2z, cz = e1x * e2y - e1y * e2x;
+            const float cl = std::sqrt(cx * cx + cy * cy + cz * cz);
+            if (cl <= best || cl < 1.0f) continue;
+            best = cl;
+            cx /= cl; cy /= cl; cz /= cl;
+            if (cx * dx + cy * dy + cz * dz > 0) { cx = -cx; cy = -cy; cz = -cz; }
+            nx = cx; ny = cy; nz = cz;
+        }
+    }
+    wrf(out + 0, p[0]); wrf(out + 4, p[1]); wrf(out + 8, p[2]);
+    wrf(out + 12, nx); wrf(out + 16, ny); wrf(out + 20, nz);
+    ctx->r2 = 1;
+}
+
+// jfg_line_of_sight(void* from, void* to, const float* a, const float* b): 1 when nothing (the level, or an object
+// with a hit model other than from and to) stands between points a and b (x, y, z each).
+void line_of_sight(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t from = (uint32_t)ctx->r4, to = (uint32_t)ctx->r5, a = (uint32_t)ctx->r6, b = (uint32_t)ctx->r7;
+    if (a == 0 || b == 0) { ctx->r2 = 0; return; }
+    const uint32_t blocked = call_game(hitsCheckLineOfSight, ctx, { from, to, rd32(a), rd32(a + 4), rd32(a + 8), rd32(b), rd32(b + 4), rd32(b + 8) });
+    ctx->r2 = blocked == 0 ? 1 : 0;
+}
+
+// --- enemies ------------------------------------------------------------------------------------------------------
+// jfg_enemy_alert(void* enemy, void* shooter): the enemy was shot by shooter (a hero): its squad turns on it, as
+// after a hit by the hero's weapons. Squad members only.
+void enemy_alert(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4, shooter = (uint32_t)ctx->r5;
+    if (is_squad_member(obj) && valid_ptr(shooter)) call_game(squadsPlayerShootsSquaddie, ctx, { obj, shooter });
+}
+
+// jfg_enemy_ignite(void* enemy, void* shooter): the enemy catches fire as from the flamethrower: it screams, runs for
+// water and burns down (shooter, if not NULL, is who set it alight). Squad members only.
+void enemy_ignite(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4, shooter = (uint32_t)ctx->r5;
+    if (!is_squad_member(obj)) return;
+    if (valid_ptr(shooter)) call_game(squadsPlayerShootsSquaddie, ctx, { obj, shooter });
+    call_game(SetSquaddieOnFire, ctx, { obj });
+}
+
+// jfg_enemy_electrocute(void* enemy, void* shooter): the enemy is electrocuted: held in place, shaking and losing
+// health for about 2 seconds, with sparks. Squad members only; one already electrocuted is left alone.
+void enemy_electrocute(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4, shooter = (uint32_t)ctx->r5;
+    if (!is_squad_member(obj)) return;
+    if (valid_ptr(shooter)) call_game(squadsPlayerShootsSquaddie, ctx, { obj, shooter });
+    call_game(squadsElectrocuteSquaddie, ctx, { obj });
+}
+
+// --- effects ------------------------------------------------------------------------------------------------------
+// jfg_fx_fire(float x, float y, float z, int scale, int ticks): a fire on the ground (the one explosions leave:
+// flames, smoke and light; it hurts nothing by itself) of scale 1..127 (32 a small one) burning for ticks of 1/10 s.
+// Returns the fire object, NULL if none was made.
+void fx_fire(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    auto as_float = [](gpr bits) { const uint32_t v = (uint32_t)bits; float f; std::memcpy(&f, &v, 4); return f; };
+    const float x = ctx->f12.fl, y = ctx->f14.fl, z = as_float(ctx->r6);
+    const int scale = (int)ctx->r7;
+    const int ticks = (int)rd32((uint32_t)ctx->r29 + 0x10);
+    const uint32_t e = entry_at(ctx);
+    for (uint32_t i = 0; i < 0x10; i += 4) wr32(e + i, 0);
+    wr16(e + 0x00, 0x13D);
+    wr8(e + 0x02, 0x0C);
+    wr16(e + 0x04, (uint16_t)(int16_t)std::clamp(x, -32768.0f, 32767.0f));
+    wr16(e + 0x06, (uint16_t)(int16_t)std::clamp(y, -32768.0f, 32767.0f));
+    wr16(e + 0x08, (uint16_t)(int16_t)std::clamp(z, -32768.0f, 32767.0f));
+    wr8(e + 0x0A, (uint8_t)std::clamp(scale, 1, 127));
+    wr8(e + 0x0B, (uint8_t)std::clamp(ticks, 1, 127));
+    const uint32_t fire = call_game(objSetupObject, ctx, { e, 1 });
+    if (valid_ptr(fire)) wr32(fire + 0x3C, 0);
+    ctx->r2 = (gpr)(int32_t)(valid_ptr(fire) ? fire : 0);
+}
+
+// --- objects and effects for mods' weapons (since version 6) ---------------------------------------------------------
+constexpr uint32_t OBJ_SCALE = 0x08;   // the object's size (its transform's scale; 1.0 = its definition's)
+constexpr uint32_t OBJ_PHYSICS = 0x7C; // ObjPhysics*, when its definition has a physics block (+0xD0); byte 0: flags
+constexpr uint8_t PHYS_AT_REST = 2;
+
+// A pointer a mod passed: the game's memory, or mods' own above 0x81000000 (docs/MEMORY.md).
+bool mod_ptr(uint32_t p) { return p >= 0x80000400u && p < 0xA0000000u; }
+
+uint32_t s16_arg(float v) { return (uint32_t)(int32_t)(int16_t)std::clamp(v, -32768.0f, 32767.0f); }
+uint32_t float_bits(float f) { uint32_t v; std::memcpy(&v, &f, 4); return v; }
+
+// jfg_spawn(const JfgSpawn* s): { s32 object; f32 x, y, z, vx, vy, vz; s32 yaw; } an object of that id (any object
+// type, a pack's included) at x, y, z, as a weapon's shot is made (objSetupObject, list 1: gone with the level). With
+// a physics block (definition +0xD0) it is set flying at vx, vy, vz (units a tick) and falls, bounces and comes to
+// rest by the game's own physics (decomp MSR 8c). The object, or NULL.
+void spawn(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t s = (uint32_t)ctx->r4;
+    ctx->r2 = 0;
+    if (!mod_ptr(s)) return;
+    const int id = (int32_t)rd32(s);
+    if (id <= 0 || id > 0x7FFF || rd32(ADDR_mainGameMode) != 0) return;
+    const float x = rdf(s + 4), y = rdf(s + 8), z = rdf(s + 12);
+    const uint32_t e = entry_at(ctx);
+    for (uint32_t i = 0; i < 0x10; i += 4) wr32(e + i, 0);
+    wr16(e + 0x00, (uint16_t)id);
+    wr8(e + 0x02, 0x10);
+    wr16(e + 0x04, (uint16_t)s16_arg(x));
+    wr16(e + 0x06, (uint16_t)s16_arg(y));
+    wr16(e + 0x08, (uint16_t)s16_arg(z));
+    const uint32_t obj = call_game(objSetupObject, ctx, { e, 1 });
+    g_rdram = rdram_;
+    if (!valid_ptr(obj)) return;
+    wr32(obj + 0x3C, 0);
+    wrf(obj + 0x0C, x); // the entry only holds whole units
+    wrf(obj + 0x10, y);
+    wrf(obj + 0x14, z);
+    Obj::Yaw::set(obj, (uint16_t)rd32(s + 28));
+    wrf(obj + 0x1C, rdf(s + 16));
+    wrf(obj + 0x20, rdf(s + 20));
+    wrf(obj + 0x24, rdf(s + 24));
+    const uint32_t phys = rd32(obj + OBJ_PHYSICS);
+    if (valid_ptr(phys)) wr8(phys, rd8(phys) & (uint8_t)~PHYS_AT_REST);
+    ctx->r2 = (gpr)(int32_t)obj;
+}
+
+// jfg_asset_number(const char* name): the number an appended entry or object type of a pack got this start
+// ("mod_id:append name", as jfg_assets.json names it; jfg_assets.cpp), -1 if no loaded mod adds it. An object type's
+// number is the object id to spawn.
+void asset_number_api(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t p = (uint32_t)ctx->r4;
+    std::string name;
+    for (uint32_t i = 0; i < 128 && mod_ptr(p + i); i++) {
+        const char c = (char)rd8(p + i);
+        if (c == 0) break;
+        name += c;
+    }
+    ctx->r2 = (gpr)jfg::asset_number(name);
+}
+
+// jfg_object_free(void* object): removes an object (objFreeObject), as its own code does when it is done.
+void object_free(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    if (!valid_ptr(obj) || rd32(ADDR_mainGameMode) != 0) return;
+    call_game(objFreeObject, ctx, { obj });
+}
+
+// jfg_object_set_scale(void* object, float scale): its size, 1.0 = as its definition makes it.
+void object_set_scale(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    // o32: after a pointer argument a float comes in $a1, not $f14.
+    float scale;
+    const uint32_t bits = (uint32_t)ctx->r5;
+    std::memcpy(&scale, &bits, 4);
+    if (valid_ptr(obj) && scale == scale) wrf(obj + OBJ_SCALE, std::clamp(scale, 0.0f, 100.0f));
+}
+
+// jfg_object_scale(void* object): its size.
+void object_scale(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    ctx->f0.fl = valid_ptr(obj) ? rdf(obj + OBJ_SCALE) : 0.0f;
+}
+
+// jfg_object_physics(void* object): its physics flags (1 in water, 2 at rest, 4 riding a moving object), -1 when it
+// has no physics.
+void object_physics(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const uint32_t phys = valid_ptr(obj) ? rd32(obj + OBJ_PHYSICS) : 0;
+    ctx->r2 = valid_ptr(phys) ? (gpr)rd8(phys) : (gpr)-1;
+}
+
+// jfg_explosion(const JfgExplosion* e): { s32 type; f32 x, y, z; void* owner; } one of the game's explosions
+// (explosionStart: its look, sound, blast and damage; 0 the grenade's, 4 under water), credited to owner (a hero, or
+// NULL).
+void explosion(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t e = (uint32_t)ctx->r4;
+    if (!mod_ptr(e) || rd32(ADDR_mainGameMode) != 0) return;
+    const int type = (int32_t)rd32(e);
+    const uint32_t owner = rd32(e + 16);
+    if (type < 0) return;
+    call_game(explosionStart, ctx, { (uint32_t)type, s16_arg(rdf(e + 4)), s16_arg(rdf(e + 8)), s16_arg(rdf(e + 12)), 8,
+                                     valid_ptr(owner) ? owner : 0 });
+}
+
+// jfg_camera_shake(s32 magnitude, s32 ms): the first player's view jolts up and down by up to magnitude level units,
+// fading out over ms (camStartShake(0, attack 0, sustain 0, decay s, magnitude), decomp MSR 10a: the game's strong hits
+// use 15-25 over 2-4 s). A new call replaces the running shake unless that one is still stronger (as it fades out),
+// so a light thump from one mod doesn't cut a big shake from another short; 0 stops it; a level change ends it.
+std::chrono::steady_clock::time_point g_shake_start;
+float g_shake_magnitude = 0.0f, g_shake_seconds = 0.0f;
+void camera_shake(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    if (rd32(ADDR_mainGameMode) != 0) return;
+    const int magnitude = std::clamp((int)(int32_t)ctx->r4, 0, 100);
+    const float seconds = std::clamp((int)(int32_t)ctx->r5, 0, 10000) / 1000.0f;
+    const auto now = std::chrono::steady_clock::now();
+    if (magnitude > 0 && g_shake_seconds > 0.0f) {
+        const float elapsed = std::chrono::duration<float>(now - g_shake_start).count();
+        const float left = g_shake_magnitude * std::max(0.0f, 1.0f - elapsed / g_shake_seconds);
+        if (left > (float)magnitude) return;
+    }
+    g_shake_start = now;
+    g_shake_magnitude = (float)magnitude;
+    g_shake_seconds = seconds;
+    // o32: the first argument is an int, so the floats go in a1..a3 and magnitude on the stack.
+    call_game(camStartShake, ctx, { 0, float_bits(0.0f), float_bits(0.0f), float_bits(seconds), (uint32_t)magnitude });
+}
+
+// jfg_blast(const JfgBlast* b): { f32 x, y, z, radius, damage, seconds; void* owner; } damage only (explosionAddBlast:
+// strongest at the middle, less out to the radius, fading over the seconds), to whatever it reaches; 16 at a time.
+void blast(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t b = (uint32_t)ctx->r4;
+    if (!mod_ptr(b) || rd32(ADDR_mainGameMode) != 0) return;
+    const float radius = std::max(1.0f, rdf(b + 12)), seconds = std::max(1.0f / 60.0f, rdf(b + 20));
+    const uint32_t owner = rd32(b + 24);
+    const recomp_context saved = *ctx;
+    ctx->f12.fl = rdf(b);     // x and y go in $f12 / $f14 (o32: leading floats), the rest as words
+    ctx->f14.fl = rdf(b + 4);
+    call_game(explosionAddBlast, ctx, { 0, 0, rd32(b + 8), float_bits(radius), rd32(b + 16), float_bits(seconds), 0,
+                                        valid_ptr(owner) ? owner : 0 });
+    *ctx = saved;
+}
+
+// jfg_shockwave(const JfgShockwave* w): { f32 x, y, z, inner, outer, inner_speed, outer_speed; s32 hold, fade; } the
+// game's flat ring effect (shockwaveStart, object 0x73): its inner and outer radius grow by their speeds each tick
+// (negative: it shrinks, inward), it holds for hold ticks, then fades over fade ticks. Radii and speeds within +-100.
+void shockwave(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t w = (uint32_t)ctx->r4;
+    if (!mod_ptr(w) || rd32(ADDR_mainGameMode) != 0) return;
+    const auto lim = [&](uint32_t at) { return float_bits(std::clamp(rdf(at), -100.0f, 100.0f)); };
+    call_game(shockwaveStart, ctx, { s16_arg(rdf(w)), s16_arg(rdf(w + 4)), s16_arg(rdf(w + 8)) & 0xFFFF, lim(w + 12),
+                                     lim(w + 16), lim(w + 20), lim(w + 24),
+                                     (uint32_t)std::clamp((int32_t)rd32(w + 28), 0, 0x7FFF),
+                                     (uint32_t)std::clamp((int32_t)rd32(w + 32), 0, 255) });
+}
+
+// jfg_enemy_traits(void* enemy, JfgEnemyTraits* out): { s32 full_health (256 a unit: the health its squadron gives
+// each member), health; f32 radius (its hit sphere), scale, height (above the floor under it: flyers are high),
+// floor; }. 1, or 0 if it is not a squad member.
+void enemy_traits(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4, out = (uint32_t)ctx->r5;
+    ctx->r2 = 0;
+    if (!valid_ptr(obj) || !mod_ptr(out) || Obj::Kind::get(obj) != KIND_SQUAD_MEMBER) return;
+    const uint32_t data = Obj::Data::get(obj), dmg = Obj::Damage::get(obj);
+    const uint32_t squadron = valid_ptr(data) ? SquadMemberData::Squadron::get(data) : 0;
+    const uint32_t sdata = valid_ptr(squadron) ? Obj::Data::get(squadron) : 0;
+    const int health = valid_ptr(dmg) ? Damage::Health::get(dmg) : 0;
+    int full = valid_ptr(sdata) ? SquadronData::MemberHealth::get(sdata) : 0;
+    if (full < health) full = health;
+    const float x = Obj::PosX::get(obj), y = Obj::PosY::get(obj), z = Obj::PosZ::get(obj);
+    float floor = y;
+    // Straight down from a little above it: the first track surface below (the result's point at +0x04).
+    const uint32_t q = ((uint32_t)ctx->r29 - 0x80u) & ~0x7u;
+    wrf(q, x); wrf(q + 4, y + 5.0f); wrf(q + 8, z);
+    wrf(q + 12, x); wrf(q + 16, y - 3000.0f); wrf(q + 20, z);
+    const bool found = (call_game(trackNearestIntersection, ctx, { 0u, q, q + 12, q + 24, 0u, 0u }) & 0xFF) != 0;
+    g_rdram = rdram_;
+    if (found) floor = rdf(q + 24 + 8);
+    wr32(out + 0, (uint32_t)full);
+    wr32(out + 4, (uint32_t)health);
+    wrf(out + 8, valid_ptr(dmg) ? Damage::Radius::get(dmg) : 0.0f);
+    wrf(out + 12, rdf(obj + OBJ_SCALE));
+    wrf(out + 16, y - floor);
+    wrf(out + 20, floor);
+    ctx->r2 = 1;
+}
+
+// jfg_enemy_fling(void* enemy, const JfgFling* f): { f32 vx, vy, vz; s32 calls; } -> 1 if flung. The game's own
+// launch (decomp MSR 10c): the member's velocity (units a squad call), track collision (b18) and b28, which keeps its
+// AI off for `calls` calls (data +0x17) or until it lands. Not for a member with no collision data (definition +0x50),
+// one the mover skips (b25), or one riding something (b9 without byte 3 b4): 0, and the caller moves it if it wants.
+constexpr uint32_t SQ_FLAGS0 = 0x00, SQ_FLAGS1 = 0x01, SQ_FLAGS2 = 0x02, SQ_FLAGS3 = 0x03, SQ_CALLS = 0x17;
+// Also the enemy multiplier's spread (jfg::fling_member, jfg_squad_multiplier.cpp).
+bool fling(uint32_t obj, float vx, float vy, float vz, int calls) {
+    if (!valid_ptr(obj) || Obj::Kind::get(obj) != KIND_SQUAD_MEMBER) return false;
+    const uint32_t sq = Obj::Data::get(obj), def = rd32(obj + 0x40);
+    if (!valid_ptr(sq) || !valid_ptr(def) || rd32(def + 0x50) == 0) return false;
+    if ((rd8(sq + SQ_FLAGS0) & 0x02) || ((rd8(sq + SQ_FLAGS2) & 0x02) && !(rd8(sq + SQ_FLAGS3) & 0x10))) return false;
+    wrf(obj + 0x1C, vx);
+    wrf(obj + 0x20, vy);
+    wrf(obj + 0x24, vz);
+    wr8(sq + SQ_FLAGS1, (uint8_t)(rd8(sq + SQ_FLAGS1) | 0x04));
+    wr8(sq + SQ_CALLS, (uint8_t)std::clamp(calls, 1, 255));
+    wr8(sq + SQ_FLAGS0, (uint8_t)(rd8(sq + SQ_FLAGS0) | 0x10));
+    return true;
+}
+
+void enemy_fling(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4, f = (uint32_t)ctx->r5;
+    ctx->r2 = 0;
+    if (!mod_ptr(f)) return;
+    ctx->r2 = fling(obj, rdf(f), rdf(f + 4), rdf(f + 8), (int32_t)rd32(f + 12)) ? 1 : 0;
+}
+
+// jfg_enemy_flung(void* enemy): 1 while a squad member is launched (b28: flung by anyone, the game included).
+void enemy_flung(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t obj = (uint32_t)ctx->r4;
+    const uint32_t sq = valid_ptr(obj) && Obj::Kind::get(obj) == KIND_SQUAD_MEMBER ? Obj::Data::get(obj) : 0;
+    ctx->r2 = (gpr)(int32_t)(valid_ptr(sq) && (rd8(sq + SQ_FLAGS0) & 0x10) ? 1 : 0);
+}
+
+// jfg_shocker_end(void* hero, float* out): 1 while the hero's shocker beam is on, with where it ends (x, y, z: what
+// it touches, or its full reach) in out.
+void shocker_end(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t data = hero_data((uint32_t)ctx->r4), out = (uint32_t)ctx->r5;
+    const uint32_t beam = data != 0 ? Hero::Beam::get(data) : 0;
+    const uint32_t bdata = valid_ptr(beam) ? Obj::Data::get(beam) : 0;
+    if (!valid_ptr(bdata) || Beam::Active::get(bdata) == 0) { ctx->r2 = 0; return; }
+    if (out != 0) {
+        wrf(out + 0, Beam::EndX::get(bdata));
+        wrf(out + 4, Beam::EndY::get(bdata));
+        wrf(out + 8, Beam::EndZ::get(bdata));
+    }
+    ctx->r2 = 1;
+}
+
+// jfg_flames_get(void* hero, float* out, int max): where the hero's flamethrower flames are now (x, y, z each, up to
+// max of them); returns how many there are (0 while it is not firing).
+void flames_get(uint8_t* rdram_, recomp_context* ctx) {
+    g_rdram = rdram_;
+    const uint32_t data = hero_data((uint32_t)ctx->r4), out = (uint32_t)ctx->r5;
+    const int max = (int)ctx->r6;
+    const uint32_t block = data != 0 ? Hero::Flames::get(data) : 0;
+    int n = 0;
+    if (valid_ptr(block)) {
+        for (int i = 0; i < FLAMES; i++) {
+            const uint32_t p = block + FLAME_FIRST + (uint32_t)i * FLAME_SIZE;
+            if (rd8(p + FLAME_LIFE) == 0) continue;
+            if (out != 0 && n < max) {
+                for (uint32_t k = 0; k < 3; k++) wr32(out + (uint32_t)n * 12 + k * 4, rd32(p + FLAME_X + k * 4));
+            }
+            n++;
+        }
+    }
+    ctx->r2 = (gpr)n;
 }
 } // namespace
+
+// The input thread, after the controller is read (src/input/controls.cpp, jfg_dual_stick after Swap Triggers): the
+// mods' toggled buttons (jfg_input_toggle) flip on each press and read as held while on.
+extern "C" void jfg_input_toggles(uint16_t* buttons) {
+    const uint16_t mask = g_toggle_mask.load(std::memory_order_relaxed);
+    const uint16_t release = g_toggle_release.exchange(0, std::memory_order_relaxed);
+    static uint16_t prev = 0;
+    const uint16_t b = *buttons;
+    uint16_t latched = (uint16_t)(g_toggle_latched.load(std::memory_order_relaxed) & ~release & mask);
+    latched ^= (uint16_t)(b & ~prev & mask); // presses flip
+    prev = b;
+    g_toggle_latched.store(latched, std::memory_order_relaxed);
+    *buttons = (uint16_t)(((b & ~mask) | latched) & ~g_blocked.load(std::memory_order_relaxed));
+}
 
 void note_blast_damage(uint32_t dmg, int damage) {
     for (int i = 0; i < g_blast_count; i++) {
@@ -544,11 +1498,16 @@ int g_weapon_steps = 0;
 void queue_weapon_step(int direction) { g_weapon_steps += direction; }
 
 // jfg_camera_set_distance(float scale): the port's dual-stick camera stands scale times as far out (on top of the
-// player's Camera Distance option); 1 = as usual. Kept until set again.
+// player's Camera Distance option); 1 = as usual. Kept until set again. Each mod's request is kept: the camera stands
+// as far out as the farthest asks, else as near as the nearest asks.
 float g_camera_distance = 1.0f;
-void camera_set_distance(uint8_t*, recomp_context* ctx) {
-    const float scale = ctx->f12.fl;
-    g_camera_distance = (scale > 0.1f && scale < 10.0f) ? scale : 1.0f;
+PerMod<float> g_camera_distance_out, g_camera_distance_in;
+void camera_set_distance(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const float scale = (ctx->f12.fl > 0.1f && ctx->f12.fl < 10.0f) ? ctx->f12.fl : 1.0f;
+    g_camera_distance_out.set(mod_index, scale > 1.0f ? scale : 1.0f, 1.0f);
+    g_camera_distance_in.set(mod_index, scale < 1.0f ? 1.0f / scale : 1.0f, 1.0f);
+    g_camera_distance = g_camera_distance_out.any() ? g_camera_distance_out.max(1.0f)
+                                                    : 1.0f / g_camera_distance_in.max(1.0f);
 }
 
 bool hero_mod_controlled(int character) {
@@ -575,12 +1534,63 @@ void register_hero_api() {
     recomp::overlays::register_base_export("jfg_enemy_type", enemy_type);
     recomp::overlays::register_base_export("jfg_enemies_near", enemies_near);
     recomp::overlays::register_base_export("jfg_object_blast_damage", object_blast_damage);
-    recomp::overlays::register_base_export("jfg_hud_hide_health", hud_hide_health);
+    recomp::overlays::register_ext_base_export("jfg_hud_hide_health", hud_hide_health);
+    recomp::overlays::register_base_export("jfg_hud_in_corners", hud_in_corners_export);
+    recomp::overlays::register_base_export("jfg_hud_area", hud_area_export);
+    recomp::overlays::register_ext_base_export("jfg_hud_corner", hud_corner);
     recomp::overlays::register_base_export("jfg_hero_heads", hero_heads);
     recomp::overlays::register_base_export("jfg_hero_game_control", hero_game_control);
     recomp::overlays::register_base_export("jfg_hero_select_weapon", hero_select_weapon);
     recomp::overlays::register_base_export("jfg_controls_get", controls_get);
-    recomp::overlays::register_base_export("jfg_camera_set_distance", camera_set_distance);
+    recomp::overlays::register_ext_base_export("jfg_camera_set_distance", camera_set_distance);
+    recomp::overlays::register_ext_base_export("jfg_input_toggle", input_toggle);
+    recomp::overlays::register_ext_base_export("jfg_input_toggle_release", input_toggle_release);
+    recomp::overlays::register_base_export("jfg_input_toggled", input_toggled);
+    recomp::overlays::register_ext_base_export("jfg_input_block", input_block);
+    recomp::overlays::register_base_export("jfg_hero_get", hero_get);
+    recomp::overlays::register_base_export("jfg_hero_state", hero_state);
+    recomp::overlays::register_base_export("jfg_hero_aim", hero_aim);
+    recomp::overlays::register_base_export("jfg_hero_barrel", hero_barrel);
+    recomp::overlays::register_base_export("jfg_hero_weapon", hero_weapon);
+    recomp::overlays::register_base_export("jfg_hero_ammo", hero_ammo);
+    recomp::overlays::register_base_export("jfg_game_paused", game_paused);
+    recomp::overlays::register_base_export("jfg_hero_set_ammo", hero_set_ammo);
+    recomp::overlays::register_base_export("jfg_enemy_dying", enemy_dying);
+    recomp::overlays::register_base_export("jfg_hero_push", hero_push);
+    recomp::overlays::register_base_export("jfg_hero_protect", hero_protect);
+    recomp::overlays::register_base_export("jfg_hero_roll", hero_roll);
+    recomp::overlays::register_base_export("jfg_hero_move", hero_move);
+    recomp::overlays::register_base_export("jfg_hero_speak", hero_speak);
+    recomp::overlays::register_base_export("jfg_objects_of_kind", objects_of_kind);
+    recomp::overlays::register_base_export("jfg_game_sound", game_sound);
+    recomp::overlays::register_base_export("jfg_game_sound_flat", game_sound_flat);
+    recomp::overlays::register_base_export("jfg_hero_hit", hero_hit);
+    recomp::overlays::register_base_export("jfg_floyd_get", floyd_get);
+    recomp::overlays::register_base_export("jfg_fire_bolt", fire_bolt);
+    recomp::overlays::register_ext_base_export("jfg_fire_plasma", fire_plasma);
+    recomp::overlays::register_base_export("jfg_level_ray", level_ray);
+    recomp::overlays::register_base_export("jfg_line_of_sight", line_of_sight);
+    recomp::overlays::register_base_export("jfg_enemy_alert", enemy_alert);
+    recomp::overlays::register_base_export("jfg_enemy_ignite", enemy_ignite);
+    recomp::overlays::register_base_export("jfg_enemy_electrocute", enemy_electrocute);
+    recomp::overlays::register_base_export("jfg_fx_fire", fx_fire);
+    recomp::overlays::register_base_export("jfg_shocker_end", shocker_end);
+    recomp::overlays::register_base_export("jfg_flames_get", flames_get);
+    recomp::overlays::register_base_export("jfg_spawn", spawn);
+    recomp::overlays::register_base_export("jfg_asset_number", asset_number_api);
+    recomp::overlays::register_base_export("jfg_world_to_screen", world_to_screen);
+    recomp::overlays::register_base_export("jfg_object_free", object_free);
+    recomp::overlays::register_base_export("jfg_object_set_scale", object_set_scale);
+    recomp::overlays::register_base_export("jfg_object_scale", object_scale);
+    recomp::overlays::register_base_export("jfg_object_physics", object_physics);
+    recomp::overlays::register_base_export("jfg_explosion", explosion);
+    recomp::overlays::register_base_export("jfg_camera_shake", camera_shake);
+    recomp::overlays::register_base_export("jfg_blast", blast);
+    recomp::overlays::register_base_export("jfg_shockwave", shockwave);
+    recomp::overlays::register_base_export("jfg_enemy_traits", enemy_traits);
+    recomp::overlays::register_base_export("jfg_enemy_fling", enemy_fling);
+    recomp::overlays::register_base_export("jfg_enemy_flung", enemy_flung);
+    recomp::overlays::register_ext_base_export("jfg_squad_multiplier", squad_multiplier_export);
 }
 
 } // namespace jfg::api
@@ -790,4 +1800,125 @@ JFG_WRAP(func_8002AA7C_2B67C) {
     g_rdram = rdram;
     const int dealt = (int)(int32_t)ctx->r2;
     if (dealt > 0 && valid_ptr(dmg)) api::note_blast_damage(dmg, dealt);
+}
+
+namespace jfg {
+bool fling_member(uint32_t obj, float vx, float vy, float vz, int calls) { return api::fling(obj, vx, vy, vz, calls); }
+
+// For the port's own users of these helpers (jfg_weapon_ammo.cpp): the exports, called from C++.
+uint32_t spawn_object(uint8_t* rdram, recomp_context* ctx, int id, float x, float y, float z, float vx, float vy,
+                      float vz, uint16_t yaw) {
+    recomp_context c = *ctx;
+    uint32_t obj = 0;
+    {
+        api::Payload p(&c, 0x20);
+        wr32(p.addr + 0, (uint32_t)id);
+        wrf(p.addr + 4, x); wrf(p.addr + 8, y); wrf(p.addr + 12, z);
+        wrf(p.addr + 16, vx); wrf(p.addr + 20, vy); wrf(p.addr + 24, vz);
+        wr32(p.addr + 28, yaw);
+        c.r4 = (gpr)(int32_t)p.addr;
+        api::spawn(rdram, &c);
+        obj = (uint32_t)c.r2;
+    }
+    g_rdram = rdram;
+    return obj;
+}
+void free_object(uint8_t* rdram, recomp_context* ctx, uint32_t obj) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)(int32_t)obj;
+    api::object_free(rdram, &c);
+    g_rdram = rdram;
+}
+void set_object_scale(uint32_t obj, float scale) {
+    if (valid_ptr(obj)) wrf(obj + api::OBJ_SCALE, scale);
+}
+void play_flat_sound(uint8_t* rdram, recomp_context* ctx, int id) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)id;
+    api::game_sound_flat(rdram, &c);
+    g_rdram = rdram;
+}
+uint32_t first_hero(uint8_t* rdram, recomp_context* ctx) {
+    recomp_context c = *ctx;
+    api::hero_get(rdram, &c);
+    g_rdram = rdram;
+    return (uint32_t)c.r2;
+}
+bool game_is_paused(uint8_t* rdram, recomp_context* ctx) {
+    recomp_context c = *ctx;
+    api::game_paused(rdram, &c);
+    g_rdram = rdram;
+    return c.r2 != 0;
+}
+// The squad members near a point (as jfg_enemies_near), nearest first: at most max into out.
+struct NearEnemy { uint32_t obj; float x, y, z; int health; bool tribal; };
+int near_enemies(uint8_t* rdram, recomp_context* ctx, float x, float y, float z, float radius, NearEnemy* out, int max) {
+    recomp_context c = *ctx;
+    int n = 0;
+    {
+        api::Payload q(&c, 0x14);
+        wrf(q.addr + 0x00, x); wrf(q.addr + 0x04, y); wrf(q.addr + 0x08, z); wrf(q.addr + 0x0C, radius);
+        wr32(q.addr + 0x10, 0);
+        api::Payload o(&c, 0x20u * (uint32_t)max);
+        c.r4 = (gpr)(int32_t)q.addr;
+        c.r5 = (gpr)(int32_t)o.addr;
+        c.r6 = (gpr)max;
+        api::enemies_near(rdram, &c);
+        n = std::min((int)(int32_t)c.r2, max);
+        for (int i = 0; i < n; i++) {
+            const uint32_t e = o.addr + 0x20u * (uint32_t)i;
+            out[i] = { rd32(e), rdf(e + 0x04), rdf(e + 0x08), rdf(e + 0x0C), (int)(int32_t)rd32(e + 0x14), rd32(e + 0x1C) != 0 };
+        }
+    }
+    g_rdram = rdram;
+    return n;
+}
+// Nothing between a and b (as jfg_line_of_sight).
+bool clear_line(uint8_t* rdram, recomp_context* ctx, uint32_t from, uint32_t to, const float* a, const float* b) {
+    recomp_context c = *ctx;
+    bool clear = false;
+    {
+        api::Payload p(&c, 0x18);
+        for (int i = 0; i < 3; i++) { wrf(p.addr + 4u * (uint32_t)i, a[i]); wrf(p.addr + 12u + 4u * (uint32_t)i, b[i]); }
+        c.r4 = (gpr)(int32_t)from; c.r5 = (gpr)(int32_t)to; c.r6 = (gpr)(int32_t)p.addr; c.r7 = (gpr)(int32_t)(p.addr + 12);
+        api::line_of_sight(rdram, &c);
+        clear = c.r2 != 0;
+    }
+    g_rdram = rdram;
+    return clear;
+}
+void alert_enemy(uint8_t* rdram, recomp_context* ctx, uint32_t enemy, uint32_t shooter, bool stun) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)(int32_t)enemy; c.r5 = (gpr)(int32_t)shooter;
+    if (stun) api::enemy_electrocute(rdram, &c);
+    else api::enemy_alert(rdram, &c);
+    g_rdram = rdram;
+}
+// An enemy's weight for a pull (1 + its full health / 6 units + its hit radius / 25; a flyer half), and whether it flies
+// (higher than flyer_height above the floor).
+float enemy_mass(uint8_t* rdram, recomp_context* ctx, uint32_t enemy, float flyer_height, bool* flyer) {
+    recomp_context c = *ctx;
+    float mass = 1.0f;
+    *flyer = false;
+    {
+        api::Payload t(&c, 0x18);
+        c.r4 = (gpr)(int32_t)enemy; c.r5 = (gpr)(int32_t)t.addr;
+        api::enemy_traits(rdram, &c);
+        if (c.r2 != 0) {
+            mass = 1.0f + (float)(int32_t)rd32(t.addr) / 256.0f / 6.0f + rdf(t.addr + 8) / 25.0f;
+            *flyer = rdf(t.addr + 16) > flyer_height;
+            if (*flyer) mass *= 0.5f;
+        }
+    }
+    g_rdram = rdram;
+    return mass;
+}
+
+int hero_ammo_of(uint8_t* rdram, recomp_context* ctx, int weapon) {
+    recomp_context c = *ctx;
+    c.r4 = (gpr)weapon;
+    api::hero_ammo(rdram, &c);
+    g_rdram = rdram;
+    return (int)(int32_t)c.r2;
+}
 }

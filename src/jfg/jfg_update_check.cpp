@@ -53,18 +53,27 @@ extern char** environ;
 namespace fs = std::filesystem;
 
 namespace {
-constexpr const char* RELEASES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/releases?per_page=30";
-constexpr const char* COMMITS_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/commits?per_page=100";
-constexpr const char* BRANCHES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/branches?per_page=100";
+constexpr const char* RELEASES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/releases?per_page=50";
+constexpr const char* COMMITS_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/commits?per_page=100";
+constexpr const char* BRANCHES_URL = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/branches?per_page=100";
 // + "<branch>/<file>": a file as it is on a branch (not counted against the API's limit of 60 requests an hour).
-const std::string RAW_FILE_PREFIX = "https://raw.githubusercontent.com/VibinToast/JetForceGemini-Recomp/refs/heads/";
+const std::string RAW_FILE_PREFIX = "https://raw.githubusercontent.com/VibinToast/JetForceGemini-Recompiled/refs/heads/";
 constexpr const char* ZIP_SUFFIX = "-windows-x64-portable.zip";
 
 struct Release {
     std::string tag, version, date, body, zip_name, zip_url, sha_url, zip_digest; // zip_digest: GitHub's own SHA-256 of the zip, lower case hex; date: YYYY-MM-DD
+    bool prerelease = false; // a test build (GitHub's prerelease flag, or a tag like v1.4.0-test.4)
+    bool fake = false;       // made up by JFG_DEBUG_FAKE_UPDATE
 };
 
 std::mutex g_mutex;
+// The releases found (newest first) and this build's version, kept so that changing the update channel picks again
+// without asking GitHub again (pick_update).
+std::vector<Release> g_releases;
+bool g_releases_ready = false;
+std::string g_check_current;
+std::atomic<bool> g_testing_channel{ false }; // update_channel=testing (jfg_launcher.txt): test builds are offered too
+std::atomic<int> g_pick_serial{ 0 };          // goes up each time what is offered may have changed (jfg_update_serial)
 std::string g_commits; // see jfg_changelog_commits()
 bool g_upcoming_notes = false; // g_commits holds the hand-written notes of the release in testing, not commits
 bool g_found = false;
@@ -101,12 +110,46 @@ std::vector<int> parse_version(const std::string& text) {
     return parts;
 }
 
+// A test build's tag goes on after the numbers: "v1.4.0-test.4" -> "test.4". Empty for a release ("+..." is not one).
+std::string prerelease_of(const std::string& text) {
+    size_t i = 0;
+    while (i < text.size() && !std::isdigit((unsigned char)text[i])) i++;
+    while (i < text.size() && (std::isdigit((unsigned char)text[i]) || text[i] == '.')) i++;
+    if (i >= text.size() || text[i] != '-') return {};
+    const size_t end = text.find('+', i);
+    return text.substr(i + 1, end == std::string::npos ? std::string::npos : end - i - 1);
+}
+
+bool is_test_build(const std::string& version) { return !prerelease_of(version).empty(); }
+
+// As semver orders them: 1.3.0 < 1.4.0-test.1 < 1.4.0-test.4 < 1.4.0 (a test build comes before its release, and
+// test.10 after test.9).
 int compare_versions(const std::string& a_text, const std::string& b_text) {
     std::vector<int> a = parse_version(a_text), b = parse_version(b_text);
     const size_t n = std::max(a.size(), b.size());
     a.resize(n, 0);
     b.resize(n, 0);
-    return a < b ? -1 : (a > b ? 1 : 0);
+    if (a != b) return a < b ? -1 : 1;
+    const std::string pa = prerelease_of(a_text), pb = prerelease_of(b_text);
+    if (pa.empty() || pb.empty()) return pa.empty() == pb.empty() ? 0 : (pa.empty() ? 1 : -1);
+    for (size_t i = 0, j = 0;;) {
+        if (i > pa.size() || j > pb.size()) return i > pa.size() ? (j > pb.size() ? 0 : -1) : 1; // fewer parts first
+        size_t ie = pa.find('.', i), je = pb.find('.', j);
+        if (ie == std::string::npos) ie = pa.size();
+        if (je == std::string::npos) je = pb.size();
+        const std::string x = pa.substr(i, ie - i), y = pb.substr(j, je - j);
+        const bool xn = !x.empty() && x.find_first_not_of("0123456789") == std::string::npos;
+        const bool yn = !y.empty() && y.find_first_not_of("0123456789") == std::string::npos;
+        if (xn && yn) {
+            const std::string xs = x.substr(std::min(x.find_first_not_of('0'), x.size() - 1)), ys = y.substr(std::min(y.find_first_not_of('0'), y.size() - 1));
+            if (xs.size() != ys.size()) return xs.size() < ys.size() ? -1 : 1;
+            if (xs != ys) return xs < ys ? -1 : 1;
+        }
+        else if (xn != yn) return xn ? -1 : 1; // a number before a word
+        else if (x != y) return x < y ? -1 : 1;
+        i = ie + 1;
+        j = je + 1;
+    }
 }
 
 bool is_newer(const std::string& latest, const std::string& current) {
@@ -152,7 +195,7 @@ bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progre
     const std::wstring target = std::wstring(path) + extra;
 
     bool ok = false;
-    HINTERNET session = WinHttpOpen(L"JetForceGemini-Recomp", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET session = WinHttpOpen(L"JetForceGemini-Recompiled", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (session == nullptr) return false;
     WinHttpSetTimeouts(session, 8000, 8000, 20000, 30000);
     HINTERNET connection = WinHttpConnect(session, host, parts.nPort, 0);
@@ -190,9 +233,10 @@ bool http_get(const std::string& url, const Sink& sink, const ProgressFn& progre
 }
 #else
 // Linux / others: curl, when it is installed. Only the release list is read here; installing is Windows only.
+// -L follows GitHub's redirect if the repository is renamed (WinHTTP above follows it by default).
 bool http_get(const std::string& url, const Sink& sink, const ProgressFn&) {
     if (url.rfind("https://", 0) != 0 || url.find('\'') != std::string::npos) return false;
-    const std::string command = "curl -fsS -m 8 -H 'Accept: application/vnd.github+json' '" + url + "' 2>/dev/null";
+    const std::string command = "curl -fsSL --proto-redir =https -m 8 -H 'Accept: application/vnd.github+json' '" + url + "' 2>/dev/null";
     FILE* pipe = popen(command.c_str(), "r");
     if (pipe == nullptr) return false;
     char buffer[4096];
@@ -240,7 +284,7 @@ bool changelog_ignored_file(const std::string& path) {
 // changes, so it is kept in bin\jfg_changelog_cache.txt ("<sha> 1" = only ignored files, "<sha> 0" = something else):
 // each commit is looked up once, which keeps well inside GitHub's limit of 60 requests an hour.
 constexpr const char* CHANGELOG_CACHE_FILE = "jfg_changelog_cache.txt";
-constexpr const char* COMMIT_URL_PREFIX = "https://api.github.com/repos/VibinToast/JetForceGemini-Recomp/commits/";
+constexpr const char* COMMIT_URL_PREFIX = "https://api.github.com/repos/VibinToast/JetForceGemini-Recompiled/commits/";
 
 bool commit_only_ignored_files(const std::string& sha, std::vector<std::pair<std::string, bool>>& cache, bool& cache_changed) {
     for (const auto& entry : cache) if (entry.first == sha) return entry.second;
@@ -360,65 +404,28 @@ void commits_thread(std::string current) {
 }
 
 // ---- finding releases ---------------------------------------------------------------------------------------------------
-void check_thread(std::string current) {
-    // Test: JFG_DEBUG_FAKE_UPDATE=<version> (Recomp-Docs/REFERENCE.md) reports that version as available without
-    // asking GitHub, with made-up notes; it cannot be installed (the dialog says why), so nothing is downloaded.
-    if (const char* fake = std::getenv("JFG_DEBUG_FAKE_UPDATE"); fake != nullptr && *fake != '\0') {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_info.version = strip_v(fake);
-        g_info.changelog = "## v" + g_info.version + " (test)\n- This update is not real: JFG_DEBUG_FAKE_UPDATE is set.\n"
-            "- It shows what the launcher and the in-game notice look like when a newer release exists.\n";
-        g_info.can_install = false;
-        g_info.unavailable = "This is a test update (JFG_DEBUG_FAKE_UPDATE), so there is nothing to install.";
-        g_found = true;
-        return;
-    }
-    std::string body;
-    if (!http_get_string(RELEASES_URL, body)) return;
-    const nlohmann::json list = nlohmann::json::parse(body, nullptr, false);
-    if (list.is_discarded() || !list.is_array()) return;
-
-    std::vector<Release> releases;
-    for (const nlohmann::json& r : list) {
-        if (!r.is_object()) continue;
-        const auto flag = [&](const char* key) { const auto it = r.find(key); return it != r.end() && it->is_boolean() && it->get<bool>(); };
-        if (flag("draft") || flag("prerelease")) continue;
-        Release release;
-        release.tag = json_string(r, "tag_name");
-        release.version = strip_v(release.tag);
-        if (parse_version(release.version).empty()) continue;
-        release.body = json_string(r, "body");
-        release.date = json_string(r, "published_at").substr(0, 10);
-        const auto assets = r.find("assets");
-        if (assets != r.end() && assets->is_array()) {
-            for (const nlohmann::json& a : *assets) {
-                const std::string name = json_string(a, "name"), url = json_string(a, "browser_download_url");
-                if (name.size() > std::strlen(ZIP_SUFFIX) && name.compare(name.size() - std::strlen(ZIP_SUFFIX), std::string::npos, ZIP_SUFFIX) == 0) {
-                    release.zip_name = name;
-                    release.zip_url = url;
-                    // GitHub computes a "sha256:<hex>" digest for every uploaded asset and lists it with the release.
-                    const std::string digest = json_string(a, "digest");
-                    if (digest.rfind("sha256:", 0) == 0 && digest.size() == 7 + 64) {
-                        release.zip_digest = digest.substr(7);
-                        for (char& c : release.zip_digest) c = (char)std::tolower((unsigned char)c);
-                    }
-                }
-            }
-            for (const nlohmann::json& a : *assets) {
-                if (!release.zip_name.empty() && json_string(a, "name") == release.zip_name + ".sha256") release.sha_url = json_string(a, "browser_download_url");
-            }
-        }
-        releases.push_back(std::move(release));
-    }
-    std::stable_sort(releases.begin(), releases.end(), [](const Release& a, const Release& b) { return compare_versions(a.version, b.version) > 0; });
-    if (releases.empty()) return;
-
-    if (!is_newer(releases[0].version, current)) return;
+// What to offer from g_releases, for the channel chosen (g_mutex held). Stable: the newest release, when it is newer
+// than this build. Testing: the newest release or test build, when newer. On Stable, a test build is also offered the
+// newest release when that is older (going back from a test build: the only way to install an older version).
+void pick_update() {
+    g_pick_serial++;
+    if (!g_releases_ready || g_installing) return; // never change the target under a running install
+    g_found = false;
+    g_info = JfgUpdateInfo{};
+    const bool testing = g_testing_channel;
+    const std::string& current = g_check_current;
+    std::vector<const Release*> offered;
+    for (const Release& r : g_releases) if (testing || !r.prerelease) offered.push_back(&r);
+    if (offered.empty()) return;
+    const Release& target = *offered[0];
+    const bool newer = is_newer(target.version, current);
+    const bool back = !newer && !testing && is_test_build(current) && compare_versions(target.version, current) != 0;
+    if (!newer && !back) return;
 
     std::string changelog;
-    for (const Release& release : releases) {
-        if (!is_newer(release.version, current)) continue;
-        std::string notes = release.body;
+    for (const Release* release : offered) {
+        if (back ? release != &target : !is_newer(release->version, current)) continue;
+        std::string notes = release->body;
         notes.erase(std::remove(notes.begin(), notes.end(), '\r'), notes.end());
         while (!notes.empty() && std::isspace((unsigned char)notes.back())) notes.pop_back();
         if (notes.empty()) notes = "(no notes)";
@@ -433,17 +440,19 @@ void check_thread(std::string current) {
             body += line + "\n";
             line.clear();
         }
-        changelog += "## v" + release.version + (release.date.empty() ? "" : " (" + release.date + ")") + "\n" + body + "\n";
+        changelog += "## v" + release->version + (release->date.empty() ? "" : " (" + release->date + ")") + "\n" + body + "\n";
     }
 
-    std::lock_guard<std::mutex> lock(g_mutex);
-    g_target = releases[0];
-    g_info.version = releases[0].version;
+    g_target = target;
+    g_info.version = target.version;
     g_info.changelog = changelog;
+    g_info.test_build = target.prerelease;
+    g_info.back_to_stable = back;
 #ifdef _WIN32
     g_info.can_install = (!g_target.zip_url.empty() && (!g_target.zip_digest.empty() || !g_target.sha_url.empty())) || std::getenv("JFG_UPDATE_ZIP") != nullptr;
     if (!g_info.can_install) {
-        g_info.unavailable = g_target.zip_url.empty()
+        g_info.unavailable = g_target.fake ? "This is a test update (JFG_DEBUG_FAKE_UPDATE), so there is nothing to install (JFG_UPDATE_ZIP would install a zip)."
+            : g_target.zip_url.empty()
             ? "This release has no portable zip attached yet, so it cannot be installed from here. Use the release page."
             : "GitHub has no checksum for this release's zip, so it cannot be verified. Use the release page.";
     }
@@ -452,6 +461,77 @@ void check_thread(std::string current) {
     g_info.unavailable = "Updating from the launcher is only available on Windows. Use the release page.";
 #endif
     g_found = true;
+}
+
+void check_thread(std::string current) {
+    std::vector<Release> releases;
+    // Test: JFG_DEBUG_FAKE_UPDATE=<version>[,<version>...] (Recomp-Docs/REFERENCE.md) lists those versions as the
+    // releases without asking GitHub, with made-up notes; one with a test tag (1.4.0-test.4) is a test build. They have
+    // no download: only JFG_UPDATE_ZIP installs one (that zip), otherwise the dialog says why and nothing is downloaded.
+    if (const char* fake = std::getenv("JFG_DEBUG_FAKE_UPDATE"); fake != nullptr && *fake != '\0') {
+        const std::string list = fake;
+        for (size_t pos = 0; pos <= list.size();) {
+            size_t end = list.find(',', pos);
+            if (end == std::string::npos) end = list.size();
+            Release release;
+            release.version = strip_v(list.substr(pos, end - pos));
+            release.version.erase(std::remove(release.version.begin(), release.version.end(), ' '), release.version.end());
+            release.tag = "v" + release.version;
+            release.prerelease = is_test_build(release.version);
+            release.fake = true;
+            release.body = std::string("- This ") + (release.prerelease ? "test build" : "update") + " is not real: JFG_DEBUG_FAKE_UPDATE is set.\n"
+                "- It shows what the launcher and the in-game notice look like when a newer release exists.";
+            if (!parse_version(release.version).empty()) releases.push_back(std::move(release));
+            pos = end + 1;
+        }
+    }
+    else {
+        std::string body;
+        if (!http_get_string(RELEASES_URL, body)) return;
+        const nlohmann::json list = nlohmann::json::parse(body, nullptr, false);
+        if (list.is_discarded() || !list.is_array()) return;
+
+        for (const nlohmann::json& r : list) {
+            if (!r.is_object()) continue;
+            const auto flag = [&](const char* key) { const auto it = r.find(key); return it != r.end() && it->is_boolean() && it->get<bool>(); };
+            if (flag("draft")) continue;
+            Release release;
+            release.tag = json_string(r, "tag_name");
+            release.version = strip_v(release.tag);
+            if (parse_version(release.version).empty()) continue;
+            // Test builds are GitHub prereleases; only the Testing channel offers them (pick_update).
+            release.prerelease = flag("prerelease") || is_test_build(release.version);
+            release.body = json_string(r, "body");
+            release.date = json_string(r, "published_at").substr(0, 10);
+            const auto assets = r.find("assets");
+            if (assets != r.end() && assets->is_array()) {
+                for (const nlohmann::json& a : *assets) {
+                    const std::string name = json_string(a, "name"), url = json_string(a, "browser_download_url");
+                    if (name.size() > std::strlen(ZIP_SUFFIX) && name.compare(name.size() - std::strlen(ZIP_SUFFIX), std::string::npos, ZIP_SUFFIX) == 0) {
+                        release.zip_name = name;
+                        release.zip_url = url;
+                        // GitHub computes a "sha256:<hex>" digest for every uploaded asset and lists it with the release.
+                        const std::string digest = json_string(a, "digest");
+                        if (digest.rfind("sha256:", 0) == 0 && digest.size() == 7 + 64) {
+                            release.zip_digest = digest.substr(7);
+                            for (char& c : release.zip_digest) c = (char)std::tolower((unsigned char)c);
+                        }
+                    }
+                }
+                for (const nlohmann::json& a : *assets) {
+                    if (!release.zip_name.empty() && json_string(a, "name") == release.zip_name + ".sha256") release.sha_url = json_string(a, "browser_download_url");
+                }
+            }
+            releases.push_back(std::move(release));
+        }
+    }
+    std::stable_sort(releases.begin(), releases.end(), [](const Release& a, const Release& b) { return compare_versions(a.version, b.version) > 0; });
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_releases = std::move(releases);
+    g_check_current = current;
+    g_releases_ready = true;
+    pick_update();
 }
 
 #ifdef _WIN32
@@ -760,6 +840,7 @@ namespace {
 bool g_check_updates = true;
 bool g_skip_launcher = false;
 bool g_show_official_pack = true;
+int g_channel_in_file = -1;             // update_channel: -1 not in the file, 0 stable, 1 testing
 std::string g_current_version;          // this build, for a check started later (jfg_launcher_set_check_updates)
 std::atomic<bool> g_check_started{ false };
 std::string g_config_rom;
@@ -771,6 +852,9 @@ constexpr const char* LAUNCHER_CONFIG_FILE = "jfg_launcher.txt";
 #define OFFICIAL_PACK_COMMENT \
     "# 1: the launcher's Texture Packs page shows the official HD texture pack, to download or update (it asks GitHub\n" \
     "# for its latest version, with check_for_updates=1). 0: hidden, and not asked for. The General settings set this.\n"
+#define UPDATE_CHANNEL_COMMENT \
+    "# stable: only releases are offered. testing: test builds (GitHub prereleases) too, to try a fix before it is\n" \
+    "# released. Going back to stable offers the latest release, even an older one. The General settings set this.\n"
 #define CHECK_UPDATES_COMMENT \
     "# 1: the game looks for a newer release on GitHub when it starts (the launcher's Play page and a note in the game\n" \
     "# show one). 0: it never contacts GitHub (no update check, no list of recent changes). The General settings set this.\n"
@@ -829,6 +913,7 @@ void jfg_launcher_config_load(const fs::path& app_folder) {
         if (key == "check_for_updates") g_check_updates = value != "0" && value != "false" && value != "no";
         else if (key == "skip_launcher") g_skip_launcher = value == "1" || value == "true" || value == "yes";
         else if (key == "show_official_pack") g_show_official_pack = value != "0" && value != "false" && value != "no";
+        else if (key == "update_channel") g_channel_in_file = value == "testing" ? 1 : 0;
         else if (key == "rom" && !value.empty()) {
             fs::path rom{ std::u8string(value.begin(), value.end()) };
             if (rom.is_relative()) rom = app_folder / rom;
@@ -897,11 +982,33 @@ void jfg_launcher_set_check_updates(bool check) {
 }
 std::string jfg_launcher_config_rom() { return g_config_rom; }
 
+bool jfg_launcher_testing_channel() { return g_testing_channel; }
+
+void jfg_launcher_set_testing_channel(bool testing) {
+    g_channel_in_file = testing ? 1 : 0;
+    write_launcher_setting("update_channel", testing ? "testing" : "stable", UPDATE_CHANNEL_COMMENT);
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_testing_channel = testing;
+    pick_update(); // from the releases already found; before the check has finished, it picks with this channel
+}
+
+std::string jfg_update_current_version(const std::string& project_version) {
+    const char* fake = std::getenv("JFG_DEBUG_FAKE_VERSION");
+    return fake != nullptr && *fake != '\0' ? strip_v(fake) : project_version;
+}
+
+int jfg_update_serial() { return g_pick_serial; }
+
+int jfg_compare_versions(const std::string& a, const std::string& b) { return compare_versions(a, b); }
+
 void jfg_update_check_start(const std::string& current) {
     static bool started = false;
     if (started) return;
     started = true;
     g_current_version = current;
+    // No update_channel in the file: a test build stays on test builds (it was installed to try one), anything else
+    // is on stable.
+    g_testing_channel = g_channel_in_file < 0 ? is_test_build(current) : g_channel_in_file == 1;
     try {
         // check_for_updates=0: no requests to GitHub at all (turning the setting on later starts the check then:
         // jfg_launcher_set_check_updates). Finishing an installed update (removing the old files) still runs.

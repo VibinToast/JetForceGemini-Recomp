@@ -25,6 +25,9 @@
 #include "jfg_hooks.h"
 #include "jfg_options.h"
 #include "jfg_port.h"
+#include "ultramodern/config.hpp"
+
+namespace jfg::overlay { float overlay_width(); } // jfg_overlay.cpp
 
 extern "C" int jfg_widescreen_active(void); // jfg_visuals.cpp
 extern "C" void instShowBearBar(uint8_t* rdram, recomp_context* ctx); // overlay 14
@@ -113,6 +116,39 @@ void pop() {
     if (g_depth < g_block) g_block = 0;
     set_side(g_depth > 0 && g_depth <= (int)(sizeof(g_stack) / sizeof(g_stack[0])) ? g_stack[g_depth - 1] : MIDDLE);
 }
+}
+
+// Mods' icons and discs (jfg_weapon_hud.cpp) right of the middle: measured from the window's right edge, as the game's
+// own pieces there are, rather than with the weapon panel from its left. From the left they would be past the 4:3
+// area's right side, which the sniper scope's clipping cuts off. right false: back to the panel's side.
+void hud_align_right(bool right) {
+    if (!g_on) return;
+    set_side(right ? RIGHT : (g_depth > 0 && g_depth <= (int)(sizeof(g_stack) / sizeof(g_stack[0])) ? g_stack[g_depth - 1] : MIDDLE));
+}
+
+// The single-player HUD goes to the window's edges (HUD in Screen Corners, in widescreen): jfg_hud_in_corners.
+bool hud_in_corners() {
+    static const bool env = std::getenv("JFG_HUD_CORNERS") != nullptr;
+    return (g.hud_corners || env) && jfg_widescreen_active();
+}
+
+// The single-player HUD's left and right edges in overlay units: the middle 320 (4:3) unless it is in the corners. In
+// the corners, RT64 measures the left and right origins from the HUD ratio's area (Graphics > HUD ratio), not the
+// window: Clamp 16:9 (the default) keeps them to a centred 16:9 strip when the window is wider, Full to the window,
+// Original to the middle 4:3. Overlays drawn to line up with the game's HUD use the same edges (jfg_hud_area).
+void hud_area(float& left, float& right) {
+    const float w = jfg::overlay::overlay_width();
+    float hud = 320.0f;
+    if (hud_in_corners()) {
+        switch (ultramodern::renderer::get_graphics_config().hr_option) {
+            case ultramodern::renderer::HUDRatioMode::Full: hud = w; break;
+            case ultramodern::renderer::HUDRatioMode::Clamp16x9: hud = std::min(w, 240.0f * 16.0f / 9.0f); break;
+            default: hud = 320.0f; break;
+        }
+    }
+    hud = std::max(std::min(hud, w), std::min(320.0f, w));
+    left = (w - hud) / 2.0f;
+    right = left + hud;
 }
 
 // frontSingleInstruments, right after its camStandardOrtho (the target and its box are drawn before and stay put).
@@ -377,18 +413,31 @@ JFG_HUD_PIECE(frontDrawObj, jfg::jfg_hud_object)
 JFG_HUD_PIECE(frontPrintNum, jfg::jfg_hud_number)
 JFG_HUD_PIECE(fontPrintXY, jfg::jfg_hud_text)
 JFG_HUD_PIECE(frontDrawRectangles, jfg::jfg_hud_rectangles)
-JFG_HUD_PIECE(func_overlay_14_0000292C_1F10284, jfg::jfg_hud_weapon_panel) // the weapon panel
 JFG_HUD_PIECE(func_overlay_14_00000220_1F0DB78, jfg::jfg_hud_middle)       // the target's panel
 JFG_HUD_PIECE(func_overlay_14_00000074_1F0D9CC, jfg::jfg_hud_middle)       // the arrows at the screen's sides
 #undef JFG_HUD_PIECE
 
-// instDrawHealth(player, health, max, updateRate), the health meter: left out for a hero whose health a mod shows
-// itself (jfg_hud_hide_health), else a HUD piece as above.
+// The weapon panel (func_overlay_14_0000292C, with the message, objective and selector panels it draws): a HUD piece on
+// the left, which a mod can take over (jfg_on_weapon_hud) and whose weapon icons it can place (jfg_weapon_hud.cpp).
+bool jfg_weapon_hud_event(uint8_t* rdram, recomp_context* ctx); // jfg_weapon_hud.cpp
+void jfg_weapon_hud_icons(uint8_t* rdram, recomp_context* ctx);
+JFG_WRAP(func_overlay_14_0000292C_1F10284) {
+    jfg::jfg_hud_weapon_panel(rdram, ctx);
+    if (jfg_weapon_hud_event(rdram, ctx)) func_overlay_14_0000292C_1F10284_orig(rdram, ctx);
+    jfg_weapon_hud_icons(rdram, ctx);
+    jfg::jfg_hud_pop(rdram, ctx);
+}
+
+// instDrawHealth(player, health, segments, updateRate), the health meter: left out for a hero whose health a mod shows
+// itself (jfg_hud_hide_health) or draws its own (jfg_on_health_draw), else a HUD piece as above.
+bool jfg_health_event(uint8_t* rdram, recomp_context* ctx); // jfg_api.cpp
 JFG_WRAP(instDrawHealth) {
     jfg::g_rdram = rdram;
     const uint32_t obj = (uint32_t)ctx->r4;
     const uint32_t data = jfg::valid_ptr(obj) ? jfg::Obj::Data::get(obj) : 0;
     if (jfg::valid_ptr(data) && jfg::api::hero_health_hidden(jfg::PlayerData::Character::get(data) & 3)) return;
+    if (!jfg_health_event(rdram, ctx)) return; // a mod draws its own meter
+    jfg::g_rdram = rdram;
     jfg::jfg_hud_health(rdram, ctx);
     instDrawHealth_orig(rdram, ctx);
     jfg::jfg_hud_pop(rdram, ctx);

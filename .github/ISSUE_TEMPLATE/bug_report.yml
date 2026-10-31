@@ -6,15 +6,15 @@ body:
     attributes:
       value: |
         Thanks for reporting! Please check first whether it's already reported in
-        [Issues](https://github.com/VibinToast/JetForceGemini-Recomp/issues) or listed in
-        [Known issues](https://github.com/VibinToast/JetForceGemini-Recomp/blob/main/KNOWN_ISSUES.md).
+        [Issues](https://github.com/VibinToast/JetForceGemini-Recompiled/issues) or listed in
+        [Known issues](https://github.com/VibinToast/JetForceGemini-Recompiled/blob/main/KNOWN_ISSUES.md).
         **Never attach your ROM.**
 
   - type: input
     id: version
     attributes:
       label: Version
-      description: Shown in the launcher (for example 1.2.1). If you built it yourself, the commit.
+      description: Shown in the launcher (for example 1.2.1, or 1.4.0-test.2 for a test build). If you built it yourself, the commit.
       placeholder: "1.2.1"
     validations:
       required: true
@@ -64,9 +64,9 @@ body:
     attributes:
       label: Settings
       description: >-
-        The ones that could matter: profile, Game Frame Rate, Frame Interpolation (Graphics tab), widescreen,
+        The ones that could matter: profile, Display Frame Rate and Game Frame Rate (Graphics tab), widescreen,
         anti-aliasing (MSAA), texture pack, mouse and keyboard or controller.
-      placeholder: "Modern profile, Game Frame Rate 60, Frame Interpolation 120, widescreen on, MSAA off, 1K HD pack"
+      placeholder: "Modern profile, Display Frame Rate 120, Game Frame Rate 60, widescreen on, MSAA off, 1K HD pack"
 
   - type: textarea
     id: logs

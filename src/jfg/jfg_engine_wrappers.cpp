@@ -161,6 +161,7 @@ JFG_WRAP(mmFree) {
 // < wanted (+0x01) over func_overlay_3_00014694, which reuses or creates one. Around each call of that loop the port
 // counts a pass that added nobody (jfg_squad_spawn_before / _after, $s0 = the squadron). The first-member call is the
 // first one made while +0x58 is 0, before the loop.
+namespace jfg { void squad_mult_making(bool on); void squad_mult_made(uint8_t*, recomp_context*, uint8_t); uint8_t squad_mult_created(uint8_t*); } // jfg_squad_multiplier.cpp
 static int g_squad_spawn = -1; // calls of 00014694 made by the current 000148C0; -1 outside it
 static bool g_squad_first_seen = false;
 
@@ -180,7 +181,11 @@ JFG_WRAP(func_overlay_3_00014694_1EE9B74) {
         g_squad_spawn++;
     }
     if (loop) jfg_squad_spawn_before(rdram, ctx);
+    const uint8_t created = jfg::squad_mult_created(rdram); // the enemy multiplier's extra members
+    jfg::squad_mult_making(true);
     func_overlay_3_00014694_1EE9B74_orig(rdram, ctx);
+    jfg::squad_mult_making(false);
+    jfg::squad_mult_made(rdram, ctx, created);
     if (loop) jfg_squad_spawn_after(rdram, ctx);
 }
 

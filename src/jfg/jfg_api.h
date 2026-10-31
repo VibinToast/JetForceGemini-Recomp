@@ -12,7 +12,7 @@
 
 namespace jfg::api {
 
-constexpr int VERSION = 4;
+constexpr int VERSION = 6;
 
 // The events, in the order they are registered: a released event keeps its place, new ones go before Count.
 enum class Event : uint32_t {
@@ -34,6 +34,15 @@ enum class Event : uint32_t {
     ObjectDrawGfx,    // jfg_on_object_draw_gfx(JfgObjectGfx* draw), since version 4
     DrawHud,          // jfg_on_draw_hud(JfgHudGfx* hud), since version 4
     HudMessage,       // jfg_on_hud_message(int msg, int character, int player), since version 4
+    ReticleDraw,      // jfg_on_reticle_draw(JfgReticle* reticle), since version 5
+    HealthDraw,       // jfg_on_health_draw(JfgHealth* health), since version 5
+    WeaponHud,        // jfg_on_weapon_hud(JfgWeaponHud* hud), since version 5
+    Kill,             // jfg_on_kill(JfgKill* kill), since version 5
+    WeaponFire,       // jfg_on_weapon_fire(JfgWeaponFire* fire), since version 6
+    SquadTick,        // jfg_on_squad_tick(JfgSquadTick* tick), since version 6
+    Drop,             // jfg_on_drop(JfgDrop* drop), since version 6
+    ObjectSpawn,      // jfg_on_object_spawn(Object* obj, int kind), since version 6
+    ObjectFree,       // jfg_on_object_free(Object* obj, int kind), since version 6
     Count
 };
 
@@ -54,11 +63,12 @@ struct Payload {
 
 // JfgBloodSpurt and JfgBloodHit (mod_api/jfg_api.h).
 namespace blood_spurt {
-constexpr uint32_t X = 0x00, Y = 0x04, Z = 0x08, VX = 0x0C, VY = 0x10, VZ = 0x14, ALPHA = 0x18, COUNT = 0x1C, SCALE = 0x20,
-                   AMOUNT = 0x24, CANCEL = 0x28, SIZE = 0x2C;
+constexpr uint32_t X = 0x00, Y = 0x04, Z = 0x08, VX = 0x0C, VY = 0x10, VZ = 0x14, BRIGHTNESS = 0x18, COLOR = 0x1C, SCALE = 0x20,
+                   AMOUNT = 0x24, CANCEL = 0x28, SOURCE = 0x2C, GROUP = 0x30, SIZE = 0x34; // SOURCE, GROUP since version 5
 }
 namespace blood_hit {
-constexpr uint32_t X = 0x00, Y = 0x04, Z = 0x08, CANCEL = 0x0C, SIZE = 0x10;
+constexpr uint32_t X = 0x00, Y = 0x04, Z = 0x08, CANCEL = 0x0C, BRIGHTNESS = 0x10, COLOR = 0x14, SOURCE = 0x18, GROUP = 0x1C,
+                   SIZE = 0x20; // BRIGHTNESS.. since version 5
 }
 // JfgObjectDraw, JfgSoundPlay, JfgScreenFlash: one value and cancel.
 namespace value_cancel {
@@ -98,6 +108,8 @@ bool listened(Event event);
 // nothing listens.
 void fire(uint8_t* rdram, recomp_context* ctx, Event event, int32_t arg0 = 0, int32_t arg1 = 0, int32_t arg2 = 0,
           int32_t arg3 = 0);
+// The event for one mod only (its callbacks; no internal handlers): a resource that mod registered.
+void fire_for_mod(uint8_t* rdram, recomp_context* ctx, Event event, size_t mod_index, int32_t arg0 = 0, int32_t arg1 = 0);
 // Registers the events and helpers with the runtime; once, before mods load (jfg_register_mod_exports).
 void register_api();
 

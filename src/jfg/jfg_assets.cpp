@@ -23,6 +23,8 @@
 // 0x30, the object index) for appended definitions; the squad code treats each like its "like" id (BaddyTypeToIndex).
 // "animRows": [{ "model": "model name", "from": stock model id }] gives an appended model the animation lists and joint
 // slots of a stock one (assets 0x28/0x29 and 0x2C/0x2D are indexed by model number).
+// Or its pack's own: { "model": "name", "anims": [appended 0x2A entry names, in list order], "slots": "file" } (the joint
+// slot row, jfgformats models.import_new's "slotRow"; decomp MSR 12a): a new animated model.
 // "append" in place of "entry" adds a new entry after the set's last one (the -1 end stays). Its number is kept
 // between game starts in bin/mod_ids.json (by mod and name); a new one gets "expect" (the number the mod was made
 // for) when that is free, else the lowest free number, mods from the top of the mod list down. jfg_mods.log says which
@@ -81,6 +83,7 @@ std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& data); // jfg_defla
 int asset_number(const std::string& ref);
 bool mod_region(int region, std::string* name, std::string* world);
 bool appended_entry(int data_asset, int entry, std::string* owner);
+bool mod_entry(int data_asset, int entry);
 void read_baddy_patches(const nlohmann::json& j, const std::string& id, size_t order); // jfg_baddies.cpp
 void activate_baddy_patches();
 void read_player_bodies(const nlohmann::json& j, const std::string& id); // jfg_cut_enemies.cpp
@@ -136,9 +139,11 @@ struct ObjType {             // "objtypes": a new object id for an appended defi
     int like = -1;           // the stock object id the squad code treats it as
     int expect = -1;
 };
-struct AnimRows {            // "animRows": an appended model gets a stock model's animation rows
+struct AnimRows {            // "animRows": an appended model gets a stock model's animation rows, or its pack's own
     std::string mod_id, model; // model: "mod:name"
     int from = -1;
+    std::vector<std::string> anims; // the pack's own: its appended animations (0x2A entries, "mod:name"), in list order
+    std::vector<uint8_t> slots;     //   and its joint slot row (0x2D bytes: per animation, per joint)
 };
 struct Region {              // "regions": a Tribal / stats region of a mod's own
     size_t order;
@@ -556,20 +561,16 @@ void give_empty_anim_row(std::vector<std::vector<uint8_t>>& assets, int m, size_
     }
 }
 
-// Model m gets model `from`'s animation list and joint slots, appended at the end of the id list and slot data. The
-// rows of the models between the last stock one and m (numbers kept for mods not loaded) stay empty. Returns false
-// when the tables aren't what the game's code expects.
-bool give_anim_rows(std::vector<std::vector<uint8_t>>& assets, int m, int from) {
+// Model m gets the animation list copy_ids (big-endian s16 animation numbers) and joint slots copy_slots, appended at the
+// end of the id list and slot data. The rows of the models between the last stock one and m (numbers kept for mods not
+// loaded) stay empty. Returns false when the tables aren't what the game's code expects.
+bool place_anim_rows(std::vector<std::vector<uint8_t>>& assets, int m, const std::vector<uint8_t>& copy_ids,
+                     const std::vector<uint8_t>& copy_slots) {
     std::vector<uint8_t>& lists = assets[ANIM_LISTS];
     std::vector<uint8_t>& ids = assets[ANIM_IDS];
     std::vector<uint8_t>& slots = assets[ANIM_SLOTS];
     std::vector<uint8_t>& slot_data = assets[ANIM_SLOT_DATA];
     auto u16 = [](const std::vector<uint8_t>& b, size_t o) { return (uint32_t)(b[o] << 8 | b[o + 1]); };
-    if (lists.size() < 2 * (size_t)(from + 2) || slots.size() < 4 * (size_t)(from + 2)) return false;
-    // animation ids: [lists[from], lists[from + 1]) in bytes of `ids`
-    const uint32_t a0 = u16(lists, 2 * from), a1 = u16(lists, 2 * from + 2);
-    const int32_t s0 = (int32_t)be32(slots, 4 * from), s1 = (int32_t)be32(slots, 4 * from + 4);
-    if (a1 < a0 || a1 > ids.size() || s0 < 0 || s1 < s0 || (size_t)s1 > slot_data.size()) return false;
     // Where the stock rows end: the largest offset in each table (the end of the last model's row).
     uint32_t ids_end = 0;
     for (size_t o = 0; o + 2 <= lists.size(); o += 2) ids_end = std::max(ids_end, u16(lists, o));
@@ -580,8 +581,6 @@ bool give_anim_rows(std::vector<std::vector<uint8_t>>& assets, int m, int from) 
         if (v == -1) break;
         slot_end = std::max(slot_end, v);
     }
-    const std::vector<uint8_t> copy_ids(ids.begin() + a0, ids.begin() + a1);
-    const std::vector<uint8_t> copy_slots(slot_data.begin() + s0, slot_data.begin() + s1);
     if (ids_end + copy_ids.size() > 0xFFFF) return false; // u16 offsets
     ids.resize(std::max<size_t>(ids.size(), ids_end));
     ids.insert(ids.begin() + ids_end, copy_ids.begin(), copy_ids.end());
@@ -627,6 +626,23 @@ bool give_anim_rows(std::vector<std::vector<uint8_t>>& assets, int m, int from) 
     pad16(slots);
     pad16(slot_data);
     return true;
+}
+
+// Model m gets model `from`'s animation list and joint slots (a copied model that moves as the stock one).
+bool give_anim_rows(std::vector<std::vector<uint8_t>>& assets, int m, int from) {
+    const std::vector<uint8_t>& lists = assets[ANIM_LISTS];
+    const std::vector<uint8_t>& ids = assets[ANIM_IDS];
+    const std::vector<uint8_t>& slots = assets[ANIM_SLOTS];
+    const std::vector<uint8_t>& slot_data = assets[ANIM_SLOT_DATA];
+    auto u16 = [](const std::vector<uint8_t>& b, size_t o) { return (uint32_t)(b[o] << 8 | b[o + 1]); };
+    if (lists.size() < 2 * (size_t)(from + 2) || slots.size() < 4 * (size_t)(from + 2)) return false;
+    // animation ids: [lists[from], lists[from + 1]) in bytes of `ids`
+    const uint32_t a0 = u16(lists, 2 * from), a1 = u16(lists, 2 * from + 2);
+    const int32_t s0 = (int32_t)be32(slots, 4 * from), s1 = (int32_t)be32(slots, 4 * from + 4);
+    if (a1 < a0 || a1 > ids.size() || s0 < 0 || s1 < s0 || (size_t)s1 > slot_data.size()) return false;
+    const std::vector<uint8_t> copy_ids(ids.begin() + a0, ids.begin() + a1);
+    const std::vector<uint8_t> copy_slots(slot_data.begin() + s0, slot_data.begin() + s1);
+    return place_anim_rows(assets, m, copy_ids, copy_slots);
 }
 
 // The "patches" of one mod's jfg_assets.json.
@@ -817,8 +833,30 @@ void on_asset_mod_enabled(recomp::mods::ModContext& context, const recomp::mods:
     }
     for (const nlohmann::json& e : j.value("animRows", nlohmann::json::array())) {
         AnimRows a{ id, e.value("model", ""), json_int(e, "from") };
-        if (a.model.empty() || a.from < 0) {
-            log("assets: " + id + ": animation rows need \"model\" and \"from\": " + e.dump());
+        // The pack's own animations (decomp MSR 12a): "anims" (its appended 0x2A entries, in list order) and "slots"
+        // (a file: the joint slot row, jfgformats models.import_new's "slotRow").
+        if (e.contains("anims") && e["anims"].is_array()) {
+            for (const nlohmann::json& n : e["anims"]) {
+                if (!n.is_string()) continue;
+                std::string name = n.get<std::string>();
+                if (name.find(':') == std::string::npos) name = id + ":" + name;
+                a.anims.push_back(std::move(name));
+            }
+            const std::string file = e.value("slots", "");
+            bool ok = false;
+            std::vector<char> bytes;
+            if (!file.empty()) bytes = mod.manifest.file_handle->read_file(file, ok);
+            const size_t slash = file.find_last_of("/\\");
+            if (!ok && slash != std::string::npos) bytes = mod.manifest.file_handle->read_file(file.substr(slash + 1), ok);
+            if (!ok || a.anims.empty() || bytes.empty() || bytes.size() % a.anims.size() != 0) {
+                log("assets: " + id + ": animation rows with \"anims\" need their \"slots\" file (in additional_files), "
+                    "a whole row per animation: " + e.dump());
+                continue;
+            }
+            a.slots.assign(bytes.begin(), bytes.end());
+        }
+        if (a.model.empty() || (a.from < 0 && a.anims.empty())) {
+            log("assets: " + id + ": animation rows need \"model\" and \"from\" (or \"anims\" and \"slots\"): " + e.dump());
             continue;
         }
         if (a.model.find(':') == std::string::npos) a.model = id + ":" + a.model;
@@ -1021,6 +1059,11 @@ bool jfg::appended_entry(int data_asset, int entry, std::string* owner) {
     if (it == g_entry_owner.end()) return false;
     if (owner) *owner = it->second;
     return true;
+}
+
+// True when a mod gave `entry` of a set (appended or replaced it, or replaced the whole set).
+bool jfg::mod_entry(int data_asset, int entry) {
+    return g_entry_owner.count({ data_asset, entry }) != 0 || g_asset_owner.count(data_asset) != 0;
 }
 
 // The number an appended entry got this start ("mod_id:append name"), or -1 (jfg_launch: --start-level by name).
@@ -1247,11 +1290,40 @@ extern "C" void jfg_apply_asset_mods(void) {
     // Animation rows for appended models.
     std::vector<AnimRows> animrows = std::move(g_animrows);
     g_animrows.clear();
+    // Placed in model order: each model's rows go at the end of the tables, and a model's count is the gap to the next
+    // model's start, so a lower model placed after a higher one left the higher one's rows looking empty (its list
+    // became 0 animations and the game drew a jointed model with no matrices: a crash in its lighting).
+    std::stable_sort(animrows.begin(), animrows.end(), [](const AnimRows& x, const AnimRows& y) {
+        return jfg::asset_number(x.model) < jfg::asset_number(y.model);
+    });
     std::set<int> with_rows;
     for (const AnimRows& a : animrows) {
         const int m = jfg::asset_number(a.model);
         if (m < 0) {
             log("assets: " + a.mod_id + ": animation rows for " + a.model + ", which no loaded mod appends - skipped");
+            continue;
+        }
+        if (!a.anims.empty()) {
+            std::vector<uint8_t> list;
+            bool known = true;
+            for (const std::string& name : a.anims) {
+                const int n = jfg::asset_number(name);
+                if (n < 0 || n > 0x7FFF) {
+                    log("assets: " + a.mod_id + ": animation " + name + " for " + a.model + " isn't appended by a loaded mod");
+                    known = false;
+                    break;
+                }
+                list.push_back((uint8_t)(n >> 8));
+                list.push_back((uint8_t)n);
+            }
+            if (known && place_anim_rows(assets, m, list, a.slots)) {
+                log("assets: " + a.mod_id + ": model " + std::to_string(m) + " has its own " +
+                    std::to_string(a.anims.size()) + " animations");
+                with_rows.insert(m);
+                entries++;
+            } else if (known) {
+                log("assets: " + a.mod_id + ": " + a.model + "'s animation rows couldn't be placed");
+            }
             continue;
         }
         if (give_anim_rows(assets, m, a.from)) {

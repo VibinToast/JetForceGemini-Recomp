@@ -182,6 +182,7 @@ extern "C" void jfg_dual_stick(uint16_t* buttons, float* x, float* y, float righ
         const bool z = (b & BTN_Z) != 0, r = (b & BTN_R) != 0;
         b = (uint16_t)((b & ~(BTN_Z | BTN_R)) | (z ? BTN_R : 0) | (r ? BTN_Z : 0));
     }
+    jfg_input_toggles(&b); // a mod's toggled buttons (jfg_hero_api.cpp)
     // Tests without a controller: JFG_DUAL_STICK_TEST names a text file holding "lx,ly,rx,ry", read on every poll.
     static const char* const test_file = std::getenv("JFG_DUAL_STICK_TEST");
     if (test_file != nullptr) {
@@ -282,10 +283,18 @@ static void aim_controls(uint32_t obj, uint32_t pad, float frames) {
     const uint32_t data = Obj::Data::get(obj);
     const float speed = (float)g.aim_speed / 100.0f;
     const int raw_x = Pad::StickX::get(pad), raw_y = Pad::StickY::get(pad);
-    if (!g.aim_centered && !jfg_mouse_keyboard_active()) { // the mouse always turns the view directly
+    if (!g.aim_centered) {
         if (g.aim_speed != 100) {
             Pad::StickX::set(pad, (int8_t)std::clamp((int)std::lround(raw_x * speed), -80, 80));
             Pad::StickY::set(pad, (int8_t)std::clamp((int)std::lround(raw_y * speed), -80, 80));
+        }
+        // The stick keeps the game's box; the mouse always turns the view directly, leaving the reticle's offset alone.
+        if (g_mouse_aim_x != 0 || g_mouse_aim_y != 0) {
+            const uint16_t body = (uint16_t)(PlayerData::BodyYaw::get(data) - g_mouse_aim_x);
+            Obj::Yaw::set(obj, body);
+            PlayerData::BodyYawCopy::set(data, body);
+            PlayerData::BodyYaw::set(data, body);
+            PlayerData::ViewPitch::set(data, (int16_t)std::clamp((int)PlayerData::ViewPitch::get(data) - g_mouse_aim_y, -0x2AAA, 0x2AAA));
         }
         return;
     }
@@ -330,7 +339,8 @@ extern "C" void jfg_platform_move(int on) {
 // Lurg fight (level 195): stick right turned the character and its reticle, C-left moved it 350 units sideways, the
 // stick alone never moved it. The free camera and the camera-relative stick are off here; instead
 //   left stick / A, D: step left and right (C-left / C-right), forward/back keep their buttons (jump, crouch);
-//   right stick: the game's stick (turn and aim), up looks up unless "Invert Aim Up/Down" is set;
+//   right stick: moves the aim directly as the mouse does with "Keep the Reticle Centered" on; off, it is the game's
+//   stick (its box, the reticle drifting back). Up looks up unless "Invert Aim Up/Down" is set;
 //   mouse: moves the aim directly, not through the stick; the body never turns (a rail).
 void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
     (void)aiming;
@@ -378,6 +388,22 @@ void boss_controls(uint32_t obj, uint32_t pad, bool aiming) {
         constexpr float YAW_RATE = 110.0f / 60.0f * (32768.0f / 180.0f), PITCH_RATE = 80.0f / 60.0f * (32768.0f / 180.0f);
         const float frames = (float)std::clamp((int)rd32(ADDR_delayDat), 1, 6), speed = (float)g.aim_speed / 100.0f;
         const float stick_x = std::clamp(rx, -1.0f, 1.0f), stick_y = std::clamp(ry, -1.0f, 1.0f);
+        // "Keep the Reticle Centered" off: whichever moved last has the aim. The stick is the game's stick (its box and
+        // drift); after the mouse moved the aim is held where the mouse left it, so the game's drift must not touch it.
+        static bool mouse_has_aim = false, game_had_aim = false;
+        if (g_mouse_aim_x != 0 || g_mouse_aim_y != 0) mouse_has_aim = true;
+        else if (axis(stick_x) != 0.0f || axis(stick_y) != 0.0f) mouse_has_aim = false;
+        if (!g.aim_centered && !mouse_has_aim) {
+            wr8(pad + 2, (uint8_t)(int8_t)std::clamp((int)std::lround(stick_x * 78.0f * speed), -80, 80));
+            wr8(pad + 3, (uint8_t)(int8_t)std::clamp((int)std::lround((g.invert_aim_y ? stick_y : -stick_y) * 78.0f * speed), -80, 80));
+            game_had_aim = true;
+            last_tick = g_tick_count;
+            static const bool log_box = std::getenv("JFG_DEBUG_BOSS") != nullptr;
+            if (log_box) std::fprintf(stderr, "[boss] tick %u game's box, reticle %d stick %d %d\n", g_tick_count, (int)(int16_t)rd16(data + PlayerData::ReticleYaw::offset), (int)(int8_t)rd8(pad + 2), (int)(int8_t)rd8(pad + 3));
+            return;
+        }
+        // Back from the game's aim: the direct aim goes on from where the game left the body and the reticle.
+        if (game_had_aim) { game_had_aim = false; centre = rd16(obj); turn = 0; reticle = std::clamp((int)(int16_t)rd16(data + PlayerData::ReticleYaw::offset), -RETICLE_LIMIT, RETICLE_LIMIT); }
         const int yaw_step = (int)std::lround(axis(stick_x) * YAW_RATE * frames * speed) + g_mouse_aim_x;
         // stick up = look up unless "Invert Aim Up/Down" is set; the view pitch value goes down to look up
         const int pitch_step = (int)std::lround(axis(g.invert_aim_y ? stick_y : -stick_y) * PITCH_RATE * frames * speed) + g_mouse_aim_y;
@@ -456,7 +482,7 @@ extern "C" int jfg_floyd_roll_before(uint8_t* rdram_, recomp_context* ctx) {
 // pitch go into his data, and its bank onto the eased roll (dAngle's result, which the game stores).
 extern "C" void jfg_floyd_roll_after(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    constexpr int PITCH_LIMIT = 0x4000, ROLL_LIMIT = 520 * 20; // the game's own limits (full stick: rate 520)
+    constexpr int PITCH_LIMIT = 0x4000, ROLL_LIMIT = 424 * 20; // the game's own limits (full stick: turn rate 424)
     const uint32_t data = g_sidekick_data;
     if (!jfg_floyd_mouse_active()) { g_bank = 0.0f; g_pitch_data = 0; return; }
     const int frames = g_sidekick_frames;

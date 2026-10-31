@@ -14,6 +14,7 @@ extern "C" void jfg_dual_stick(uint16_t* buttons, float* x, float* y, float righ
 extern "C" int jfg_mouse_keyboard_active(void);
 extern "C" int jfg_floyd_mouse_active(void);
 extern "C" void jfg_dual_stick_release(void);
+extern "C" void jfg_input_toggles(uint16_t* buttons); // JFG PORT: src/jfg/jfg_hero_api.cpp
 extern "C" int jfg_sprint_enabled(void);
 extern "C" int jfg_worldmap_switching(void);
 extern "C" void jfg_sprint_input(int held);
@@ -299,6 +300,7 @@ bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, floa
             if (get_input_digital(InputField{ controller_digital, SDL_CONTROLLER_BUTTON_LEFTSHOULDER })) cur_buttons |= 0x0020;
         }
 
+        if (!dual_stick) jfg_input_toggles(&cur_buttons); // JFG PORT: a mod's toggled buttons (jfg_dual_stick does it there)
         if (dual_stick) {
             float right_x = 0.0f, right_y = 0.0f;
             get_right_analog(&right_x, &right_y);

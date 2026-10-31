@@ -28,6 +28,8 @@
 #include "jfg_port.h"
 #include "jfg_update_check.h"
 
+void jfg_note_code_mods(); // jfg_mods.cpp
+
 namespace jfg {
 
 bool g_story_skip_pending = false;
@@ -55,6 +57,11 @@ void request_warp(int level, int character, int entrance, int front_mode) {
 // Called once per game tick on the game's main thread (hook at the entry of func_80044FAC_45BAC).
 extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     g_rdram = rdram;
+    static bool noted = false; // the mods are loaded by the first tick: where each code mod went, for crash reports
+    if (!noted) {
+        noted = true;
+        ::jfg_note_code_mods();
+    }
     jfg::api::fire(rdram, ctx, jfg::api::Event::GameTick, (int32_t)rd32(ADDR_delayDat));
     jfg::api::mod_camera_tick();
     jfg_camera_restore();
@@ -66,6 +73,7 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     auto_save_tick(ctx);
     gameplay_tick();
     tribal_saves_tick();
+    weapons::tick(ctx);
     jfg_locale_tick(ctx);
     tools_game_tick(ctx); // F10's requests and the values it shows
     lighting_tool_tick(ctx); // the lighting tool's level files, placement mode and saving
@@ -221,7 +229,8 @@ extern "C" void jfg_debug_frame(uint8_t* rdram, recomp_context* ctx) {
     if (update_version.empty() && std::chrono::steady_clock::now() >= update_poll) {
         update_poll = std::chrono::steady_clock::now() + std::chrono::seconds(1);
         JfgUpdateInfo info;
-        if (jfg_update_available(info)) { update_version = info.version; update_seen = std::chrono::steady_clock::now(); }
+        // Not for the way back from a test build (Update Channel: Stable): the launcher offers that.
+        if (jfg_update_available(info) && !info.back_to_stable) { update_version = info.version; update_seen = std::chrono::steady_clock::now(); }
     }
     const float update_t = update_version.empty() ? -1.0f
         : std::chrono::duration<float>(std::chrono::steady_clock::now() - std::max(update_seen, hint_start + std::chrono::seconds(3))).count();

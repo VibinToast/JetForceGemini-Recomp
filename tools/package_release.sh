@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds the Linux release and uploads it to GitHub. The Linux side of tools\package_release.bat. Needs the GitHub CLI
+# Builds the Linux release and uploads it to its draft on GitHub. It never publishes: only the owner does, on GitHub.
+# The Linux side of tools\package_release.bat. Needs the GitHub CLI
 # (gh), signed in (gh auth login), for anything that talks to GitHub, and Docker or Podman for the build (see below).
 # See RELEASING.md in the owner's Recomp-Docs notes.
 #
@@ -7,8 +8,7 @@
 #                                              workflow when something is merged into main), builds that release's exact
 #                                              commit in dist/src-vX.Y.Z (your own checkout and bin folder are not
 #                                              touched), uploads the AppImage, the portable .tar.gz and their .sha256
-#                                              files, and publishes the release once the Windows files are there too
-#   tools/package_release.sh --publish         the same, but publishes even when the Windows files are not there yet
+#                                              files to the draft
 #   tools/package_release.sh 1.0.1             builds this checkout as 1.0.1 (writes version.txt) and uploads to v1.0.1
 #                                              if that release is a draft (a published release is never changed)
 #   tools/package_release.sh --skip-build 1.0.1   packs what is already in bin (no new build)
@@ -21,13 +21,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ROM="$(realpath "${JFG_ROM:-$ROOT/baserom.us.z64}")"
 OUT="$ROOT/dist"
-NATIVE=0 SKIP_BUILD=0 PUBLISH=0 VERSION=""
+NATIVE=0 SKIP_BUILD=0 VERSION=""
 for a in "$@"; do
   case "$a" in
     --native) NATIVE=1 ;;
     --skip-build) SKIP_BUILD=1 ;;
-    --publish) PUBLISH=1 ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
     -*) echo "unknown option $a (see --help)" >&2; exit 1 ;;
     *) VERSION="${a#v}" ;;
   esac
@@ -37,7 +36,7 @@ say() { echo "[jfg] $*"; }
 die() { echo "[jfg] ERROR: $*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null; }
 
-# Every file a release needs before it is published. Keep in step with tools/package_release.ps1.
+# Every file a release needs before the owner publishes it. Keep in step with tools/package_release.ps1.
 release_files() {
   local v="$1"
   printf '%s\n' "JFG-$v-windows-x64-portable.zip" "JFG-$v-windows-x64-portable.zip.sha256" \
@@ -56,11 +55,6 @@ if [ -z "$VERSION" ]; then
   for t in "${drafts[@]}"; do
     if ! assets_of "$t" | grep -qxF "JFG-${t#v}-linux-x86_64.AppImage"; then TAG="$t"; break; fi
   done
-  if [ -z "$TAG" ] && [ "$PUBLISH" = 1 ] && [ "${#drafts[@]}" -gt 0 ]; then
-    gh release edit "${drafts[0]}" --draft=false
-    say "published ${drafts[0]}"
-    exit 0
-  fi
   if [ -z "$TAG" ]; then
     if [ "${#drafts[@]}" -gt 0 ]; then say "the draft release ${drafts[0]} already has its Linux build"
     else say "no draft release is waiting for a build. Merge into main (or run the Release workflow) to make one."; fi
@@ -132,7 +126,7 @@ TGZ="JFG-$VERSION-linux-x86_64-portable.tar.gz"
 UPLOAD=("$OUT/$APP" "$OUT/$APP.sha256" "$OUT/$TGZ" "$OUT/$TGZ.sha256")
 for f in "${UPLOAD[@]}"; do [ -f "$f" ] || die "missing $f"; done
 
-# ---- upload, and publish once every file is there ----------------------------------------------------------------
+# ---- upload to the draft; its draft state is never changed here --------------------------------------------------
 if ! have gh; then say "gh (GitHub CLI) is not installed. Add $APP, $TGZ and their .sha256 files to $TAG on GitHub by hand."; exit 0; fi
 if ! gh release view "$TAG" >/dev/null 2>&1; then
   say "no GitHub release $TAG. Merge into main (or run the Release workflow) to make one, then run this again."
@@ -146,12 +140,10 @@ fi
 gh release upload "$TAG" "${UPLOAD[@]}" --clobber
 say "uploaded to the GitHub release $TAG"
 missing="$(release_files "$VERSION" | grep -vxF -f <(assets_of "$TAG") || true)"
-if [ -n "$missing" ] && [ "$PUBLISH" = 0 ]; then
-  say "$TAG stays a draft until these are uploaded too (tools\\package_release.bat on Windows):"
+if [ -n "$missing" ]; then
+  say "$TAG is a draft and still needs these (tools\package_release.bat on Windows):"
   sed 's/^/  /' <<< "$missing"
-  say "to publish it without them: tools/package_release.sh --publish, or gh release edit $TAG --draft=false"
 else
-  gh release edit "$TAG" --draft=false
-  say "published $TAG: $(gh release view "$TAG" --json url --jq .url)"
+  say "$TAG has every file and stays a draft: only the owner publishes it."
 fi
 [ -z "$WORKTREE" ] || git worktree remove --force "$WORKTREE" 2>/dev/null || true

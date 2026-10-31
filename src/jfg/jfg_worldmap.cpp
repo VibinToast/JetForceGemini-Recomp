@@ -338,7 +338,8 @@ void load_disk() {
     if (!f) return;
     const nlohmann::json j = nlohmann::json::parse(f, nullptr, false);
     if (!j.is_object()) return;
-    for (const auto& [slot, s] : j.value("slots", nlohmann::json::object()).items()) {
+    const nlohmann::json slots = j.value("slots", nlohmann::json::object()); // named: items() doesn't keep a temporary alive
+    for (const auto& [slot, s] : slots.items()) {
         SaveState st;
         for (const auto& v : s.value("unlocked", nlohmann::json::array())) if (v.is_string()) st.unlocked.insert(v);
         for (const auto& v : s.value("entered", nlohmann::json::array())) if (v.is_string()) st.entered.insert(v);

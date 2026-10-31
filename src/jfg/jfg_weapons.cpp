@@ -281,6 +281,18 @@ void apply_weapons() {
     }
     else last_charge = charge;
 
+    // A modded charge weapon (slot 15 with a charging row, +0x06 = -1) charges at the plasma shotgun's rate: the game
+    // grows weapon 3's charge by 2 a tick and every other's by 1 (decomp MSR 10b).
+    static int last_carried = 0;
+    const bool carried_charge = weapon == 15 && (int8_t)rd8(ADDR_weaponTable + WeaponDef::Size * 15 + 0x06) == -1;
+    if (carried_charge && charge > last_carried) {
+        const int max_charge = (int)Character::MaxCharge::get(ch, 15) << 5;
+        const int next = std::clamp(charge + (charge - last_carried), 0, std::max(max_charge, charge));
+        PlayerData::Charge::set(data, (int16_t)next);
+        last_carried = next;
+    }
+    else last_carried = charge;
+
     // Mines on the field: the oldest of the player's mines beyond the limit is removed the way mineRemove does it.
     const bool mines_on = g_weapon_mod[11].on || g_weapon_mod[12].on;
     for (size_t i = 0; i < g_player_mines.size();) { // drop mines that are gone (object freed or reused, or already going)

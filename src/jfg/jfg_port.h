@@ -190,6 +190,21 @@ void tribal_saves_on_save(int slot);  // a save to slot is carried out this tick
 void tribal_saves_forget(int slot);   // the game deletes a file (-1: all files)
 void tribal_saves_tick();             // start of the tick: notices rescues
 
+// --- jfg_weapon_registry.cpp -------------------------------------------------------------------------------------
+// Weapons past slot 14 (the proximity mine and mods'), carried on slot 15. The save hooks as tribal_saves_*.
+namespace weapons {
+void file_chosen();
+void on_save(int slot);
+void forget(int slot);
+void tick(recomp_context* ctx);         // start of the tick: slot 15 as the weapon in hand, and its icon
+bool known(int id);                     // a carried weapon id (15 up)
+bool draw_big_icon(int id, float x, float y, float scale, float alpha); // its big icon, if it has one
+void level_load(uint8_t* rdram);        // objSetupPlayers
+int weapon_in_hand(uint32_t ch, int hero); // carried weapons by their id (15 up), -1 none
+int carried_ammo(int id);               // the first player's, -1 not owned
+void set_carried_ammo(int id, int ammo);
+}
+
 // Mods' planets and galaxies on the planet-select map (jfg_worldmap.cpp). Planets and galaxies by index; keys "mod:id".
 int world_find(const std::string& key);    // a planet's index, -1 = none
 int world_state(int planet);               // bits: 1 open, 2 entered, 4 completed; -1 = no such planet
@@ -204,6 +219,7 @@ void worldmap_file_chosen();               // the save file hooks, as tribal_sav
 void worldmap_on_save(int slot);
 void worldmap_forget(int slot);
 void register_world_api();                 // the helpers above for mods (register_api)
+void register_blood_api();                 // blood colours, rainbow, keeping splats and parts (jfg_gore.cpp)
 void tribal_saves_region_reset();     // end of mainResetRegion: puts the region's rescues back
 
 // --- jfg_visuals.cpp ---------------------------------------------------------------------------------------------
@@ -338,7 +354,6 @@ std::vector<ToolField> weapon_fields();    // the Weapons window (F10)
 struct BuiltinProfile { const char* name; const char* description; const char* text; };
 extern const BuiltinProfile BUILTIN_PROFILES[4];
 extern std::string g_active_profile;   // "" = none chosen (the settings as they are)
-extern std::string g_profile_snapshot; // settings right after the active profile was applied (to show "changed")
 extern std::string g_profile_message;
 extern std::vector<std::string> g_user_profiles;
 const BuiltinProfile* builtin_profile(const std::string& name); // nullptr if not a built-in one
@@ -349,6 +364,7 @@ void save_profile_choice();
 void load_profile_choice();
 void write_user_profile(const std::string& name);
 void choose_profile(const std::string& name);
+bool start_new_player_profile();           // a new player starts on Modern (load_options, before reading the file)
 bool valid_profile_name(const std::string& name);
 void profile_autosave();                   // changes made while a player profile is active are written to it
 // What choosing a profile would change, shown before it is applied (issue #7: a profile's dual-stick layout silently
@@ -362,6 +378,7 @@ struct ProfilePreview {
 extern bool g_profile_keep_controls;       // Keep My Controls (saved in jfg_profile.txt)
 void set_profile_keep_controls(bool keep);
 ProfilePreview preview_profile(const std::string& name);
+bool builtin_profile_changed();             // the settings differ from the active built-in profile's
 std::string profile_preview_text(const std::string& name); // as lines for a prompt; "" when nothing would change
 void draw_profiles();                      // the Profiles tab
 void debug_profile_tick();                 // JFG_DEBUG_PROFILE

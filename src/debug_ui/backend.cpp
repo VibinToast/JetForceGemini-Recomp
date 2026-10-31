@@ -35,7 +35,8 @@ extern "C" void jfg_tools_key(int scancode, int down, int repeat); // JFG PORT: 
 #include "config/config.hpp"
 #include "runtime/gfx.hpp"
 
-namespace jfg { bool cpu_layer_build(ImDrawList* list); } // src/jfg/jfg_cpu_layer.cpp
+namespace jfg { bool cpu_layer_build(ImDrawList* list); void cpu_layer_trace_drawn(bool drawn); } // src/jfg/jfg_cpu_layer.cpp
+namespace jfg::overlay { bool build(ImDrawList* list, ImVector<ImTextureData*>& textures); } // src/jfg/jfg_overlay.cpp
 
 namespace dino::debug_ui::backend {
 
@@ -70,13 +71,12 @@ static std::atomic<bool> b_fly_requested{ false };
 
 static ImGuiContext *prev_ctx;
 static std::unique_ptr<plume::RenderDescriptorSet> descriptor_set;
-#ifdef _WIN32
-// JFG PORT: the debug UI's DX12 texture slots (descriptor_set): the font atlas and the lighting tool's texture preview.
-static constexpr uint32_t D3D12_SRV_SLOTS = 8;
-static D3D12_CPU_DESCRIPTOR_HANDLE d3d12_srv_cpu = {};
-static D3D12_GPU_DESCRIPTOR_HANDLE d3d12_srv_gpu = {};
-static UINT d3d12_srv_step = 0;
-static bool d3d12_srv_used[D3D12_SRV_SLOTS] = {};
+#if defined(_WIN32)
+// JFG PORT: ImGui's D3D12 textures (the font, and the mod overlay's pictures: src/jfg/jfg_overlay.cpp) each get a
+// descriptor set of their own; one shared slot made every new texture replace the font. (One set of many slots drew
+// nothing past its first.)
+static std::vector<std::unique_ptr<plume::RenderDescriptorSet>> d3d12_texture_sets;
+static plume::D3D12Device* d3d12_imgui_device = nullptr;
 #endif
 static std::unique_ptr<plume::RenderCommandQueue> d3d12_upload_queue; // JFG PORT: ImGui's DX12 backend uploads its textures through a queue of its own
 static std::mutex frame_mutex;
@@ -297,14 +297,12 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
         case RT64::UserConfiguration::GraphicsAPI::D3D12: {
 #ifdef _WIN32
             plume::D3D12Device *interface_device = static_cast<plume::D3D12Device *>(device);
-            // JFG PORT: room for a few textures (the font atlas, the lighting tool's texture preview), handed out by
-            // the alloc / free functions below.
-            plume::RenderDescriptorRange descriptor_range(plume::RenderDescriptorRangeType::TEXTURE, 0, D3D12_SRV_SLOTS);
+            plume::RenderDescriptorRange descriptor_range(plume::RenderDescriptorRangeType::TEXTURE, 0, 1);
             descriptor_set = interface_device->createDescriptorSet(plume::RenderDescriptorSetDesc(&descriptor_range, 1));
 
             plume::D3D12DescriptorSet *interface_descriptor_set = static_cast<plume::D3D12DescriptorSet *>(descriptor_set.get());
-            const D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle = interface_device->viewHeapAllocator->getCPUHandleAt(interface_descriptor_set->viewAllocation.offset);
-            const D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle = interface_device->viewHeapAllocator->getGPUHandleAt(interface_descriptor_set->viewAllocation.offset);
+            d3d12_imgui_device = interface_device;
+            d3d12_texture_sets.clear();
             // JFG PORT: ImGui 1.92+ (upstream RT64's) takes an init struct and needs a command queue for texture uploads.
             d3d12_upload_queue = interface_device->createCommandQueue(plume::RenderCommandListType::DIRECT);
             ImGui_ImplDX12_InitInfo init_info;
@@ -313,22 +311,19 @@ static void rt64_init_hook(plume::RenderInterface* _interface, plume::RenderDevi
             init_info.NumFramesInFlight = 2;
             init_info.RTVFormat = DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM;
             init_info.SrvDescriptorHeap = interface_device->viewHeapAllocator->heap;
-            d3d12_srv_cpu = cpu_handle;
-            d3d12_srv_gpu = gpu_handle;
-            d3d12_srv_step = interface_device->d3d->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
             init_info.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu) {
-                for (uint32_t i = 0; i < D3D12_SRV_SLOTS; i++) {
-                    if (d3d12_srv_used[i]) continue;
-                    d3d12_srv_used[i] = true;
-                    out_cpu->ptr = d3d12_srv_cpu.ptr + SIZE_T(i) * d3d12_srv_step;
-                    out_gpu->ptr = d3d12_srv_gpu.ptr + UINT64(i) * d3d12_srv_step;
-                    return;
-                }
-                IM_ASSERT(false && "out of debug UI texture slots");
+                plume::RenderDescriptorRange range(plume::RenderDescriptorRangeType::TEXTURE, 0, 1);
+                auto set = d3d12_imgui_device->createDescriptorSet(plume::RenderDescriptorSetDesc(&range, 1));
+                const uint32_t at = static_cast<plume::D3D12DescriptorSet *>(set.get())->viewAllocation.offset;
+                *out_cpu = d3d12_imgui_device->viewHeapAllocator->getCPUHandleAt(at);
+                *out_gpu = d3d12_imgui_device->viewHeapAllocator->getGPUHandleAt(at);
+                d3d12_texture_sets.push_back(std::move(set));
             };
             init_info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE cpu, D3D12_GPU_DESCRIPTOR_HANDLE) {
-                const SIZE_T i = (cpu.ptr - d3d12_srv_cpu.ptr) / d3d12_srv_step;
-                if (i < D3D12_SRV_SLOTS) d3d12_srv_used[i] = false;
+                for (auto it = d3d12_texture_sets.begin(); it != d3d12_texture_sets.end(); ++it) {
+                    const uint32_t at = static_cast<plume::D3D12DescriptorSet *>(it->get())->viewAllocation.offset;
+                    if (d3d12_imgui_device->viewHeapAllocator->getCPUHandleAt(at).ptr == cpu.ptr) { d3d12_texture_sets.erase(it); return; }
+                }
             };
             ImGui_ImplDX12_Init(&init_info);
 #else
@@ -410,53 +405,57 @@ static void render_draw_data(plume::RenderCommandList* command_list, ImDrawData*
     }
 }
 
-// JFG PORT: the game's CPU-drawn reticles while RT64 adds in-between frames (src/jfg/jfg_cpu_layer.cpp). Built here for
-// every presented frame, unlike the overlay, whose draw data is made once per game tick. Needs the font atlas only for
-// its white pixel, so nothing is drawn before the first overlay or debug window frame created it.
-static void draw_cpu_layer(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
+// JFG PORT: what the render hook draws over each presented frame, in one ImGui render call (the backends cycle their
+// vertex buffers once per call and assume one call a frame: a second call's drawing was lost):
+// - the game's CPU-drawn reticles while RT64 adds in-between frames (src/jfg/jfg_cpu_layer.cpp), built here for every
+//   presented frame; it needs the font atlas for its white pixel, so nothing is drawn before the first overlay or debug
+//   window frame created it;
+// - the mod overlay (src/jfg/jfg_overlay.cpp): mods' pictures and shapes at the window's resolution, every presented
+//   frame, with its own textures (a white one for the shapes, the mods' pictures), which the backend creates and updates;
+// - the debug window and the port's overlay (FPS, toasts), whose draw data is made once per game tick.
+static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
+    const std::lock_guard<std::mutex> frame_lock(frame_mutex);
     if (jfg_imgui_ctx == nullptr || !jfg_imgui_ctx->Initialized) return;
     ImGuiContext *prev_ctx = ImGui::GetCurrentContext();
     ImGui::SetCurrentContext(jfg_imgui_ctx);
     ImGuiIO &io = ImGui::GetIO();
+    const ImVec2 size((float)swap_chain_framebuffer->getWidth(), (float)swap_chain_framebuffer->getHeight());
+
+    static ImDrawList *cpu_list = nullptr, *mod_list = nullptr;
+    if (cpu_list == nullptr) cpu_list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
+    if (mod_list == nullptr) mod_list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
+    static ImVector<ImTextureData*> textures;
+    textures.resize(0);
+
+    ImDrawData combined;
+    combined.Valid = true;
+    combined.DisplayPos = ImVec2(0.0f, 0.0f);
+    combined.DisplaySize = size;
+    combined.FramebufferScale = ImVec2(1.0f, 1.0f);
+
+    bool cpu_layer = false;
     if (io.Fonts != nullptr && io.Fonts->TexRef.GetTexID() != ImTextureID_Invalid) {
-        static ImDrawList *list = nullptr;
-        if (list == nullptr) list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
-        const ImVec2 size((float)swap_chain_framebuffer->getWidth(), (float)swap_chain_framebuffer->getHeight());
-        list->_ResetForNewFrame();
-        list->PushClipRect(ImVec2(0.0f, 0.0f), size);
-        list->PushTexture(io.Fonts->TexRef);
-        if (jfg::cpu_layer_build(list)) {
-            ImDrawData draw_data;
-            draw_data.Valid = true;
-            draw_data.DisplayPos = ImVec2(0.0f, 0.0f);
-            draw_data.DisplaySize = size;
-            draw_data.FramebufferScale = ImVec2(1.0f, 1.0f);
-            draw_data.Textures = nullptr;
-            draw_data.AddDrawList(list);
-            render_draw_data(command_list, &draw_data);
-        }
+        cpu_list->_ResetForNewFrame();
+        cpu_list->PushClipRect(ImVec2(0.0f, 0.0f), size);
+        cpu_list->PushTexture(io.Fonts->TexRef);
+        cpu_layer = jfg::cpu_layer_build(cpu_list);
+        if (cpu_layer) combined.AddDrawList(cpu_list);
     }
-    ImGui::SetCurrentContext(prev_ctx);
-}
+    mod_list->_ResetForNewFrame();
+    mod_list->PushClipRect(ImVec2(0.0f, 0.0f), size);
+    if (jfg::overlay::build(mod_list, textures) && mod_list->VtxBuffer.Size > 0) combined.AddDrawList(mod_list);
 
-static void rt64_draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
-    {
-        const std::lock_guard<std::mutex> frame_lock(frame_mutex);
-        draw_cpu_layer(command_list, swap_chain_framebuffer);
+    ImDrawData *ui = ui_wanted() ? ImGui::GetDrawData() : nullptr;
+    if (ui != nullptr && ui->Valid) {
+        if (ui->Textures != nullptr) for (ImTextureData *t : *ui->Textures) textures.push_back(t);
+        for (ImDrawList *l : ui->CmdLists) combined.AddDrawList(l);
     }
-
-    if (!ui_wanted()) return;
-
-    const std::lock_guard<std::mutex> frame_lock(frame_mutex);
-
-    ImGuiContext *prev_ctx = ImGui::GetCurrentContext();
-    ImGui::SetCurrentContext(jfg_imgui_ctx);
-
-    ImDrawData *draw_data = ImGui::GetDrawData();
-    if (draw_data != nullptr) {
-        render_draw_data(command_list, draw_data);
-    }
-
+    combined.Textures = &textures;
+    // CmdLists.Size: AddDrawList does not keep ImGui's obsolete CmdListsCount, which stays 0 here. Testing that left the
+    // reticles undrawn on every frame without a texture to update (no mod overlay, FPS counter or toast) (JFG-175).
+    const bool draw = combined.CmdLists.Size > 0 || !textures.empty();
+    if (draw) render_draw_data(command_list, &combined);
+    if (cpu_layer) jfg::cpu_layer_trace_drawn(draw);
     ImGui::SetCurrentContext(prev_ctx);
 }
 

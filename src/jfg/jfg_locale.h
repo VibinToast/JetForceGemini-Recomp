@@ -73,6 +73,12 @@ const Locale* find(const std::string& id); // "" = english.json, if any
 // The chosen locale's id ("" = English), saved in jfg_language.txt. Any thread.
 std::string chosen();
 void choose(const std::string& id);
+// Whether a language was ever picked (jfg_language.txt names one). Until then, and after updating from a version
+// without the question, the launcher or the game asks first (src/ui/ui_language_prompt.cpp).
+bool choice_saved();
+// English and the translations the project made and checked; any other locale file (Pirate, the community's, the
+// newer machine-assisted ones) is listed as unofficial.
+bool official(const std::string& id);
 
 // For menus (any thread): (id, label) of English and every locale, in list order. Before the game starts (the
 // launcher) it comes from the files' names alone. The label is the locale's name,
@@ -93,6 +99,11 @@ std::string ui_breaks(const std::string& text);
 // After choose(), once (the UI thread, src/ui/ui_state.cpp): the "ui" of the language the menus show and of the new
 // one (English -> text), to put the menus' text nodes in the new language in place; the new one is then in use.
 bool take_ui_switch(std::map<std::string, std::string>& old_ui, std::map<std::string, std::string>& new_ui);
+// `english` in locale `id`'s own "ui" ("" = English: english.json's, else `english`), whichever language is chosen.
+// Reads that file once. Any thread. The language question shows itself in the language the player points at.
+std::string ui_in(const std::string& id, const std::string& english);
+// While held, translate_ui leaves every text as it is: text set from ui_in, already in its language, stays so.
+void hold_translation(bool hold);
 // For RmlUi's SystemInterface::TranslateString (src/ui/ui_state.cpp): `in` is a text node's text, white space and
 // all. False when it has no translation (`out` = `in`).
 bool translate_ui(std::string& out, const std::string& in);

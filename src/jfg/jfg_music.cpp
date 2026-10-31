@@ -7,6 +7,19 @@
 // can change while they play (jfg_sound_set). They are decoded when the mod is enabled and mixed with the game's
 // samples at the game's sound effects volume (the options menu), on top of the port's main volume.
 //
+// The same file can replace the game's own sound effects, by id (the ids JFG_DEBUG_SOUNDS logs):
+//   "replace": { "0xE1": "<name>", "0xFA": { "sound": "<name>", "loop": true, "volume": 0.8 }, ... }
+// The game still plays its sound, so its handle, its looping and its stopping work as before, but silently: the
+// replaced ids' volume in the game's sound table (sfxIndex, and the placed sounds' copy at D_800F29F0; 10 bytes a
+// sound, +2 volume, +3 minimum volume) is 0, set again every tick. In its place the mod's sound plays (amSndPlay,
+// amSndPlayXYZ: sound_replaced_play), a placed one quieter with its distance from the hero over the game's range for
+// it (+6). A plain one-shot plays out; a "loop" started with a handle stops when the game stops it or the handle is
+// cleared (sound_replace_tick). A placed one can't go by its handle: the placed sounds' manager
+// lets go of a silent point at once, clearing it, so it stops when the game stops it by that handle (amSndStopXYZ:
+// sound_replaced_stop), when the same id starts again, or when one of its "stopped_by" ids plays ("0xFA": { "sound":
+// "charge", "stopped_by": [ "0xE1" ] }: the shot ends the charge). A placed sound already playing on its handle is not
+// started again (the game doesn't).
+//
 // Music:
 //
 // A mod ships OGG Vorbis files and says which levels play them, in jfg_music.json:
@@ -247,6 +260,19 @@ struct ModSound {
 };
 std::vector<std::unique_ptr<ModSound>> g_sounds; // filled as mods are enabled, read-only while the game runs
 
+// The game's sound effects replaced by mods' (jfg_sounds.json "replace"), by id. The first mod to name an id wins.
+struct Replacement {
+    const ModSound* sound = nullptr;
+    bool loop = false;
+    float volume = 1.0f;
+    uint16_t range = 0; // the game's range for it (placed sounds), read before it is muted
+    std::vector<uint32_t> stopped_by; // ids whose playing stops this one's voices
+    bool enabled = true;  // off (jfg_sound_replace_enable): the game's own sound plays again
+    bool saved = false;   // the game's volume and minimum volume for it, kept to give back
+    uint8_t volume_game = 0, minimum_game = 0;
+};
+std::map<uint32_t, Replacement> g_replace;
+
 // A playing sound. id 0 = a free slot.
 struct Voice {
     const ModSound* sound = nullptr;
@@ -338,6 +364,40 @@ void on_sound_mod_enabled(recomp::mods::ModContext&, const recomp::mods::ModHand
         count++;
     }
     log("sounds: " + id + ": " + std::to_string(count) + " sounds");
+    if (!j.contains("replace") || !j["replace"].is_object()) return;
+    int replaced = 0;
+    for (auto& [key, value] : j["replace"].items()) {
+        const uint32_t sound_id = (uint32_t)std::strtoul(key.c_str(), nullptr, 0);
+        std::string name;
+        Replacement r;
+        if (value.is_string()) {
+            name = value.get<std::string>();
+        } else if (value.is_object() && value.contains("sound") && value["sound"].is_string()) {
+            name = value["sound"].get<std::string>();
+            if (value.contains("loop") && value["loop"].is_boolean()) r.loop = value["loop"].get<bool>();
+            if (value.contains("volume") && value["volume"].is_number()) r.volume = std::max(0.0f, value["volume"].get<float>());
+            if (value.contains("stopped_by") && value["stopped_by"].is_array()) {
+                for (const auto& v : value["stopped_by"]) {
+                    if (v.is_string()) r.stopped_by.push_back((uint32_t)std::strtoul(v.get<std::string>().c_str(), nullptr, 0));
+                }
+            }
+        }
+        const std::string full = id + ":" + name;
+        for (const auto& snd : g_sounds) {
+            if (snd->key == full) r.sound = snd.get();
+        }
+        if (!r.sound || sound_id == 0 || sound_id > 0xFFFF) {
+            log("sounds: " + id + ": replace " + key + ": no sound " + name + " in the mod, or not a sound id");
+            continue;
+        }
+        if (g_replace.count(sound_id)) {
+            log("sounds: " + id + ": replace " + key + ": another mod replaces it already");
+            continue;
+        }
+        g_replace[sound_id] = r;
+        replaced++;
+    }
+    log("sounds: " + id + ": replaces " + std::to_string(replaced) + " of the game's sounds");
 }
 
 const ModSound* find_sound(size_t mod_index, const std::string& name) {
@@ -356,6 +416,33 @@ float float_arg(recomp_context* ctx, int index) {
     return f;
 }
 
+// A voice for snd; the oldest makes room when all are in use. Its id.
+uint32_t start_voice(const ModSound* snd, float volume, float pan, float pitch, bool loop) {
+    std::lock_guard<std::mutex> lock(g_voice_mutex);
+    Voice* slot = nullptr;
+    for (Voice& v : g_voices) {
+        if (v.id == 0) { slot = &v; break; }
+        if (!slot || v.id < slot->id) slot = &v;
+    }
+    *slot = Voice{ snd, 0.0, std::max(0.0f, volume), std::clamp(pan, -1.0f, 1.0f), std::max(0.01f, pitch), loop,
+                   g_next_voice++ };
+    return slot->id;
+}
+
+void stop_voice(uint32_t id) {
+    std::lock_guard<std::mutex> lock(g_voice_mutex);
+    for (Voice& v : g_voices) {
+        if (id != 0 && v.id == id) v = Voice{};
+    }
+}
+
+// Replaced sounds started with a handle: stopped when the handle no longer holds what the game put there.
+struct Tracked {
+    uint32_t handle_addr, handle, voice, id, tick;
+    bool placed; // a placed sound: not stopped by its handle clearing
+};
+std::vector<Tracked> g_tracked;
+
 // jfg_sound_play / jfg_sound_loop(const char* name, float volume, float pan, float pitch): a voice id, 0 when the mod
 // has no such sound. The oldest voice makes room when all are in use.
 void start_sound(uint8_t* rdram, recomp_context* ctx, size_t mod_index, bool loop) {
@@ -370,15 +457,7 @@ void start_sound(uint8_t* rdram, recomp_context* ctx, size_t mod_index, bool loo
         ctx->r2 = 0;
         return;
     }
-    std::lock_guard<std::mutex> lock(g_voice_mutex);
-    Voice* slot = nullptr;
-    for (Voice& v : g_voices) {
-        if (v.id == 0) { slot = &v; break; }
-        if (!slot || v.id < slot->id) slot = &v;
-    }
-    *slot = Voice{ snd, 0.0, std::max(0.0f, float_arg(ctx, 1)), std::clamp(float_arg(ctx, 2), -1.0f, 1.0f),
-                   std::max(0.01f, float_arg(ctx, 3)), loop, g_next_voice++ };
-    ctx->r2 = (gpr)slot->id;
+    ctx->r2 = (gpr)start_voice(snd, float_arg(ctx, 1), float_arg(ctx, 2), float_arg(ctx, 3), loop);
 }
 
 void sound_play(uint8_t* rdram, recomp_context* ctx, size_t mod_index) { start_sound(rdram, ctx, mod_index, false); }
@@ -401,13 +480,146 @@ void sound_set(uint8_t*, recomp_context* ctx) {
 
 // jfg_sound_stop(int voice)
 void sound_stop(uint8_t*, recomp_context* ctx) {
-    const uint32_t id = (uint32_t)ctx->r4;
-    std::lock_guard<std::mutex> lock(g_voice_mutex);
-    for (Voice& v : g_voices) {
-        if (id != 0 && v.id == id) v = Voice{};
+    stop_voice((uint32_t)ctx->r4);
+}
+
+// Whether a replacement is the mod's own (its sounds are "<mod id>:<name>"): only the mod that replaced an id may turn
+// the replacement off or swap its sound.
+bool replacement_owned(const Replacement& r, size_t mod_index) {
+    const std::string prefix = recomp::mods::get_mod_id(mod_index) + ":";
+    return r.sound && r.sound->key.compare(0, prefix.size(), prefix) == 0;
+}
+
+// jfg_sound_replace_enable(int id, int on): a replacement (jfg_sounds.json "replace") on or off while the game runs; off,
+// the game's own sound plays again (its volume given back next tick) and the stand-in's voices stop. 1 if the id is
+// replaced by this mod, else 0.
+void sound_replace_enable(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const uint32_t id = (uint32_t)ctx->r4 & 0xFFFF;
+    const bool on = ctx->r5 != 0;
+    const auto it = g_replace.find(id);
+    if (it == g_replace.end() || !replacement_owned(it->second, mod_index)) { ctx->r2 = 0; return; }
+    if (it->second.enabled && !on) {
+        for (size_t i = 0; i < g_tracked.size();) {
+            if (g_tracked[i].id != id) { i++; continue; }
+            stop_voice(g_tracked[i].voice);
+            g_tracked[i] = g_tracked.back();
+            g_tracked.pop_back();
+        }
+    }
+    it->second.enabled = on;
+    ctx->r2 = 1;
+}
+
+// jfg_sound_replace_use(int id, const char* name, float volume): another of the mod's sounds stands in for a replaced id
+// from its next play on (one game sound shared by two weapons, told apart by the weapon in hand). 1 if done, else 0 (not
+// replaced by this mod, or no such sound in the mod). Voices already playing carry on.
+void sound_replace_use(uint8_t* rdram, recomp_context* ctx, size_t mod_index) {
+    const uint32_t id = (uint32_t)ctx->r4 & 0xFFFF;
+    const ModSound* snd = find_sound(mod_index, _arg_string<1>(rdram, ctx));
+    const auto it = g_replace.find(id);
+    if (it == g_replace.end() || !snd || !replacement_owned(it->second, mod_index)) { ctx->r2 = 0; return; }
+    it->second.sound = snd;
+    it->second.volume = std::max(0.0f, float_arg(ctx, 2));
+    ctx->r2 = 1;
+}
+
+constexpr uint32_t ADDR_sfxIndex = 0x800E9508;     // SoundData*: amSndPlay's table
+constexpr uint32_t ADDR_sfxIndexXYZ = 0x800F29F0;  // SoundData*: amSndPlayXYZ's (the same table, kept apart)
+constexpr uint32_t ADDR_maxSound = 0x800E9510;     // s32: the highest id
+constexpr uint32_t SOUND_DATA = 10;
+
+// The replaced ids silent in the game's tables (their range and volumes kept first), or given their volumes back while
+// a mod has turned the replacement off.
+void mute_replaced() {
+    using namespace jfg;
+    const int max = (int)rd32(ADDR_maxSound);
+    for (uint32_t table : { rd32(ADDR_sfxIndex), rd32(ADDR_sfxIndexXYZ) }) {
+        if (!valid_ptr(table)) continue;
+        for (auto& [id, r] : g_replace) {
+            if ((int)id > max) continue;
+            const uint32_t e = table + id * SOUND_DATA;
+            if (!r.saved && rd8(e + 2) != 0) {
+                r.range = rd16(e + 6);
+                r.volume_game = rd8(e + 2);
+                r.minimum_game = rd8(e + 3);
+                r.saved = true;
+            }
+            if (r.enabled) {
+                wr8(e + 2, 0);
+                wr8(e + 3, 0);
+            } else if (r.saved) {
+                wr8(e + 2, r.volume_game);
+                wr8(e + 3, r.minimum_game);
+            }
+        }
     }
 }
 } // namespace
+
+// The game's amSndPlay / amSndPlayXYZ wrappers, after the game's code: a replaced id plays the mod's sound. handle_addr:
+// where the game keeps the sound's handle (0 none); was_playing: that handle was set before the call (a placed sound
+// the game then didn't start again). For a placed sound, x, y, z.
+namespace jfg {
+void sound_replaced_play(recomp_context* ctx, uint32_t id, uint32_t handle_addr, bool was_playing, bool placed,
+                         float x, float y, float z) {
+    if (g_replace.empty()) return;
+    id &= 0xFFFF;
+    // Any sound, replaced or not, ends the voices of the replacements it stops.
+    for (const auto& [rid, rep] : g_replace) {
+        if (std::find(rep.stopped_by.begin(), rep.stopped_by.end(), id) == rep.stopped_by.end()) continue;
+        for (size_t i = 0; i < g_tracked.size();) {
+            if (g_tracked[i].id != rid) { i++; continue; }
+            stop_voice(g_tracked[i].voice);
+            g_tracked[i] = g_tracked.back();
+            g_tracked.pop_back();
+        }
+    }
+    const auto it = g_replace.find(id);
+    if (it == g_replace.end() || was_playing || !it->second.enabled) return;
+    const Replacement& r = it->second;
+    if (placed) { // the same placed sound again: the older one makes way
+        for (size_t i = 0; i < g_tracked.size();) {
+            if (g_tracked[i].id != id || !g_tracked[i].placed) { i++; continue; }
+            stop_voice(g_tracked[i].voice);
+            g_tracked[i] = g_tracked.back();
+            g_tracked.pop_back();
+        }
+    }
+    float volume = r.volume;
+    if (placed) {
+        const uint32_t hero = player_object(ctx);
+        if (valid_ptr(hero) && r.range > 0) {
+            const float dx = x - Obj::PosX::get(hero), dy = y - Obj::PosY::get(hero), dz = z - Obj::PosZ::get(hero);
+            const float d = std::sqrt(dx * dx + dy * dy + dz * dz);
+            volume *= std::clamp(1.0f - d / (float)r.range, 0.0f, 1.0f);
+        }
+        if (volume <= 0.01f) return;
+    }
+    const uint32_t voice = start_voice(r.sound, volume, 0.0f, 1.0f, r.loop);
+    static const bool debug = std::getenv("JFG_DEBUG_SOUNDS") != nullptr;
+    if (debug) std::fprintf(stderr, "[jfg] sound 0x%X replaced by %s (volume %.2f%s)\n", id & 0xFFFF, r.sound->key.c_str(), volume, r.loop ? ", loop" : "");
+    if (valid_ptr(handle_addr)) {
+        const uint32_t handle = rd32(handle_addr);
+        // Only a loop goes by the handle: a one-shot plays out (its tail would be cut when the game reuses the handle).
+        if (handle != 0 && (r.loop || placed)) g_tracked.push_back({ handle_addr, handle, voice, id, jfg::g_tick_count, placed });
+        else if (handle == 0 && r.loop) stop_voice(voice); // the game has nothing playing to end the loop
+        else if (!r.stopped_by.empty()) g_tracked.push_back({ 0, 0, voice, id, jfg::g_tick_count, true });
+    } else if (placed || !r.stopped_by.empty()) {
+        g_tracked.push_back({ 0, 0, voice, id, jfg::g_tick_count, true }); // for stopped_by and restarts
+    }
+}
+
+// amSndStopXYZ(mask)'s wrapper (jfg_diagnostics.cpp), before the game's code: the stand-ins started on that handle stop.
+void sound_replaced_stop(uint32_t mask) {
+    if (mask == 0) return;
+    for (size_t i = 0; i < g_tracked.size();) {
+        if (g_tracked[i].handle != mask) { i++; continue; }
+        stop_voice(g_tracked[i].voice);
+        g_tracked[i] = g_tracked.back();
+        g_tracked.pop_back();
+    }
+}
+} // namespace jfg
 
 extern "C" void jfg_register_music_mods(void) {
     recomp::mods::ModContentType type{
@@ -430,6 +642,8 @@ extern "C" void jfg_register_music_mods(void) {
     recomp::overlays::register_ext_base_export("jfg_sound_loop", sound_loop);
     recomp::overlays::register_base_export("jfg_sound_set", sound_set);
     recomp::overlays::register_base_export("jfg_sound_stop", sound_stop);
+    recomp::overlays::register_ext_base_export("jfg_sound_replace_enable", sound_replace_enable);
+    recomp::overlays::register_ext_base_export("jfg_sound_replace_use", sound_replace_use);
 }
 
 // Mixes the mods' playing sounds into the game's audio (as jfg_music_mix): linear resampling to the game's rate times
@@ -503,9 +717,37 @@ void music_force(const std::string& mod_id, const std::string& name) {
     g_forced_level = name.empty() ? -1 : (int)(int16_t)rd16(ADDR_currentLevel);
 }
 
+// Every game tick: the replaced sounds kept silent, and their stand-ins stopped with them.
+void sound_replace_tick() {
+    if (g_replace.empty()) return;
+    mute_replaced();
+    for (size_t i = 0; i < g_tracked.size();) {
+        const Tracked& t = g_tracked[i];
+        if (t.placed || rd32(t.handle_addr) == t.handle) { i++; continue; }
+        static const bool debug = std::getenv("JFG_DEBUG_SOUNDS") != nullptr;
+        if (debug) std::fprintf(stderr, "[jfg] sound 0x%X: the game's ended after %u ticks, its stand-in stops\n", t.id, jfg::g_tick_count - t.tick);
+        stop_voice(t.voice);
+        g_tracked[i] = g_tracked.back();
+        g_tracked.pop_back();
+    }
+    // Placed and stopped_by entries whose voice has ended, and any never stopped, are forgotten.
+    {
+        std::lock_guard<std::mutex> lock(g_voice_mutex);
+        for (size_t i = 0; i < g_tracked.size();) {
+            bool alive = false;
+            for (const Voice& v : g_voices) alive = alive || v.id == g_tracked[i].voice;
+            if (alive || !g_tracked[i].placed) { i++; continue; }
+            g_tracked[i] = g_tracked.back();
+            g_tracked.pop_back();
+        }
+    }
+    if (g_tracked.size() > 64) g_tracked.erase(g_tracked.begin(), g_tracked.begin() + 32);
+}
+
 // Every game tick: starts or stops the level's track and keeps the game's tune silent while one plays.
 void music_tick(recomp_context* ctx) {
     static uint32_t saved_global = 0x100;
+    sound_replace_tick();
     if (!g_sounds.empty()) {
         const recomp_context saved = *ctx;
         const uint32_t sfx = call_game(frontGetSfxVolume, ctx, {});

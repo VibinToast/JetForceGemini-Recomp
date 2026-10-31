@@ -175,11 +175,23 @@ extern "C" int jfg_squad_frames(uint8_t* rdram, uint32_t member, int frames) {
 // function from the ROM, and enemies ran twice as fast at 60 fps when the cadence was a hook inside them). They are
 // wrapped (tools/wrapped_funcs.txt): every call runs these first, then the game's code (<name>_orig), or a mod's patch
 // or hook of it.
+uint32_t kills_set_squaddie(uint32_t obj); // jfg_kills.cpp
+void squad_mult_member_moved(uint8_t* rdram, recomp_context* ctx, uint32_t obj); // jfg_squad_multiplier.cpp
+namespace squad_types { void set_frames(int frames); void voices(uint32_t obj, bool on); } // jfg_squad_types.cpp
+
+// Also tells jfg_kills.cpp which squad member is being updated (a Tribal lost is marked during the update).
 JFG_WRAP(SquaddieControl) {
     const int r = jfg_squad_frames(rdram, (uint32_t)ctx->r4, (int32_t)ctx->r5);
     if (r == 0) return;
     ctx->r5 = (gpr)r;
+    jfg::squad_types::set_frames(r); // a mod's squad type tick gets the update rate
+    const uint32_t before = jfg::kills_set_squaddie((uint32_t)ctx->r4);
+    jfg::squad_types::voices((uint32_t)ctx->r4, true); // a mod's squad type: the like type's voices silenced
+    const uint32_t member = (uint32_t)ctx->r4;
     SquaddieControl_orig(rdram, ctx);
+    jfg::squad_types::voices(0, false);
+    jfg::kills_set_squaddie(before);
+    jfg::squad_mult_member_moved(rdram, ctx, member); // More Enemies: an extra drone beside its stock one
 }
 
 JFG_WRAP(SquadronControl) {
@@ -391,7 +403,7 @@ uint32_t model_instance(uint32_t obj) {
 // (2026-10-17). Only members found here are touched.
 std::unordered_set<uint32_t> g_live_objects;
 void read_live_objects() {
-    constexpr uint32_t ADDR_ObjList = 0x800F2CA4, ADDR_ObjListCount = 0x800F2CA8, ADDR_NoAddObjList = 0x800F2CB4, ADDR_NoAddObjListCount = 0x800F2CB8;
+    constexpr uint32_t ADDR_NoAddObjList = 0x800F2CB4, ADDR_NoAddObjListCount = 0x800F2CB8;
     g_live_objects.clear();
     const uint32_t lists[2][2] = { { ADDR_ObjList, ADDR_ObjListCount }, { ADDR_NoAddObjList, ADDR_NoAddObjListCount } };
     for (const auto& l : lists) {
@@ -803,9 +815,12 @@ extern "C" uint32_t jfg_frame_sync(uint8_t* rdram_, uint32_t frames) {
 
 // FlowerBoltControl(obj, frames): the slug boss's homing bolts (overlay 149) apply a turn limit, steering smoothing and
 // speed growth per call, so at 60 fps they homed and sped up about twice as hard. They run with the squad cadence.
+namespace jfg { void claims_after_frees(uint8_t* rdram); void object_events_after_frees(uint8_t* rdram); } // jfg_object_claims.cpp, jfg_object_events.cpp
 JFG_WRAP(objDoFrees) {
     jfg::jfg_squad_count_repair(rdram);
     objDoFrees_orig(rdram, ctx);
+    jfg::claims_after_frees(rdram); // mods' claims on the freed objects go
+    jfg::object_events_after_frees(rdram); // and mods watching them are told (next tick)
 }
 
 JFG_WRAP(FlowerBoltControl) {
