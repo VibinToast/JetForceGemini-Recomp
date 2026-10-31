@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 # JFG PORT: the version comes from version.txt (the release workflow updates it); the launcher shows it.
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/version.txt" JFG_VERSION LIMIT_COUNT 1)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/version.txt")
-project(JFGRecomp VERSION ${JFG_VERSION} LANGUAGES C CXX)
+# A test build is versioned like 1.4.0-test.4: the project version (numbers only) leaves the tag off; the game shows it.
+string(REGEX MATCH "^[0-9]+(\\.[0-9]+)*" JFG_VERSION_NUMBERS "${JFG_VERSION}")
+project(JFGRecomp VERSION ${JFG_VERSION_NUMBERS} LANGUAGES C CXX)
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

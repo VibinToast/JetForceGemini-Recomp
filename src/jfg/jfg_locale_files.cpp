@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "json/json.hpp"
+#include "../runtime/support.hpp"
 #include "librecomp/game.hpp"
 #include "jfg_assets.h"
 #include "jfg_locale.h"
@@ -42,6 +43,8 @@ constexpr uint32_t ROM_ASCII_GLYPHS = 0xA7B04; // fontConvertString's table (D_8
 constexpr size_t SUBTITLE_ENTRY_MAX = 960;     // gGameTextTableEntries' buffer (subtitlesInit)
 // The names the old Language option and locale mods saved, for jfg_language.txt from before locale files.
 const char* const SLOT_IDS[5] = { "", "french", "german", "spanish", "japanese" };
+// The official translations (jfg::locale::official); English is official too.
+const char* const OFFICIAL_IDS[] = { "french", "german", "spanish", "japanese" };
 
 void log(const std::string& text) { jfg::jfg_log_line("jfg_mods.log", text.c_str()); }
 
@@ -507,28 +510,34 @@ void load_saved_choice() {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.rfind("language=", 0) == 0) { g_chosen = migrate(line.substr(9)); return; }
     }
-    // Before locales, the Language option was a slot number (jfg_port_options.txt "language="), read here since the
-    // options aren't loaded yet at start-up.
-    std::ifstream options("jfg_port_options.txt");
-    while (std::getline(options, line)) {
-        if (line.rfind("language=", 0) == 0) {
-            const int slot = std::atoi(line.c_str() + 9);
-            if (slot > 0 && slot < 5) g_chosen = SLOT_IDS[slot];
-        }
-    }
+    // No saved choice: English until the player picks one (the first-start question asks; an old version's Language
+    // slot in jfg_port_options.txt no longer counts, so a skipped question leaves English).
 }
 
-// locales/*.json, by name.
+// The locale files, by name: the ones that ship with the port (assets/locales) and the player's own (locales/ in the
+// game's folder); a player's file replaces a shipped one of the same name.
 std::vector<std::filesystem::path> locale_files() {
-    std::vector<std::filesystem::path> files;
-    std::error_code ec;
-    for (const auto& e : std::filesystem::directory_iterator(FOLDER, ec)) {
-        std::string ext = e.path().extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-        if (e.is_regular_file(ec) && ext == ".json") files.push_back(e.path());
+    std::map<std::string, std::filesystem::path> by_name;
+    for (const std::filesystem::path& folder : { dino::runtime::get_asset_path("locales"), std::filesystem::path(FOLDER) }) {
+        std::error_code ec;
+        for (const auto& e : std::filesystem::directory_iterator(folder, ec)) {
+            std::string ext = e.path().extension().string(), name = e.path().stem().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            if (e.is_regular_file(ec) && ext == ".json") by_name[name] = e.path();
+        }
     }
-    std::sort(files.begin(), files.end());
+    std::vector<std::filesystem::path> files;
+    for (const auto& [name, path] : by_name) files.push_back(path);
     return files;
+}
+
+// Locale `id`'s file (locale_files' choice): the player's, else the shipped one.
+std::filesystem::path locale_path(const std::string& id) {
+    const std::filesystem::path own = std::filesystem::path(FOLDER) / (id + ".json");
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(own, ec)) return own;
+    return dino::runtime::get_asset_path("locales") / (id + ".json");
 }
 
 // Under g_mutex: the Language list from `locales` (only id, name and english_name are read). english.json names the
@@ -577,7 +586,7 @@ extern "C" void jfg_locale_build_registry(void) {
     set_list(g_locales);
     load_choice();
     char line[160];
-    std::snprintf(line, sizeof line, "locale: %zu locale files in %s/", g_locales.size(), FOLDER);
+    std::snprintf(line, sizeof line, "locale: %zu locale files (assets/locales and %s/)", g_locales.size(), FOLDER);
     log(line);
 }
 
@@ -610,6 +619,19 @@ void choose(const std::string& id) {
         std::fprintf(f, "# The game's language: a locale file's name (locales/<name>.json); empty = English.\nlanguage=%s\n", id.c_str());
         std::fclose(f);
     }
+}
+
+bool choice_saved() {
+    std::ifstream f(CHOICE_FILE);
+    std::string line;
+    while (std::getline(f, line))
+        if (line.rfind("language=", 0) == 0) return true;
+    return false;
+}
+
+bool official(const std::string& id) {
+    if (id.empty() || id == ENGLISH_ID) return true;
+    return std::any_of(std::begin(OFFICIAL_IDS), std::end(OFFICIAL_IDS), [&](const char* o) { return id == o; });
 }
 
 // Test: JFG_DEBUG_LANGUAGE="secs,id" picks locale `id` ("" = English) that many seconds after the first call, as the
@@ -691,7 +713,7 @@ void load_ui() {
     g_ui_loaded = true;
     std::string id = jfg::locale::chosen();
     if (id.empty()) id = ENGLISH_ID;
-    std::ifstream f(std::filesystem::path(FOLDER) / (id + ".json"), std::ios::binary);
+    std::ifstream f(locale_path(id), std::ios::binary);
     if (!f) return;
     const std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     const json j = json::parse(bytes, nullptr, false);
@@ -748,7 +770,33 @@ bool take_ui_switch(std::map<std::string, std::string>& old_ui, std::map<std::st
     return true;
 }
 
+namespace {
+std::atomic<bool> g_hold{ false };
+std::mutex g_ui_in_mutex;
+std::map<std::string, std::map<std::string, std::string>> g_ui_in; // id -> its file's "ui"
+} // namespace
+
+void hold_translation(bool hold) { g_hold = hold; }
+
+std::string ui_in(const std::string& id, const std::string& english) {
+    std::lock_guard<std::mutex> lock(g_ui_in_mutex);
+    auto it = g_ui_in.find(id);
+    if (it == g_ui_in.end()) {
+        std::map<std::string, std::string> ui;
+        std::ifstream f(locale_path(id.empty() ? std::string(ENGLISH_ID) : id), std::ios::binary);
+        const std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        const json j = json::parse(bytes, nullptr, false);
+        if (!j.is_discarded() && j.is_object() && j.contains("ui") && j["ui"].is_object())
+            for (const auto& [k, v] : j["ui"].items())
+                if (v.is_string()) ui[ui_key(k)] = v.get<std::string>();
+        it = g_ui_in.emplace(id, std::move(ui)).first;
+    }
+    auto t = it->second.find(ui_key(english));
+    return t != it->second.end() ? ui_breaks(t->second) : english;
+}
+
 bool translate_ui(std::string& out, const std::string& in) {
+    if (g_hold) { out = in; return false; }
     const std::string key = ui_key(in);
     std::lock_guard<std::mutex> lock(g_ui_mutex);
     const std::string* t = key.empty() ? nullptr : lookup(key);

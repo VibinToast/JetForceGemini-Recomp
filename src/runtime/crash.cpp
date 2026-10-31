@@ -77,14 +77,23 @@ static void crash_printf(const CrashPrintContext* context, const char *format, .
     va_end(args);
 }
 
+extern "C" int jfg_mods_at(uint32_t address, char* out, int out_size); // jfg_mods.cpp
+
 static void dump_game_callstack(const CrashPrintContext* log_context) {
     if (!game_func_stack.empty()) {
         crash_printf(log_context, "**** GAME CALLSTACK START ****\n");
 
         while (!game_func_stack.empty()) {
             GameFunc& func = game_func_stack.top();
+            // JFG PORT: a mod function is listed at its linked address (every mod links at 0x81000000): the mods whose
+            // image covers it, to look up in their build/mod.map
+            char mods[512];
+            const int n = func.name == nullptr ? jfg_mods_at((uint32_t)func.address, mods, sizeof mods) : 0;
             if (func.name != nullptr) {
                 crash_printf(log_context, "0x%08" PRIx32 " %s\n", (uint32_t)func.address, func.name);
+            } else if (n > 0) {
+                crash_printf(log_context, "0x%08" PRIx32 " a mod function: this address in the build/mod.map of one of: %s\n",
+                             (uint32_t)func.address, mods);
             } else {
                 crash_printf(log_context, "0x%08" PRIx32 "\n", (uint32_t)func.address);
             }

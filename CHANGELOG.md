@@ -3,6 +3,71 @@
 Changes to Jet Force Gemini: Recompiled. Newest first. "Unreleased" is the next release, still in testing: its notes
 are written here by hand and become that version's notes when it is released.
 
+## Unreleased
+
+### New options
+
+- Update Channel (General, next to Check for Updates): Testing also offers test builds, so you can try a fix before it is released. Switching back to Stable offers the latest release again, even if it is older than the test build. Your saves, settings and mods are kept.
+
+## v1.3.2 (2026-10-30)
+
+- Linux: fixed a crash when choosing a save file after restarting the game. Nothing needs deleting.
+- Windows: the same bug made the game forget progress on mods' planets after a restart; it is now kept.
+
+## v1.3.1 (2026-10-30)
+
+**Linux players on 1.2.x:** download this release by hand once. The repository was renamed to JetForceGemini-Recompiled and the old update check can't see the new name; from 1.3 on it works as usual.
+
+### Mods
+
+- A new Get Mods page in the launcher: browse, install, update and remove mods in one click, with tags, full controller support, and other people's collections added by their GitHub repo.
+- More than 20 official mods to start with, including a minimap, new weapons, a dodge, a kill feed, health and ammo rings, custom enemies and more enemies in every squad.
+- Mods can now add new weapons (with their own model, HUD icon and kill feed name), new enemy types with their own animations, sound effects, music, HUD and on-screen drawing, level objects and pickups. See the mod API in `mod_api/jfg_api.h` and the modding wiki.
+- Mods work together better: they no longer undo each other's settings, and a crash report names the mod it happened in.
+- The Mods page is redone in the texture packs' look, with each mod's tags, its settings on a readable page, and an On/Off switch that works during play.
+- Blood options and Hide Floyd moved into the Blood and Better Floyd mods.
+
+### Languages
+
+- 10+ languages ship with the game, and you're asked to choose on first start: English, French, German, Spanish, Japanese, and unofficial Italian, Dutch, Polish, Swedish, Brazilian Portuguese and Pirate. A language is one file you can translate yourself.
+- The launcher and settings menus follow your language, and you can switch it at once from the launcher's Play page.
+
+### New options
+
+- Floyd's Fuel: how long Floyd's fuel lasts in his missions (100% to 300%).
+- Faster Pause Menu: the pause menu opens and closes three times as fast.
+- Controls redone: a Players row, Quick Setup (Modern, Original N64, Custom) and grouped sections, with button bindings on their own page.
+- Return to Main Menu in the Quit tab.
+
+### Changes
+
+- Simpler settings: Frame Interpolation is now called Display Frame Rate (your setting is kept). Game Frame Rate, the fly camera's settings (F7) and the over-the-shoulder aiming sliders are hidden until you turn on Show Advanced Options (General tab, above Language); they then show in their usual places.
+- New players start on the Modern profile. If you already have settings, nothing changes.
+- The Default profile is now called Original.
+- The logo now says Recompiled.
+- The settings menu reopens on the page you left, and B goes back.
+- Jetpack Refuel Speed is 300% in the Modern, Modern and Balanced and Extreme profiles.
+- Auto Save no longer saves during boss fights; a save that comes due waits for the next level.
+- Keep the Reticle Centered off now works with a controller while Mouse and Keyboard Controls are on, in boss fights too; the mouse still turns the view directly.
+- Profiles: Sprint is on in Modern, Modern and Balanced and Extreme (the left stick click sprints, B still crouches). Extreme also gets three times Floyd's fuel and the fixed sniper zoom. Choose a profile again to get these.
+- Get Mods: publishing a new mod can no longer stop the mod list from loading.
+
+### Fixes
+
+- Custom levels: the hero no longer falls through floors or stops at invisible walls in big levels (higher collision limits, long thin triangles handled, floors joined where the level's pieces meet), and rooms remember up to 255 killed enemies and broken crates instead of 128.
+- Customize Buttons: the note about the Built-in Button Layout no longer covers the first binding row, Use My Bindings stays inside the panel, and a controller can reach it.
+- Custom levels: shots no longer stop at invisible walls past the ends of thin two-sided walls.
+- Floyd banks as far with the mouse as with the stick at full turn, no further.
+- The launcher's Profiles page: the buttons below the profile name box no longer show past the bottom of the panel.
+- Fixed a crash with the flamethrower in busy levels, and a freeze in big fights with a lot of enemies.
+- Screen shakes work with the dual-stick and aiming cameras.
+- Disable LOD also covers enemy models loaded again during a level.
+- Get Mods: a controller can now move down from the tags to the list of mods.
+- Get Mods: removing or updating a mod no longer fails because its file is in use.
+- Mods: moving down past the end of the mod list now stays on the last mod instead of jumping back to the top.
+- Profiles: Keep Area Progress and Permanent Tribal Saves are now on in every built-in profile except Original.
+- The aim reticles of most weapons (Tri-Rocket, Homing Missiles, mines, grenades and others) and the rain no longer disappear with Display Frame Rate on when no mod or on-screen message is showing.
+
 ## v1.2.4 (2026-10-25)
 
 ### Fixes

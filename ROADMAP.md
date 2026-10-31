@@ -16,9 +16,6 @@ What's coming to Jet Force Gemini Recompiled. Plans can change and there are no 
 **Mods**
 - Mod support.
 
-**Settings menu**
-- A better way to use the F10 tools with a controller.
-
 **Gameplay**
 - Settings for Floyd's fuel in Floyd missions.
 

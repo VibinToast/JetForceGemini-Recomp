@@ -7,6 +7,7 @@
 
 #include "librecomp/mods.hpp"
 
+#include <cctype>
 #include <string>
 
 #ifdef WIN32
@@ -32,7 +33,8 @@ const std::string mod_tab_id = "#tab_mods"; // JFG PORT: the launcher's Mods but
 
 static void mark_other_mod_menus_dirty(ModMenu* changed);
 
-// JFG PORT: a card like the texture packs': thumbnail, name, version and authors, and a tag saying whether it is on.
+// JFG PORT: a card like the texture packs': thumbnail, name, version and authors, and a tag saying whether it is on
+// with the mod's own tags (its manifest's "tags": HUD, Weapons...) under it, as on the launcher's Get Mods page.
 ModEntryView::ModEntryView(Element *parent) : Element(parent, Events(EventType::Update)) {
     ContextId context = get_current_context();
 
@@ -69,7 +71,15 @@ ModEntryView::ModEntryView(Element *parent) : Element(parent, Events(EventType::
             meta_label = context.create_element<Label>(body_container, LabelStyle::Small);
         } // body_container
 
-        status_tag = context.create_element<Label>(this, LabelStyle::Annotation);
+        side_container = context.create_element<Element>(this);
+        side_container->set_display(Display::Flex);
+        side_container->set_flex_direction(FlexDirection::Column);
+        side_container->set_align_items(AlignItems::FlexEnd);
+        side_container->set_flex(0.0f, 0.0f);
+        {
+            status_tag = context.create_element<Label>(side_container, LabelStyle::Annotation);
+            tags_label = context.create_element<Label>(side_container, LabelStyle::Small);
+        } // side_container
     } // this
 
     add_style(&checked_style, checked_state);
@@ -93,7 +103,9 @@ void ModEntryView::set_scale(float scale, float radius) {
     modui::set_text(name_label, scale, 29.0f, 36.0f, 700, modui::text, 1.0f);
     modui::set_text(meta_label, scale, 23.0f, 29.0f, 400, modui::dim);
     meta_label->set_margin_top(6.0f * scale);
-    status_tag->set_margin_left(12.0f * scale);
+    side_container->set_margin_left(12.0f * scale);
+    modui::set_text(tags_label, scale, 17.0f, 22.0f, 400, modui::dim, 1.0f);
+    tags_label->set_margin_top(8.0f * scale);
     set_mod_status(status);
 }
 
@@ -106,6 +118,13 @@ void ModEntryView::set_mod_details(const recomp::mods::ModDetails &details) {
         first = false;
     }
     meta_label->set_text(meta);
+    std::string tags;
+    for (const std::string& tag : details.tags) {
+        tags += (tags.empty() ? "" : ", ") + tag;
+    }
+    for (char& c : tags) c = (char)std::toupper((unsigned char)c);
+    tags_label->set_text(tags);
+    tags_label->set_display(tags.empty() ? Display::None : Display::Block);
 }
 
 void ModEntryView::set_mod_thumbnail(const std::string &thumbnail) {
@@ -164,6 +183,10 @@ void ModEntryButton::set_mod_selected_callback(std::function<void(uint32_t)> cal
     selected_callback = callback;
 }
 
+void ModEntryButton::set_mod_activated_callback(std::function<void(uint32_t)> callback) {
+    activated_callback = callback;
+}
+
 void ModEntryButton::set_mod_drag_callback(std::function<void(uint32_t, EventDrag)> callback) {
     drag_callback = callback;
 }
@@ -199,6 +222,13 @@ void ModEntryButton::process_event(const Event& e) {
     case EventType::Focus:
         selected_callback(mod_index);
         set_focused(std::get<EventFocus>(e.variant).active);
+        if (std::get<EventFocus>(e.variant).active) focused_at = std::chrono::steady_clock::now();
+        break;
+    case EventType::Click:
+        // JFG PORT: confirm on the selected mod's card opens its settings, as its Configure button does; not the click
+        // that focused it (a mouse click focuses and clicks at once: the first selects).
+        if (activated_callback != nullptr && std::chrono::steady_clock::now() - focused_at > std::chrono::milliseconds(250))
+            activated_callback(mod_index);
         break;
     case EventType::Hover:
         view->set_style_enabled(hover_state, std::get<EventHover>(e.variant).active);
@@ -314,7 +344,16 @@ void ModMenu::open_install_dialog() {
 
 void ModMenu::mod_toggled(bool enabled) {
     if (active_mod_index >= 0) {
-        recomp::mods::enable_mod(mod_details[active_mod_index].mod_id, enabled);
+        // JFG PORT: a mod with a switch (modui::has_switch) is turned on and off by it, and stays in the Mods list: so
+        // it can change while the game runs. Turning it on before the game starts also puts it in the list.
+        const std::string& id = mod_details[active_mod_index].mod_id;
+        if (modui::has_switch(id)) {
+            recomp::mods::set_mod_config_value(id, "enabled", (uint32_t)(enabled ? 1 : 0));
+            if (enabled && !ultramodern::is_game_started()) recomp::mods::enable_mod(id, true);
+        }
+        else {
+            recomp::mods::enable_mod(id, enabled);
+        }
         
         // Refresh enabled status for all mods in case one of them got auto-enabled due to being a dependency.
         refresh_mod_status();
@@ -350,6 +389,24 @@ void ModMenu::apply_scale() {
     mod_entry_floating_view->set_scale(s, radius);
 }
 
+// JFG PORT: down from the settings menu's tabs, and right from the launcher's Mods button (spatial nav found the
+// toggle), go to the mod selected last (else the first), so switching pages and coming back keeps the place.
+void ModMenu::update_entry_nav() {
+    Rml::ElementTabSet* tabset = recompui::get_config_tabset();
+    if (owner_context == recompui::get_config_context_id() && tabset && tabset->GetActiveTab() == recompui::config_tab_to_index(ConfigTab::Mods)) {
+        recompui::set_config_tabset_mod_nav();
+    }
+    if (owner_context == recompui::get_launcher_context_id()) {
+        Rml::ElementDocument* doc = owner_context.get_document();
+        Rml::Element* mods_button = doc != nullptr ? doc->GetElementById(mod_tab_id.substr(1)) : nullptr;
+        if (mods_button != nullptr) {
+            Element* entry = get_first_mod_entry();
+            const std::string target = entry != nullptr ? entry->get_id() : install_mods_button->get_id();
+            mods_button->SetProperty(Rml::PropertyId::NavRight, Rml::Property{ "#" + target, Rml::Unit::STRING });
+        }
+    }
+}
+
 void ModMenu::mod_selected(uint32_t mod_index) {
     if (active_mod_index >= 0) {
         mod_entry_buttons[active_mod_index]->set_selected(false);
@@ -362,10 +419,12 @@ void ModMenu::mod_selected(uint32_t mod_index) {
         const recomp::mods::ConfigSchema &config_schema = recomp::mods::get_mod_config_schema(mod_details[active_mod_index].mod_id);
         bool toggle_checked = modui::status_of(mod_details[mod_index].mod_id) != modui::Status::Off;
         bool auto_enabled = recomp::mods::is_mod_auto_enabled(mod_details[mod_index].mod_id);
-        bool toggle_enabled = !auto_enabled && (mod_details[mod_index].runtime_toggleable || !ultramodern::is_game_started());
-        bool configure_enabled = !config_schema.options.empty();
+        bool toggle_enabled = !auto_enabled && modui::can_toggle(mod_details[mod_index]);
+        // JFG PORT: a switch alone (modui::has_switch) gives the settings page nothing to show.
+        bool configure_enabled = config_schema.options.size() > (modui::has_switch(mod_details[mod_index].mod_id) ? 1u : 0u);
         mod_details_panel->set_mod_details(mod_details[mod_index], thumbnail_src, toggle_checked, toggle_enabled, auto_enabled, configure_enabled);
         mod_entry_buttons[active_mod_index]->set_selected(true);
+        update_entry_nav(); // JFG PORT
 
         mod_details_panel->setup_mod_navigation(mod_entry_buttons[mod_index]);
 
@@ -386,11 +445,11 @@ void ModMenu::mod_selected(uint32_t mod_index) {
         }
 
         // Navigation from the mod list.
-        if (toggle_enabled) {
-            mod_entry_buttons[active_mod_index]->set_nav(NavDirection::Right, enable_toggle);
-        }
-        else if (configure_enabled) {
+        if (configure_enabled) { // JFG PORT: Configure comes first now
             mod_entry_buttons[active_mod_index]->set_nav(NavDirection::Right, configure_button);
+        }
+        else if (toggle_enabled) {
+            mod_entry_buttons[active_mod_index]->set_nav(NavDirection::Right, enable_toggle);
         }
         else if (Element* row = mod_details_panel->get_first_dependency_row()) { // JFG PORT
             mod_entry_buttons[active_mod_index]->set_nav(NavDirection::Right, row);
@@ -575,6 +634,7 @@ void ModMenu::mod_configure_requested() {
             if (handle_special_config_options(option, config_value)) {
                 continue;
             }
+            if (modui::is_switch_option(option)) continue; // JFG PORT: the On/Off toggle is this option
 
             switch (option.type) {
             case recomp::mods::ConfigOptionType::Enum: {
@@ -666,6 +726,10 @@ void ModMenu::create_mod_list() {
 
         ModEntryButton *mod_entry = context.create_element<ModEntryButton>(list_scroll_container, mod_index);
         mod_entry->set_mod_selected_callback([this](uint32_t mod_index){ mod_selected(mod_index); });
+        mod_entry->set_mod_activated_callback([this](uint32_t mod_index) {
+            // JFG PORT: only the mod already selected (a first click selects it), and only if it has settings.
+            if ((int32_t)mod_index == active_mod_index && mod_details_panel->get_configure_button()->is_enabled()) mod_configure_requested();
+        });
         mod_entry->set_mod_drag_callback([this](uint32_t mod_index, recompui::EventDrag drag){ mod_dragged(mod_index, drag); });
         mod_entry->set_scale(scale, radius);
         mod_entry->set_mod_details(mod_details[mod_index]);
@@ -676,31 +740,16 @@ void ModMenu::create_mod_list() {
 
     if (!mod_entry_buttons.empty()) {
         mod_entry_buttons.front()->set_nav_manual(NavDirection::Up, mod_tab_id);
-        mod_entry_buttons.back()->set_nav(NavDirection::Down, install_mods_button);
+        // JFG PORT: down stops at the last mod. It went on to Install Mods, and from there automatic navigation found the
+        // launcher's sidebar and went round to its top. The buttons below are reached from Configure and the On/Off switch.
+        mod_entry_buttons.back()->set_nav_none(NavDirection::Down);
         install_mods_button->set_nav(NavDirection::Up, mod_entry_buttons.back());
     }
     else {
         install_mods_button->set_nav_manual(NavDirection::Up, mod_tab_id);
     }
 
-    Rml::ElementTabSet* tabset = recompui::get_config_tabset();
-    if (tabset && tabset->GetActiveTab() == recompui::config_tab_to_index(ConfigTab::Mods)) {
-        recompui::set_config_tabset_mod_nav();
-    }       
-
-    // JFG PORT: in the launcher, right from the Mods button goes to the first mod (spatial nav found the toggle).
-    if (owner_context == recompui::get_launcher_context_id()) {
-        Rml::ElementDocument* doc = owner_context.get_document();
-        Rml::Element* mods_button = doc != nullptr ? doc->GetElementById(mod_tab_id.substr(1)) : nullptr;
-        if (mods_button != nullptr) {
-            if (!mod_entry_buttons.empty()) {
-                mods_button->SetProperty(Rml::PropertyId::NavRight, Rml::Property{ "#" + mod_entry_buttons.front()->get_id(), Rml::Unit::STRING });
-            }
-            else {
-                mods_button->SetProperty(Rml::PropertyId::NavRight, Rml::Property{ "#" + install_mods_button->get_id(), Rml::Unit::STRING });
-            }
-        }
-    }
+    update_entry_nav();
 
     // Add one extra spacer at the bottom.
     ModEntrySpacer *spacer = context.create_element<ModEntrySpacer>(list_scroll_container);
@@ -756,7 +805,7 @@ void ModMenu::process_event(const Event &e) {
         }
         if (active_mod_index != -1) {        
             bool auto_enabled = recomp::mods::is_mod_auto_enabled(mod_details[active_mod_index].mod_id);
-            bool toggle_enabled = !auto_enabled && (mod_details[active_mod_index].runtime_toggleable || !ultramodern::is_game_started());
+            bool toggle_enabled = !auto_enabled && modui::can_toggle(mod_details[active_mod_index]);
             if (!toggle_enabled) {
                 mod_details_panel->disable_toggle();
             }
@@ -822,6 +871,7 @@ ModMenu::ModMenu(Element *parent) : Element(parent) {
             Button* configure_button = mod_details_panel->get_configure_button();
             install_mods_button = context.create_element<Button>(footer_container, "Install Mods", recompui::ButtonStyle::Primary);
             install_mods_button->add_pressed_callback([this](){ open_install_dialog(); });
+            install_mods_button->set_nav_none(NavDirection::Down); // JFG PORT: nothing below (see the list's last mod)
 
             ingame_note = context.create_element<Label>(footer_container, "Mods can be installed and changed from the launcher.", LabelStyle::Small);
             ingame_note->set_color(Color{ COL_TEXT_DIM, 255 });
@@ -833,11 +883,13 @@ ModMenu::ModMenu(Element *parent) : Element(parent) {
             refresh_button = context.create_element<Button>(footer_container, "Refresh", recompui::ButtonStyle::Primary);
             refresh_button->add_pressed_callback([this](){ refresh_mods(true); mark_other_mod_menus_dirty(this); });
             refresh_button->set_nav_manual(NavDirection::Up, mod_tab_id);
+            refresh_button->set_nav_none(NavDirection::Down); // JFG PORT
 
             mods_folder_button = context.create_element<Button>(footer_container, "Open Mods Folder", recompui::ButtonStyle::Primary);
             mods_folder_button->add_pressed_callback([this](){ open_mods_folder(); });
             mods_folder_button->set_nav(NavDirection::Up, configure_button);
             mods_folder_button->set_nav_manual(NavDirection::Up, mod_tab_id);
+            mods_folder_button->set_nav_none(NavDirection::Down); // JFG PORT
         } // footer_container
     } // this
     
@@ -925,6 +977,18 @@ void set_config_tabset_mod_nav() {
             }
         }
     }
+}
+
+bool ModMenu::focus_active_mod() {
+    if (active_mod_index < 0 || (size_t)active_mod_index >= mod_entry_buttons.size()) return false;
+    mod_entry_buttons[active_mod_index]->focus();
+    mod_entry_buttons[active_mod_index]->scroll_into_view();
+    return true;
+}
+
+bool focus_selected_mod() {
+    ModMenu* mod_menu = sub_menu_owner != nullptr ? sub_menu_owner : config_mod_menu();
+    return mod_menu != nullptr && mod_menu->focus_active_mod();
 }
 
 void focus_mod_configure_button() {

@@ -18,22 +18,24 @@ scrollbarvertical,scrollbarhorizontal {
     margin: 0;
     border: 0;
     
+    // JFG PORT: the emblem's gold on the launcher's border blue, so the bar shows (it was a faint cyan). The compiled
+    // recomp.rcss has the same values (sass is not installed here).
     slidertrack {
-        background: $color-primary-l;
-        opacity: 0.05;
+        background: #1f3d73;
+        opacity: 0.6;
     }
     
     sliderbar {
         border-radius: space(math.div($scrollbar-width, 2) - 1);
-        background: $color-primary-l;
-        opacity: 0.1;
+        background: #ffb21a;
+        opacity: 0.85;
 
         &:hover:not(:active) {
-            opacity: 0.2;
+            opacity: 1;
         }
 
         &:active {
-            opacity: 0.3;
+            opacity: 1;
         }
     }
     

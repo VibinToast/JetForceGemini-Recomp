@@ -43,6 +43,7 @@ static std::string jfg_upper_latin(const std::string& text); // JFG PORT: below 
 #include "ui_renderer.h"
 void jfg_config_menu_refresh(); // JFG PORT: src/ui/ui_config.cpp
 void close_config_menu(); // src/ui/ui_config.cpp (JFG_DEBUG_CONFIG_CLOSE)
+void jfg_config_note_input(bool controller); // src/ui/ui_config.cpp: the last input in the menus (Players row)
 void jfg_config_step_tab(int dir); // JFG PORT: src/ui/ui_config.cpp
 void jfg_restore_menu_place(); // JFG PORT: src/ui/ui_config.cpp, the menu reopens where it was closed
 bool jfg_config_slider_step(int dir, float held_secs, bool bumper); // JFG PORT: src/ui/ui_config.cpp
@@ -53,6 +54,9 @@ void jfg_launcher_start_pressed(); // JFG PORT: src/ui/ui_launcher.cpp (controll
 void jfg_launcher_scroll(float pixels); // JFG PORT: src/ui/ui_launcher.cpp (controller: right stick)
 extern "C" void jfg_settings_menu_open(int open); // JFG PORT: src/jfg/jfg_camera.cpp (pauses the game)
 extern "C" void jfg_tools_ui_frame(void); // JFG PORT: src/jfg/jfg_ui_tools.cpp
+void jfg_language_prompt_frame(); // JFG PORT: src/ui/ui_language_prompt.cpp
+namespace jfg { void mod_options_frame(); } // JFG PORT: settings moved to the official mods (src/jfg/jfg_mod_options.cpp)
+namespace jfg::overlay { void set_menu_shown(bool shown); } // JFG PORT: src/jfg/jfg_overlay.cpp (mods' overlay)
 extern "C" int jfg_tools_controller_button(int button, int down, int bound); // JFG PORT: src/jfg/jfg_ui_tools.cpp (controller)
 
 static std::vector<char> read_file(const std::filesystem::path& filepath) {
@@ -716,7 +720,11 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
     bool config_was_open = recompui::is_context_shown(recompui::get_config_context_id()) || recompui::is_context_shown(recompui::get_config_sub_menu_context_id());
     jfg_settings_menu_open(config_was_open ? 1 : 0); // JFG PORT
+    // JFG PORT: mods' overlay stays under the settings menu and prompts (not F10's tools bar, which leaves the HUD up)
+    jfg::overlay::set_menu_shown(config_was_open || recompui::is_prompt_open());
     jfg_tools_ui_frame(); // JFG PORT: F10's tools (src/jfg/jfg_ui_tools.cpp)
+    jfg_language_prompt_frame(); // JFG PORT: the first-run language question (src/ui/ui_language_prompt.cpp)
+    jfg::mod_options_frame(); // JFG PORT: old blood / Hide Floyd settings and profiles' mod keys, once mods are scanned
 
     using clock = std::chrono::system_clock;
 
@@ -932,6 +940,24 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
                         break;
                     }
                 }
+                // JFG PORT: in the game's settings menu B is Back as well (as Esc: out of the bindings, then the menu
+                // closes), and on a mod's settings page it goes back to the mods; unless B is bound to a menu input or a
+                // binding is being set.
+                if (context_capturing_input && button == SDL_CONTROLLER_BUTTON_B && sdl_key == 0 && !recompui::is_prompt_open() &&
+                    dino::input::get_scanned_input_index() < 0) {
+                    if (recompui::is_context_shown(recompui::get_config_sub_menu_context_id())) {
+                        recompui::config_sub_menu_back();
+                        non_mouse_interacted = true;
+                        cont_interacted = true;
+                        break;
+                    }
+                    if (recompui::is_context_shown(recompui::get_config_context_id())) {
+                        ui_state->context->ProcessKeyDown(Rml::Input::KeyIdentifier::KI_ESCAPE, 0);
+                        non_mouse_interacted = true;
+                        cont_interacted = true;
+                        break;
+                    }
+                }
                 if (context_capturing_input && sdl_key) {
                     ui_state->context->ProcessKeyDown(RmlSDL::ConvertKey(sdl_key), 0);
                     latest_controller_key_pressed = sdl_key;
@@ -1033,6 +1059,9 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
             if (open_config) {
                 ::jfg_config_menu_refresh(); // JFG PORT
+                // JFG PORT: opened with a controller button, the controller is the menu's input from the start, so its
+                // focus goes back to the mod or option it was on (jfg_restore_menu_place), not the first tab.
+                if (cur_event.type == SDL_EventType::SDL_CONTROLLERBUTTONDOWN) recompui::set_cont_active(true);
                 recompui::show_context(recompui::get_config_context_id(), "");
                 ::jfg_restore_menu_place(); // JFG PORT
             }
@@ -1077,6 +1106,19 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
         if (debug_close_secs >= 0.0f && config_was_open && since_start >= std::chrono::duration<float>(debug_close_secs)) {
             close_config_menu();
             debug_close_secs = -1.0f;
+        }
+        // JFG_DEBUG_CONFIG_REOPEN=<secs>: opens this menu again as Esc does (where it was closed) <secs> seconds after start.
+        static float debug_reopen_secs = -2.0f;
+        if (debug_reopen_secs == -2.0f) {
+            const char* env = std::getenv("JFG_DEBUG_CONFIG_REOPEN");
+            debug_reopen_secs = env ? (float)std::atof(env) : -1.0f;
+        }
+        if (debug_reopen_secs >= 0.0f && !config_was_open && ultramodern::is_game_started() &&
+            since_start >= std::chrono::duration<float>(debug_reopen_secs)) {
+            ::jfg_config_menu_refresh();
+            recompui::show_context(recompui::get_config_context_id(), "");
+            ::jfg_restore_menu_place();
+            debug_reopen_secs = -1.0f;
         }
     }
 
@@ -1147,6 +1189,7 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
 
     if (cont_interacted || kb_interacted || mouse_clicked) {
         recompui::set_cont_active(cont_interacted);
+        ::jfg_config_note_input(cont_interacted); // JFG PORT: the Controls page's Players row
     }
     dino::input::config_menu_set_cont_or_kb(ui_state->cont_is_active);
 

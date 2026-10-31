@@ -1,4 +1,6 @@
-// Jet Force Gemini port: the gore options - blood splats and severed body parts that stay, and more blood.
+// Jet Force Gemini port: gore for mods (API version 5) - blood splats and severed body parts that stay, more blood,
+// blood colours. Since 2026-10-27 these are the Blood mod's options (jfg_blood), not the port's: the mod turns them
+// on with jfg_blood_keep / jfg_limbs_keep, and does No blood and Blood amount itself with the blood events.
 //
 // Blood (overlay 8): bloodSpurtAdd puts a drop into a pool of 64 entries (0x54 bytes each). A drop flies (state +0x4A
 // = 1), lands (2) and lies as a splat (3) whose life (+0x3C, s16, 300 at the start) bloodSpurtUpdateAll counts down by
@@ -21,15 +23,22 @@
 // stay" keeps the timer of the newest LIMBS_KEPT limbs up (jfg_on_severed_limb_tick handler); limbs are objects
 // with models of their own, so the older ones still go, to keep the object heap from filling up.
 //
-// "No blood" and "Blood amount": handlers of jfg_on_blood_spurt / jfg_on_blood_hit (jfg_api.cpp). bloodSpurtAdd's
-// wrapper makes the extra drops of the event's amount with the same arguments and a little spread in their direction
-// and speed.
+// Blood amount: bloodSpurtAdd's wrapper makes the extra drops of the event's amount (a mod sets it) with the same
+// arguments and a little spread in their direction and speed.
+//
+// Colours: bloodSpurtAdd's colour argument is an index into a table of 8 colours (overlay 8 + 0x16C4, s32 r, g, b each,
+// scaled by the drop's brightness when drawn); hit sprites have their own table (+0x1724) and argument. The index
+// comes from the bleeding creature's definition (+0x2F): 0 heroes, Floyd and Tribals, 1 ground insects and most
+// bosses, 2 flyers, drones and turrets; 4 is the final boss's own; 3, 5, 6 and 7 the game never asks for (rainbow
+// blood picks any). jfg_blood_set_color puts a mod's colours into the tables (again whenever overlay 8 is loaded
+// anew), and the blood events say which creature bleeds (jfg_blood_source), so a mod can give a group its own index.
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <map>
 #include <random>
 #include <unordered_map>
 
@@ -38,12 +47,15 @@
 #include "jfg_game.h"
 #include "jfg_hooks.h"
 #include "jfg_options.h"
+#include "jfg_per_mod.h"
 #include "jfg_port.h"
 
 extern "C" void bloodSpurtAdd_orig(uint8_t* rdram, recomp_context* ctx);
 extern "C" void bloodSpurtUpdateAll_orig(uint8_t* rdram, recomp_context* ctx);
 extern "C" void bloodSpurtsDraw_orig(uint8_t* rdram, recomp_context* ctx);
 extern "C" uint32_t jfg_overlay_loaded_at(uint32_t rom); // jfg_glue.cpp
+#include <cmath>
+#include "librecomp/overlays.hpp"
 
 namespace jfg {
 
@@ -88,12 +100,14 @@ bool keep_newest(Tracker& t, uint32_t addr, int keep) {
 }
 
 Tracker g_splats, g_limbs;
+int g_keep_splats = 0;     // jfg_blood_keep: splats kept (0 = the game's own, else 64..4096)
+bool g_keep_limbs = false; // jfg_limbs_keep
 uint32_t g_blood_recycled = 0; // splats freed for new blood, for the test log
 
 // The splats freed for new blood, oldest first, as the pool entry's words, and the level they were made in.
 constexpr uint32_t BLOOD_ENTRY_WORDS = BloodEntry::Size / 4;
 constexpr size_t SPLATS_KEPT = 4096 - BLOOD_ENTRIES; // the most Blood Splat Limit (blood_splats) keeps besides the pool
-size_t kept_limit() { return (size_t)std::clamp(g.blood_splats - BLOOD_ENTRIES, 0, (int)SPLATS_KEPT); }
+size_t kept_limit() { return (size_t)std::clamp(g_keep_splats - BLOOD_ENTRIES, 0, (int)SPLATS_KEPT); }
 struct KeptSplat { uint32_t words[BLOOD_ENTRY_WORDS]; };
 std::deque<KeptSplat> g_kept_splats;
 int g_kept_level = -1;
@@ -163,7 +177,7 @@ constexpr uint32_t G_DL = 0x06000000, G_ENDDL = 0xB8000000;
 // "Blood stays", before bloodSpurtUpdateAll counts the splats' lives down: every splat is kept; the tracker only
 // records which is oldest, for make_room_for_blood.
 void keep_splats() {
-    if (!g.gore_keep_blood) return;
+    if (g_keep_splats == 0) return;
     g_blood_base = jfg_overlay_loaded_at(OVERLAY_8_ROM);
     if (g_blood_base == 0) return;
     for (int i = 0; i < BLOOD_ENTRIES; i++) {
@@ -175,16 +189,14 @@ void keep_splats() {
     blood_log();
 }
 
-// jfg_on_blood_spurt handler (after No blood and Blood amount's), "Blood stays": with every entry in use, free the
-// oldest splats so the spurt's drops (one, or the event's amount in percent) get entries. With no splat to take the
-// drops are dropped, as in the game.
-extern "C" void jfg_gore_make_room(uint8_t* rdram_, recomp_context* ctx) {
+// bloodSpurtAdd's wrapper (after the blood event), "Blood stays": with every entry in use, free the oldest splats so
+// the spurt's drops (one, or the event's amount in percent) get entries. With no splat to take the drops are dropped,
+// as in the game.
+extern "C" void jfg_gore_make_room(uint8_t* rdram_, int amount) {
+    if (g_keep_splats == 0) return;
     g_rdram = rdram_;
-    const uint32_t blood = (uint32_t)ctx->r4;
-    if (rd32(blood + api::blood_spurt::CANCEL) != 0) return;
     g_blood_base = jfg_overlay_loaded_at(OVERLAY_8_ROM);
     if (g_blood_base == 0 || rd32(g_blood_base + BLOOD_READY) == 0) return; // bloodSpurtAdd sets the pool up first
-    const int32_t amount = (int32_t)rd32(blood + api::blood_spurt::AMOUNT);
     const int drops = amount > 100 ? std::min((amount + 99) / 100, BLOOD_ENTRIES) : 1;
     int free = 0;
     for (int i = 0; i < BLOOD_ENTRIES; i++) if (BloodEntry::State::get(blood_entry(i)) == 0) free++;
@@ -203,7 +215,7 @@ extern "C" void jfg_gore_level_change(uint8_t* rdram_, recomp_context* ctx) {
 // calls.
 void draw_kept_splats(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    if (!g.gore_keep_blood || g.no_blood) {
+    if (g_keep_splats == 0) {
         g_kept_splats.clear();
         g_extra_passes = g_extra_drawn = 0;
         return;
@@ -277,25 +289,153 @@ void draw_kept_splats(uint8_t* rdram_, recomp_context* ctx) {
 // jfg_on_severed_limb_tick(limb, frames) handler.
 extern "C" void jfg_gore_limb(uint8_t* rdram_, recomp_context* ctx) {
     g_rdram = rdram_;
-    if (!g.gore_keep_limbs) return;
+    if (!g_keep_limbs) return;
     const uint32_t obj = (uint32_t)ctx->r4;
     const uint32_t data = valid_ptr(obj) ? Obj::Data::get(obj) : 0;
     if (!valid_ptr(data) || LimbData::Type::get(data) >= 2) return;
     if (keep_newest(g_limbs, obj, LIMBS_KEPT) && LimbData::Life::get(data) > 0) LimbData::Life::set(data, LIMB_LIFE);
 }
 
-// jfg_on_blood_spurt / jfg_on_blood_hit handlers: "No blood" cancels, "Blood amount" scales the drops.
-extern "C" void jfg_gore_on_blood_spurt(uint8_t* rdram_, recomp_context* ctx) {
-    g_rdram = rdram_;
-    const uint32_t blood = (uint32_t)ctx->r4;
-    if (jfg_no_blood()) { wr32(blood + api::blood_spurt::CANCEL, 1); return; }
-    const int32_t amount = (int32_t)rd32(blood + api::blood_spurt::AMOUNT);
-    wr32(blood + api::blood_spurt::AMOUNT, (uint32_t)(amount * g.blood_amount / 100));
+extern "C" bool jfg_gore_keep_blood(void) { return g_keep_splats != 0; }
+extern "C" bool jfg_gore_keep_limbs(void) { return g_keep_limbs; }
+
+// --- colours -----------------------------------------------------------------------------------------------------
+namespace {
+constexpr uint32_t SPURT_COLORS = 0x16C4, HIT_COLORS = 0x1724; // 8 x (s32 r, g, b) each
+constexpr int COLORS = 8;
+// The game's tables (overlay 8's data), put back for a colour a mod returns to the game's own.
+constexpr uint8_t GAME_COLORS[2][COLORS][3] = {
+    { { 80, 0, 0 }, { 0, 80, 19 }, { 0, 0, 0 }, { 0, 12, 80 }, { 170, 255, 0 }, { 147, 99, 48 }, { 128, 0, 255 }, { 255, 0, 255 } },
+    { { 160, 0, 0 }, { 0, 160, 40 }, { 0, 0, 0 }, { 0, 32, 192 }, { 170, 255, 0 }, { 147, 99, 48 }, { 128, 0, 255 }, { 255, 0, 255 } },
+};
+uint32_t g_colors[2][COLORS];      // 0xRRGGBB
+bool g_color_set[2][COLORS] = {};  // else the game's
+bool g_colors_dirty = false;
+uint32_t g_colors_written_at = 0;  // overlay 8's address when the tables were last written
+constexpr uint32_t ADDR_rainbowblood = 0x800A5080; // u8: drops take a random colour index
+} // namespace
+
+// The wrappers of overlay 8's functions, before the game's code: the tables as the mods set them, written when they
+// changed or the overlay was loaded somewhere new.
+extern "C" void jfg_blood_colors_apply(void) {
+    const uint32_t base = jfg_overlay_loaded_at(OVERLAY_8_ROM);
+    if (base == 0 || (!g_colors_dirty && base == g_colors_written_at)) return;
+    g_colors_dirty = false;
+    g_colors_written_at = base;
+    for (int t = 0; t < 2; t++) {
+        const uint32_t table = base + (t == 0 ? SPURT_COLORS : HIT_COLORS);
+        for (int i = 0; i < COLORS; i++) {
+            for (int c = 0; c < 3; c++) {
+                const uint32_t v = g_color_set[t][i] ? (g_colors[t][i] >> (16 - 8 * c)) & 0xFF : GAME_COLORS[t][i][c];
+                wr32(table + (uint32_t)(i * 12 + c * 4), v);
+            }
+        }
+    }
 }
 
-extern "C" void jfg_gore_on_blood_hit(uint8_t* rdram_, recomp_context* ctx) {
+// The object bleeding at x, y, z: the nearest with damage data whose hit sphere is within reach, among those of the
+// blood's colour index (definition + 0x2F) when there are any. Its group (JFG_BLOOD_* in mod_api/jfg_api.h): a hero or
+// Floyd, a Tribal, else by the colour index: 1 green, 2 dark, 4 the final boss, any other "other" (or a hero's, with
+// nothing near).
+extern "C" uint32_t jfg_blood_source(float x, float y, float z, int color, int* group) {
+    enum { HERO = 0, TRIBAL = 1, GREEN = 2, DARK = 3, BOSS = 4, OTHER = 5 };
+    constexpr int16_t KIND_HERO = 1, KIND_FLOYD = 2, KIND_SQUAD_MEMBER = 0x18;
+    constexpr float REACH = 120.0f; // from the hit sphere's surface
+    uint32_t best = 0, best_any = 0;
+    float best_gap = REACH, best_any_gap = REACH;
+    const uint32_t list = rd32(ADDR_ObjList);
+    const int count = (int)rd32(ADDR_ObjListCount);
+    if (valid_ptr(list) && count > 0 && count < 4096) {
+        for (int i = 0; i < count; i++) {
+            const uint32_t obj = rd32(list + 4u * (uint32_t)i);
+            if (!valid_ptr(obj)) continue;
+            const uint32_t dmg = Obj::Damage::get(obj);
+            if (!valid_ptr(dmg)) continue;
+            const float dx = Damage::CentreX::get(dmg) - x, dy = Damage::CentreY::get(dmg) - y, dz = Damage::CentreZ::get(dmg) - z;
+            const float gap = std::max(0.0f, std::sqrt(dx * dx + dy * dy + dz * dz) - std::max(0.0f, Damage::Radius::get(dmg)));
+            if (gap < best_any_gap) { best_any_gap = gap; best_any = obj; }
+            const uint32_t def = Obj::Def::get(obj);
+            if (valid_ptr(def) && (int)rd8(def + 0x2F) == color && gap < best_gap) { best_gap = gap; best = obj; }
+        }
+    }
+    if (best == 0) best = best_any;
+    int grp = color == 1 ? GREEN : color == 2 ? DARK : color == 4 ? BOSS : (color == 0 && best == 0) ? HERO : OTHER;
+    if (best != 0) {
+        const int16_t kind = Obj::Kind::get(best);
+        const uint32_t data = Obj::Data::get(best);
+        if (kind == KIND_HERO || kind == KIND_FLOYD) grp = HERO;
+        else if (kind == KIND_SQUAD_MEMBER && valid_ptr(data) && (rd8(data + 0x03) & 0x08) != 0) grp = TRIBAL;
+    }
+    if (group != nullptr) *group = grp;
+    return best;
+}
+
+namespace {
+// jfg_blood_color_alloc(int nth) -> the calling mod's nth colour index of its own (0 its first), out of the four the
+// game never asks for (3, 5, 6, 7); the same mod and nth always get the same one; -1 when none is left.
+constexpr int FREE_COLORS[4] = { 3, 5, 6, 7 };
+std::map<std::pair<size_t, int>, int> g_color_owners; // (mod, nth) -> index
+void blood_color_alloc(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const int nth = (int32_t)ctx->r4;
+    ctx->r2 = (gpr)(int32_t)-1;
+    if (nth < 0 || nth > 3) return;
+    const auto key = std::make_pair(mod_index, nth);
+    if (auto it = g_color_owners.find(key); it != g_color_owners.end()) { ctx->r2 = (gpr)it->second; return; }
+    for (int index : FREE_COLORS) {
+        bool taken = false;
+        for (const auto& owner : g_color_owners) taken = taken || owner.second == index;
+        if (taken) continue;
+        g_color_owners[key] = index;
+        ctx->r2 = (gpr)index;
+        return;
+    }
+}
+
+// jfg_blood_set_color(int index, unsigned int drops, unsigned int hits): colour index 0..7 for drops and splats, and
+// for hit sprites, 0xRRGGBB each; 0xFFFFFFFF = the game's own.
+void blood_set_color(uint8_t*, recomp_context* ctx) {
+    const int index = (int)ctx->r4;
+    if (index < 0 || index >= COLORS) return;
+    const uint32_t v[2] = { (uint32_t)ctx->r5, (uint32_t)ctx->r6 };
+    for (int t = 0; t < 2; t++) {
+        g_color_set[t][index] = v[t] != 0xFFFFFFFFu;
+        g_colors[t][index] = v[t] & 0xFFFFFF;
+    }
+    g_colors_dirty = true;
+}
+
+// Each mod's request is kept (jfg_per_mod.h): rainbow and body parts while any mod asks, the most splats asked for.
+PerMod<bool> g_rainbow_requests, g_limb_requests;
+PerMod<int> g_splat_requests;
+
+// jfg_blood_set_rainbow(int on): the game's rainbow blood (its cheat): every drop takes a random colour index.
+void blood_set_rainbow(uint8_t* rdram_, recomp_context* ctx, size_t mod_index) {
     g_rdram = rdram_;
-    if (jfg_no_blood()) wr32((uint32_t)ctx->r4 + api::blood_hit::CANCEL, 1);
+    g_rainbow_requests.set(mod_index, ctx->r4 != 0, false);
+    wr8(ADDR_rainbowblood, g_rainbow_requests.any() ? 1 : 0);
+}
+
+// jfg_blood_keep(int splats): Blood stays with that many splats (64..4096), 0 = the game's own (they fade).
+void blood_keep(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    const int splats = (int)ctx->r4;
+    g_splat_requests.set(mod_index, splats <= 0 ? 0 : std::clamp(splats, BLOOD_ENTRIES, 4096), 0);
+    g_keep_splats = g_splat_requests.max(0);
+    if (g_keep_splats == 0) g_kept_splats.clear();
+}
+
+// jfg_limbs_keep(int on): Body parts stay (the newest LIMBS_KEPT).
+void limbs_keep(uint8_t*, recomp_context* ctx, size_t mod_index) {
+    g_limb_requests.set(mod_index, ctx->r4 != 0, false);
+    g_keep_limbs = g_limb_requests.any();
+}
+} // namespace
+
+void register_blood_api() {
+    recomp::overlays::register_base_export("jfg_blood_set_color", blood_set_color);
+    recomp::overlays::register_ext_base_export("jfg_blood_color_alloc", blood_color_alloc);
+    recomp::overlays::register_ext_base_export("jfg_blood_set_rainbow", blood_set_rainbow);
+    recomp::overlays::register_ext_base_export("jfg_blood_keep", blood_keep);
+    recomp::overlays::register_ext_base_export("jfg_limbs_keep", limbs_keep);
 }
 
 // bloodSpurtAdd's wrapper (jfg_api.cpp), before the game's own drop: (amount - 100) percent extra drops with the same
@@ -332,6 +472,8 @@ JFG_WRAP(bloodSpurtUpdateAll) {
 }
 
 JFG_WRAP(bloodSpurtsDraw) {
+    jfg::g_rdram = rdram;
+    jfg::jfg_blood_colors_apply();
     jfg::draw_kept_splats(rdram, ctx);
     bloodSpurtsDraw_orig(rdram, ctx);
 }

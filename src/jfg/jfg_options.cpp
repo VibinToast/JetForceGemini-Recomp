@@ -62,12 +62,8 @@ bool aim_view_key(const char* key, int* preset_value) {
 }
 
 void apply_option(const char* key, int value) {
-    if (std::strcmp(key, "no_blood") == 0) g.no_blood = value != 0;
-    else if (std::strcmp(key, "gore_keep_blood") == 0) g.gore_keep_blood = value != 0;
-    else if (std::strcmp(key, "gore_keep_limbs") == 0) g.gore_keep_limbs = value != 0;
-    else if (std::strcmp(key, "blood_amount") == 0) g.blood_amount = std::clamp(value, 100, 800);
-    else if (std::strcmp(key, "blood_splats") == 0) g.blood_splats = std::clamp(value, 64, 4096);
-    else if (std::strcmp(key, "show_fps") == 0) g.show_fps = value != 0;
+    if (apply_mod_option(key, value)) return; // moved to the official mods
+    if (std::strcmp(key, "show_fps") == 0) g.show_fps = value != 0;
     else if (std::strcmp(key, "show_level") == 0) g.show_level = value != 0;
     else if (std::strcmp(key, "show_pack") == 0) g.show_pack = value != 0;
     else if (std::strcmp(key, "dump_by_level") == 0) g.dump_by_level = value != 0;
@@ -104,7 +100,6 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "fov") == 0) g.fov = std::clamp(value, 75, 140);
     else if (std::strcmp(key, "hit_flash") == 0) g.hit_flash = std::clamp(value, 0, 100);
     else if (std::strcmp(key, "shadow_opacity") == 0) g.shadow_opacity = std::clamp(value, 0, 200);
-    else if (std::strcmp(key, "hide_floyd") == 0) g.hide_floyd = value != 0;
     else if (std::strcmp(key, "language") == 0) g.language = std::clamp(value, 0, 4);
     else if (std::strcmp(key, "vignette") == 0) g.vignette = value != 0;
     else if (std::strcmp(key, "vignette_strength") == 0) g.vignette_strength = std::clamp(value, 0, 100);
@@ -158,11 +153,13 @@ void apply_option(const char* key, int value) {
     else if (std::strcmp(key, "mouse_aim_speed") == 0) g.mouse_aim_speed = std::clamp(value, 10, 400);
     else if (std::strcmp(key, "invert_mouse_y") == 0) g.invert_mouse_y = value != 0;
     else if (std::strcmp(key, "refuel_speed") == 0) g.refuel_speed = std::clamp(value, 25, 1000);
+    else if (std::strcmp(key, "floyd_fuel") == 0) g.floyd_fuel = std::clamp(value, 100, 300);
+    else if (std::strcmp(key, "fast_pause") == 0) g.fast_pause = value != 0;
     else if (std::strcmp(key, "sniper_fixed_zoom") == 0) g.sniper_fixed_zoom = value != 0;
     else if (std::strcmp(key, "sniper_zoom") == 0) g.sniper_zoom = std::clamp(value, 100, 500);
     else if (std::strcmp(key, "damage_taken") == 0) g.damage_taken = std::clamp(value, 0, 400);
     else if (std::strcmp(key, "unlimited_continues") == 0) g.unlimited_continues = value != 0;
-    else if (std::strcmp(key, "dive_speed") == 0) g.dive_speed = std::clamp(value, 50, 400);
+    else if (std::strcmp(key, "dive_speed") == 0) g.dive_speed = DIVE_SPEED_OPTION ? std::clamp(value, 50, 400) : 100;
     else if (std::strcmp(key, "fly_speed") == 0) g.fly_speed = std::clamp(value, 10, 1000);
     else if (std::strcmp(key, "fly_freeze") == 0) g.fly_freeze = value != 0;
     else if (std::strcmp(key, "fly_hide_hud") == 0) g.fly_hide_hud = value != 0;
@@ -171,7 +168,8 @@ void apply_option(const char* key, int value) {
 void load_options() {
     if (g_options_loaded) return;
     g_options_loaded = true;
-    if (std::FILE* f = std::fopen(OPTIONS_FILE, "r")) {
+    if (start_new_player_profile()) std::fprintf(stderr, "[jfg] new player: Modern profile\n");
+    else if (std::FILE* f = std::fopen(OPTIONS_FILE, "r")) {
         char key[64]; int value;
         while (std::fscanf(f, "%63[^=]=%d\n", key, &value) == 2) apply_option(key, value);
         std::fclose(f);
@@ -186,11 +184,11 @@ void load_options() {
 std::string options_text(const State& s) {
     std::string out;
     char buf[512];
-    std::snprintf(buf, sizeof(buf), "no_blood=%d\nstart_skips_cutscenes=%d\n", s.no_blood ? 1 : 0, s.start_skips_cutscenes ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "start_skips_cutscenes=%d\n", s.start_skips_cutscenes ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "auto_save=%d\nauto_save_minutes=%d\nsave_notification=%d\nkeep_area_progress=%d\n", s.auto_save ? 1 : 0, s.auto_save_minutes, s.save_notification ? 1 : 0, s.keep_area_progress ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "show_fps=%d\nwidescreen=%d\nframe_rate=%d\nsmooth_motion=%d\n", s.show_fps ? 1 : 0, s.widescreen ? 1 : 0, s.frame_rate, s.smooth_motion); out += buf;
-    std::snprintf(buf, sizeof(buf), "smooth_shadows=%d\nshadow_opacity=%d\nhud_corners=%d\nmodern_lighting=%d\n", s.smooth_shadows ? 1 : 0, s.shadow_opacity, s.hud_corners ? 1 : 0, s.modern_lighting ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "fov=%d\nhit_flash=%d\nhide_floyd=%d\nlanguage=%d\n", s.fov, s.hit_flash, s.hide_floyd ? 1 : 0, s.language); out += buf;
+    std::snprintf(buf, sizeof(buf), "smooth_shadows=%d\nshadow_opacity=%d\nhud_corners=%d\n", s.smooth_shadows ? 1 : 0, s.shadow_opacity, s.hud_corners ? 1 : 0, s.modern_lighting ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "fov=%d\nhit_flash=%d\nlanguage=%d\n", s.fov, s.hit_flash, s.language); out += buf;
     std::snprintf(buf, sizeof(buf), "vignette=%d\nvignette_strength=%d\nvignette_size=%d\n", s.vignette ? 1 : 0, s.vignette_strength, s.vignette_size); out += buf;
     std::snprintf(buf, sizeof(buf), "level_fog_distance=%d\nno_level_fog=%d\n", s.level_fog_distance, s.no_level_fog ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "depth_fog=%d\nfog_start=%d\nfog_end=%d\nfog_density=%d\nfog_color=%d\n", s.depth_fog ? 1 : 0, s.fog_start, s.fog_end, s.fog_density, s.fog_color); out += buf;
@@ -210,11 +208,11 @@ std::string options_text(const State& s) {
     std::snprintf(buf, sizeof(buf), "mouse_keyboard=%d\nmouse_camera_speed=%d\nmouse_aim_speed=%d\ninvert_mouse_y=%d\n", s.mouse_keyboard ? 1 : 0, s.mouse_camera_speed, s.mouse_aim_speed, s.invert_mouse_y ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "refuel_speed=%d\nsniper_fixed_zoom=%d\nsniper_zoom=%d\ndamage_taken=%d\ndive_speed=%d\n", s.refuel_speed, s.sniper_fixed_zoom ? 1 : 0, s.sniper_zoom, s.damage_taken, s.dive_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "fly_speed=%d\nfly_freeze=%d\nfly_hide_hud=%d\n", s.fly_speed, s.fly_freeze ? 1 : 0, s.fly_hide_hud ? 1 : 0); out += buf;
+    std::snprintf(buf, sizeof(buf), "floyd_fuel=%d\nfast_pause=%d\n", s.floyd_fuel, s.fast_pause ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "unlimited_continues=%d\npermanent_tribals=%d\n", s.unlimited_continues ? 1 : 0, s.permanent_tribals ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "sprint=%d\nsprint_speed=%d\nsprint_aiming=%d\n", s.sprint ? 1 : 0, s.sprint_speed, s.sprint_aiming ? 1 : 0); out += buf;
     std::snprintf(buf, sizeof(buf), "sprint_swimming=%d\nsprint_swim_speed=%d\n", s.sprint_swimming ? 1 : 0, s.sprint_swim_speed); out += buf;
     std::snprintf(buf, sizeof(buf), "pause_in_menu=%d\n", s.pause_in_menu ? 1 : 0); out += buf;
-    std::snprintf(buf, sizeof(buf), "gore_keep_blood=%d\ngore_keep_limbs=%d\nblood_amount=%d\nblood_splats=%d\n", s.gore_keep_blood ? 1 : 0, s.gore_keep_limbs ? 1 : 0, s.blood_amount, s.blood_splats); out += buf;
     return out;
 }
 

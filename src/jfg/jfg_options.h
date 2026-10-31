@@ -13,6 +13,9 @@ constexpr bool FRAME_RATE_OPTION = true;
 // The "Depth fog" option (FogPS.hlsl in RT64) is hidden and off: in testing nothing showed in any level. The renderer
 // pass, the option and its status line are kept for when it is looked at again. Set to true to bring it back.
 constexpr bool DEPTH_FOG_OPTION = false;
+// "Vela's Dive Speed" is hidden (owner, 2026-10-29): she swims at the game's speed (100%), a saved value is ignored.
+// Set to true to bring it back.
+constexpr bool DIVE_SPEED_OPTION = false;
 
 // --- persistent menu state -----------------------------------------------------------------------------------------
 struct State {
@@ -24,11 +27,6 @@ struct State {
     int  raw_flag = 0;
     bool pending_warp = false;
     // options
-    bool no_blood = false;
-    bool gore_keep_blood = false;  // blood splats stay on the ground and walls (jfg_gore.cpp)
-    bool gore_keep_limbs = false;  // severed body parts stay (jfg_gore.cpp)
-    int  blood_amount = 100;       // blood drops per spurt, percent (jfg_blood_more)
-    int  blood_splats = 64;        // splats that stay with gore_keep_blood (64 = the game's pool; jfg_gore.cpp)
     bool show_fps = false;         // frame rate in the top right corner
     bool show_level = false;       // level number and name in the top right corner
     bool show_pack = false;        // texture pack in use in the top right corner
@@ -55,7 +53,6 @@ struct State {
     int  fov = 100;                // gameplay field of view, percent of the game's own (jfg_fov)
     int  hit_flash = 100;          // red screen when the character is hit: strength, percent (jfg_hit_flash)
     int  shadow_opacity = 50;      // how dark character shadows are drawn, percent of the game's (jfg_shadow_alpha); 50 in every profile
-    bool hide_floyd = false;       // Floyd is not drawn while he follows the character (jfg_hide_object)
     int  language = 0;             // "Language": 0 English, 1 French, 2 German, 3 Spanish, 4 Japanese (jfg_locale.cpp); not part of profiles
     bool vignette = false;        // darker screen edges in RT64 (src/shaders/VignettePS.hlsl), see push_render_options()
     int  vignette_strength = 40;   // vignette: how dark the corners get, percent
@@ -70,8 +67,9 @@ struct State {
     int  texture_filter = 0;       // 0: the N64's three-point texture filter, 1: bilinear (RT64 threePointFiltering)
     int  output_filter = 0;        // picture scaling to the window: 0 anti-aliased pixel scaling, 1 linear, 2 nearest
     bool start_skips_cutscenes = true;
+    bool fast_pause = true;        // the pause menu's frame opens and closes FAST_PAUSE times as fast (frontMenuFrameTick's wrapper); off in Original
     bool pause_in_menu = true;     // the game stands still while the Select / Esc settings menu is open (jfg_freeze_world)
-    bool auto_save = true;         // save to the file in play on arriving in a level and every few minutes (jfg_auto_save.cpp); on in every profile but Default
+    bool auto_save = true;         // save to the file in play on arriving in a level and every few minutes (jfg_auto_save.cpp); on in every profile but Original
     int  auto_save_minutes = 5;    // auto save: minutes of play between saves, 0 = only on arriving in a level
     bool save_notification = true; // auto save: "Game saved" in the bottom right corner
     bool keep_area_progress = false; // saves keep an unfinished region's progress and room (jfg_area_progress.cpp)
@@ -109,6 +107,7 @@ struct State {
     int  mouse_aim_speed = 100;    // mouse: aim turn per mouse movement, percent
     bool invert_mouse_y = false;   // mouse: moving the mouse forward looks/aims down
     int  refuel_speed = 100;       // jetpack fuel pads: fuel added per tick, percent (jfg_refuel_amount)
+    int  floyd_fuel = 100;         // Floyd missions: how long Floyd's fuel lasts, percent (jfg_floyd_fuel); 100 in every profile but Extreme
     bool sniper_fixed_zoom = false; // sniper rifle: the zoom stays at sniper_zoom, the zoom buttons do nothing
     int  sniper_zoom = 250;        // sniper rifle: fixed zoom, percent of the unzoomed view (100..500, the game's range)
     int  damage_taken = 100;       // damage the player takes, percent (apply_damage_taken)
@@ -135,6 +134,10 @@ extern State g;
 
 // jfg_options.cpp
 void apply_option(const char* key, int value); // sets one option from its saved form (the options file, profiles)
+// The old blood and Hide Floyd keys and "mod:<id>:<option>" keys: a mod's options (jfg_mod_options.cpp). False for
+// any other key.
+bool apply_mod_option(const char* key, int value);
+void mod_options_frame(); // every UI frame
 void load_options();                           // once, at the first tick (or when the Select menu is built)
 std::string options_text(const State& s);      // every option in its saved form, one "key=value" line each
 void save_options();                           // also into the active player profile

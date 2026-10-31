@@ -5,12 +5,23 @@
         <form class="config__form" data-attr-cur-input="cur_input_row" data-attr-cur-binding-slot="active_binding_slot">
             <div class="config__header">
                 <div class="config__header-left">
+                    <!-- JFG PORT: this page opens from Customize Buttons on the Controls page / tab; this goes back (as B does). -->
+                    <button
+                        class="button"
+                        id="jfg_bindings_back"
+                        data-event-click="jfg_bindings_back"
+                        style="margin: 0dp 16dp 0dp 0dp; nav-down: #input_row_button_0_0; nav-up: #tab_jfg_controls; nav-left: #tab_jfg_controls; nav-right: #cont_kb_toggle"
+                        data-attr-style="(jfg_bindings_unused && !input_device_is_keyboard) ? 'margin: 0dp 16dp 0dp 0dp; nav-down: #jfg_use_my_bindings; nav-up: #tab_jfg_controls; nav-left: #tab_jfg_controls; nav-right: #cont_kb_toggle' : 'margin: 0dp 16dp 0dp 0dp; nav-down: #input_row_button_0_0; nav-up: #tab_jfg_controls; nav-left: #tab_jfg_controls; nav-right: #cont_kb_toggle'"
+                    >
+                        <div class="button__label" style="white-space: nowrap;">Back to Controls</div>
+                    </button>
                     <button
                         class="toggle"
                         id="cont_kb_toggle"
                         data-class-toggle--checked="input_device_is_keyboard"
                         onclick="toggle_input_device"
-                        style="nav-down: #input_row_button_0_0; nav-up: #tab_controls"
+                        style="nav-down: #input_row_button_0_0; nav-up: #tab_jfg_controls; nav-left: #jfg_bindings_back"
+                        data-attr-style="(jfg_bindings_unused && !input_device_is_keyboard) ? 'nav-down: #jfg_use_my_bindings; nav-up: #tab_jfg_controls; nav-left: #jfg_bindings_back' : 'nav-down: #input_row_button_0_0; nav-up: #tab_jfg_controls; nav-left: #jfg_bindings_back'"
                     >
                         <div class="toggle__border" />
                         <div class="toggle__floater" />
@@ -24,6 +35,7 @@
                     <button
                         class="button button--warning"
                         style="nav-down:#input_row_button_0_0"
+                        data-attr-style="(jfg_bindings_unused && !input_device_is_keyboard) ? 'nav-down:#jfg_use_my_bindings' : 'nav-down:#input_row_button_0_0'"
                         data-event-click="reset_input_bindings_to_defaults"
                     >
                         <div class="button__label">Reset to defaults</div>
@@ -32,18 +44,25 @@
             </div>
             <!-- JFG PORT: these bindings are not what plays (jfg::settings::controller_bindings_unused /
                  keyboard_bindings_unused). data-if goes on a wrapper without its own display style; it must not shrink
-                 (the bindings below take the room that is left), or its button spills over the list. -->
+                 (the bindings below take the room that is left). The button floats right of the text. With the note
+                 shown, the picture below is narrower so the page fits (JFG-166). -->
             <div data-if="jfg_bindings_unused" style="flex: 0 0 auto;">
-                <div style="display: flex; flex-direction: row; align-items: center; padding: 12dp 20dp; background-color: rgba(233,205,53,0.12); border-bottom-width: 1.1dp; border-bottom-color: rgba(233,205,53,0.5);">
-                    <div style="flex: 1 1 auto; font-size: 18dp; line-height: 26dp; color: #f2f2f2;">
-                        <span data-if="!input_device_is_keyboard">The Built-in Button Layout is on (Controls tab), so during play the controller uses it instead of these bindings: A jump, B crouch, LT aim, RT fire, RB / Y and LB / X change weapon. Menus, cutscenes and Floyd missions still use these.</span>
-                        <span data-if="input_device_is_keyboard">Mouse and Keyboard Controls is on (Controls tab), so during play the keyboard has its own layout instead of these bindings: WASD run, Space jump, Left Ctrl or C crouch, the mouse aims and fires. Menus still use these.</span>
-                    </div>
-                    <div data-if="!input_device_is_keyboard">
-                        <button class="button" style="margin: 0dp 0dp 0dp 16dp; white-space: nowrap;" data-event-click="jfg_use_my_bindings">
+                <div style="padding: 12dp 20dp; background-color: rgba(233,205,53,0.12); border-bottom-width: 1.1dp; border-bottom-color: rgba(233,205,53,0.5);">
+                    <div data-if="!input_device_is_keyboard" style="float: right; margin: 0dp 0dp 0dp 16dp;">
+                        <button
+                            class="button"
+                            id="jfg_use_my_bindings"
+                            style="white-space: nowrap; nav-up: #jfg_bindings_back; nav-down: #input_row_button_0_0; nav-left: none; nav-right: none"
+                            data-event-click="jfg_use_my_bindings"
+                        >
                             <div class="button__label" style="white-space: nowrap;">Use My Bindings</div>
                         </button>
                     </div>
+                    <div style="font-size: 18dp; line-height: 26dp; color: #f2f2f2;">
+                        <span data-if="!input_device_is_keyboard">The Built-in Button Layout is on (Controls tab), so during play the controller uses it instead of these bindings: A jump, B crouch, LT aim, RT fire, RB / Y and LB / X change weapon. Menus, cutscenes and Floyd missions still use these.</span>
+                        <span data-if="input_device_is_keyboard">Mouse and Keyboard Controls is on (Controls tab), so during play the keyboard has its own layout instead of these bindings: WASD run, Space jump, Left Ctrl or C crouch, the mouse aims and fires. Menus still use these.</span>
+                    </div>
+                    <div style="clear: both;" />
                 </div>
             </div>
             <div class="config__wrapper input-config">
@@ -71,7 +90,7 @@
                                             data-event-click="set_input_binding(i,j)"
                                             class="prompt-font control-option__binding"
                                             data-attr-bind-slot="j"
-                                            data-attr-style="i == 0 ? 'nav-up:#cont_kb_toggle' : 'nav-up:auto'"
+                                            data-attr-style="i == 0 ? ((jfg_bindings_unused && !input_device_is_keyboard) ? 'nav-up:#jfg_use_my_bindings' : 'nav-up:#cont_kb_toggle') : 'nav-up:auto'"
                                         >
                                             <div class="control-option__binding-recording">
                                                 <div class="control-option__binding-circle" />
@@ -88,7 +107,7 @@
                                         data-event-focus="set_input_row_focus(i)"
                                         data-event-click="clear_input_bindings(i)"
                                         class="icon-button icon-button--error"
-                                        data-attr-style="i == 0 ? 'nav-up:#cont_kb_toggle' : 'nav-up:auto'"
+                                        data-attr-style="i == 0 ? ((jfg_bindings_unused && !input_device_is_keyboard) ? 'nav-up:#jfg_use_my_bindings' : 'nav-up:#cont_kb_toggle') : 'nav-up:auto'"
                                     >
                                         <svg src="icons/Trash.svg" />
                                     </button>
@@ -98,7 +117,7 @@
                                         data-event-focus="set_input_row_focus(i)"
                                         data-event-click="reset_single_input_binding_to_default(i)"
                                         class="icon-button icon-button--error"
-                                        data-attr-style="i == 0 ? 'nav-up:#cont_kb_toggle' : 'nav-up:auto'"
+                                        data-attr-style="i == 0 ? ((jfg_bindings_unused && !input_device_is_keyboard) ? 'nav-up:#jfg_use_my_bindings' : 'nav-up:#cont_kb_toggle') : 'nav-up:auto'"
                                     >
                                         <svg src="icons/Reset.svg" />
                                     </button>
@@ -106,7 +125,9 @@
                             </div>
                         </div>
                     </div>
-                    <div class="input-config__visual-wrapper">
+                    <!-- JFG PORT: the picture's height follows its width (3:4); with the note above, a full-width picture is
+                         taller than the room left and runs past the panel, so it is narrower then (JFG-166). -->
+                    <div class="input-config__visual-wrapper" data-attr-style="jfg_bindings_unused ? 'max-width: 800dp; margin: auto;' : ''">
                         <div class="input-config__visual-aspect">
                             <div class="input-config__visual">
                                 <!-- stick only -->

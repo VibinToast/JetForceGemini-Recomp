@@ -14,6 +14,7 @@
 // reticle at the aim point, its depth and heading digits that change every tick, the target boxes on enemies), and one
 // step for all of them made the reticle shake while turning (issue #8).
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -223,6 +224,22 @@ void publish() {
     std::lock_guard<std::mutex> lock(g_layer_mutex);
     layer.seq = ++g_layer_seq;
     if (g_trace) trace_add(g_trace_published, layer.fb, (uint32_t)layer.pixels.size());
+    if (g_trace) {
+        // Once a second: how many of the layers had lines (a reticle) and the most line pixels in one, without the rain.
+        static uint32_t layers = 0, with_lines = 0, most = 0;
+        static auto last = std::chrono::steady_clock::now();
+        uint32_t lines = 0;
+        for (const LayerPixel& p : layer.pixels) lines += p.still ? 0 : 1;
+        layers++;
+        with_lines += lines != 0 ? 1 : 0;
+        most = std::max(most, lines);
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last >= std::chrono::seconds(1)) {
+            std::fprintf(stderr, "[cpu-layer] lines: %u of %u layers, at most %u px\n", with_lines, layers, most);
+            layers = with_lines = most = 0;
+            last = now;
+        }
+    }
     if (g_trace && (g_layer_seq % 60) == 0 && !layer.pixels.empty()) {
         int x0 = 9999, y0 = 9999, x1 = -1, y1 = -1, still = 0;
         for (const LayerPixel& p : layer.pixels) { x0 = std::min(x0, (int)p.x); y0 = std::min(y0, (int)p.y); x1 = std::max(x1, (int)p.x); y1 = std::max(y1, (int)p.y); still += p.still ? 1 : 0; }
@@ -416,6 +433,21 @@ bool cpu_layer_build(ImDrawList* list) {
         list->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + sx, y0 + sy), col);
     }
     return true;
+}
+
+// Present thread (render hook), after the frame's render call, when cpu_layer_build gave it a layer. JFG_DEBUG_CPU_LAYER=1:
+// once a second, how many of those layers really reached the render call (the QA suite's reticle cases check this line).
+void cpu_layer_trace_drawn(bool drawn) {
+    if (!g_trace) return;
+    static uint32_t layers = 0, reached = 0;
+    static auto last = std::chrono::steady_clock::now();
+    layers++;
+    reached += drawn ? 1 : 0;
+    const auto now = std::chrono::steady_clock::now();
+    if (now - last < std::chrono::seconds(1)) return;
+    std::fprintf(stderr, "[cpu-layer] drawn: %u of %u frames with a layer\n", reached, layers);
+    layers = reached = 0;
+    last = now;
 }
 
 } // namespace jfg

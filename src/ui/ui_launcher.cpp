@@ -12,16 +12,23 @@
 #include <chrono>
 #include <fstream>
 #include <iterator>
+#include <algorithm>
+#include <map>
 
 static std::string version_string;
 #include "jfg/jfg_update_check.h"
 #include "jfg/jfg_pack_install.h"
+#include "jfg/jfg_mod_store.h" // JFG PORT: the Get Mods page
 #include "jfg/jfg_locale.h" // JFG PORT: texts set from here in the chosen language (jfg::locale::ui)
+#include "input/input.hpp" // JFG PORT: get_scanned_input_index (Esc on the bindings page)
 // A newer release exists (src/jfg/jfg_update_check.cpp): a banner on the Play page and a warning triangle next to the
 // version open the dialog with what is new and a confirmation, and the update is then downloaded and installed. The dialog
 // does not open by itself. bin\jfg_launcher.txt can turn the check off (check_for_updates=0).
+// update_test: it is a test build (Update Channel: Testing); update_back: this is a test build on the Stable channel and
+// the offer goes back to the latest release.
 static bool update_available = false, update_dialog = false, update_can_install = false, update_restarting = false;
-static std::string update_version, update_changelog, update_status, update_unavailable, changelog_text;
+static bool update_test = false, update_back = false;
+static std::string update_version, update_changelog, update_status, update_unavailable, update_page, changelog_text;
 static bool changelog_dialog = false;
 static int update_stage = 0, update_percent = 0;
 // Dialogs take the focus when they open (controller players have no other way in) and give it back when they close.
@@ -40,19 +47,23 @@ static constexpr int TOAST_FRAMES = 180, TOAST_FPS = 30;
 void jfg_launcher_commit_settings();  // ui_config.cpp: applies pending graphics changes and saves the settings
 void jfg_config_menu_refresh();       // ui_config.cpp: refreshes the port's tabs (profiles, texture packs)
 void jfg_config_clear_option_focus(); // ui_config.cpp: no option's description shown
+void jfg_controls_page_entered();     // ui_config.cpp: the Controls page's Players row and Mouse & Keyboard section
 void jfg_open_url_prompt(const std::string& url, const std::string& return_id); // ui_config.cpp: asks, then opens it
 
 struct LauncherPageInfo { const char* id; const char* title; const char* subtitle; const char* nav_id; };
 static const LauncherPageInfo LAUNCHER_PAGES[] = {
     { "play", "Play", "Load your ROM, then jump in.", "nav_play" },
     { "profiles", "Profiles", "Whole sets of settings: the original game, Modern, Modern and Balanced, Extreme or your own.", "tab_jfg_profiles" },
-    { "general", "General", "Volume, the settings menu, what is shown on screen and the fly camera.", "tab_jfg_general" },
+    { "general", "General", "Volume, the settings menu, what is shown on screen and advanced options.", "tab_jfg_general" },
     { "gameplay", "Gameplay", "Saving, gore, player tweaks and movement.", "tab_jfg_gameplay" },
-    { "controls", "Controls", "Dual-stick, mouse and keyboard, aiming, and the controller's stick and rumble.", "tab_jfg_controls" },
-    { "bindings", "Bindings", "Button bindings for the controller and the keyboard.", "tab_controls" },
+    { "controls", "Controls", "Players, quick setup, camera and aiming, sticks and rumble, mouse and keyboard, and your buttons.", "tab_jfg_controls" },
+    // Not in the sidebar: Customize Buttons on the Controls page opens it (jfg_launcher_show_bindings), and its sidebar
+    // button is Controls'.
+    { "bindings", "Customize Buttons", "Button bindings for the controller and the keyboard.", "tab_jfg_controls" },
     { "graphics", "Graphics", "Window, resolution, frame rate, widescreen and effects.", "tab_jfg_graphics" },
     { "textures", "Texture Packs", "Pick a texture pack from the texture_packs folder, and dump the game's textures to make your own.", "tab_jfg_textures" },
     { "mods", "Mods", "Turn mods on and off, set their order and options, and install new ones.", "tab_mods" },
+    { "store", "Get Mods", "Mods from VibinToast's collections: install, update and remove them.", "tab_store" },
     { "about", "About", "Jet Force Gemini: Recompiled.", "nav_about" },
 };
 static const LauncherPageInfo& launcher_page_info() {
@@ -188,9 +199,10 @@ static void refresh_official(bool scan) {
     if (state.text != official_text) { official_text = state.text; model_handle.DirtyVariable("official_text"); }
     const Rml::String result = state.busy ? Rml::String() : state.text;
     if (result != official_result) { official_result = result; model_handle.DirtyVariable("official_result"); }
-    if (!scan) return;
-    // The Play page's bar: the first installed official pack with a newer version out.
-    const std::vector<JfgOfficialUpdate> updates = jfg_launcher_show_official_pack() ? jfg_official_updates() : std::vector<JfgOfficialUpdate>{};
+    // The Play page's bar: the first installed official pack with a newer version out (looked up when scanning, its
+    // text made on every refresh so it follows a change of language).
+    static std::vector<JfgOfficialUpdate> updates;
+    if (scan) updates = jfg_launcher_show_official_pack() ? jfg_official_updates() : std::vector<JfgOfficialUpdate>{};
     const bool update = !updates.empty();
     Rml::String title, text, variant;
     if (update) {
@@ -202,6 +214,7 @@ static void refresh_official(bool scan) {
     if (title != official_update_title) { official_update_title = title; model_handle.DirtyVariable("official_update_title"); }
     if (text != official_update_text) { official_update_text = text; model_handle.DirtyVariable("official_update_text"); }
     official_update_variant = variant;
+    if (!scan) return;
     if (jfg_launcher_show_official_pack() != official_shown) {
         official_shown = jfg_launcher_show_official_pack();
         model_handle.DirtyVariable("official_shown");
@@ -220,6 +233,139 @@ static void refresh_official(bool scan) {
     if (status != official_status) { official_status = status; model_handle.DirtyVariable("official_status"); }
 }
 
+// ---- the mod store (Get Mods page; src/jfg/jfg_mod_store.cpp) ---------------------------------------------------------
+// The sources' catalogs merged into one list of cards, a filter (all / installed / updates), the sources' switches, and
+// the chosen mod's details beside the list. Pictures are queued as "jfg_store_<id>" once each.
+struct StoreRow {
+    Rml::String id, name, short_text, version, source_name, tags, size_text, thumb, status, action;
+    bool installed = false, update = false, managed = false, blocked = false, busy = false, selected = false;
+};
+struct StoreSourceRow { Rml::String id, name, status, page; bool enabled = true, official = false, removable = false; };
+struct StoreTagRow { Rml::String name; int count = 0; };
+static std::vector<StoreRow> store_rows;
+static std::vector<StoreSourceRow> store_sources;
+// The tags of every listed mod, with how many have each (the Tags row's filters); "" in store_tag: all of them.
+static std::vector<StoreTagRow> store_tags;
+static Rml::String store_tag;
+// The Sources pop-up (its button: "Sources 2/2", the switched-on ones of all).
+static bool store_sources_dialog = false;
+static int store_sources_on = 0;
+// Its Add box (someone else's collection, "owner/repo" or its address) and why the last Add failed.
+static Rml::String store_add_text, store_add_msg;
+static Rml::String store_filter = "all", store_selected;
+static Rml::String store_text, store_sel_name, store_sel_desc, store_sel_meta, store_sel_deps, store_sel_note, store_sel_thumb;
+static Rml::String store_sel_action;
+// For the controller: the selected mod's card ("#st_mod_<n>", or the first card when the filter hides it) and what is
+// right of the cards (Install / Update, else Remove, else nothing).
+static Rml::String store_sel_card = "#st_mod_0", store_right = "none";
+static bool store_busy = false, store_preview = false, store_loaded = false, store_sel_can_act = false, store_sel_can_remove = false;
+static bool store_sel_blocked = false;
+static int store_percent = 0, store_serial = -1, store_count_all = 0, store_count_installed = 0, store_count_updates = 0;
+static std::map<std::string, bool> store_images; // queued already
+
+static void refresh_store_rows() {
+    if (!model_handle) return;
+    const JfgStoreState state = jfg_store_state();
+    store_busy = state.busy;
+    store_percent = state.percent;
+    store_text = state.text;
+    store_preview = state.preview;
+    const std::vector<JfgStoreMod> mods = jfg_store_mods();
+    store_rows.clear();
+    store_sel_card = "#st_mod_0";
+    store_count_all = (int)mods.size();
+    store_count_installed = store_count_updates = 0;
+    const JfgStoreMod* sel = nullptr;
+    // A mod's tags come joined ("Weapons, Audio").
+    auto tags_of = [](const std::string& joined) {
+        std::vector<std::string> out;
+        size_t at = 0;
+        while (at < joined.size()) {
+            size_t end = joined.find(", ", at);
+            if (end == std::string::npos) end = joined.size();
+            if (end > at) out.push_back(joined.substr(at, end - at));
+            at = end + 2;
+        }
+        return out;
+    };
+    std::map<std::string, int> tag_counts;
+    for (const JfgStoreMod& m : mods) for (const std::string& t : tags_of(m.tags)) tag_counts[t]++;
+    if (!store_tag.empty() && tag_counts.find(store_tag) == tag_counts.end()) store_tag.clear(); // its mods are gone
+    store_tags.clear();
+    for (const auto& [name, count] : tag_counts) store_tags.push_back({ name, count });
+    for (const JfgStoreMod& m : mods) {
+        store_count_installed += m.installed ? 1 : 0;
+        store_count_updates += m.update ? 1 : 0;
+        if (store_selected.empty()) store_selected = m.id;
+        if (m.id == store_selected) sel = &m;
+        if (store_filter == "installed" && !m.installed) continue;
+        if (store_filter == "updates" && !m.update) continue;
+        if (!store_tag.empty()) {
+            const std::vector<std::string> tags = tags_of(m.tags);
+            if (std::find(tags.begin(), tags.end(), std::string(store_tag)) == tags.end()) continue;
+        }
+        StoreRow r;
+        r.id = m.id; r.name = m.name; r.short_text = m.short_text; r.version = m.version;
+        r.source_name = m.source_name; r.tags = m.tags; r.size_text = m.size_text;
+        r.installed = m.installed; r.update = m.update; r.managed = m.managed; r.blocked = m.blocked;
+        r.busy = state.busy && state.busy_id == m.id;
+        r.selected = m.id == store_selected;
+        if (!m.thumb.empty()) {
+            const std::string image = "jfg_store_" + m.id;
+            if (!store_images[image] && recompui::can_queue_images()) {
+                std::ifstream in(std::filesystem::u8path(m.thumb), std::ios::binary);
+                std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                if (!bytes.empty()) { recompui::queue_image_from_bytes_file(image, bytes); store_images[image] = true; }
+            }
+            if (store_images[image]) r.thumb = "/" + image;
+        }
+        if (m.blocked) r.status = m.blocked_reason;
+        else if (m.update) r.status = "Update: " + m.installed_version + " > " + m.version;
+        else if (m.installed) r.status = "Installed " + m.installed_version;
+        else r.status = "Version " + m.version + "  -  " + m.size_text;
+        r.action = m.blocked ? "Unavailable" : m.update ? "Update" : m.installed ? "Installed" : "Install";
+        if (r.selected) store_sel_card = "#st_mod_" + std::to_string(store_rows.size());
+        store_rows.push_back(r);
+    }
+    if (sel != nullptr) {
+        store_sel_name = sel->name;
+        store_sel_desc = sel->description.empty() ? sel->short_text : sel->description;
+        store_sel_meta = "Version " + sel->version + "  -  " + sel->size_text + "  -  by " + (sel->authors.empty() ? std::string("?") : sel->authors) +
+                         "  -  " + sel->source_name;
+        std::string deps;
+        for (const std::string& d : sel->dependencies) deps += (deps.empty() ? "" : ", ") + d;
+        store_sel_deps = deps.empty() ? "" : "Needs: " + deps + " (installed with it)";
+        std::string note;
+        if (sel->installed && !sel->managed) note = "You added this mod yourself: the store won't remove it, but it can update it.";
+        else if (sel->installed) note = "Installed " + sel->installed_version + " from " + sel->source_name + ".";
+        if (!sel->shadowed.empty()) note += (note.empty() ? "" : " ") + std::string("Also in ") + sel->shadowed + ": this one is used.";
+        store_sel_note = note;
+        store_sel_thumb = store_images["jfg_store_" + sel->id] ? "/jfg_store_" + sel->id : "";
+        store_sel_blocked = sel->blocked;
+        store_sel_can_act = !sel->blocked && (!sel->installed || sel->update);
+        store_sel_action = sel->blocked ? sel->blocked_reason : sel->update ? "Update to " + sel->version : sel->installed ? "Installed" : "Install";
+        store_sel_can_remove = sel->installed && sel->managed;
+    }
+    store_right = store_busy ? "none" : store_sel_can_act ? "#st_act" : store_sel_can_remove ? "#st_remove" : "none";
+    store_sources.clear();
+    store_sources_on = 0;
+    for (const JfgStoreSource& src : jfg_store_sources()) {
+        store_sources_on += src.enabled ? 1 : 0;
+        StoreSourceRow r;
+        r.id = src.id; r.name = src.name; r.enabled = src.enabled; r.official = src.official; r.removable = src.removable;
+        // Its repo's page (Page, after the prompt every link gets): the catalog's address without its release part.
+        r.page = src.url.substr(0, src.url.find("/releases/"));
+        r.status = !src.enabled ? "Off" : src.loaded ? std::to_string(src.mods) + " mods" : src.error;
+        store_sources.push_back(r);
+    }
+    for (const char* v : { "store_rows", "store_sources", "store_busy", "store_percent", "store_text", "store_preview",
+                           "store_filter", "store_sel_name", "store_sel_desc", "store_sel_meta", "store_sel_deps", "store_sel_note",
+                           "store_sel_thumb", "store_sel_action", "store_sel_can_act", "store_sel_can_remove", "store_sel_blocked",
+                           "store_count_all", "store_count_installed", "store_count_updates", "store_selected", "store_sel_card",
+                           "store_right", "store_tags", "store_tag", "store_sources_on" })
+        model_handle.DirtyVariable(v);
+}
+
 static void set_launcher_page(const std::string& page) {
     if (launcher_page == page) return;
     jfg_launcher_commit_settings(); // leaving a settings page keeps its changes
@@ -227,6 +373,8 @@ static void set_launcher_page(const std::string& page) {
     jfg_config_clear_option_focus();
     jfg_config_menu_refresh();
     if (launcher_page == "textures") refresh_official(true);
+    if (launcher_page == "store" && !store_loaded) { store_loaded = true; jfg_store_refresh(); refresh_store_rows(); }
+    if (launcher_page == "controls") jfg_controls_page_entered();
     model_handle.DirtyVariable("page");
     model_handle.DirtyVariable("page_title");
     model_handle.DirtyVariable("page_subtitle");
@@ -236,19 +384,26 @@ static void set_launcher_page(const std::string& page) {
 // ---- controller (ui_state.cpp, while the launcher is shown; D-pad / left stick / A / Select already work as keys) ------
 // LB / RB: the page before / after in the sidebar (focusing its button opens the page), wrapping round.
 void jfg_launcher_step_page(int dir) {
-    if (update_dialog || changelog_dialog) return;
+    if (update_dialog || changelog_dialog || store_sources_dialog) return;
     Rml::ElementDocument* doc = launcher_document();
     if (doc == nullptr) return;
     constexpr int n = (int)(sizeof(LAUNCHER_PAGES) / sizeof(LAUNCHER_PAGES[0]));
     int cur = 0;
     for (int i = 0; i < n; i++) if (launcher_page == LAUNCHER_PAGES[i].id) cur = i;
-    const int next = ((cur + dir) % n + n) % n;
+    int next = ((cur + dir) % n + n) % n;
+    if (std::string(LAUNCHER_PAGES[next].id) == "bindings") next = ((next + dir) % n + n) % n; // not in the sidebar
     if (Rml::Element* button = doc->GetElementById(LAUNCHER_PAGES[next].nav_id)) button->Focus(true);
+}
+
+// Customize Buttons (Controls page) opens the bindings page; Back to Controls or Esc / B goes back onto that button.
+void jfg_launcher_show_bindings(bool open) {
+    set_launcher_page(open ? "bindings" : "controls");
+    focus_soon(open ? "input_row_button_0_0" : "jfg_customize_buttons");
 }
 
 // Start: the Play page, on its Start button (or Browse while no ROM is loaded).
 void jfg_launcher_start_pressed() {
-    if (update_dialog || changelog_dialog) return;
+    if (update_dialog || changelog_dialog || store_sources_dialog) return;
     Rml::ElementDocument* doc = launcher_document();
     if (doc == nullptr) return;
     if (Rml::Element* button = doc->GetElementById("nav_play")) button->Focus(true);
@@ -277,6 +432,12 @@ void jfg_launcher_scroll(float pixels) {
     else {
         Rml::Element* page = doc->GetElementById("rl_page_" + launcher_page);
         if (page == nullptr) return;
+        // Get Mods: the D-pad moves through the cards (they scroll to it), so the stick reads the chosen mod's details.
+        if (Rml::Element* detail = launcher_page == "store" ? doc->GetElementById("st_detail") : nullptr;
+            detail != nullptr && detail->GetScrollHeight() > detail->GetClientHeight() + 1.0f) {
+            detail->SetScrollTop(detail->GetScrollTop() + pixels);
+            return;
+        }
         // Only when the focus is inside the page (not in the sidebar): the nearest scrolling box between it and the page.
         bool in_page = false;
         for (Rml::Element* e = doc->GetFocusLeafNode(); e != nullptr && !in_page; e = e->GetParentNode()) in_page = e == page;
@@ -312,24 +473,25 @@ void jfg_launcher_ui_tick() {
         pending_focus_id.clear();
     }
     // "Check for Updates" turned off (General page): the banner and the triangle go; turned on, they come once found.
-    if (model_handle && update_available && !jfg_launcher_check_updates() && !update_dialog) {
-        update_available = false;
-        model_handle.DirtyVariable("update_available");
-    }
-    if (model_handle && !update_available && jfg_launcher_check_updates()) {
+    // What is offered is read again when the check finishes or the Update Channel changes (not while the dialog is open).
+    static int update_serial = -1;
+    static bool update_checking = false;
+    if (model_handle && !update_dialog && (jfg_update_serial() != update_serial || jfg_launcher_check_updates() != update_checking)) {
+        update_serial = jfg_update_serial();
+        update_checking = jfg_launcher_check_updates();
         JfgUpdateInfo info;
-        if (jfg_update_available(info)) {
-            update_available = true;
-            update_version = info.version;
-            update_changelog = jfg_changelog_rml(info.changelog, version_string);
-            update_can_install = info.can_install;
-            update_unavailable = info.unavailable;
-            model_handle.DirtyVariable("update_available");
-            model_handle.DirtyVariable("update_version");
-            model_handle.DirtyVariable("update_changelog");
-            model_handle.DirtyVariable("update_can_install");
-            model_handle.DirtyVariable("update_unavailable");
-        }
+        update_available = update_checking && jfg_update_available(info);
+        update_version = info.version;
+        update_changelog = update_available ? jfg_changelog_rml(info.changelog, version_string) : std::string();
+        update_can_install = info.can_install;
+        update_unavailable = info.unavailable;
+        update_test = info.test_build;
+        update_back = info.back_to_stable;
+        // A test build's own page (it is not "latest"); a release's: the latest release.
+        update_page = std::string("https://github.com/VibinToast/JetForceGemini-Recompiled/releases/") + (update_test ? "tag/v" + update_version : "latest");
+        for (const char* name : { "update_available", "update_version", "update_changelog", "update_can_install", "update_unavailable",
+                                  "update_test", "update_back", "update_page" })
+            model_handle.DirtyVariable(name);
     }
     if (model_handle && update_dialog) {
         const JfgUpdateProgress progress = jfg_update_progress();
@@ -364,6 +526,14 @@ void jfg_launcher_ui_tick() {
             }
             refresh_official(changed);
         }
+    }
+    // The mod store: read the first time its page is shown (also when the launcher opens on it), then a background
+    // install's progress, and the list again once it ends.
+    if (model_handle && launcher_page == "store" && !store_loaded) { store_loaded = true; jfg_store_refresh(); refresh_store_rows(); }
+    if (model_handle && store_loaded) {
+        jfg_store_tick();
+        const JfgStoreState state = jfg_store_state();
+        if (state.serial != store_serial) { store_serial = state.serial; refresh_store_rows(); }
     }
     if (!model_handle || launcher_page != "about") return;
     using namespace std::chrono;
@@ -520,18 +690,49 @@ public:
                         return;
                     }
                 }
+                // Get Mods, down from a tag: automatic navigation doesn't look inside the scrolling list of cards (it found
+                // the sidebar below it), so the last row of tags leads to the chosen mod's card. Tags can wrap onto more rows.
+                if (key == Rml::Input::KeyIdentifier::KI_DOWN && launcher_page == "store") {
+                    Rml::Element* tag = event.GetTargetElement();
+                    if (tag == nullptr || !tag->IsClassSet("st-chip--tag")) return;
+                    const float bottom = tag->GetAbsoluteTop() + tag->GetOffsetHeight();
+                    bool row_below = false;
+                    Rml::Element* row = tag->GetParentNode();
+                    for (int i = 0; i < row->GetNumChildren(); i++) {
+                        Rml::Element* other = row->GetChild(i);
+                        if (other->IsClassSet("st-chip--tag") && other->GetAbsoluteTop() >= bottom) row_below = true;
+                    }
+                    if (row_below) tag->SetProperty(Rml::PropertyId::NavDown, Rml::Style::Nav::Auto);
+                    else if (store_rows.empty()) tag->SetProperty(Rml::PropertyId::NavDown, Rml::Style::Nav::None);
+                    else tag->SetProperty(Rml::PropertyId::NavDown, Rml::Property{ store_sel_card, Rml::Unit::STRING });
+                    return;
+                }
                 if (key != Rml::Input::KeyIdentifier::KI_ESCAPE) return;
                 if (changelog_dialog) {
                     close_changelog_dialog();
+                    return;
+                }
+                if (store_sources_dialog) {
+                    store_sources_dialog = false;
+                    model_handle.DirtyVariable("store_sources_dialog");
+                    focus_soon("st_sources");
                     return;
                 }
                 if (update_dialog) { // Esc / Back is "Later" (not while it is installing)
                     close_update_dialog();
                     return;
                 }
+                if (launcher_page == "bindings" && dino::input::get_scanned_input_index() < 0) {
+                    jfg_launcher_show_bindings(false);
+                    return;
+                }
                 Rml::Element* target = event.GetTargetElement();
                 Rml::ElementDocument* doc = target ? target->GetOwnerDocument() : nullptr;
                 if (doc == nullptr) return;
+                // Get Mods: from Install / Remove back to the mod's card first.
+                if (launcher_page == "store" && (target->GetId() == "st_act" || target->GetId() == "st_remove")) {
+                    if (Rml::Element* card = doc->GetElementById(store_sel_card.substr(1))) { card->Focus(true); return; }
+                }
                 if (Rml::Element* button = doc->GetElementById(launcher_page_info().nav_id)) button->Focus(true);
             }
         );
@@ -541,9 +742,12 @@ public:
 
         constructor.Bind("rom_valid", &rom_valid);
 
-        version_string = recomp::get_project_version().to_string();
+        version_string = jfg_update_current_version(recomp::get_project_version().to_string()); // with a test build's tag
         constructor.Bind("version_number", &version_string);
         constructor.Bind("update_available", &update_available);
+        constructor.Bind("update_test", &update_test);
+        constructor.Bind("update_back", &update_back);
+        constructor.Bind("update_page", &update_page);
         constructor.Bind("update_version", &update_version);
         constructor.Bind("update_dialog", &update_dialog);
         constructor.Bind("update_changelog", &update_changelog);
@@ -640,6 +844,151 @@ public:
         });
         constructor.BindEventCallback("official_cancel", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
             jfg_official_cancel();
+        });
+
+        // JFG PORT: the mod store (Get Mods page).
+        if (auto row = constructor.RegisterStruct<StoreRow>()) {
+            row.RegisterMember("id", &StoreRow::id);
+            row.RegisterMember("name", &StoreRow::name);
+            row.RegisterMember("short_text", &StoreRow::short_text);
+            row.RegisterMember("version", &StoreRow::version);
+            row.RegisterMember("source_name", &StoreRow::source_name);
+            row.RegisterMember("tags", &StoreRow::tags);
+            row.RegisterMember("size_text", &StoreRow::size_text);
+            row.RegisterMember("thumb", &StoreRow::thumb);
+            row.RegisterMember("status", &StoreRow::status);
+            row.RegisterMember("action", &StoreRow::action);
+            row.RegisterMember("installed", &StoreRow::installed);
+            row.RegisterMember("update", &StoreRow::update);
+            row.RegisterMember("managed", &StoreRow::managed);
+            row.RegisterMember("blocked", &StoreRow::blocked);
+            row.RegisterMember("busy", &StoreRow::busy);
+            row.RegisterMember("selected", &StoreRow::selected);
+        }
+        constructor.RegisterArray<std::vector<StoreRow>>();
+        if (auto src = constructor.RegisterStruct<StoreSourceRow>()) {
+            src.RegisterMember("id", &StoreSourceRow::id);
+            src.RegisterMember("name", &StoreSourceRow::name);
+            src.RegisterMember("status", &StoreSourceRow::status);
+            src.RegisterMember("enabled", &StoreSourceRow::enabled);
+            src.RegisterMember("official", &StoreSourceRow::official);
+            src.RegisterMember("removable", &StoreSourceRow::removable);
+            src.RegisterMember("page", &StoreSourceRow::page);
+        }
+        constructor.RegisterArray<std::vector<StoreSourceRow>>();
+        if (auto tag = constructor.RegisterStruct<StoreTagRow>()) {
+            tag.RegisterMember("name", &StoreTagRow::name);
+            tag.RegisterMember("count", &StoreTagRow::count);
+        }
+        constructor.RegisterArray<std::vector<StoreTagRow>>();
+        constructor.Bind("store_tags", &store_tags);
+        constructor.Bind("store_tag", &store_tag);
+        constructor.Bind("store_sources_dialog", &store_sources_dialog);
+        constructor.Bind("store_sources_on", &store_sources_on);
+        constructor.Bind("store_add_text", &store_add_text);
+        constructor.Bind("store_add_msg", &store_add_msg);
+        // Add: the box's collection joins the sources (its catalog loads in the background); the box empties.
+        constructor.BindEventCallback("store_add_source", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            const std::string error = jfg_store_add_source(store_add_text);
+            store_add_msg = error;
+            if (error.empty()) store_add_text.clear();
+            model_handle.DirtyVariable("store_add_text");
+            model_handle.DirtyVariable("store_add_msg");
+            refresh_store_rows();
+        });
+        // Remove (an added collection only): its mods stay installed, but no longer show or update here.
+        constructor.BindEventCallback("store_remove_source", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+            if (args.empty()) return;
+            jfg_store_remove_source(args[0].Get<Rml::String>());
+            store_add_msg.clear();
+            model_handle.DirtyVariable("store_add_msg");
+            refresh_store_rows();
+            focus_soon("st_add_text");
+        });
+        constructor.BindEventCallback("store_set_tag", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+            store_tag = args.empty() ? Rml::String() : args[0].Get<Rml::String>();
+            refresh_store_rows();
+        });
+        // Sources: a pop-up of the collections, each switched on or off; Close (or Esc / B) goes back to its button.
+        constructor.BindEventCallback("store_sources_open", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            store_sources_dialog = true;
+            store_add_msg.clear();
+            model_handle.DirtyVariable("store_sources_dialog");
+            model_handle.DirtyVariable("store_add_msg");
+            focus_soon("st_source_0");
+        });
+        constructor.BindEventCallback("store_sources_close", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            store_sources_dialog = false;
+            model_handle.DirtyVariable("store_sources_dialog");
+            focus_soon("st_sources");
+        });
+        constructor.Bind("store_rows", &store_rows);
+        constructor.Bind("store_sources", &store_sources);
+        constructor.Bind("store_filter", &store_filter);
+        constructor.Bind("store_selected", &store_selected);
+        constructor.Bind("store_busy", &store_busy);
+        constructor.Bind("store_percent", &store_percent);
+        constructor.Bind("store_text", &store_text);
+        constructor.Bind("store_preview", &store_preview);
+        constructor.Bind("store_sel_name", &store_sel_name);
+        constructor.Bind("store_sel_desc", &store_sel_desc);
+        constructor.Bind("store_sel_meta", &store_sel_meta);
+        constructor.Bind("store_sel_deps", &store_sel_deps);
+        constructor.Bind("store_sel_note", &store_sel_note);
+        constructor.Bind("store_sel_thumb", &store_sel_thumb);
+        constructor.Bind("store_sel_action", &store_sel_action);
+        constructor.Bind("store_sel_can_act", &store_sel_can_act);
+        constructor.Bind("store_sel_can_remove", &store_sel_can_remove);
+        constructor.Bind("store_sel_blocked", &store_sel_blocked);
+        constructor.Bind("store_count_all", &store_count_all);
+        constructor.Bind("store_count_installed", &store_count_installed);
+        constructor.Bind("store_count_updates", &store_count_updates);
+        constructor.Bind("store_sel_card", &store_sel_card);
+        constructor.Bind("store_right", &store_right);
+        constructor.BindEventCallback("store_set_filter", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+            if (!args.empty()) { store_filter = args[0].Get<Rml::String>(); refresh_store_rows(); }
+        });
+        // A card that gets the focus (D-pad, stick) is the chosen mod, and scrolls into view.
+        constructor.BindEventCallback("store_focus", [](Rml::DataModelHandle, Rml::Event& event, const Rml::VariantList& args) {
+            if (args.empty()) return;
+            if (Rml::Element* card = event.GetTargetElement())
+                card->ScrollIntoView(Rml::ScrollIntoViewOptions(Rml::ScrollAlignment::Nearest, Rml::ScrollAlignment::Nearest));
+            if (store_selected == args[0].Get<Rml::String>()) return;
+            store_selected = args[0].Get<Rml::String>();
+            refresh_store_rows();
+            if (Rml::Element* detail = event.GetTargetElement()->GetOwnerDocument()->GetElementById("st_detail")) detail->SetScrollTop(0.0f);
+        });
+        // A card clicked: chosen; pressed with A (the controller in use): on to its Install / Update / Remove.
+        constructor.BindEventCallback("store_select", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+            if (args.empty()) return;
+            store_selected = args[0].Get<Rml::String>();
+            refresh_store_rows();
+            if (recompui::get_cont_active() && store_right != "none") focus_soon(std::string(store_right.substr(1)));
+        });
+        constructor.BindEventCallback("store_install", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+            const std::string id = args.empty() ? std::string(store_selected) : std::string(args[0].Get<Rml::String>());
+            if (!id.empty()) { store_selected = id; jfg_store_install(id); refresh_store_rows(); focus_soon(std::string(store_sel_card.substr(1))); }
+        });
+        constructor.BindEventCallback("store_remove", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            if (!store_selected.empty()) {
+                jfg_store_remove(store_selected);
+                refresh_store_rows();
+                focus_soon(std::string((store_right != "none" ? store_right : store_sel_card).substr(1)));
+            }
+        });
+        constructor.BindEventCallback("store_toggle_source", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+            if (args.empty()) return;
+            const std::string id = args[0].Get<Rml::String>();
+            for (size_t i = 0; i < store_sources.size(); i++) {
+                if (store_sources[i].id != id) continue;
+                jfg_store_set_source_enabled(id, !store_sources[i].enabled);
+                focus_soon("st_source_" + std::to_string(i)); // stays on the switch while the list is made again
+            }
+            refresh_store_rows();
+        });
+        constructor.BindEventCallback("store_reload", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            jfg_store_refresh();
+            refresh_store_rows();
         });
 
         // JFG PORT: the launcher's pages (see the top of this file).
